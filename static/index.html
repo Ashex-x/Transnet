@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API调用示例</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-code"></i> API调用演示</h1>
+            <p class="subtitle">输入文本，调用后端API处理并显示结果</p>
+        </header>
+
+        <main class="main-content">
+            <div class="input-section">
+                <h2><i class="fas fa-keyboard"></i> 输入</h2>
+                <div class="input-group">
+                    <textarea id="inputText" placeholder="请输入要处理的文本..." rows="6"></textarea>
+                    <div class="character-count">
+                        <span id="charCount">0</span> / 1000 字符
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button id="processBtn" class="btn btn-primary">
+                        <i class="fas fa-play"></i> 处理文本
+                    </button>
+                    <button id="clearBtn" class="btn btn-secondary">
+                        <i class="fas fa-broom"></i> 清空
+                    </button>
+                </div>
+                
+                <div class="api-controls">
+                    <h3><i class="fas fa-cog"></i> API设置</h3>
+                    <div class="form-group">
+                        <label for="apiEndpoint">API端点:</label>
+                        <input type="text" id="apiEndpoint" value="/api/process" placeholder="输入API端点">
+                    </div>
+                    <div class="form-group">
+                        <label for="requestMethod">请求方法:</label>
+                        <select id="requestMethod">
+                            <option value="POST" selected>POST</option>
+                            <option value="GET">GET</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="output-section">
+                <h2><i class="fas fa-file-alt"></i> 输出</h2>
+                <div class="status-indicator">
+                    <div id="statusLight" class="status-light"></div>
+                    <span id="statusText">就绪</span>
+                </div>
+                <div class="output-group">
+                    <div class="output-header">
+                        <h3><i class="fas fa-server"></i> 处理结果</h3>
+                        <button id="copyBtn" class="btn btn-small">
+                            <i class="fas fa-copy"></i> 复制
+                        </button>
+                    </div>
+                    <pre id="outputText" class="output-content"></pre>
+                </div>
+                
+                <div class="response-info">
+                    <h3><i class="fas fa-info-circle"></i> 响应信息</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">状态码:</span>
+                            <span id="statusCode" class="info-value">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">响应时间:</span>
+                            <span id="responseTime" class="info-value">- ms</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">数据大小:</span>
+                            <span id="dataSize" class="info-value">- B</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>© 2024 API调用示例 | 使用 <i class="fas fa-heart"></i> 构建</p>
+        </footer>
+    </div>
+
+    <script src="js/api_client.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

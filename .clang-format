@@ -1,0 +1,11 @@
+BasedOnStyle: Google 
+
+IndentWidth: 2
+ColumnLimit: 80
+BreakBeforeBraces: Attach 
+
+BraceWrapping:
+  AfterFunction: false
+  AfterControlStatement: false 
+  AfterClass: false
+UseTab: Never
