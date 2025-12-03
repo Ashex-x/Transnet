@@ -1,98 +1,120 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API调用示例</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/components.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>Transnet - translation network</title>
+    <!-- 
+        @TODO: for mobile client, we need to modify the screen
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        @TODO: for search Engine Optimization
+        @TODO: other things
+    -->
+        
+    <!-- 
+        ============================
+        引入CSS的地方（通常在head中）
+        ============================
+    -->
+    <!-- 方式1：外部CSS文件（最常用） -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- 方式2：内部CSS（适合小项目） -->
+    <style>
+        /* 这里是CSS代码 */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .highlight {
+            color: red;
+        }
+    </style>
+    
+    <!-- 方式3：内联CSS（不推荐，仅用于特殊情况） -->
+    <!-- <p style="color: blue;">内联样式</p> -->
 </head>
 <body>
-    <div class="container">
-        <header class="header">
-            <h1><i class="fas fa-code"></i> API调用演示</h1>
-            <p class="subtitle">输入文本，调用后端API处理并显示结果</p>
-        </header>
-
-        <main class="main-content">
-            <div class="input-section">
-                <h2><i class="fas fa-keyboard"></i> 输入</h2>
-                <div class="input-group">
-                    <textarea id="inputText" placeholder="请输入要处理的文本..." rows="6"></textarea>
-                    <div class="character-count">
-                        <span id="charCount">0</span> / 1000 字符
-                    </div>
-                </div>
-                <div class="button-group">
-                    <button id="processBtn" class="btn btn-primary">
-                        <i class="fas fa-play"></i> 处理文本
-                    </button>
-                    <button id="clearBtn" class="btn btn-secondary">
-                        <i class="fas fa-broom"></i> 清空
-                    </button>
-                </div>
-                
-                <div class="api-controls">
-                    <h3><i class="fas fa-cog"></i> API设置</h3>
-                    <div class="form-group">
-                        <label for="apiEndpoint">API端点:</label>
-                        <input type="text" id="apiEndpoint" value="/api/process" placeholder="输入API端点">
-                    </div>
-                    <div class="form-group">
-                        <label for="requestMethod">请求方法:</label>
-                        <select id="requestMethod">
-                            <option value="POST" selected>POST</option>
-                            <option value="GET">GET</option>
-                            <option value="PUT">PUT</option>
-                            <option value="DELETE">DELETE</option>
-                        </select>
-                    </div>
-                </div>
+    <!-- 
+        ============================
+        BODY区域：网页显示的内容
+        ============================
+    -->
+    
+    <!-- 这是一个HTML注释：这里开始是页面内容 -->
+    <header>
+        <h1>欢迎来到我的网站</h1>
+        <nav>
+            <ul>
+                <li><a href="#">首页</a></li>
+                <li><a href="#">关于</a></li>
+            </ul>
+        </nav>
+    </header>
+    
+    <main>
+        <!-- 
+            HTML负责结构，比如这个div是一个容器
+            CSS负责样式，比如给这个div添加背景色
+        -->
+        <div class="content-box">
+            <h2 class="highlight">这是一个标题</h2>
+            <p>这是一段普通的文字内容。</p>
+            
+            <!-- 
+                HTML负责创建按钮
+                CSS负责按钮的外观
+                JS负责按钮的点击功能
+            -->
+            <button id="myButton" class="btn-primary">
+                点击我
+            </button>
+            
+            <div id="resultArea">
+                <!-- JS会动态修改这里的内容 -->
+                初始内容
             </div>
-
-            <div class="output-section">
-                <h2><i class="fas fa-file-alt"></i> 输出</h2>
-                <div class="status-indicator">
-                    <div id="statusLight" class="status-light"></div>
-                    <span id="statusText">就绪</span>
-                </div>
-                <div class="output-group">
-                    <div class="output-header">
-                        <h3><i class="fas fa-server"></i> 处理结果</h3>
-                        <button id="copyBtn" class="btn btn-small">
-                            <i class="fas fa-copy"></i> 复制
-                        </button>
-                    </div>
-                    <pre id="outputText" class="output-content"></pre>
-                </div>
-                
-                <div class="response-info">
-                    <h3><i class="fas fa-info-circle"></i> 响应信息</h3>
-                    <div class="info-grid">
-                        <div class="info-item">
-                            <span class="info-label">状态码:</span>
-                            <span id="statusCode" class="info-value">-</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">响应时间:</span>
-                            <span id="responseTime" class="info-value">- ms</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">数据大小:</span>
-                            <span id="dataSize" class="info-value">- B</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
-
-        <footer class="footer">
-            <p>© 2024 API调用示例 | 使用 <i class="fas fa-heart"></i> 构建</p>
-        </footer>
-    </div>
-
-    <script src="js/api_client.js"></script>
-    <script src="js/main.js"></script>
+        </div>
+    </main>
+    
+    <!-- 
+        ============================
+        引入JavaScript的地方
+        （通常在body末尾，这样页面加载更快）
+        ============================
+    -->
+    <!-- 方式1：外部JS文件（最常用） -->
+    <script src="script.js"></script>
+    
+    <!-- 方式2：内部JS -->
+    <script>
+        // 这里是JavaScript代码
+        // 注意：CSS用 /* 注释 */，JS用 // 或 /* 注释 */
+        
+        // 等待页面完全加载
+        document.addEventListener('DOMContentLoaded', function() {
+            // 获取HTML元素（通过id选择）
+            const button = document.getElementById('myButton');
+            const resultArea = document.getElementById('resultArea');
+            
+            // 添加点击事件（JS的功能）
+            button.addEventListener('click', function() {
+                // 修改HTML内容
+                resultArea.textContent = '按钮被点击了！';
+                // 修改CSS样式
+                resultArea.style.color = 'green';
+                resultArea.style.fontWeight = 'bold';
+            });
+        });
+    </script>
+    
+    <!-- 
+        ============================
+        最佳实践总结：
+        1. CSS放在<head>中（确保样式先加载）
+        2. JS放在<body>末尾（确保页面结构先加载）
+        3. 尽量使用外部文件（代码分离，便于维护）
+        ============================
+    -->
 </body>
 </html>

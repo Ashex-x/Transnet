@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transnet - Translation Network</title>
+    <!-- Load Tailwind CSS (get style css file from CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /**
+         * Set a default font for better aesthetics 
+         * @TODO: Complete this block with more details and components.
+         */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+            color: #1f2937;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen">
+
+    <div class="max-w-4xl mx-auto bg-white shadow-xl rounded-xl p-6 md:p-10 border border-gray-100">
+
+        <h1 class="text-3xl md:text-4xl font-extrabold text-blue-600 mb-6 border-b pb-2">
+            Transnet
+        </h1>
+        <p class="text-gray-600 mb-8">
+            Hello there! This is a simple web for Transnet
+        </p>
+
+        <!-- Input Section -->
+        <div class="mb-6">
+            <label for="input-text" class="block text-lg font-medium text-gray-700 mb-2">
+                Input (Chinese Text to Translate)
+            </label>
+            <textarea id="input-text"
+                      rows="6"
+                      placeholder="Type your Chinese text here..."
+                      class="w-full p-4 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out shadow-sm resize-none"></textarea>
+        </div>
+
+        <!-- Action Button -->
+        <div class="flex justify-center mb-8">
+            <button id="process-button"
+                    onclick="processInput()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition duration-200 ease-in-out hover:scale-105 active:scale-95 disabled:bg-gray-400 flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Translate
+            </button>
+        </div>
+
+        <!-- Output Section -->
+        <div class="mb-6">
+            <label for="output-text" class="block text-lg font-medium text-gray-700 mb-2">
+                Output
+            </label>
+            <div id="loading-indicator" class="hidden text-center py-4 text-blue-600 font-semibold">
+                Translating... Please wait.
+            </div>
+            <textarea id="output-text"
+                      rows="8"
+                      readonly
+                      placeholder="The Translated result..."
+                      class="w-full p-4 border border-gray-300 bg-gray-50 rounded-lg shadow-inner resize-none"></textarea>
+        </div>
+
+    </div>
+
+    <script>
+        // Set up API endpoint details (Replace these with your actual values if needed)
+        // If you are using the Gemini API directly from the client, set the model and API URL here.
+        const MODEL_NAME = 'gemini-2.5-flash-preview-09-2025';
+        const API_KEY = ""; // Canvas environment will provide the key if left empty
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+        const MAX_RETRIES = 5;
+
+        // Utility to convert Base64 to ArrayBuffer (for internal API handling if needed)
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        /**
+         * The core function to process user input and call the backend/API.
+         */
+        async function processInput() {
+            const inputElement = document.getElementById('input-text');
+            const outputElement = document.getElementById('output-text');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const processButton = document.getElementById('process-button');
+
+            const userQuery = inputElement.value.trim();
+
+            if (!userQuery) {
+                outputElement.value = "Please enter some text to process.";
+                return;
+            }
+
+            // UI State: Disable button and show loading
+            processButton.disabled = true;
+            loadingIndicator.classList.remove('hidden');
+            outputElement.value = ""; // Clear previous output
+
+            try {
+                const systemPrompt = "You are a concise summarization expert. Analyze the user's input and provide a brief, professional summary of its core meaning in less than 50 words. If the input is a question, simply answer it directly.";
+
+                const payload = {
+                    contents: [{ parts: [{ text: userQuery }] }],
+                    // Optional: Use Google Search grounding for up-to-date answers
+                    tools: [{ "google_search": {} }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                };
+
+                let response, result;
+                let success = false;
+                for (let i = 0; i < MAX_RETRIES && !success; i++) {
+                    const delay = Math.pow(2, i) * 1000; // Exponential backoff: 1s, 2s, 4s, ...
+                    if (i > 0) await new Promise(resolve => setTimeout(resolve, delay));
+
+                    // ----------------------------------------------------------------------
+                    //   <<< THIS IS WHERE YOU INTEGRATE YOUR BACKEND/API CALL >>>
+                    // ----------------------------------------------------------------------
+                    // If your backend is an external server: replace this fetch call
+                    // with a call to your server's endpoint, which will, in turn, call the Gemini API.
+                    // Example: await fetch('/api/process-text', { method: 'POST', body: JSON.stringify({ query: userQuery }) });
+                    //
+                    // If you are calling the Gemini API directly (as shown below for demonstration):
+                    //
+                    response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    //
+                    // ----------------------------------------------------------------------
+
+                    if (response.ok) {
+                        result = await response.json();
+                        success = true;
+                    } else if (response.status !== 429 && response.status < 500) {
+                        // Non-retryable error (e.g., 400 Bad Request, 401 Unauthorized)
+                        const errorText = await response.text();
+                        throw new Error(`API Error ${response.status}: ${errorText}`);
+                    }
+                    // Retry on 429 (Too Many Requests) or 5xx errors
+                }
+
+                if (!success) {
+                    throw new Error("API failed after multiple retries due to server errors.");
+                }
+
+                const candidate = result.candidates?.[0];
+                let generatedText = "No response text found.";
+                let sourcesHtml = "";
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    generatedText = candidate.content.parts[0].text;
+
+                    // Extract and format grounding sources if available
+                    const groundingMetadata = candidate.groundingMetadata;
+                    if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                        const sources = groundingMetadata.groundingAttributions
+                            .map(attribution => ({
+                                uri: attribution.web?.uri,
+                                title: attribution.web?.title,
+                            }))
+                            .filter(source => source.uri && source.title);
+
+                        if (sources.length > 0) {
+                            sourcesHtml = "\n\n--- Sources ---\n";
+                            sources.forEach((source, index) => {
+                                sourcesHtml += `${index + 1}. ${source.title} (${source.uri})\n`;
+                            });
+                        }
+                    }
+                }
+
+                outputElement.value = generatedText + sourcesHtml;
+
+            } catch (error) {
+                console.error("Processing failed:", error);
+                outputElement.value = `Error: Failed to connect or process the request. Check the console for details. Message: ${error.message}`;
+            } finally {
+                // UI State: Re-enable button and hide loading
+                processButton.disabled = false;
+                loadingIndicator.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
