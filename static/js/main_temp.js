@@ -1,16 +1,4 @@
-// Set up API endpoint details (Replace these with your actual values if needed)
-// If you are using the Gemini API directly from the client, set the model and API URL here.
-
-// Utility to convert Base64 to ArrayBuffer (for internal API handling if needed)
-function base64ToArrayBuffer(base64) {
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
+// main_temp.js
 
 /**
  * The core function to process user input and call the backend/API.
@@ -35,7 +23,7 @@ async function transInput() {
 
   try {
     // Send Chinese text to backend
-    const response = await fetch('http://localhost:5000/api/input-text', {
+    const response = await fetch('http://localhost:13579/api/input-text', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
