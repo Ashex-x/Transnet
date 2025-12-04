@@ -1,7 +1,7 @@
 # utils.py
 
-import config
-import api.basic_trans
+from . import config
+from .api import basic_trans
 
 
 class PyUtils:
@@ -9,5 +9,7 @@ class PyUtils:
     pass
 
   def py_utils(self) -> None:
-    basic_trans = api.basic_trans.BasicTrans()
-    basic_trans.trans()
+    backend_config = config.BackendConfig()
+    backend_config.config()
+    basic_tran = basic_trans.BasicTrans()
+    basic_tran.trans()
