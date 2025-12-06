@@ -40,6 +40,10 @@ async function transInput() {
       throw new Error(`HTTP Error: ${response.status}`);
     }
 
+    if (response.status == 'success') {
+      kOutputElement.value = `${response.output}`;
+    }
+
   } catch (error) {
     console.error('Submit fail: ', error);
     kOutputElement.textContent = `Submit fail: ${error.mess}`;
@@ -47,5 +51,6 @@ async function transInput() {
     // UI State: Re-enable button and hide loading
     kTranslateButton.disabled = false;
     kLoadingIndicator.classList.add('hidden');
+    return;
   }
 }
