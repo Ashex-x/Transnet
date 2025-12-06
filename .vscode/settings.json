@@ -22,4 +22,5 @@
     },
     "C_Cpp.formatting": "clangFormat",
     "C_Cpp.codeAnalysis.clangTidy.enabled": true,
+    "cmake.sourceDirectory": "/home/ashex/Works/Transnet/backend/cpp",
 }
