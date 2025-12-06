@@ -6,5 +6,5 @@ __pycache__
 logs/*.log
 
 # database
-backend/database/processed_data/*.csv
-backend/database/raw_data/*.u8
+database/processed_data/*.csv
+database/raw_data/*.u8
