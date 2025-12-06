@@ -5,3 +5,7 @@ __pycache__
 # log
 logs
 .log
+
+# database
+backend/database/processed_data/*.csv
+backend/database/raw_data/*.u8
