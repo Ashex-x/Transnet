@@ -8,8 +8,7 @@ import backend.utils
 
 import logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 web_application = flask.Flask(__name__)
 flask_cors.CORS(web_application)
@@ -26,8 +25,8 @@ def serve_index():
 
 @web_application.route('/<path:filename>')
 def serve_static_files(filename):
-    """Other static files"""
-    return flask.send_from_directory('static', filename)
+  """Other static files"""
+  return flask.send_from_directory('static', filename)
 
 
 @web_application.route('/api/input-text', methods=['POST'])
@@ -52,14 +51,15 @@ def translate_input_text():
     # input_source = data.get('source')
     # input_length = data.get('input_length')
 
-    output_text = None
+    output_trans = None
     if input_text is not None:
-      output_text = input_text  # Translates the input text.
+      output_trans = str(input_text)  # Translates the input text.
+      logger.info("Translate successfully")
       return flask.jsonify({
         "status": "success",
         "message": "Data received successfully.",
-        "output": output_text,
-        "char_count": len(output_text),
+        "output": output_trans,
+        "char_count": len(output_trans),
         "processed_timestamp": input_timestamp
       }), 200
     else:

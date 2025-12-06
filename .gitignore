@@ -1,3 +1,7 @@
 # python
 .pyi
 __pycache__
+
+# log
+logs
+.log
