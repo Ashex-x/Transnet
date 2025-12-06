@@ -1,2 +1,416 @@
-2025-12-06 19:50:46 | root            | INFO     |runme.py:12 | __init__ | Start class: Main
-2025-12-06 19:52:18 | root       | INFO     |runme.py:12 | Start class: Main
+2025-12-06 23:16:18 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:16:18 | werkzeug   | INFO     |_internal.py:97 | [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:13579
+ * Running on http://192.168.1.110:13579
+2025-12-06 23:16:18 | werkzeug   | INFO     |_internal.py:97 | [33mPress CTRL+C to quit[0m
+2025-12-06 23:16:18 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-06 23:16:18 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:16:18 | werkzeug   | WARNING  |_internal.py:97 |  * Debugger is active!
+2025-12-06 23:16:18 | werkzeug   | INFO     |_internal.py:97 |  * Debugger PIN: 124-328-083
+2025-12-06 23:16:21 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.110 - - [06/Dec/2025 23:16:21] "GET / HTTP/1.1" 200 -
+2025-12-06 23:16:21 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.110 - - [06/Dec/2025 23:16:21] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:16:22 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.110 - - [06/Dec/2025 23:16:22] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-12-06 23:16:40 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:16:40] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:16:40 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:16:40 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:16:40] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:17:29 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:17:29] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:17:29 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:17:29 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:17:29] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:17:56 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:17:56] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:17:56 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:17:56 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:17:56] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:18:10 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:18:10] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:18:10 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:18:10 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:18:10] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:20:33 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:20:33] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:20:33 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:20:33 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:20:33] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:20:35 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.110 - - [06/Dec/2025 23:20:35] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:20:35 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.110 - - [06/Dec/2025 23:20:35] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:20:36 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:20:36 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:20:36] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:20:38 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:20:38] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:20:38 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:20:38 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:20:38] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:20:42 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:20:42 | werkzeug   | INFO     |_internal.py:97 | [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:13579
+ * Running on http://192.168.1.110:13579
+2025-12-06 23:20:42 | werkzeug   | INFO     |_internal.py:97 | [33mPress CTRL+C to quit[0m
+2025-12-06 23:20:42 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-06 23:20:42 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:20:42 | werkzeug   | WARNING  |_internal.py:97 |  * Debugger is active!
+2025-12-06 23:20:42 | werkzeug   | INFO     |_internal.py:97 |  * Debugger PIN: 124-328-083
+2025-12-06 23:20:45 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.110 - - [06/Dec/2025 23:20:45] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:20:45 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.110 - - [06/Dec/2025 23:20:45] "[36mGET /js/main_temp.js HTTP/1.1[0m" 304 -
+2025-12-06 23:20:46 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:20:46] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:20:46 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:20:46 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:20:46] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:21:02 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:21:02 | werkzeug   | INFO     |_internal.py:97 | [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:13579
+ * Running on http://192.168.1.110:13579
+2025-12-06 23:21:02 | werkzeug   | INFO     |_internal.py:97 | [33mPress CTRL+C to quit[0m
+2025-12-06 23:21:02 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-06 23:21:02 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:21:02 | werkzeug   | WARNING  |_internal.py:97 |  * Debugger is active!
+2025-12-06 23:21:02 | werkzeug   | INFO     |_internal.py:97 |  * Debugger PIN: 124-328-083
+2025-12-06 23:21:05 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.110 - - [06/Dec/2025 23:21:05] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:21:05 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.110 - - [06/Dec/2025 23:21:05] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:21:07 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:21:07] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:21:07 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:21:07 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:21:07] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:21:27 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:21:28 | werkzeug   | INFO     |_internal.py:97 | [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:13579
+ * Running on http://192.168.1.110:13579
+2025-12-06 23:21:28 | werkzeug   | INFO     |_internal.py:97 | [33mPress CTRL+C to quit[0m
+2025-12-06 23:21:28 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-06 23:21:28 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:21:28 | werkzeug   | WARNING  |_internal.py:97 |  * Debugger is active!
+2025-12-06 23:21:28 | werkzeug   | INFO     |_internal.py:97 |  * Debugger PIN: 124-328-083
+2025-12-06 23:21:30 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.110 - - [06/Dec/2025 23:21:30] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:21:30 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.110 - - [06/Dec/2025 23:21:30] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:21:31 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:21:31] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:21:31 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:21:31 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:21:31] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:21:33 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:21:33 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:21:33] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:45 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:45] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:45 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:45 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:45] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:46 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:46 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:46] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:46 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:46 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:46] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:46 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:46 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:46] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:47 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:47 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:47] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:47 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:47 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:47] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:48 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:48 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:48] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:48 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:48 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:48] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:49 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:49 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:49] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:49 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:49 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:49] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:49 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:49 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:49] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:50 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:50 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:50] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:50 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:50] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:23:50 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:23:50 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:23:50] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:25:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:25:52] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:25:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:25:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:25:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:25:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:25:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:25:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:25:53 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:25:53 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:25:53] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:27:55 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:27:55] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:27:55 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:27:55 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:27:55] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:27:55 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:27:55 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:27:55] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:27:55 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:27:55 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:27:55] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:27:55 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:27:55 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:27:55] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:27:56 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:27:56 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:27:56] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:27:56 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:27:56 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:27:56] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:28:12 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:28:12] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:28:12 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:28:12] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:28:15 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:28:15] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:28:15 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:28:15 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:28:15] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:30:14 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.102 - - [06/Dec/2025 23:30:14] "GET / HTTP/1.1" 200 -
+2025-12-06 23:30:14 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.102 - - [06/Dec/2025 23:30:14] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:30:16 | werkzeug   | INFO     |_internal.py:97 | 192.168.1.102 - - [06/Dec/2025 23:30:16] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-12-06 23:32:44 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:44] "GET / HTTP/1.1" 200 -
+2025-12-06 23:32:44 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:44] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:32:44 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:44] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-12-06 23:32:49 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:49] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:49 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:49 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:49] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:50 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:50 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:50] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:51 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:51 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:51] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:51 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:51 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:51] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:51 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:51 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:51] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:51 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:51 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:51] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:53 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:53 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:53] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:53 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:53 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:53] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:56 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:56] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:56 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:56 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:56] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:56 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:56 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:56] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:57 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:57 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:57] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:57 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:57 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:57] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:57 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:57 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:57] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:57 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:57 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:57] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:32:57 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:32:57 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:32:57] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:38 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:38] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:38 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:38 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:38] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:38 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:38 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:38] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:39 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:39 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:39] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:39 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:39 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:39] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:40 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:40 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:40] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:40 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:40 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:40] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:40 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:40 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:40] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:41 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:41 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:41] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:41 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:41 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:41] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:42 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:42 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:42] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:42 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:42 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:42] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:43 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:43 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:43] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:43 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:43] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:43 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:43 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:43] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:43 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:43 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:43] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:44 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:44 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:44] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:45 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:45 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:45] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:45 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:45 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:45] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:46 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:46 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:46] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:46 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:46 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:46] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:47 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:47 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:47] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:47 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:47 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:47] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:48 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:48 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:48] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:48 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:48] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:48 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:48 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:48] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:49 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:49 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:49] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:49 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:49 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:49] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:50 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:50 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:50] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:50 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:50 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:50] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:50 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:50 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:50] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:50 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:50 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:50] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:51 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:51 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:51] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:51 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:51 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:51] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:51 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:51 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:51] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:34:52 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:34:52 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:34:52] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:04 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:38:04 | werkzeug   | INFO     |_internal.py:97 | [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:13579
+ * Running on http://192.168.1.110:13579
+2025-12-06 23:38:04 | werkzeug   | INFO     |_internal.py:97 | [33mPress CTRL+C to quit[0m
+2025-12-06 23:38:04 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-06 23:38:04 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:38:04 | werkzeug   | WARNING  |_internal.py:97 |  * Debugger is active!
+2025-12-06 23:38:04 | werkzeug   | INFO     |_internal.py:97 |  * Debugger PIN: 124-328-083
+2025-12-06 23:38:06 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:06] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:06 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:38:06 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:06] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:07 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:38:07 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:07] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:09 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:09] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:38:09 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:09] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:38:10 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:38:10 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:10] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:16 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:16] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:16 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:38:16 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:16] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:17 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:38:17 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:17] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:17 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:38:17 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:17] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:17 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:38:17 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:17] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:20 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:38:20 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:20] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:20 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:38:20 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:20] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:20 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:38:20 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:20] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:38:20 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:38:20 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:38:20] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:08 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:08] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:08 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:39:08 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:08] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:08 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:39:08 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:08] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:08 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:39:08 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:08] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:10 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:10] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:39:10 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:10] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:39:10 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:39:10 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:10] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:11 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:39:11 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:11] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:11 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:39:11 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:11] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:19 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:19] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:39:19 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:19] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:39:20 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:20] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:20 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:39:20 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:20] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:21 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:39:21 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:21] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:21 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:39:21 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:21] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:39:22 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:39:22 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:39:22] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:03 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:03] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:40:03 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:03] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:40:04 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:04] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:04 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:40:04 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:04] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:04 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:40:04 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:04] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:11 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:11] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:40:11 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:11] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:40:12 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:12] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:12 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:40:12 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:12] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:30 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:30] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:30 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:40:30 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:30] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:32 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:32] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:40:32 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:32] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:40:33 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:40:33 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:33] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:33 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:40:33 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:33] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:34 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:40:34 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:34] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:37 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:37] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:40:37 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:40:37 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:40:37] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:41:02 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:41:02] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:41:02 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:41:02 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:41:02] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:41:03 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:41:03 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:41:03] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:41:04 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:41:04] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:41:04 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:41:04] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:41:04 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:41:04 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:41:04] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:41:05 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:41:05 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:41:05] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:41:08 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:41:08] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:41:08 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:41:08 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:41:08] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:42:55 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:42:55] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:42:55 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:42:55 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:42:55] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:44:09 | werkzeug   | INFO     |_internal.py:97 |  * Detected change in '/home/ashex/Works/Transnet/app.py', reloading
+2025-12-06 23:44:09 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-06 23:44:09 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:44:09 | werkzeug   | WARNING  |_internal.py:97 |  * Debugger is active!
+2025-12-06 23:44:09 | werkzeug   | INFO     |_internal.py:97 |  * Debugger PIN: 124-328-083
+2025-12-06 23:44:22 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:44:22] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:44:22 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:44:22] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:44:23 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:44:23] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:44:23 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:44:23 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:44:23] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:44:25 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:44:25 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:44:25] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:48:29 | werkzeug   | INFO     |_internal.py:97 |  * Detected change in '/home/ashex/Works/Transnet/app.py', reloading
+2025-12-06 23:48:29 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-06 23:48:29 | root       | INFO     |runme.py:13 | Start class: Main
+2025-12-06 23:48:29 | werkzeug   | WARNING  |_internal.py:97 |  * Debugger is active!
+2025-12-06 23:48:29 | werkzeug   | INFO     |_internal.py:97 |  * Debugger PIN: 124-328-083
+2025-12-06 23:53:20 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:53:20] "[36mGET / HTTP/1.1[0m" 304 -
+2025-12-06 23:53:20 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:53:20] "GET /js/main_temp.js HTTP/1.1" 200 -
+2025-12-06 23:53:21 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:53:21] "OPTIONS /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:53:21 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:53:21 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:53:21] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:53:24 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:53:24 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:53:24] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-06 23:53:26 | root       | INFO     |app.py:57 | Translate successfully
+2025-12-06 23:53:26 | werkzeug   | INFO     |_internal.py:97 | 127.0.0.1 - - [06/Dec/2025 23:53:26] "POST /api/input-text HTTP/1.1" 200 -
+2025-12-07 00:16:56 | werkzeug   | INFO     |_internal.py:97 |  * Detected change in '/home/ashex/Works/Transnet/runme.py', reloading
+2025-12-07 00:16:56 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:22:23 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:22:49 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:23:01 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:27:39 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:27:46 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:28:01 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:28:03 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:28:19 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:28:44 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:28:55 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:29:00 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:29:02 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:29:07 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:33:19 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:34:34 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:37:52 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:53:34 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:55:57 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:57:32 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:59:00 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 00:59:04 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 01:02:25 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat
+2025-12-07 01:02:29 | werkzeug   | INFO     |_internal.py:97 |  * Restarting with stat

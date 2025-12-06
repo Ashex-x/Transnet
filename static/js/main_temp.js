@@ -40,8 +40,14 @@ async function transInput() {
       throw new Error(`HTTP Error: ${response.status}`);
     }
 
-    if (response.status == 'success') {
-      kOutputElement.value = `${response.output}`;
+    const output_json = await response.json();
+
+    if (!output_json) {
+      throw new Error(`JSON Error: received empty json or analysising failed`);
+    }
+
+    if (output_json.status == "success") {
+      kOutputElement.value = `${output_json.output}`;
     }
 
   } catch (error) {

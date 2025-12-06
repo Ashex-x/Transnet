@@ -2,7 +2,7 @@
 
 import logging
 import backend.logger_setup
-# import app
+import app
 
 
 class Main:
@@ -14,3 +14,4 @@ class Main:
 
 if __name__ == "__main__":
   run_class = Main()
+  app.run_frontend()
