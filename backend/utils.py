@@ -12,4 +12,4 @@ class PyUtils:
     backend_config = config.BackendConfig()
     backend_config.config()
     basic_tran = basic_trans.BasicTrans()
-    basic_tran.trans()
+    basic_tran.trans("你好")
