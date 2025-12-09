@@ -11,5 +11,5 @@ class PyUtils:
   def py_utils(self) -> None:
     backend_config = config.BackendConfig()
     backend_config.config()
-    basic_tran = basic_trans.BasicTrans()
-    basic_tran.trans("你好")
+    # basic_tran = basic_trans.BasicTrans()
+    # basic_tran.trans("你好")

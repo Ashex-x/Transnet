@@ -33,4 +33,17 @@ class BasicTrans:
       self.logger.error(f"{e}")
 
   def trans(self, input: str) -> typing.Optional[dict]:
-    pass
+    if isinstance(self.basic_db_cedict, pd.DataFrame):
+      resuld = self.basic_db_cedict[
+        self.basic_db_cedict['simplified'] == input]
+
+      output_dict = {
+        "tranditional": resuld.iloc[0, 0],
+        "simplified": resuld.iloc[0, 1],
+        "pinyin": resuld.iloc[0, 2],
+        "translation": resuld.iloc[0, 3]
+        }
+
+      self.logger.debug(f"Translation successful: \n{output_dict}")
+
+      return output_dict
