@@ -13,6 +13,8 @@ logger = logging.getLogger()
 web_application = flask.Flask(__name__)
 flask_cors.CORS(web_application)
 
+py_utils = backend.utils.PyUtils()
+
 
 @web_application.route('/')
 def serve_index():
@@ -24,7 +26,7 @@ def serve_index():
 
 
 @web_application.route('/<path:filename>')
-def serve_static_files(filename):
+def serve_static_files(filename: str):
   """Other static files"""
   return flask.send_from_directory('static', filename)
 
@@ -46,25 +48,28 @@ def translate_input_text():
                       format(type(data).__name__))
 
     # Receives input data
-    input_timestamp = data.get('timestamp')
-    input_text = data.get('text')
+    input_timestamp = data.get('timestamp')  # type: ignore
+    input_text = data.get('text')  # type: ignore
     # input_source = data.get('source')
     # input_length = data.get('input_length')
 
     output_trans = None
-    if input_text is not None:
-      output_trans = str(input_text)  # Translates the input text.
+    if isinstance(input_text, str):
+      # ===== Translation start ================================================
+      output_trans = py_utils.total_trans(input=input_text)
+      # ===== Translation end ==================================================
+
       logger.info("Translate successfully")
-      return flask.jsonify({
-        "status": "success",
-        "message": "Data received successfully.",
-        "output": output_trans,
-        "char_count": len(output_trans),
-        "processed_timestamp": input_timestamp
-      }), 200
-    else:
-      return flask.jsonify({"error":
-                            "Input is empty by somehow(unknown)."}), 500
+      if output_trans:
+        return flask.jsonify({
+          "status": "success",
+          "message": "Data received successfully.",
+          "output": output_trans["translation"],
+          "processed_timestamp": input_timestamp
+        }), 200
+
+    return flask.jsonify({"error":
+                          "Input is empty by somehow(unknown)."}), 500
 
   except Exception as e:
     return flask.jsonify({"error": str(e)}), 500
