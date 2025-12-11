@@ -8,3 +8,6 @@ logs/*.log
 # database
 database/processed_data/*.csv
 database/raw_data/*.u8
+
+# cmake
+build/.cmake/
