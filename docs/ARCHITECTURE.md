@@ -13,7 +13,7 @@
 
 ### Details:
 
-#### Basic Translation System(BTS):
+#### Basic Translation System (BTS):
 
 1. **Basic Translation:** Use **digital dictionary**(CEDict-120k, CCDict-300k) to provide basic translation.
     - Dictoraries will be saved as CSV files.
@@ -44,7 +44,9 @@
 
 ---
 
-#### Relation Search System(RSeS):
+#### Relation Search System (RSeS):
+
+> This system works only for online word and phrase translations.
 
 1. **Core Knowledge Extraction:** Use `G2_relate` to extract core lexical features (e.g., detailed POS, structure, common collocations) upon user request for details.
     - This is launched only if the user requests more details about the input.
@@ -56,12 +58,9 @@
     - **For verb:** Find synonyms.
     - etc.
 
-1. **Feedback and Weighting:** Implement a mechanism to receive user feedback (e.g., upvote/downvote).
-    - Dynamically adjust the Weight/Strength of the relations (Edges) in the Relation Database, allowing the graph to be self-correcting and adaptive.
-
 ---
 
-#### Relation Storage System(RStS):
+#### Relation Storage System (RStS):
 
 > This system works first when a user requests more details and related words.
 > If no translation is found in Extension database or Relation database, the system will use RSeS and store its result.
@@ -71,6 +70,9 @@
 1. **Storage Translation:** Store results.
     - **Extension Database:** Store results from RSeS Word Analysis.
     - **Relation Database:** Store results from RSeS Relation Search.
+
+1. **Feedback and Weighting:** Implement a mechanism to receive user feedback (e.g., upvote/downvote).
+    - Dynamically adjust the Weight/Strength of the relations (Edges) in the Relation Database, allowing the graph to be self-correcting and adaptive.
 
 ## 2. File structure
 - Transnet -> `my workspace`
