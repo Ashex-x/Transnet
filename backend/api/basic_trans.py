@@ -1,5 +1,6 @@
 # test_api.py
 
+from typing import Dict, Any
 import pandas as pd
 import os
 import typing
@@ -24,7 +25,7 @@ class BasicTrans:
     path = os.path.join(current_dir, "../../database/processed_data/cedict.csv")
 
     try:
-      self.basic_db_cedict = pd.read_csv(path)
+      self.basic_db_cedict = pd.read_csv(path)  # type: ignore
       self.logger.debug("loads csv successfully")
     except FileNotFoundError as e:
       self.logger.error(f"{e}\nDid you process raw data and save it in the"
@@ -32,7 +33,15 @@ class BasicTrans:
     except Exception as e:
       self.logger.error(f"{e}")
 
-  def trans(self, input: str) -> typing.Optional[dict]:
+  def trans(self, input: str) -> typing.Optional[Dict[str, Any]]:
+    """
+    Use basic dictory to translate the input text.
+
+    :param input: the string that you want translate.
+    :type input: str
+    :return: the translation result
+    :rtype: dict[str, Scalar] | None
+    """
     if isinstance(self.basic_db_cedict, pd.DataFrame):
       resuld = self.basic_db_cedict[
         self.basic_db_cedict['simplified'] == input]
