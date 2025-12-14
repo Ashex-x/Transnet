@@ -5,7 +5,7 @@ import re
 import os
 
 
-def convert(u8_file, csv_file):
+def convert(u8_file: str, csv_file: str) -> None:
   with open(u8_file, 'r', encoding='utf-8') as infile, \
     open(csv_file, 'w', encoding='utf-8', newline='') as outfile:
 
@@ -35,8 +35,10 @@ def convert(u8_file, csv_file):
       else:
         pinyin = ''
 
+      rest = rest.split('/', 1)[1]
+
       # Extract english
-      definitions = re.findall(r'/(.*?)/', rest)
+      definitions = [x for x in rest.split('/') if x]
       translation = '/ '.join(definitions)
 
       # Write CSV
@@ -48,7 +50,7 @@ def convert(u8_file, csv_file):
 if __name__ == "__main__":
   # Check file path
   u8_file = 'cedict_ts.u8'
-  csv_file = 'cedict.csv'
+  csv_file = '../processed_data/cedict.csv'
 
   if os.path.exists(csv_file):
     os.remove(csv_file)

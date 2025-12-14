@@ -6,8 +6,33 @@ __pycache__
 logs/*.log
 
 # database
+database/processed_data/*.u8
 database/processed_data/*.csv
 database/raw_data/*.u8
+database/raw_data/*.csv
 
 # cmake
-build/.cmake/
+build/
+*/build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+
+CTestTestfile.cmake
+
+CMakeDoxyfile.in
+CMakeDoxygenDefaults.cmake
+
+Makefile
+
+*.cmake
+*.swp
+*.swo
+*~
+
+# some docs
+docs/ARCHITECTURE.pdf
