@@ -1,0 +1,8 @@
+# LLM configuration
+
+[openai]
+api_key = "${OPENAI_API_KEY}"
+base_url = "${OPENAI_BASE_URL}"
+model = "${OPENAI_MODEL}"
+timeout_seconds = 30
+max_retries = 3

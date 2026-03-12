@@ -1,0 +1,16 @@
+[package]
+name = "transnet-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+axum.workspace = true
+serde.workspace = true
+tokio.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+transnet-llm.workspace = true
+transnet-types.workspace = true

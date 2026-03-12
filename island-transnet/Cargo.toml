@@ -1,0 +1,30 @@
+[workspace]
+members = [
+    "crates/transnet-types",
+    "crates/transnet-llm",
+    "crates/transnet-api",
+    "bins/transnet-server",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Island Team"]
+license = "MIT"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+thiserror = "1.0"
+axum = { version = "0.7", features = ["macros"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+transnet-types = { path = "crates/transnet-types" }
+transnet-llm = { path = "crates/transnet-llm" }
+transnet-api = { path = "crates/transnet-api" }

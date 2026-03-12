@@ -36,3 +36,7 @@ Makefile
 
 # some docs
 docs/ARCHITECTURE.pdf
+
+# dist
+*/dist
+*/node_modules

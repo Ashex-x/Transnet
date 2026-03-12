@@ -1,0 +1,36 @@
+namespace ecs;
+
+// Entity delta structure for streaming updates
+table EntityDelta {
+  id: string;
+  bitmask: uint32;
+  position: [float32];
+  orientation: float32;
+  color: string;
+  shape: string;
+  size: [float32];
+  name: string;
+  material_type: string;
+  components: string;
+  volume: float32;
+  toxicity: float32;
+  degradability: bool;
+  fat: float32;
+  protein: float32;
+  carbohydrate: float32;
+  water_content: float32;
+  fiber_content: float32;
+  vitamins: float32;
+  trace_elements: float32;
+  caloric_value: float32;
+  hunger: float32;
+  water: float32;
+}
+
+// Full snapshot containing all entities
+table Snapshot {
+  entities: [EntityDelta];
+  tick: uint64;
+}
+
+root_type Snapshot;

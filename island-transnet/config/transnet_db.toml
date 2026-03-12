@@ -1,0 +1,22 @@
+# Database configuration
+
+[sqlite]
+path = "data/transnet.db"
+pool_size = 10
+enable_wal = true
+busy_timeout = 5000
+connection_timeout = 30
+
+[qdrant]
+url = "http://localhost:6333"
+collection_name = "word_embeddings"
+vector_size = 1536
+distance = "Cosine"
+
+[qdrant.hnsw]
+m = 16
+ef_construct = 100
+
+[qdrant.timeout]
+connect = 10
+request = 30

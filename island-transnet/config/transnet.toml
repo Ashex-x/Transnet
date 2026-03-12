@@ -1,0 +1,15 @@
+# Main Transnet configuration
+
+[server]
+host = "127.0.0.1"
+port = 8080
+workers = 4
+
+[logging]
+level = "info"
+format = "json"
+file = "logs/transnet.log"
+
+[ipc]
+socket_path = "/tmp/transnet_ipc.sock"
+enable = true

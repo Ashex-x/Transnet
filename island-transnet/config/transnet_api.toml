@@ -1,0 +1,15 @@
+# API configuration
+
+[auth]
+token_expiry_hours = 24
+refresh_token_expiry_days = 7
+password_min_length = 8
+
+[ratelimit]
+requests_per_minute = 100
+
+[cors]
+allowed_origins = ["*"]
+allowed_methods = ["GET", "POST", "PATCH", "DELETE"]
+allowed_headers = ["Content-Type", "Authorization"]
+expose_headers = []

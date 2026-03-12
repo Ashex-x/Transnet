@@ -1,0 +1,27 @@
+{
+  "name": "static",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build:ts": "tsc && node fix-imports.js",
+    "build:scss": "sass src/styles:dist/styles --no-source-map",
+    "build": "npm run build:ts && npm run build:scss",
+    "watch:ts": "tsc --watch",
+    "watch:scss": "sass src/styles:dist/styles --watch --no-source-map",
+    "watch": "npm run watch:ts & npm run watch:scss",
+    "clean": "rm -rf dist",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "sass": "^1.97.3",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "flatbuffers": "^25.9.23"
+  }
+}
