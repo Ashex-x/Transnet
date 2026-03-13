@@ -1,12 +1,12 @@
 # Main Transnet configuration
 
 [server]
-host = "127.0.0.1"
-port = 8080
-workers = 4
+host = "${BACKEND_HOST}"
+port = "${BACKEND_PORT}"
+workers = "${WORKERS}"
 
 [logging]
-level = "info"
+level = "${RUST_LOG}"
 format = "json"
 file = "logs/transnet.log"
 

@@ -38,5 +38,25 @@ Makefile
 docs/ARCHITECTURE.pdf
 
 # dist
-*/dist
-*/node_modules
+dist/
+*/dist/
+
+# node_modules
+node_modules/
+*/node_modules/
+
+# Rust
+target/
+Cargo.lock
+*.lock
+*.lock.json
+*.lock.toml
+*.lock.yaml
+*.lock.yml
+*.lock.json
+*.lock.toml
+*.lock.yaml
+*.lock.yml
+
+# environment variables
+.env
