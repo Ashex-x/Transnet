@@ -7,7 +7,15 @@ use transnet_types::{LlmFileConfig, ServerFileConfig};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-  let _ = dotenvy::dotenv();
+  // Load .env from the project root (parent directory)
+  let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
+  let project_root = Path::new(&manifest_dir)
+    .parent()
+    .and_then(|p| p.parent())
+    .and_then(|p| p.parent())
+    .context("failed to find project root")?;
+  let env_path = project_root.join(".env");
+  let _ = dotenvy::from_path(&env_path);
 
   let server_config: ServerFileConfig = read_config("config/transnet.toml")?;
   let llm_config: LlmFileConfig = read_config("config/transnet_llm.toml")?;
