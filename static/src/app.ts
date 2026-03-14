@@ -1,73 +1,86 @@
 /**
- * app.ts serves as the main entry point for the frontend application.
- * It bootstraps the application and loads the appropriate page components
- * when a user navigates to a specific route.
- * MainWeb is the initial landing page/component presented to the user.
+ * app.ts - Main entry point for the Transnet frontend application
  */
 
-import { MainWeb } from './components/main_web';
-import { Metaland } from './components/metaland';
-import { House } from './components/house';
-import { Transnet } from './components/transnet';
 import { router } from './router';
+import { HomePage } from './pages/HomePage';
+import { AuthPage } from './pages/AuthPage';
+import { HistoryPage } from './pages/HistoryPage';
+import { FavoritesPage } from './pages/FavoritesPage';
+import { ProfilePage } from './pages/ProfilePage';
 
-interface Component {
-  destroy(): void;
+// Note: Styles are loaded via link tag in index.html
+
+interface PageComponent {
   render(): void | Promise<void>;
+  destroy(): void;
 }
 
 class App {
-  private currentComponent: Component | null;
+  private currentPage: PageComponent | null = null;
+  private container: HTMLElement;
 
   constructor() {
-    this.currentComponent = null;
+    this.container = document.body;
   }
 
   init(): void {
-    router.register('/', () => this.loadMainWeb());
-    router.register('/metaland', () => this.loadMetaland());
-    router.register('/metaland/house', () => this.loadHouse());
-    router.register('/transnet', () => this.loadTransnet());
+    // Register routes
+    router.register('/', () => this.loadHomePage());
+    router.register('/login', () => this.loadAuthPage());
+    router.register('/register', () => this.loadAuthPage());
+    router.register('/history', () => this.loadHistoryPage());
+    router.register('/favorites', () => this.loadFavoritesPage());
+    router.register('/profile', () => this.loadProfilePage());
+
+    // Handle initial route
     router.handleRoute();
   }
 
-  loadMainWeb(): void {
-    if (this.currentComponent) {
-      this.currentComponent.destroy();
+  private destroyCurrentPage(): void {
+    if (this.currentPage) {
+      this.currentPage.destroy();
+      this.currentPage = null;
     }
-    const component = new MainWeb();
-    this.currentComponent = component;
-    component.render();
   }
 
-  loadMetaland(): void {
-    if (this.currentComponent) {
-      this.currentComponent.destroy();
-    }
-    const component = new Metaland(document.body);
-    this.currentComponent = component;
-    component.render();
+  private async loadHomePage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new HomePage(this.container);
+    this.currentPage = page;
+    await page.render();
   }
 
-  async loadHouse(): Promise<void> {
-    if (this.currentComponent) {
-      this.currentComponent.destroy();
-    }
-    const component = new House(document.body);
-    this.currentComponent = component;
-    await component.render();
+  private loadAuthPage(): void {
+    this.destroyCurrentPage();
+    const page = new AuthPage(this.container);
+    this.currentPage = page;
+    page.render();
   }
 
-  loadTransnet(): void {
-    if (this.currentComponent) {
-      this.currentComponent.destroy();
-    }
-    const component = new Transnet(document.body);
-    this.currentComponent = component;
-    component.render();
+  private async loadHistoryPage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new HistoryPage(this.container);
+    this.currentPage = page;
+    await page.render();
+  }
+
+  private async loadFavoritesPage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new FavoritesPage(this.container);
+    this.currentPage = page;
+    await page.render();
+  }
+
+  private async loadProfilePage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new ProfilePage(this.container);
+    this.currentPage = page;
+    await page.render();
   }
 }
 
+// Initialize app when DOM is ready
 const app = new App();
 document.addEventListener('DOMContentLoaded', () => {
   app.init();

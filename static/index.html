@@ -1,12 +1,24 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Anima - Metaland</title>
+  <meta name="description" content="Transnet - AI驱动的智能翻译平台，支持多语言翻译、历史记录和收藏功能">
+  <meta name="theme-color" content="#0a0a0f">
+  <title>Transnet - AI 智能翻译</title>
+  
+  <!-- Favicon -->
   <link rel="icon" type="image/x-icon" href="/resource/favicon.jpg">
-  <link rel="stylesheet" href="/assets/styles/animations.css">
-  <link rel="stylesheet" href="/assets/styles/static.css">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Styles -->
+  <link rel="stylesheet" href="/assets/styles/transnet.css">
+  
+  <!-- Import Maps -->
   <script type="importmap">
   {
     "imports": {
@@ -14,8 +26,28 @@
     }
   }
   </script>
+  
+  <!-- Fallback styles if CSS fails to load -->
+  <style>
+    body {
+      background: #0a0a0f;
+      color: #fff;
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+    }
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      color: #00f0ff;
+      font-size: 1.5rem;
+    }
+  </style>
 </head>
 <body>
+  <div id="loading" class="loading">Loading...</div>
   <script type="module" src="/assets/app.js"></script>
 </body>
 </html>
