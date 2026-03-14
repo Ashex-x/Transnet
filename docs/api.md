@@ -2,11 +2,10 @@
 
 ## Overview
 
-**Base URL**: `/api`
-**Protocol**: HTTP/HTTPS
+**Protocol**: HTTPS
 **Content-Type**: `application/json`
 **Authentication**: JWT Bearer Token (for protected endpoints only)
-**ID Format**: UUID v7
+**ID Format**: UUID v7. Primary identifiers: `user_id` (users), `translation_id` (history/favorites).
 
 ## Architecture
 
@@ -70,15 +69,23 @@ Get real-time system statistics and health status.
 ```
 
 ### GET `/health`
-Health check endpoint.
+
+Combined liveness and readiness check.
+
+Liveness: The HTTP server is up and responding.
+Readiness: Core dependencies (e.g. Qdrant, LLM API) are reachable and healthy.
 
 **Response (200 OK)**:
 ```json
 {
   "success": true,
   "data": {
-    "status": "ok",
-    "service": "transnet"
+    "status": "ready",
+    "service": "transnet",
+    "checks": {
+      "qdrant": "connected",
+      "llm_api": "reachable"
+    }
   }
 }
 ```
@@ -94,7 +101,7 @@ Health check endpoint.
 **Token Payload**:
 ```json
 {
-  "sub": "550e8400-e29b-41d4-a716-446655440000",  // uuid (UUID v7) - user_id
+  "sub": "550e8400-e29b-41d4-a716-446655440000",  // user_id (UUID v7)
   "iat": 1234567890,                              // issued at (Unix timestamp)
   "exp": 1234571490,                              // expires at (Unix timestamp)
   "type": "access"                                // token type: "access" or "refresh"
@@ -133,7 +140,7 @@ Register a new account.
 {
   "success": true,
   "data": {
-    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
     "username": "johndoe",
     "email": "john@example.com"
   }
@@ -167,7 +174,7 @@ Login to account.
     "token_type": "Bearer",
     "expires_in": 3600,
     "user": {
-      "uuid": "550e8400-e29b-41d4-a716-446655440000",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
       "username": "johndoe",
       "email": "john@example.com"
     }
@@ -289,8 +296,7 @@ When JWT is NOT provided (anonymous user):
   "text": "The quick brown fox",
   "source_lang": "en",
   "target_lang": "es",
-  "mode": "basic",
-  "input_type": "auto"
+  "mode": "basic"
 }
 ```
 
@@ -298,24 +304,45 @@ When JWT is NOT provided (anonymous user):
 - `text` (required): Text to translate
 - `source_lang` (required): Source language code (ISO 639-1)
 - `target_lang` (required): Target language code (ISO 639-1)
-- `mode` (optional): `basic`, `explain`
-- `input_type` (optional): `auto`, `word`, `phrase`, `sentence`, `text`
+- `mode` (required): Translation mode, one of:
+  - `basic`
+  - `explain`
+  - `full_analysis`
+  Backend automatically detects `input_type` and validates that this `mode` is supported for the detected input type. See `types.md` for detection criteria and per-input-type behavior.
+
+**Translation Field Types**: The `translation` field in the response contains type-specific data based on the detected `input_type` and requested `mode`. There are **9 possible types** defined in `types.md`:
+
+| Input Type  | Mode            | Translation Type                 |
+| ----------- | --------------- | -------------------------------- |
+| `word`      | `basic`         | `TranslationWordBasic`           |
+| `word`      | `explain`       | `TranslationWordExplain`         |
+| `word`      | `full_analysis` | `TranslationWordFullAnalysis`    |
+| `phrase`    | `basic`         | `TranslationPhraseBasic`         |
+| `phrase`    | `explain`       | `TranslationPhraseExplain`       |
+| `phrase`    | `full_analysis` | `TranslationPhraseFullAnalysis`  |
+| `sentence`  | `basic`         | `TranslationSentenceBasic`       |
+| `sentence`  | `explain`       | `TranslationSentenceExplain`     |
+| `paragraph` | `basic`         | `TranslationParagraphEssayBasic` |
+| `essay`     | `basic`         | `TranslationParagraphEssayBasic` |
+
+For detailed JSON schemas and examples of each translation field type, see `types.md`.
 
 **Authenticated Response (200 OK)**:
 ```json
 {
   "success": true,
   "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "translation_id": "550e8400-e29b-41d4-a716-446655440000",
     "text": "The quick brown fox",
-    "translation": "El rápido zorro marrón",
     "source_lang": "en",
     "target_lang": "es",
     "input_type": "sentence",
     "provider": "openai-compatible",
     "model": "ACTION",
-    "created_at": "2024-01-15T10:30:00Z",
-    "user_id": "550e8400-e29b-41d4-a716-446655440000"
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "translation": {
+      // Translation field type specific data
+    }
   }
 }
 ```
@@ -325,23 +352,23 @@ When JWT is NOT provided (anonymous user):
 {
   "success": true,
   "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "translation_id": "550e8400-e29b-41d4-a716-446655440000",
     "text": "The quick brown fox",
-    "translation": "El rápido zorro marrón",
     "source_lang": "en",
     "target_lang": "es",
     "input_type": "sentence",
     "provider": "openai-compatible",
     "model": "ACTION",
-    "created_at": "2024-01-15T10:30:00Z"
+    "translation": {
+      // Translation field type specific data
+    }
   }
 }
 ```
 
 **Behavior**:
 - Translations are saved to history ONLY when JWT is provided
-- Returns translation ID for favorites reference
-- Translation ID is always returned (can be used by favorites even without JWT)
+- Returns `translation_id` for history and favorites (e.g. POST `/favorites`); always returned even when anonymous
 
 **Error Responses**:
 - `400`: Invalid request data
@@ -367,12 +394,10 @@ Authorization: Bearer <access_token>
 - `source_lang` (optional): Filter by source language
 - `target_lang` (optional): Filter by target language
 - `input_type` (optional): Filter by input type
-- `sort_by` (optional, default: created_at): Sort field (`created_at`, `source_lang`)
-- `sort_order` (optional, default: desc): `asc` or `desc`
 
 **Example Request**:
 ```
-GET /history?page=1&limit=20&source_lang=en&target_lang=es&sort_by=created_at&sort_order=desc
+GET /history?page=1&limit=20&source_lang=en&target_lang=es
 ```
 
 **Response (200 OK)**:
@@ -382,26 +407,28 @@ GET /history?page=1&limit=20&source_lang=en&target_lang=es&sort_by=created_at&so
   "data": {
     "translations": [
       {
-        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "translation_id": "550e8400-e29b-41d4-a716-446655440000",
         "text": "The quick brown fox",
-        "translation": "El rápido zorro marrón",
         "source_lang": "en",
         "target_lang": "es",
         "input_type": "sentence",
         "provider": "openai-compatible",
         "model": "ACTION",
-        "created_at": "2024-01-15T10:30:00Z"
+        "translation": {
+          // Translation field type specific data
+        }
       },
       {
-        "id": "660e8400-e29b-41d4-a716-446655440001",
+        "translation_id": "660e8400-e29b-41d4-a716-446655440001",
         "text": "Hello world",
-        "translation": "Hola mundo",
         "source_lang": "en",
         "target_lang": "es",
-        "input_type": "text",
+        "input_type": "sentence",
         "provider": "openai-compatible",
         "model": "ACTION",
-        "created_at": "2024-01-15T09:15:00Z"
+        "translation": {
+          // Translation field type specific data
+        }
       }
     ],
     "pagination": {
@@ -419,7 +446,7 @@ GET /history?page=1&limit=20&source_lang=en&target_lang=es&sort_by=created_at&so
 
 ---
 
-### GET `/history/:id`
+### GET `/history/:translation_id`
 Get a specific translation by ID.
 
 **Headers** (Required):
@@ -432,15 +459,16 @@ Authorization: Bearer <access_token>
 {
   "success": true,
   "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "translation_id": "550e8400-e29b-41d4-a716-446655440000",
     "text": "The quick brown fox",
-    "translation": "El rápido zorro marrón",
     "source_lang": "en",
     "target_lang": "es",
     "input_type": "sentence",
     "provider": "openai-compatible",
     "model": "ACTION",
-    "created_at": "2024-01-15T10:30:00Z",
+    "translation": {
+      // Translation field type specific data
+    },
     "word_meaning_id": "770e8400-e29b-41d4-a716-446655440001",
     "translation_parts": [
       {
@@ -465,7 +493,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### DELETE `/history/:id`
+### DELETE `/history/:translation_id`
 Delete a translation from history.
 
 **Headers** (Required):
@@ -496,8 +524,10 @@ Authorization: Bearer <access_token>
 
 ## Favorites
 
+Favorites are history records with `is_favorite = true` and an optional `note`. There is no separate favorite ID; use `translation_id` to identify a favorited item.
+
 ### POST `/favorites`
-Add a translation to favorites.
+Mark a translation as favorite (sets `is_favorite = true` on the history record and optionally stores a note).
 
 **Headers** (Required):
 ```
@@ -513,19 +543,18 @@ Authorization: Bearer <access_token>
 ```
 
 **Fields**:
-- `translation_id` (required): Translation UUID from history
-- `note` (optional, max: 500 characters): User note
+- `translation_id` (required): Translation ID from the user's history
+- `note` (optional, max: 500 characters): User note (default empty)
 
-**Response (201 Created)**:
+**Response (200 OK)**:
 ```json
 {
   "success": true,
   "data": {
-    "id": "880e8400-e29b-41d4-a716-446655440002",
     "user_id": "550e8400-e29b-41d4-a716-446655440000",
     "translation_id": "550e8400-e29b-41d4-a716-446655440000",
     "note": "Useful for travel",
-    "created_at": "2024-01-15T11:00:00Z"
+    "updated_at": "2024-01-15T12:30:00Z"
   }
 }
 ```
@@ -534,12 +563,12 @@ Authorization: Bearer <access_token>
 - `400`: Validation error
 - `401`: Authentication required
 - `404`: Translation not found
-- `409`: Already favorited (unique constraint)
+- `409`: Already favorited (`is_favorite` already true for this translation)
 
 ---
 
 ### GET `/favorites`
-Get user's favorites.
+Get user's favorites (history records where `is_favorite = true`).
 
 **Headers** (Required):
 ```
@@ -549,12 +578,10 @@ Authorization: Bearer <access_token>
 **Query Parameters**:
 - `page` (optional, default: 1): Page number
 - `limit` (optional, default: 20, max: 100): Items per page
-- `sort_by` (optional, default: created_at): Sort field
-- `sort_order` (optional, default: desc): `asc` or `desc`
 
 **Example Request**:
 ```
-GET /favorites?page=1&limit=20&sort_by=created_at&sort_order=desc
+GET /favorites?page=1&limit=20
 ```
 
 **Response (200 OK)**:
@@ -564,21 +591,20 @@ GET /favorites?page=1&limit=20&sort_by=created_at&sort_order=desc
   "data": {
     "favorites": [
       {
-        "id": "880e8400-e29b-41d4-a716-446655440002",
         "translation_id": "550e8400-e29b-41d4-a716-446655440000",
-        "word_id": "770e8400-e29b-41d4-a716-446655440001",
         "note": "Useful for travel",
-        "created_at": "2024-01-15T11:00:00Z",
+        "updated_at": "2024-01-15T12:30:00Z",
         "translation": {
-          "id": "550e8400-e29b-41d4-a716-446655440000",
+          "translation_id": "550e8400-e29b-41d4-a716-446655440000",
           "text": "The quick brown fox",
-          "translation": "El rápido zorro marrón",
           "source_lang": "en",
           "target_lang": "es",
           "input_type": "sentence",
           "provider": "openai-compatible",
           "model": "ACTION",
-          "created_at": "2024-01-15T10:30:00Z"
+          "translation": {
+            // Translation field type specific data
+          }
         },
         "word_meaning": {
           "id": "770e8400-e29b-41d4-a716-446655440001",
@@ -607,8 +633,8 @@ GET /favorites?page=1&limit=20&sort_by=created_at&sort_order=desc
 
 ---
 
-### PUT `/favorites/:id`
-Update a favorite note.
+### PUT `/favorites/:translation_id`
+Update the note for a favorited translation.
 
 **Headers** (Required):
 ```
@@ -627,12 +653,9 @@ Authorization: Bearer <access_token>
 {
   "success": true,
   "data": {
-    "id": "880e8400-e29b-41d4-a716-446655440002",
     "user_id": "550e8400-e29b-41d4-a716-446655440000",
     "translation_id": "550e8400-e29b-41d4-a716-446655440000",
-    "word_id": "770e8400-e29b-41d4-a716-446655440001",
     "note": "Updated note for context",
-    "created_at": "2024-01-15T11:00:00Z",
     "updated_at": "2024-01-15T12:30:00Z"
   }
 }
@@ -641,13 +664,13 @@ Authorization: Bearer <access_token>
 **Error Responses**:
 - `400`: Validation error
 - `401`: Authentication required
-- `403`: Favorite not found or access denied
-- `404`: Favorite not found
+- `403`: Translation not in favorites or access denied
+- `404`: Translation not found
 
 ---
 
-### DELETE `/favorites/:id`
-Delete a favorite.
+### DELETE `/favorites/:translation_id`
+Remove a translation from favorites (sets `is_favorite = false` on the history record).
 
 **Headers** (Required):
 ```
@@ -659,15 +682,15 @@ Authorization: Bearer <access_token>
 {
   "success": true,
   "data": {
-    "message": "Favorite deleted successfully"
+    "message": "Favorite removed successfully"
   }
 }
 ```
 
 **Error Responses**:
 - `401`: Authentication required
-- `403`: Favorite not found or access denied
-- `404`: Favorite not found
+- `403`: Translation not in favorites or access denied
+- `404`: Translation not found
 
 ---
 
@@ -686,10 +709,9 @@ Authorization: Bearer <access_token>
 {
   "success": true,
   "data": {
-    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
     "username": "johndoe",
     "email": "john@example.com",
-    "created_at": "2024-01-01T00:00:00Z",
     "updated_at": "2024-01-15T09:30:00Z",
     "stats": {
       "total_translations": 142,
@@ -726,7 +748,7 @@ Authorization: Bearer <access_token>
 {
   "success": true,
   "data": {
-    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
     "username": "johndoe_new",
     "email": "john_new@example.com",
     "updated_at": "2024-01-15T13:00:00Z"
@@ -810,28 +832,28 @@ The gateway (transnet-server) should:
 
 ## Database Integration
 
-### Tables
+For the **web server (MySQL)** schema (users, history, favorites as part of history), see `docs/database.md`.
 
-- **users**: User accounts with `uuid` as primary key
+Below describes backend storage patterns. Identifiers align with the API: `user_id` (users), `translation_id` (history).
+
+### Tables (conceptual)
+
+- **users**: User accounts; primary key `user_id`
 - **sessions**: Active JWT sessions
-- **translations**: Translation history with `user_id` (nullable)
-- **favorites**: Saved translations/words with `user_id` (required)
-- **word_meanings**: Word definitions with cached embeddings
-- **translation_parts**: Individual word/phrase translations
+- **history** (translations): Translation history; primary key `translation_id`, foreign key `user_id`. Includes `is_favorite` (boolean) and `note` (optional) for favorites; no separate favorites table
+- **word_meanings**: Word definitions with cached embeddings (backend)
+- **translation_parts**: Individual word/phrase translations (backend)
 
 ### Write Pattern
 
-- **Authentication**: Insert into `users` + `sessions` tables
-- **Translation**: Insert into `translations` + `translation_parts` + `word_meanings` (with Qdrant cache check)
-  - `user_id` is included when JWT is provided (authenticated user)
-  - `user_id` is NULL when JWT is NOT provided (anonymous user)
-- **Favorites**: Insert into `favorites` table
-- **History**: Query `translations` with pagination and filters
+- **Authentication**: Insert into `users` + `sessions`
+- **Translation**: Insert into history with `translation_id`, `user_id` (when JWT provided, else nullable for anonymous). Optionally `translation_parts` + `word_meanings` (with Qdrant cache check)
+- **Favorites**: Update history record: set `is_favorite = true` and optional `note` (POST). Update `note` (PUT). Set `is_favorite = false` (DELETE)
 
 ### Read Pattern
 
-- **History**: Join `translations` + `users` with pagination (where `user_id` matches JWT `sub`, or all for admin)
-- **Favorites**: Join `favorites` + `translations` + `word_meanings` (where `user_id` matches JWT `sub`)
+- **History**: Query history by `user_id` with pagination and filters
+- **Favorites**: Query history where `user_id` matches JWT `sub` and `is_favorite = true`
 
 ### Cache Strategy
 
