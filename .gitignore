@@ -60,3 +60,6 @@ Cargo.lock
 
 # environment variables
 .env
+
+# docs
+docs/*.pdf
