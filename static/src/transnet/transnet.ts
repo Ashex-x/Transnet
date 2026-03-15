@@ -50,105 +50,142 @@ export class Transnet {
 
     this.mainElement = this.shell.mount();
 
-    // Create translation UI content
-    const translationContainer = document.createElement('div');
-    translationContainer.className = 'translation-container';
+    // Create translation UI content using innerHTML
+    this.mainElement.innerHTML = `
+      <div class="translation-container">
+        <!-- Input Section -->
+        <div class="translation-section">
+          <div class="section-header">
+            <label>Source</label>
+          </div>
+          <textarea id="source-text" placeholder="Enter text to translate... Press Ctrl+Enter to translate quickly."></textarea>
+          <div class="image-upload-area" id="image-upload-area">
+            <input type="file" accept="image/*" id="image-input">
+            <div class="upload-placeholder">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span>Click to upload an image</span>
+            </div>
+          </div>
+          <img class="image-preview" id="image-preview" alt="Preview">
+        </div>
 
-    const inputSection = document.createElement('div');
-    inputSection.className = 'translation-section';
+        <!-- Output Section -->
+        <div class="translation-section">
+          <div class="section-header">
+            <label>Target</label>
+          </div>
+          <textarea id="target-text" placeholder="Translation will appear here..." readonly></textarea>
+        </div>
+      </div>
 
-    const inputHeader = document.createElement('div');
-    inputHeader.className = 'section-header';
+      <!-- Translation Config Section -->
+      <div class="translation-config-section">
+        <div class="config-controls">
+          <!-- Language selectors row -->
+          <div class="config-row">
+            <select id="source-lang"></select>
+            <button class="swap-button" id="swap-button">Swap</button>
+            <select id="target-lang"></select>
+          </div>
 
-    const sourceControls = document.createElement('div');
-    sourceControls.className = 'translation-controls';
+          <!-- Output type selector row -->
+          <div class="config-row">
+            <label>Output Type:</label>
+            <select id="output-type" class="output-type-select">
+              <option value="basic" selected>Basic</option>
+              <option value="explain">Explain</option>
+              <option value="full_analysis">Full</option>
+            </select>
+          </div>
 
-    const sourceLangSelect = document.createElement('select');
-    sourceLangSelect.id = 'source-lang';
-    this.populateLanguageOptions(sourceLangSelect, 'en');
+          <!-- Input type selector row -->
+          <div class="config-row">
+            <label>Input Type:</label>
+            <select id="input-type" class="input-type-select">
+              <option value="text" selected>Text</option>
+              <option value="image">Image</option>
+            </select>
+          </div>
 
-    const targetLangSelect = document.createElement('select');
-    targetLangSelect.id = 'target-lang';
-    this.populateLanguageOptions(targetLangSelect, 'es');
+          <!-- Translate button row -->
+          <div class="config-row">
+            <button class="translate-button" id="translate-button">Translate</button>
+            <p class="action-hint">Press Ctrl+Enter to translate quickly.</p>
+          </div>
+        </div>
+      </div>
 
-    const swapButton = document.createElement('button');
-    swapButton.className = 'swap-button';
-    swapButton.textContent = 'Swap';
-    swapButton.addEventListener('click', () => {
-      const currentSource = sourceLangSelect.value;
-      sourceLangSelect.value = targetLangSelect.value;
-      targetLangSelect.value = currentSource;
-    });
+      <!-- Extra Output Section -->
+      <div class="extra-output-section">
+        <div class="extra-output-section__title">Extra Output</div>
+        <div class="extra-output-section__content"></div>
+      </div>
+    `;
 
-    sourceControls.appendChild(sourceLangSelect);
-    sourceControls.appendChild(swapButton);
-    sourceControls.appendChild(targetLangSelect);
+    // Populate language selectors
+    const sourceLangSelect = document.getElementById('source-lang') as HTMLSelectElement;
+    const targetLangSelect = document.getElementById('target-lang') as HTMLSelectElement;
+    if (sourceLangSelect && targetLangSelect) {
+      this.populateLanguageOptions(sourceLangSelect, 'en');
+      this.populateLanguageOptions(targetLangSelect, 'es');
+    }
 
-    const sourceLabel = document.createElement('label');
-    sourceLabel.textContent = 'Source';
+    // Attach event listeners
+    const sourceText = document.getElementById('source-text') as HTMLTextAreaElement;
+    const imageUploadArea = document.getElementById('image-upload-area') as HTMLElement;
+    const imageInput = document.getElementById('image-input') as HTMLInputElement;
+    const swapButton = document.getElementById('swap-button') as HTMLButtonElement;
+    const inputTypeSelect = document.getElementById('input-type') as HTMLSelectElement;
+    const translateButton = document.getElementById('translate-button') as HTMLButtonElement;
 
-    const inputTextArea = document.createElement('textarea');
-    inputTextArea.id = 'source-text';
-    inputTextArea.placeholder = 'Enter text to translate...';
-    inputTextArea.addEventListener('keydown', (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-        event.preventDefault();
+    if (sourceText) {
+      sourceText.addEventListener('keydown', (event: KeyboardEvent) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+          event.preventDefault();
+          void this.onTranslate();
+        }
+      });
+    }
+
+    if (imageUploadArea && imageInput) {
+      imageUploadArea.addEventListener('click', () => {
+        imageInput.click();
+      });
+
+      imageInput.addEventListener('change', (event: Event) => {
+        const target = event.target as HTMLInputElement;
+        const file = target.files?.[0];
+        if (file) {
+          void this.onImageUpload(file);
+        }
+      });
+    }
+
+    if (swapButton && sourceLangSelect && targetLangSelect) {
+      swapButton.addEventListener('click', () => {
+        const currentSource = sourceLangSelect.value;
+        sourceLangSelect.value = targetLangSelect.value;
+        targetLangSelect.value = currentSource;
+      });
+    }
+
+    if (inputTypeSelect) {
+      inputTypeSelect.addEventListener('change', (event: Event) => {
+        const target = event.target as HTMLSelectElement;
+        const type = target.value as 'text' | 'image';
+        this.onInputChangeType(type);
+      });
+    }
+
+    if (translateButton) {
+      translateButton.addEventListener('click', () => {
         void this.onTranslate();
-      }
-    });
-
-    inputHeader.appendChild(sourceControls);
-    inputSection.appendChild(inputHeader);
-    inputSection.appendChild(sourceLabel);
-    inputSection.appendChild(inputTextArea);
-
-    const actionSection = document.createElement('div');
-    actionSection.className = 'action-section';
-
-    const translateButton = document.createElement('button');
-    translateButton.className = 'translate-button';
-    translateButton.textContent = 'Translate';
-    translateButton.id = 'translate-button';
-    translateButton.addEventListener('click', () => {
-      void this.onTranslate();
-    });
-
-    const helperText = document.createElement('p');
-    helperText.className = 'action-hint';
-    helperText.textContent = 'Press Ctrl+Enter to translate quickly.';
-
-    actionSection.appendChild(translateButton);
-    actionSection.appendChild(helperText);
-
-    const outputSection = document.createElement('div');
-    outputSection.className = 'translation-section';
-
-    const outputHeader = document.createElement('div');
-    outputHeader.className = 'section-header';
-
-    const targetLabel = document.createElement('label');
-    targetLabel.textContent = 'Target';
-
-    const outputTextArea = document.createElement('textarea');
-    outputTextArea.id = 'target-text';
-    outputTextArea.placeholder = 'Translation will appear here...';
-    outputTextArea.readOnly = true;
-
-    const status = document.createElement('p');
-    status.id = 'transnet-status';
-    status.className = 'transnet-status';
-    status.textContent = 'Ready to translate.';
-
-    outputSection.appendChild(outputHeader);
-    outputSection.appendChild(targetLabel);
-    outputSection.appendChild(outputTextArea);
-    outputSection.appendChild(status);
-
-    translationContainer.appendChild(inputSection);
-    translationContainer.appendChild(actionSection);
-    translationContainer.appendChild(outputSection);
-
-    this.mainElement.appendChild(translationContainer);
+      });
+    }
   }
 
   /**
@@ -175,6 +212,59 @@ export class Transnet {
   }
 
   /**
+   * Handle image upload and display preview.
+   */
+  private async onImageUpload(file: File): Promise<void> {
+    const imagePreview = document.getElementById('image-preview') as HTMLImageElement;
+    const imageUploadArea = document.getElementById('image-upload-area') as HTMLElement;
+
+    if (!imagePreview || !imageUploadArea) {
+      return;
+    }
+
+    // Display image preview
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        imagePreview.src = event.target.result as string;
+        imagePreview.classList.add('visible');
+        imageUploadArea.style.display = 'none';
+      }
+    };
+    reader.readAsDataURL(file);
+
+    // Image processor logic placeholder - no business logic implemented
+    // Future implementation will process the uploaded image here
+  }
+
+  /**
+   * Handle input type switching between text and image.
+   */
+  private onInputChangeType(type: 'text' | 'image'): void {
+    const sourceText = document.getElementById('source-text') as HTMLTextAreaElement;
+    const imageUploadArea = document.getElementById('image-upload-area') as HTMLElement;
+    const imagePreview = document.getElementById('image-preview') as HTMLImageElement;
+
+    if (!sourceText || !imageUploadArea || !imagePreview) {
+      return;
+    }
+
+    if (type === 'image') {
+      // Show image upload/preview, hide textarea
+      sourceText.style.display = 'none';
+      imageUploadArea.classList.add('visible');
+      imageUploadArea.style.display = 'block';
+    } else {
+      // Show textarea, hide image upload/preview
+      sourceText.style.display = 'block';
+      imageUploadArea.classList.remove('visible');
+      imageUploadArea.style.display = 'none';
+      imagePreview.classList.remove('visible');
+      imagePreview.src = '';
+    }
+  }
+
+  /**
    * Send the translate request and update the UI with the result or error.
    */
   private async onTranslate(): Promise<void> {
@@ -182,10 +272,11 @@ export class Transnet {
     const targetText = document.getElementById('target-text') as HTMLTextAreaElement;
     const sourceLang = document.getElementById('source-lang') as HTMLSelectElement;
     const targetLang = document.getElementById('target-lang') as HTMLSelectElement;
+    const outputType = document.getElementById('output-type') as HTMLSelectElement;
     const translateButton = document.getElementById('translate-button') as HTMLButtonElement;
     const status = document.getElementById('transnet-status') as HTMLParagraphElement;
 
-    if (!sourceText || !targetText || !sourceLang || !targetLang || !translateButton || !status) {
+    if (!sourceText || !targetText || !sourceLang || !targetLang || !outputType || !translateButton || !status) {
       return;
     }
 
@@ -212,7 +303,7 @@ export class Transnet {
           text,
           source_lang: sourceLang.value,
           target_lang: targetLang.value,
-          mode: 'basic',
+          mode: outputType.value,
           input_type: 'auto',
         }),
       });
