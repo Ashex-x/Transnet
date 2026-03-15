@@ -3,8 +3,8 @@
  * Main translation interface with glass morphism design
  */
 
-import { ApiService, TranslationRequest, Translation } from '../services/ApiService';
-import { AuthService } from '../services/AuthService';
+import { ApiService, TranslationRequest, Translation } from '../services/api';
+import { AuthService } from '../services/auth';
 import { Toast } from './Toast';
 
 const LANGUAGES = [

@@ -5,12 +5,12 @@
 
 import { ParticleBackground } from '../components/ParticleBackground';
 import { Header } from '../components/Header';
-import { ApiService, Favorite, FavoritesResponse } from '../services/ApiService';
-import { AuthService } from '../services/AuthService';
+import { ApiService, Favorite, FavoritesResponse } from '../services/api';
+import { AuthService } from '../services/auth';
 import { Toast } from '../components/Toast';
 import { router } from '../router';
 
-export class FavoritesPage {
+export class Favorites {
   private container: HTMLElement;
   private particleBg: ParticleBackground | null = null;
   private header: Header | null = null;

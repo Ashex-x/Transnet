@@ -5,8 +5,8 @@
 
 import { ParticleBackground } from '../components/ParticleBackground';
 import { Header } from '../components/Header';
-import { ApiService, HistoryItem, HistoryResponse } from '../services/ApiService';
-import { AuthService } from '../services/AuthService';
+import { ApiService, HistoryItem, HistoryResponse } from '../services/api';
+import { AuthService } from '../services/auth';
 import { Toast } from '../components/Toast';
 import { router } from '../router';
 
@@ -19,7 +19,7 @@ const LANGUAGES = [
   { code: 'ja', name: '日本語' },
 ];
 
-export class HistoryPage {
+export class History {
   private container: HTMLElement;
   private particleBg: ParticleBackground | null = null;
   private header: Header | null = null;

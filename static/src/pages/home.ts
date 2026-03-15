@@ -6,11 +6,11 @@
 import { ParticleBackground } from '../components/ParticleBackground';
 import { Header } from '../components/Header';
 import { Translator } from '../components/Translator';
-import { ApiService, HistoryItem } from '../services/ApiService';
-import { AuthService } from '../services/AuthService';
+import { ApiService, HistoryItem } from '../services/api';
+import { AuthService } from '../services/auth';
 import { router } from '../router';
 
-export class HomePage {
+export class Home {
   private container: HTMLElement;
   private particleBg: ParticleBackground | null = null;
   private header: Header | null = null;

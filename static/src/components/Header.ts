@@ -3,7 +3,7 @@
  * Navigation and user menu
  */
 
-import { AuthService } from '../services/AuthService';
+import { AuthService } from '../services/auth';
 import { router } from '../router';
 
 export class Header {

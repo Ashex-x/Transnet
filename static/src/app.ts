@@ -3,11 +3,11 @@
  */
 
 import { router } from './router';
-import { HomePage } from './pages/HomePage';
-import { AuthPage } from './pages/AuthPage';
-import { HistoryPage } from './pages/HistoryPage';
-import { FavoritesPage } from './pages/FavoritesPage';
-import { ProfilePage } from './pages/ProfilePage';
+import { Home } from './pages/home';
+import { Auth } from './pages/auth';
+import { History } from './pages/history';
+import { Favorites } from './pages/favorites';
+import { Profile } from './pages/profile';
 
 // Note: Styles are loaded via link tag in index.html
 
@@ -46,35 +46,35 @@ class App {
 
   private async loadHomePage(): Promise<void> {
     this.destroyCurrentPage();
-    const page = new HomePage(this.container);
+    const page = new Home(this.container);
     this.currentPage = page;
     await page.render();
   }
 
   private loadAuthPage(): void {
     this.destroyCurrentPage();
-    const page = new AuthPage(this.container);
+    const page = new Auth(this.container);
     this.currentPage = page;
     page.render();
   }
 
   private async loadHistoryPage(): Promise<void> {
     this.destroyCurrentPage();
-    const page = new HistoryPage(this.container);
+    const page = new History(this.container);
     this.currentPage = page;
     await page.render();
   }
 
   private async loadFavoritesPage(): Promise<void> {
     this.destroyCurrentPage();
-    const page = new FavoritesPage(this.container);
+    const page = new Favorites(this.container);
     this.currentPage = page;
     await page.render();
   }
 
   private async loadProfilePage(): Promise<void> {
     this.destroyCurrentPage();
-    const page = new ProfilePage(this.container);
+    const page = new Profile(this.container);
     this.currentPage = page;
     await page.render();
   }

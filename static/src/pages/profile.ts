@@ -5,16 +5,16 @@
 
 import { ParticleBackground } from '../components/ParticleBackground';
 import { Header } from '../components/Header';
-import { ApiService, Profile } from '../services/ApiService';
-import { AuthService } from '../services/AuthService';
+import { ApiService, Profile as ProfileType } from '../services/api';
+import { AuthService } from '../services/auth';
 import { Toast } from '../components/Toast';
 import { router } from '../router';
 
-export class ProfilePage {
+export class Profile {
   private container: HTMLElement;
   private particleBg: ParticleBackground | null = null;
   private header: Header | null = null;
-  private profile: Profile | null = null;
+  private profile: ProfileType | null = null;
   private isEditing = false;
 
   constructor(container: HTMLElement = document.body) {

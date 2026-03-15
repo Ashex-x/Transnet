@@ -4,11 +4,11 @@
 
 import { ParticleBackground } from '../components/ParticleBackground';
 import { Header } from '../components/Header';
-import { AuthService } from '../services/AuthService';
+import { AuthService } from '../services/auth';
 import { Toast } from '../components/Toast';
 import { router } from '../router';
 
-export class AuthPage {
+export class Auth {
   private container: HTMLElement;
   private particleBg: ParticleBackground | null = null;
   private header: Header | null = null;
