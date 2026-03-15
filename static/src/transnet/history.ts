@@ -1,14 +1,10 @@
 /**
- * History Page
- * Displays user's translation history
+ * Authenticated history page for past Transnet translations.
  */
 
-import { ParticleBackground } from '../components/ParticleBackground';
-import { Header } from '../components/Header';
-import { ApiService, HistoryItem, HistoryResponse } from '../services/api';
-import { AuthService } from '../services/auth';
-import { Toast } from '../components/Toast';
-import { router } from '../router';
+import { PageShell } from '../shared/page-shell';
+import { Toast } from '../shared/toast';
+import { ApiService, HistoryItem, HistoryResponse } from '../services/tran_api/api';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -21,8 +17,7 @@ const LANGUAGES = [
 
 export class History {
   private container: HTMLElement;
-  private particleBg: ParticleBackground | null = null;
-  private header: Header | null = null;
+  private shell: PageShell | null = null;
   private historyData: HistoryResponse | null = null;
   private currentPage = 1;
   private filters = {
@@ -30,31 +25,26 @@ export class History {
     target_lang: '',
     input_type: '',
   };
+  private mainElement: HTMLElement | null = null;
 
   constructor(container: HTMLElement = document.body) {
     this.container = container;
     this.container.innerHTML = '';
   }
 
+  /**
+   * Guard access, build the page shell, and load the first history page.
+   */
   async render(): Promise<void> {
-    // Check authentication
-    if (!AuthService.isAuthenticated()) {
-      Toast.info('请先登录');
-      router.navigate('/login');
-      return;
-    }
+    this.shell = new PageShell(this.container, {
+      requiresAuth: true,
+      showFooter: false,
+      mainClassName: 'profile-page',
+    });
 
-    // Add particle background
-    this.particleBg = new ParticleBackground(this.container);
+    this.mainElement = this.shell.mount();
 
-    // Add header
-    this.header = new Header();
-    this.header.mount(this.container);
-
-    // Create main content
-    const main = document.createElement('main');
-    main.className = 'profile-page';
-    main.innerHTML = `
+    this.mainElement.innerHTML = `
       <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
           <h1 style="font-size: 2rem; font-weight: 700;">Translation History</h1>
@@ -76,22 +66,24 @@ export class History {
             </select>
           </div>
         </div>
-        
+
         <div class="history-list"></div>
-        
+
         <div class="pagination"></div>
       </div>
     `;
 
-    this.container.appendChild(main);
     this.bindFilterEvents();
     await this.loadHistory();
   }
 
+  /**
+   * Bind filter controls and reload history whenever a filter changes.
+   */
   private bindFilterEvents(): void {
-    const sourceFilter = this.container.querySelector('.filter-source');
-    const targetFilter = this.container.querySelector('.filter-target');
-    const typeFilter = this.container.querySelector('.filter-type');
+    const sourceFilter = this.mainElement?.querySelector('.filter-source');
+    const targetFilter = this.mainElement?.querySelector('.filter-target');
+    const typeFilter = this.mainElement?.querySelector('.filter-type');
 
     sourceFilter?.addEventListener('change', (e) => {
       this.filters.source_lang = (e.target as HTMLSelectElement).value;
@@ -112,6 +104,9 @@ export class History {
     });
   }
 
+  /**
+   * Fetch the current history page using the active filters.
+   */
   private async loadHistory(): Promise<void> {
     const response = await ApiService.getHistory({
       page: this.currentPage,
@@ -130,8 +125,11 @@ export class History {
     }
   }
 
+  /**
+   * Render the list of history cards or the empty state.
+   */
   private renderHistoryList(): void {
-    const container = this.container.querySelector('.history-list');
+    const container = this.mainElement?.querySelector('.history-list');
     if (!container) return;
 
     const items = this.historyData?.translations || [];
@@ -149,7 +147,6 @@ export class History {
 
     container.innerHTML = items.map((item, index) => this.renderHistoryCard(item, index)).join('');
 
-    // Bind action events
     container.querySelectorAll('.history-copy-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -178,6 +175,9 @@ export class History {
     });
   }
 
+  /**
+   * Render one history entry card.
+   */
   private renderHistoryCard(item: HistoryItem, index: number): string {
     return `
       <div class="glass-card history-card animate-fade-in-up" style="animation-delay: ${index * 0.05}s;">
@@ -219,19 +219,22 @@ export class History {
     `;
   }
 
+  /**
+   * Render pagination controls for the current response set.
+   */
   private renderPagination(): void {
-    const container = this.container.querySelector('.pagination');
+    const container = this.mainElement?.querySelector('.pagination');
     if (!container || !this.historyData) return;
 
     const { page, total_pages } = this.historyData.pagination;
-    
+
     if (total_pages <= 1) {
       container.innerHTML = '';
       return;
     }
 
     let pages: (number | string)[] = [];
-    
+
     if (total_pages <= 7) {
       pages = Array.from({ length: total_pages }, (_, i) => i + 1);
     } else {
@@ -263,6 +266,9 @@ export class History {
     });
   }
 
+  /**
+   * Save a history item to the favorites list.
+   */
   private async addToFavorite(translationId: string): Promise<void> {
     const response = await ApiService.addFavorite({ translation_id: translationId });
     if (response.success) {
@@ -274,6 +280,9 @@ export class History {
     }
   }
 
+  /**
+   * Remove a single history entry after user confirmation.
+   */
   private async deleteHistoryItem(id: string): Promise<void> {
     if (!confirm('Are you sure you want to delete this translation?')) return;
 
@@ -286,12 +295,18 @@ export class History {
     }
   }
 
+  /**
+   * Escape text before inserting it into history-card HTML.
+   */
   private escapeHtml(text: string): string {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
   }
 
+  /**
+   * Format API timestamps for display in the history list.
+   */
   private formatDate(dateStr: string): string {
     const date = new Date(dateStr);
     return date.toLocaleString('en-US', {
@@ -303,9 +318,12 @@ export class History {
     });
   }
 
+  /**
+   * Remove the page and its shared widgets from the DOM.
+   */
   destroy(): void {
-    this.particleBg?.destroy();
-    this.header?.destroy();
-    this.container.innerHTML = '';
+    this.shell?.destroy();
+    this.shell = null;
+    this.mainElement = null;
   }
 }

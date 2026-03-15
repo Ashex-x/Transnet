@@ -1,0 +1,84 @@
+/**
+ * Styles for `/metaland/**` routes.
+ */
+
+#metaland,
+#house {
+  min-height: 100vh;
+  background: #fff;
+  transition: background 0.3s ease;
+
+  &.dark-mode {
+    background: #000;
+  }
+}
+
+#grid-container,
+#map-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.grid-dot {
+  position: absolute;
+  background: #ccc;
+  border-radius: 50%;
+  transition: transform 0.3s ease;
+}
+
+.zone-button,
+.back-button {
+  position: absolute;
+  z-index: 10;
+  padding: 14px 24px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  backdrop-filter: blur(14px);
+}
+
+#house-button {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+#back-button,
+.back-button {
+  top: var(--space-5);
+  left: var(--space-5);
+}
+
+.entity {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(0, 240, 255, 0.65);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.5);
+}
+
+.myuna-dot {
+  width: 16px;
+  height: 16px;
+  background: rgba(184, 41, 247, 0.8);
+  box-shadow: 0 0 18px rgba(184, 41, 247, 0.5);
+}
+
+.heart-beat {
+  animation: heartBeat 1.8s ease-in-out infinite;
+}
+
+@keyframes heartBeat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+}

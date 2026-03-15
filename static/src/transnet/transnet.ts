@@ -1,8 +1,8 @@
 /**
- * transnet.ts handles the Transnet page for AI-worlds net translation.
+ * Main Transnet translation page.
  */
 
-import { router } from '../router';
+import { PageShell } from '../shared/page-shell';
 
 interface TranslateApiSuccess {
   success: true;
@@ -27,48 +27,30 @@ interface TranslateApiError {
 export class Transnet {
   private container: HTMLElement;
   private readonly apiUrl: string;
+  private shell: PageShell | null = null;
+  private mainElement: HTMLElement | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
     this.apiUrl = '/transnet/api';
   }
 
-  render(): void {
-    this.createTransnetPage();
-  }
+  /**
+   * Render the Transnet translation UI using PageShell.
+   */
+  async render(): Promise<void> {
+    this.container.innerHTML = '';
 
-  private createTransnetPage(): void {
-    const transnet = document.createElement('div');
-    transnet.id = 'transnet';
-    transnet.className = 'page active';
-
-    const header = document.createElement('header');
-    header.id = 'transnet-header';
-
-    const headerContent = document.createElement('div');
-    headerContent.className = 'header-content';
-
-    const title = document.createElement('h1');
-    title.textContent = 'Transnet';
-
-    const tagline = document.createElement('p');
-    tagline.textContent = 'AI-Worlds Net Translation';
-
-    const backButton = document.createElement('button');
-    backButton.className = 'back-button';
-    backButton.innerHTML = '← Back';
-    backButton.addEventListener('click', () => {
-      router.navigate('/');
+    // Create PageShell with header and footer
+    this.shell = new PageShell(this.container, {
+      requiresAuth: false,
+      showFooter: true,
+      mainClassName: 'transnet-page',
     });
 
-    headerContent.appendChild(title);
-    headerContent.appendChild(tagline);
-    header.appendChild(headerContent);
-    header.appendChild(backButton);
+    this.mainElement = this.shell.mount();
 
-    const main = document.createElement('main');
-    main.id = 'transnet-main';
-
+    // Create translation UI content
     const translationContainer = document.createElement('div');
     translationContainer.className = 'translation-container';
 
@@ -166,23 +148,12 @@ export class Transnet {
     translationContainer.appendChild(actionSection);
     translationContainer.appendChild(outputSection);
 
-    main.appendChild(translationContainer);
-
-    const footer = document.createElement('footer');
-    footer.id = 'transnet-footer';
-
-    const footerText = document.createElement('p');
-    footerText.textContent = 'Transnet — Bridging AI Worlds';
-
-    footer.appendChild(footerText);
-
-    transnet.appendChild(header);
-    transnet.appendChild(main);
-    transnet.appendChild(footer);
-
-    this.container.appendChild(transnet);
+    this.mainElement.appendChild(translationContainer);
   }
 
+  /**
+   * Populate a language selector and set its default value.
+   */
   private populateLanguageOptions(select: HTMLSelectElement, defaultValue: string): void {
     const languages: Array<[string, string]> = [
       ['en', 'English'],
@@ -203,6 +174,9 @@ export class Transnet {
     }
   }
 
+  /**
+   * Send the translate request and update the UI with the result or error.
+   */
   private async onTranslate(): Promise<void> {
     const sourceText = document.getElementById('source-text') as HTMLTextAreaElement;
     const targetText = document.getElementById('target-text') as HTMLTextAreaElement;
@@ -266,10 +240,12 @@ export class Transnet {
     }
   }
 
+  /**
+   * Remove the page from the DOM and clean up resources.
+   */
   destroy(): void {
-    const transnet = document.getElementById('transnet');
-    if (transnet) {
-      transnet.remove();
-    }
+    this.shell?.destroy();
+    this.shell = null;
+    this.mainElement = null;
   }
 }

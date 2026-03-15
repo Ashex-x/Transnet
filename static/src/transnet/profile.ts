@@ -1,91 +1,94 @@
 /**
- * Profile Page
- * User profile and settings
+ * Profile page for authenticated Transnet users.
  */
 
-import { ParticleBackground } from '../components/ParticleBackground';
-import { Header } from '../components/Header';
-import { ApiService, Profile as ProfileType } from '../services/api';
-import { AuthService } from '../services/auth';
-import { Toast } from '../components/Toast';
 import { router } from '../router';
+import { ApiService, Profile as ProfileType } from '../services/tran_api/api';
+import { AuthService } from '../services/auth';
+import { PageShell } from '../shared/page-shell';
+import { Toast } from '../shared/toast';
 
 export class Profile {
   private container: HTMLElement;
-  private particleBg: ParticleBackground | null = null;
-  private header: Header | null = null;
+  private shell: PageShell | null = null;
   private profile: ProfileType | null = null;
   private isEditing = false;
+  private mainElement: HTMLElement | null = null;
 
   constructor(container: HTMLElement = document.body) {
     this.container = container;
     this.container.innerHTML = '';
   }
 
+  /**
+   * Guard access, load the profile, and render the editable account page.
+   */
   async render(): Promise<void> {
-    // Check authentication
-    if (!AuthService.isAuthenticated()) {
-      Toast.info('Please login first');
-      router.navigate('/login');
-      return;
-    }
+    this.shell = new PageShell(this.container, {
+      requiresAuth: true,
+      showFooter: false,
+      mainClassName: 'profile-page',
+    });
 
-    // Add particle background
-    this.particleBg = new ParticleBackground(this.container);
+    this.mainElement = this.shell.mount();
 
-    // Add header
-    this.header = new Header();
-    this.header.mount(this.container);
-
-    // Load profile data
     await this.loadProfile();
 
-    // Create main content
-    const main = document.createElement('main');
-    main.className = 'profile-page';
-    main.innerHTML = `
+    this.renderContent();
+    this.bindEvents();
+  }
+
+  /**
+   * Render page content only, preserving shell structure.
+   */
+  private renderContent(): void {
+    if (!this.mainElement) return;
+
+    this.mainElement.innerHTML = `
       <div class="container">
         ${this.renderProfileHeader()}
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-          <!-- Account Settings -->
-          <div class="glass-card" style="padding: 32px;">
-            <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 24px;">Account Settings</h2>
-            
+
+        <div class="profile-grid">
+          <section class="glass-card profile-section">
+            <h2 class="profile-section__title">Account Settings</h2>
+
             <form class="profile-form">
               <div class="input-group">
                 <label class="input-label">用户名</label>
                 <input type="text" class="input-field profile-username" value="${this.profile?.username || ''}" ${!this.isEditing ? 'disabled' : ''}>
               </div>
-              
+
               <div class="input-group">
                 <label class="input-label">邮箱</label>
                 <input type="email" class="input-field profile-email" value="${this.profile?.email || ''}" ${!this.isEditing ? 'disabled' : ''}>
               </div>
 
-              ${this.isEditing ? `
-                <div style="display: flex; gap: 12px; margin-top: 24px;">
-                  <button type="submit" class="btn btn--primary" style="flex: 1;">Save Changes</button>
+              ${
+                this.isEditing
+                  ? `
+                <div class="profile-form__actions">
+                  <button type="submit" class="btn btn--primary profile-form__grow">Save Changes</button>
                   <button type="button" class="btn btn--ghost profile-cancel">Cancel</button>
                 </div>
-              ` : `
-                <button type="button" class="btn btn--secondary profile-edit" style="width: 100%; margin-top: 24px;">
+              `
+                  : `
+                <button type="button" class="btn btn--secondary profile-edit profile-form__full">
                   Edit Profile
                 </button>
-              `}
+              `
+              }
             </form>
-          </div>
+          </section>
 
-          <!-- Password Change -->
-          <div class="glass-card" style="padding: 32px;">
-            <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 24px;">Change Password</h2>
-            
+          <section class="glass-card profile-section">
+            <h2 class="profile-section__title">Change Password</h2>
+
             <form class="password-form">
               <div class="input-group">
                 <label class="input-label">Current Password</label>
                 <input type="password" class="input-field current-password" placeholder="Enter current password" required>
               </div>
-              
+
               <div class="input-group">
                 <label class="input-label">New Password</label>
                 <input type="password" class="input-field new-password" placeholder="At least 8 chars with uppercase, lowercase and number" required minlength="8">
@@ -96,34 +99,31 @@ export class Profile {
                 <input type="password" class="input-field confirm-password" placeholder="Re-enter new password" required>
               </div>
 
-              <button type="submit" class="btn btn--primary" style="width: 100%; margin-top: 24px;">
+              <button type="submit" class="btn btn--primary profile-form__full">
                 Update Password
               </button>
             </form>
-          </div>
+          </section>
         </div>
 
-        <!-- Account Actions -->
-        <div class="glass-card" style="padding: 32px; margin-top: 24px;">
-          <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 24px; color: var(--error);">Danger Zone</h2>
-          <div style="display: flex; gap: 16px;">
-            <button class="btn btn--danger profile-logout" style="flex: 1;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16 17 21 12 16 7"></polyline>
-                <line x1="21" y1="12" x2="9" y2="12"></line>
-              </svg>
-              Logout
-            </button>
-          </div>
-        </div>
+        <section class="glass-card profile-section profile-section--danger">
+          <h2 class="profile-section__title profile-section__title--danger">Danger Zone</h2>
+          <button class="btn btn--danger profile-logout profile-form__grow">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            Logout
+          </button>
+        </section>
       </div>
     `;
-
-    this.container.appendChild(main);
-    this.bindEvents();
   }
 
+  /**
+   * Fetch the latest profile data used by the page.
+   */
   private async loadProfile(): Promise<void> {
     const response = await ApiService.getProfile();
     if (response.success && response.data) {
@@ -133,6 +133,9 @@ export class Profile {
     }
   }
 
+  /**
+   * Render the profile summary block shown above the editable sections.
+   */
   private renderProfileHeader(): string {
     const user = AuthService.getCurrentUser();
     const stats = this.profile?.stats;
@@ -164,48 +167,46 @@ export class Profile {
     `;
   }
 
+  /**
+   * Bind profile edit, password update, and logout actions.
+   */
   private bindEvents(): void {
-    // Edit profile
-    const editBtn = this.container.querySelector('.profile-edit');
-    editBtn?.addEventListener('click', () => {
+    this.mainElement?.querySelector('.profile-edit')?.addEventListener('click', () => {
       this.isEditing = true;
-      this.render();
+      this.renderContent();
+      this.bindEvents();
     });
 
-    // Cancel edit
-    const cancelBtn = this.container.querySelector('.profile-cancel');
-    cancelBtn?.addEventListener('click', () => {
+    this.mainElement?.querySelector('.profile-cancel')?.addEventListener('click', () => {
       this.isEditing = false;
-      this.render();
+      this.renderContent();
+      this.bindEvents();
     });
 
-    // Save profile
-    const profileForm = this.container.querySelector('.profile-form');
-    profileForm?.addEventListener('submit', async (e) => {
-      e.preventDefault();
+    this.mainElement?.querySelector('.profile-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
       await this.saveProfile();
     });
 
-    // Change password
-    const passwordForm = this.container.querySelector('.password-form');
-    passwordForm?.addEventListener('submit', async (e) => {
-      e.preventDefault();
+    this.mainElement?.querySelector('.password-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
       await this.changePassword();
     });
 
-    // Logout
-    const logoutBtn = this.container.querySelector('.profile-logout');
-    logoutBtn?.addEventListener('click', async () => {
+    this.mainElement?.querySelector('.profile-logout')?.addEventListener('click', async () => {
       if (confirm('Are you sure you want to logout?')) {
         await AuthService.logout();
-        router.navigate('/');
+        router.navigate('/transnet');
       }
     });
   }
 
+  /**
+   * Save the editable profile fields and refresh cached auth user info.
+   */
   private async saveProfile(): Promise<void> {
-    const username = (this.container.querySelector('.profile-username') as HTMLInputElement)?.value;
-    const email = (this.container.querySelector('.profile-email') as HTMLInputElement)?.value;
+    const username = (this.mainElement?.querySelector('.profile-username') as HTMLInputElement)?.value;
+    const email = (this.mainElement?.querySelector('.profile-email') as HTMLInputElement)?.value;
 
     if (!username || !email) {
       Toast.error('请填写完整信息');
@@ -213,21 +214,25 @@ export class Profile {
     }
 
     const response = await ApiService.updateProfile({ username, email });
-
     if (response.success) {
       Toast.success('Profile updated');
       this.isEditing = false;
       await AuthService.updateUserInfo();
-      this.render();
+      await this.loadProfile();
+      this.renderContent();
+      this.bindEvents();
     } else {
       Toast.error(response.error?.message || 'Update failed');
     }
   }
 
+  /**
+   * Validate and submit a password change request.
+   */
   private async changePassword(): Promise<void> {
-    const currentPassword = (this.container.querySelector('.current-password') as HTMLInputElement)?.value;
-    const newPassword = (this.container.querySelector('.new-password') as HTMLInputElement)?.value;
-    const confirmPassword = (this.container.querySelector('.confirm-password') as HTMLInputElement)?.value;
+    const currentPassword = (this.mainElement?.querySelector('.current-password') as HTMLInputElement)?.value;
+    const newPassword = (this.mainElement?.querySelector('.new-password') as HTMLInputElement)?.value;
+    const confirmPassword = (this.mainElement?.querySelector('.confirm-password') as HTMLInputElement)?.value;
 
     if (!currentPassword || !newPassword || !confirmPassword) {
       Toast.error('请填写所有密码字段');
@@ -245,20 +250,21 @@ export class Profile {
     }
 
     const response = await ApiService.changePassword(currentPassword, newPassword);
-
     if (response.success) {
       Toast.success('Password updated, please login again');
-      // Clear password form
-      const form = this.container.querySelector('.password-form') as HTMLFormElement;
+      const form = this.mainElement?.querySelector('.password-form') as HTMLFormElement;
       form?.reset();
     } else {
       Toast.error(response.error?.message || 'Password update failed');
     }
   }
 
+  /**
+   * Remove the page and shared widgets from the DOM.
+   */
   destroy(): void {
-    this.particleBg?.destroy();
-    this.header?.destroy();
-    this.container.innerHTML = '';
+    this.shell?.destroy();
+    this.shell = null;
+    this.mainElement = null;
   }
 }

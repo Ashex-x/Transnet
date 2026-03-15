@@ -1,46 +1,36 @@
 /**
- * Favorites Page
- * Displays user's favorite translations
+ * Authenticated favorites page for saved Transnet translations.
  */
 
-import { ParticleBackground } from '../components/ParticleBackground';
-import { Header } from '../components/Header';
-import { ApiService, Favorite, FavoritesResponse } from '../services/api';
-import { AuthService } from '../services/auth';
-import { Toast } from '../components/Toast';
-import { router } from '../router';
+import { PageShell } from '../shared/page-shell';
+import { Toast } from '../shared/toast';
+import { ApiService, Favorite, FavoritesResponse } from '../services/tran_api/api';
 
 export class Favorites {
   private container: HTMLElement;
-  private particleBg: ParticleBackground | null = null;
-  private header: Header | null = null;
+  private shell: PageShell | null = null;
   private favoritesData: FavoritesResponse | null = null;
   private currentPage = 1;
+  private mainElement: HTMLElement | null = null;
 
   constructor(container: HTMLElement = document.body) {
     this.container = container;
     this.container.innerHTML = '';
   }
 
+  /**
+   * Guard access, build the page shell, and load the first favorites page.
+   */
   async render(): Promise<void> {
-    // Check authentication
-    if (!AuthService.isAuthenticated()) {
-      Toast.info('请先登录');
-      router.navigate('/login');
-      return;
-    }
+    this.shell = new PageShell(this.container, {
+      requiresAuth: true,
+      showFooter: false,
+      mainClassName: 'profile-page',
+    });
 
-    // Add particle background
-    this.particleBg = new ParticleBackground(this.container);
+    this.mainElement = this.shell.mount();
 
-    // Add header
-    this.header = new Header();
-    this.header.mount(this.container);
-
-    // Create main content
-    const main = document.createElement('main');
-    main.className = 'profile-page';
-    main.innerHTML = `
+    this.mainElement.innerHTML = `
       <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
           <h1 style="font-size: 2rem; font-weight: 700;">My Favorites</h1>
@@ -48,17 +38,19 @@ export class Favorites {
             <span class="favorites-count">0</span> items
           </div>
         </div>
-        
+
         <div class="favorites-grid" style="display: grid; gap: 20px;"></div>
-        
+
         <div class="pagination"></div>
       </div>
     `;
 
-    this.container.appendChild(main);
     await this.loadFavorites();
   }
 
+  /**
+   * Fetch the current favorites page from the API.
+   */
   private async loadFavorites(): Promise<void> {
     const response = await ApiService.getFavorites({
       page: this.currentPage,
@@ -77,15 +69,21 @@ export class Favorites {
     }
   }
 
+  /**
+   * Update the visible favorites count from the latest pagination data.
+   */
   private updateCount(): void {
-    const countEl = this.container.querySelector('.favorites-count');
+    const countEl = this.mainElement?.querySelector('.favorites-count');
     if (countEl && this.favoritesData) {
       countEl.textContent = this.favoritesData.pagination.total.toString();
     }
   }
 
+  /**
+   * Render all favorite cards or the empty state for the route.
+   */
   private renderFavorites(): void {
-    const container = this.container.querySelector('.favorites-grid');
+    const container = this.mainElement?.querySelector('.favorites-grid');
     if (!container) return;
 
     const items = this.favoritesData?.favorites || [];
@@ -106,6 +104,9 @@ export class Favorites {
     this.bindCardEvents();
   }
 
+  /**
+   * Render one favorite translation card with note-edit controls.
+   */
   private renderFavoriteCard(item: Favorite, index: number): string {
     const translation = item.translation;
     const wordMeaning = item.word_meaning;
@@ -168,7 +169,7 @@ export class Favorites {
               <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                 ${wordMeaning.related_words.map(word => `
                   <span style="font-size: 0.8rem; color: var(--accent-secondary); background: rgba(184, 41, 247, 0.1); padding: 2px 8px; border-radius: 4px;">${word}</span>
-                `).join('')}
+                  `).join('')}
               </div>
             ` : ''}
           </div>
@@ -180,7 +181,7 @@ export class Favorites {
               <span style="color: var(--text-secondary);">Note:</span> ${this.escapeHtml(item.note)}
             </div>
           ` : '<div class="note-display" style="font-size: 0.85rem; color: var(--text-tertiary); font-style: italic;">Click edit to add a note...</div>'}
-          
+
           <div class="note-edit hidden" style="display: flex; gap: 8px; margin-top: 8px;">
             <input type="text" class="input-field note-input" value="${this.escapeHtml(item.note || '')}" placeholder="Add a note..." style="flex: 1; padding: 8px 12px;">
             <button class="btn btn--primary note-save" style="padding: 8px 16px;">Save</button>
@@ -191,9 +192,11 @@ export class Favorites {
     `;
   }
 
+  /**
+   * Bind card-level actions such as copy, edit, save, and delete.
+   */
   private bindCardEvents(): void {
-    // Copy buttons
-    this.container.querySelectorAll('.favorite-copy-btn').forEach(btn => {
+    this.mainElement?.querySelectorAll('.favorite-copy-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const text = btn.getAttribute('data-text');
         if (text) {
@@ -203,24 +206,21 @@ export class Favorites {
       });
     });
 
-    // Edit buttons
-    this.container.querySelectorAll('.favorite-edit-btn').forEach(btn => {
+    this.mainElement?.querySelectorAll('.favorite-edit-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
         if (id) this.startEditing(id);
       });
     });
 
-    // Delete buttons
-    this.container.querySelectorAll('.favorite-delete-btn').forEach(btn => {
+    this.mainElement?.querySelectorAll('.favorite-delete-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
         if (id) this.deleteFavorite(id);
       });
     });
 
-    // Note save/cancel
-    this.container.querySelectorAll('.note-save').forEach(btn => {
+    this.mainElement?.querySelectorAll('.note-save').forEach(btn => {
       btn.addEventListener('click', () => {
         const card = btn.closest('.favorite-card');
         const id = card?.getAttribute('data-id');
@@ -231,23 +231,23 @@ export class Favorites {
       });
     });
 
-    this.container.querySelectorAll('.note-cancel').forEach(btn => {
+    this.mainElement?.querySelectorAll('.note-cancel').forEach(btn => {
       btn.addEventListener('click', () => {
         this.stopEditing();
       });
     });
   }
 
+  /**
+   * Show the inline note editor for the chosen favorite card.
+   */
   private startEditing(id: string): void {
-    
-    // Hide all edit forms first
-    this.container.querySelectorAll('.note-section').forEach(section => {
+    this.mainElement?.querySelectorAll('.note-section').forEach(section => {
       section.querySelector('.note-display')?.classList.remove('hidden');
       section.querySelector('.note-edit')?.classList.add('hidden');
     });
 
-    // Show current edit form
-    const card = this.container.querySelector(`.favorite-card[data-id="${id}"]`);
+    const card = this.mainElement?.querySelector(`.favorite-card[data-id="${id}"]`);
     if (card) {
       card.querySelector('.note-display')?.classList.add('hidden');
       card.querySelector('.note-edit')?.classList.remove('hidden');
@@ -256,10 +256,16 @@ export class Favorites {
     }
   }
 
+  /**
+   * Restore the non-editing view for all note editors.
+   */
   private stopEditing(): void {
     this.renderFavorites();
   }
 
+  /**
+   * Persist the edited note for a single favorite.
+   */
   private async saveNote(id: string, note: string): Promise<void> {
     const response = await ApiService.updateFavorite(id, note);
     if (response.success) {
@@ -270,6 +276,9 @@ export class Favorites {
     }
   }
 
+  /**
+   * Delete a favorite entry after user confirmation.
+   */
   private async deleteFavorite(id: string): Promise<void> {
     if (!confirm('Are you sure you want to delete this favorite?')) return;
 
@@ -282,19 +291,22 @@ export class Favorites {
     }
   }
 
+  /**
+   * Render pagination controls for the current favorites response.
+   */
   private renderPagination(): void {
-    const container = this.container.querySelector('.pagination');
+    const container = this.mainElement?.querySelector('.pagination');
     if (!container || !this.favoritesData) return;
 
     const { page, total_pages } = this.favoritesData.pagination;
-    
+
     if (total_pages <= 1) {
       container.innerHTML = '';
       return;
     }
 
     let pages: (number | string)[] = [];
-    
+
     if (total_pages <= 7) {
       pages = Array.from({ length: total_pages }, (_, i) => i + 1);
     } else {
@@ -326,20 +338,29 @@ export class Favorites {
     });
   }
 
+  /**
+   * Escape user-provided text before inserting it into generated markup.
+   */
   private escapeHtml(text: string): string {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
   }
 
+  /**
+   * Format API dates for display on the favorites cards.
+   */
   private formatDate(dateStr: string): string {
     const date = new Date(dateStr);
     return date.toLocaleDateString('zh-CN');
   }
 
+  /**
+   * Remove the page and its shared widgets from the DOM.
+   */
   destroy(): void {
-    this.particleBg?.destroy();
-    this.header?.destroy();
-    this.container.innerHTML = '';
+    this.shell?.destroy();
+    this.shell = null;
+    this.mainElement = null;
   }
 }

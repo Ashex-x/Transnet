@@ -1,5 +1,8 @@
 /**
- * metaland.ts handles the Metaland page with background and map.
+ * Entry page for the `/metaland` route.
+ *
+ * The page mounts the Metaland background and exposes the first zone shortcut
+ * that leads deeper into the Metaland experience.
  */
 
 import { Background } from './background';
@@ -14,12 +17,18 @@ export class Metaland {
     this.background = null;
   }
 
+  /**
+   * Render the route shell and attach the interactive background layer.
+   */
   render(): void {
     this.createMetalandPage();
     this.background = new Background(this.container);
     this.background.render();
   }
 
+  /**
+   * Build the Metaland route markup and its house-entry shortcut.
+   */
   private createMetalandPage(): void {
     const metaland = document.createElement('div');
     metaland.id = 'metaland';
@@ -28,7 +37,6 @@ export class Metaland {
     const mapContainer = document.createElement('div');
     mapContainer.id = 'map-container';
 
-    // Add house button
     const houseButton = document.createElement('button');
     houseButton.id = 'house-button';
     houseButton.className = 'zone-button';
@@ -42,6 +50,9 @@ export class Metaland {
     this.container.appendChild(metaland);
   }
 
+  /**
+   * Remove the background and route markup from the DOM.
+   */
   destroy(): void {
     if (this.background) {
       this.background.destroy();

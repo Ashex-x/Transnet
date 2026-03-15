@@ -1,5 +1,8 @@
 /**
- * house.ts handles the House page with ECS entity visualization.
+ * Route page for `/metaland/house`.
+ *
+ * This page creates the house scene shell, mounts the shared Metaland
+ * background, and boots the ECS-driven house visualization.
  */
 
 import { House as HouseECS } from './zones/house';
@@ -17,16 +20,21 @@ export class House {
     this.background = null;
   }
 
+  /**
+   * Render the page shell, background, and house ECS scene.
+   */
   async render(): Promise<void> {
     this.createHousePage();
     this.background = new Background(this.container);
     this.background.render();
-    
-    // Initialize ECS entities
+
     this.houseECS = new HouseECS();
     await this.houseECS.init();
   }
 
+  /**
+   * Build the route markup and its back-navigation control.
+   */
   private createHousePage(): void {
     const house = document.createElement('div');
     house.id = 'house';
@@ -35,7 +43,6 @@ export class House {
     const mapContainer = document.createElement('div');
     mapContainer.id = 'map-container';
 
-    // Add back button
     const backButton = document.createElement('button');
     backButton.id = 'back-button';
     backButton.className = 'back-button';
@@ -49,6 +56,9 @@ export class House {
     this.container.appendChild(house);
   }
 
+  /**
+   * Tear down the ECS scene, background, and DOM nodes for the route.
+   */
   destroy(): void {
     if (this.houseECS) {
       this.houseECS.destroy();

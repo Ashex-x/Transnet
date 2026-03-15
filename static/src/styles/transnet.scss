@@ -1,4 +1,16 @@
 /**
+ * Central stylesheet entry point.
+ *
+ * Route and shared styles are split into dedicated modules and imported here so
+ * the build still emits a single CSS file for the frontend.
+ */
+
+@use 'base/core' as core;
+@use 'shared/shared' as shared;
+@use 'main/routes' as mainRoutes;
+@use 'metaland/routes' as metalandRoutes;
+@use 'transnet/routes' as transnetRoutes;
+/**
  * Transnet Design System
  * Theme: Deep Space Aurora
  * Based on Design.md specifications
@@ -1149,4 +1161,246 @@ input, textarea, select {
 ::selection {
   background: var(--accent-primary-glow);
   color: var(--text-primary);
+}
+
+// ============================================
+// 22. HOME LANDING
+// ============================================
+
+.home-landing {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5);
+}
+
+.home-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  min-height: 72px;
+
+  &__section {
+    display: flex;
+    align-items: center;
+    gap: clamp(12px, 2vw, 24px);
+  }
+
+  &__link {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    transition:
+      color var(--duration-fast) var(--ease-out-expo),
+      opacity var(--duration-fast) var(--ease-out-expo);
+
+    &:hover {
+      color: var(--text-primary);
+    }
+
+    &--active {
+      color: var(--text-primary);
+    }
+  }
+}
+
+.home-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.82rem;
+  pointer-events: none;
+
+  &__track {
+    width: 44px;
+    height: 24px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+  }
+
+  &__thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.22);
+    transform: translateX(20px);
+  }
+}
+
+.home-auth {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.home-user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  backdrop-filter: blur(16px);
+  transition:
+    background var(--duration-fast) var(--ease-out-expo),
+    border-color var(--duration-fast) var(--ease-out-expo),
+    transform var(--duration-fast) var(--ease-out-expo);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+  }
+
+  &__avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+    font-weight: 700;
+  }
+
+  &__name {
+    font-size: 0.95rem;
+    white-space: nowrap;
+  }
+}
+
+.home-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(20px, 4vw, 48px) 0 0;
+
+  &__content {
+    width: min(1120px, 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+    text-align: center;
+  }
+
+  &__eyebrow {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.88rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  &__title {
+    max-width: 1080px;
+    font-size: clamp(2rem, 4.6vw, 4.5rem);
+    line-height: 1.06;
+    font-weight: 700;
+    text-wrap: balance;
+  }
+
+  &__subtitle {
+    max-width: 760px;
+    color: var(--text-secondary);
+    font-size: clamp(0.98rem, 1.4vw, 1.15rem);
+  }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-5);
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+}
+
+.home-sphere-slot {
+  width: min(78vw, 760px);
+  height: min(70vh, 760px);
+  min-width: 320px;
+  min-height: 320px;
+  position: relative;
+}
+
+.home-sphere {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.home-sphere__canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+@media (max-width: 840px) {
+  .home-landing {
+    padding: var(--space-4);
+  }
+
+  .home-nav {
+    flex-direction: column;
+    align-items: stretch;
+
+    &__section {
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+  }
+
+  .home-auth {
+    margin-left: auto;
+  }
+
+  .home-stage__footer {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+}
+
+@media (max-width: 560px) {
+  .home-nav__section--right {
+    gap: var(--space-3);
+  }
+
+  .home-auth {
+    gap: var(--space-3);
+  }
+
+  .home-user-chip__name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .home-sphere-slot {
+    width: min(90vw, 480px);
+    height: min(56vh, 480px);
+  }
 }

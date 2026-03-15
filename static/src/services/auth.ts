@@ -3,7 +3,7 @@
  * Manages JWT tokens and authentication state
  */
 
-import { ApiService, AuthResponse, User } from './api';
+import { ApiService, AuthResponse, User } from './tran_api/api';
 
 const STORAGE_KEY = 'transnet_auth';
 

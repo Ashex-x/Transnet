@@ -4,7 +4,7 @@
  * Base URL: /api (as per API documentation)
  */
 
-import { AuthService } from './auth';
+import { AuthService } from '../auth';
 
 // API Response Types
 export interface ApiResponse<T> {
