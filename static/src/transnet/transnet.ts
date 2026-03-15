@@ -52,95 +52,107 @@ export class Transnet {
 
     // Create translation UI content using innerHTML
     this.mainElement.innerHTML = `
-      <div class="translation-container">
-        <!-- Input Section -->
-        <div class="translation-section">
-          <div class="section-header">
-            <label>Source</label>
-          </div>
-          <textarea id="source-text" placeholder="Enter text to translate... Press Ctrl+Enter to translate quickly."></textarea>
-          <div class="image-upload-area" id="image-upload-area">
-            <input type="file" accept="image/*" id="image-input">
-            <div class="upload-placeholder">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-              </svg>
-              <span>Click to upload an image</span>
+      <main class="transnet-stage">
+        <div class="transnet-stage__content">
+          <!-- Translation Section -->
+          <div class="transnet-translation">
+            <!-- Input Section -->
+            <div class="transnet-translation__section">
+              <div class="transnet-section__header">
+                <label>Source</label>
+              </div>
+              <textarea class="transnet-source-text" placeholder="Enter text to translate... Press Ctrl+Enter to translate quickly."></textarea>
+              <div class="transnet-image-upload-area">
+                <input type="file" accept="image/*" class="transnet-image-input">
+                <div class="transnet-upload-placeholder">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <span>Click to upload an image</span>
+                </div>
+              </div>
+              <img class="transnet-image-preview" alt="Preview">
+            </div>
+
+            <!-- Output Section -->
+            <div class="transnet-translation__section">
+              <div class="transnet-section__header">
+                <label>Target</label>
+              </div>
+              <textarea class="transnet-target-text" placeholder="Translation will appear here..." readonly></textarea>
             </div>
           </div>
-          <img class="image-preview" id="image-preview" alt="Preview">
+
+          <!-- Translation Config Section -->
+          <div class="transnet-config">
+            <div class="transnet-config__controls">
+              <!-- Language selectors row -->
+              <div class="transnet-config__row">
+                <select class="transnet-source-lang"></select>
+                <button class="transnet-swap-button">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M7 10l5-5 5 5"></path>
+                    <path d="M7 14l5 5 5-5"></path>
+                  </svg>
+                </button>
+                <select class="transnet-target-lang"></select>
+              </div>
+
+              <!-- Output type selector row -->
+              <div class="transnet-config__row">
+                <label>Output Type:</label>
+                <select class="transnet-output-type">
+                  <option value="basic" selected>Basic</option>
+                  <option value="explain">Explain</option>
+                  <option value="full_analysis">Full</option>
+                </select>
+              </div>
+
+              <!-- Input type selector row -->
+              <div class="transnet-config__row">
+                <label>Input Type:</label>
+                <select class="transnet-input-type">
+                  <option value="text" selected>Text</option>
+                  <option value="image">Image</option>
+                </select>
+              </div>
+
+              <!-- Translate button row -->
+              <div class="transnet-config__row">
+                <button class="transnet-translate-button">Translate</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Status Section -->
+          <p class="transnet-status" data-state="idle"></p>
+
+          <!-- Extra Output Section -->
+          <div class="transnet-extra-output">
+            <div class="transnet-extra-output__title">Extra Output</div>
+            <div class="transnet-extra-output__content"></div>
+          </div>
         </div>
-
-        <!-- Output Section -->
-        <div class="translation-section">
-          <div class="section-header">
-            <label>Target</label>
-          </div>
-          <textarea id="target-text" placeholder="Translation will appear here..." readonly></textarea>
-        </div>
-      </div>
-
-      <!-- Translation Config Section -->
-      <div class="translation-config-section">
-        <div class="config-controls">
-          <!-- Language selectors row -->
-          <div class="config-row">
-            <select id="source-lang"></select>
-            <button class="swap-button" id="swap-button">Swap</button>
-            <select id="target-lang"></select>
-          </div>
-
-          <!-- Output type selector row -->
-          <div class="config-row">
-            <label>Output Type:</label>
-            <select id="output-type" class="output-type-select">
-              <option value="basic" selected>Basic</option>
-              <option value="explain">Explain</option>
-              <option value="full_analysis">Full</option>
-            </select>
-          </div>
-
-          <!-- Input type selector row -->
-          <div class="config-row">
-            <label>Input Type:</label>
-            <select id="input-type" class="input-type-select">
-              <option value="text" selected>Text</option>
-              <option value="image">Image</option>
-            </select>
-          </div>
-
-          <!-- Translate button row -->
-          <div class="config-row">
-            <button class="translate-button" id="translate-button">Translate</button>
-            <p class="action-hint">Press Ctrl+Enter to translate quickly.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Extra Output Section -->
-      <div class="extra-output-section">
-        <div class="extra-output-section__title">Extra Output</div>
-        <div class="extra-output-section__content"></div>
-      </div>
+      </main>
     `;
 
     // Populate language selectors
-    const sourceLangSelect = document.getElementById('source-lang') as HTMLSelectElement;
-    const targetLangSelect = document.getElementById('target-lang') as HTMLSelectElement;
+    const sourceLangSelect = this.mainElement.querySelector('.transnet-source-lang') as HTMLSelectElement;
+    const targetLangSelect = this.mainElement.querySelector('.transnet-target-lang') as HTMLSelectElement;
     if (sourceLangSelect && targetLangSelect) {
       this.populateLanguageOptions(sourceLangSelect, 'en');
       this.populateLanguageOptions(targetLangSelect, 'es');
     }
 
     // Attach event listeners
-    const sourceText = document.getElementById('source-text') as HTMLTextAreaElement;
-    const imageUploadArea = document.getElementById('image-upload-area') as HTMLElement;
-    const imageInput = document.getElementById('image-input') as HTMLInputElement;
-    const swapButton = document.getElementById('swap-button') as HTMLButtonElement;
-    const inputTypeSelect = document.getElementById('input-type') as HTMLSelectElement;
-    const translateButton = document.getElementById('translate-button') as HTMLButtonElement;
+    const sourceText = this.mainElement.querySelector('.transnet-source-text') as HTMLTextAreaElement;
+    const imageUploadArea = this.mainElement.querySelector('.transnet-image-upload-area') as HTMLElement;
+    const imageInput = this.mainElement.querySelector('.transnet-image-input') as HTMLInputElement;
+    const swapButton = this.mainElement.querySelector('.transnet-swap-button') as HTMLButtonElement;
+    const inputTypeSelect = this.mainElement.querySelector('.transnet-input-type') as HTMLSelectElement;
+    const translateButton = this.mainElement.querySelector('.transnet-translate-button') as HTMLButtonElement;
 
     if (sourceText) {
       sourceText.addEventListener('keydown', (event: KeyboardEvent) => {
@@ -215,8 +227,8 @@ export class Transnet {
    * Handle image upload and display preview.
    */
   private async onImageUpload(file: File): Promise<void> {
-    const imagePreview = document.getElementById('image-preview') as HTMLImageElement;
-    const imageUploadArea = document.getElementById('image-upload-area') as HTMLElement;
+    const imagePreview = this.mainElement?.querySelector('.transnet-image-preview') as HTMLImageElement;
+    const imageUploadArea = this.mainElement?.querySelector('.transnet-image-upload-area') as HTMLElement;
 
     if (!imagePreview || !imageUploadArea) {
       return;
@@ -241,9 +253,9 @@ export class Transnet {
    * Handle input type switching between text and image.
    */
   private onInputChangeType(type: 'text' | 'image'): void {
-    const sourceText = document.getElementById('source-text') as HTMLTextAreaElement;
-    const imageUploadArea = document.getElementById('image-upload-area') as HTMLElement;
-    const imagePreview = document.getElementById('image-preview') as HTMLImageElement;
+    const sourceText = this.mainElement?.querySelector('.transnet-source-text') as HTMLTextAreaElement;
+    const imageUploadArea = this.mainElement?.querySelector('.transnet-image-upload-area') as HTMLElement;
+    const imagePreview = this.mainElement?.querySelector('.transnet-image-preview') as HTMLImageElement;
 
     if (!sourceText || !imageUploadArea || !imagePreview) {
       return;
@@ -268,13 +280,13 @@ export class Transnet {
    * Send the translate request and update the UI with the result or error.
    */
   private async onTranslate(): Promise<void> {
-    const sourceText = document.getElementById('source-text') as HTMLTextAreaElement;
-    const targetText = document.getElementById('target-text') as HTMLTextAreaElement;
-    const sourceLang = document.getElementById('source-lang') as HTMLSelectElement;
-    const targetLang = document.getElementById('target-lang') as HTMLSelectElement;
-    const outputType = document.getElementById('output-type') as HTMLSelectElement;
-    const translateButton = document.getElementById('translate-button') as HTMLButtonElement;
-    const status = document.getElementById('transnet-status') as HTMLParagraphElement;
+    const sourceText = this.mainElement?.querySelector('.transnet-source-text') as HTMLTextAreaElement;
+    const targetText = this.mainElement?.querySelector('.transnet-target-text') as HTMLTextAreaElement;
+    const sourceLang = this.mainElement?.querySelector('.transnet-source-lang') as HTMLSelectElement;
+    const targetLang = this.mainElement?.querySelector('.transnet-target-lang') as HTMLSelectElement;
+    const outputType = this.mainElement?.querySelector('.transnet-output-type') as HTMLSelectElement;
+    const translateButton = this.mainElement?.querySelector('.transnet-translate-button') as HTMLButtonElement;
+    const status = this.mainElement?.querySelector('.transnet-status') as HTMLParagraphElement;
 
     if (!sourceText || !targetText || !sourceLang || !targetLang || !outputType || !translateButton || !status) {
       return;
