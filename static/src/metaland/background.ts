@@ -1,6 +1,8 @@
 /**
- * background.ts handles the Metaland background with grid dots
- * and interactive dot motion near mouse cursor.
+ * Shared Metaland background layer.
+ *
+ * The background draws a dot grid across the viewport and adds subtle motion
+ * interactions in response to pointer movement and clicks.
  */
 
 interface GridDot {
@@ -26,18 +28,27 @@ export class Background {
     this.mouseY = 0;
   }
 
+  /**
+   * Create the grid layer and start its interaction listeners.
+   */
   render(): void {
     this.createGridContainer();
     this.createGridDots();
     this.setupEventListeners();
   }
 
+  /**
+   * Insert the background grid container into the page.
+   */
   private createGridContainer(): void {
     this.gridContainer = document.createElement('div');
     this.gridContainer.id = 'grid-container';
     this.container.appendChild(this.gridContainer);
   }
 
+  /**
+   * Populate the viewport with evenly spaced background dots.
+   */
   private createGridDots(): void {
     const spacing = 30;
     const width = window.innerWidth;
@@ -66,6 +77,9 @@ export class Background {
     }
   }
 
+  /**
+   * Track pointer movement, scatter clicks, and viewport resizes.
+   */
   private setupEventListeners(): void {
     document.addEventListener('mousemove', (e: MouseEvent) => {
       this.mouseX = e.clientX;
@@ -81,6 +95,9 @@ export class Background {
     });
   }
 
+  /**
+   * Push nearby dots outward from the current pointer position.
+   */
   private scatterDots(): void {
     const scatterRadius = 100;
     const scatterForce = 50;
@@ -106,12 +123,18 @@ export class Background {
     });
   }
 
+  /**
+   * Return a scattered dot back to its original position.
+   */
   private returnDot(dot: GridDot): void {
     dot.currentX = dot.originalX;
     dot.currentY = dot.originalY;
     dot.element.style.transform = `translate(0px, 0px)`;
   }
 
+  /**
+   * Rebuild the grid after a viewport resize.
+   */
   private handleResize(): void {
     if (this.gridContainer) {
       this.gridContainer.innerHTML = '';
@@ -120,6 +143,9 @@ export class Background {
     this.createGridDots();
   }
 
+  /**
+   * Toggle the legacy dark-mode class for the Metaland route shell.
+   */
   setDarkMode(enabled: boolean): void {
     const container = document.getElementById('metaland');
     if (container) {
@@ -131,6 +157,9 @@ export class Background {
     }
   }
 
+  /**
+   * Remove the grid layer and clear the cached dot collection.
+   */
   destroy(): void {
     if (this.gridContainer) {
       this.gridContainer.remove();

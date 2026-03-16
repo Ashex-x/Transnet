@@ -1,70 +1,165 @@
 /**
- * app.ts serves as the main entry point for the frontend application.
- * It bootstraps the application and loads the appropriate page components
- * when a user navigates to a specific route.
- * MainWeb is the initial landing page/component presented to the user.
+ * Frontend application bootstrapper.
+ *
+ * This file wires the SPA router to the active route-page classes and manages
+ * page lifecycle transitions.
  */
 
-import { MainWeb } from './components/main_web';
-import { Metaland } from './components/metaland';
-import { House } from './components/house';
-import { Transnet } from './components/transnet';
 import { router } from './router';
+import { Home } from './main/home';
+import { Auth } from './main/auth';
+import { About } from './main/about';
+import { Setting } from './main/setting';
+import { History } from './transnet/history';
+import { Favorites } from './transnet/favorites';
+import { Profile } from './transnet/profile';
+// import { Metaland } from './metaland/metaland';
+import { House } from './metaland/house';
+import { Transnet } from './transnet/transnet';
 
-interface Component {
-  destroy(): void;
+// Note: Styles are loaded via link tag in index.html
+
+interface PageComponent {
   render(): void | Promise<void>;
+  destroy(): void;
 }
 
 class App {
-  private currentComponent: Component | null;
+  private currentPage: PageComponent | null = null;
+  private container: HTMLElement;
 
   constructor() {
-    this.currentComponent = null;
+    this.container = document.body;
   }
 
+  /**
+   * Register all active SPA routes and resolve the initial location.
+   */
   init(): void {
-    router.register('/', () => this.loadMainWeb());
-    router.register('/metaland', () => this.loadMetaland());
-    router.register('/metaland/house', () => this.loadHouse());
-    router.register('/transnet', () => this.loadTransnet());
+    router.register('/', () => this.redirectToHome());
+    router.register('/home', () => this.loadHomePage());
+    router.register('/login', () => this.loadAuthPage());
+    router.register('/register', () => this.loadAuthPage());
+    router.register('/about', () => this.loadAboutPage());
+    router.register('/setting', () => this.loadSettingPage());
+    router.register('/transnet', () => this.loadTransnetPage());
+    router.register('/transnet/history', () => this.loadHistoryPage());
+    router.register('/transnet/favorites', () => this.loadFavoritesPage());
+    router.register('/transnet/profile', () => this.loadProfilePage());
+    router.register('/metaland', () => this.loadMetalandPage());
+    router.register('/metaland/house', () => this.loadHousePage());
+
     router.handleRoute();
   }
 
-  loadMainWeb(): void {
-    if (this.currentComponent) {
-      this.currentComponent.destroy();
+  /**
+   * Destroy the current page before mounting the next route target.
+   */
+  private destroyCurrentPage(): void {
+    if (this.currentPage) {
+      this.currentPage.destroy();
+      this.currentPage = null;
     }
-    const component = new MainWeb();
-    this.currentComponent = component;
-    component.render();
   }
 
-  loadMetaland(): void {
-    if (this.currentComponent) {
-      this.currentComponent.destroy();
-    }
-    const component = new Metaland(document.body);
-    this.currentComponent = component;
-    component.render();
+  private async loadHomePage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new Home(this.container);
+    this.currentPage = page;
+    await page.render();
   }
 
-  async loadHouse(): Promise<void> {
-    if (this.currentComponent) {
-      this.currentComponent.destroy();
-    }
-    const component = new House(document.body);
-    this.currentComponent = component;
-    await component.render();
+  /**
+   * Normalize the root URL by redirecting it to the landing page route.
+   */
+  private redirectToHome(): void {
+    router.navigate('/home', { replace: true });
   }
 
-  loadTransnet(): void {
-    if (this.currentComponent) {
-      this.currentComponent.destroy();
-    }
-    const component = new Transnet(document.body);
-    this.currentComponent = component;
-    component.render();
+  /**
+   * Mount the shared authentication page for `/login` and `/register`.
+   */
+  private loadAuthPage(): void {
+    this.destroyCurrentPage();
+    const page = new Auth(this.container);
+    this.currentPage = page;
+    page.render();
+  }
+
+  /**
+   * Mount the About page.
+   */
+  private async loadAboutPage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new About(this.container);
+    this.currentPage = page;
+    await page.render();
+  }
+
+  /**
+   * Mount the Settings page.
+   */
+  private async loadSettingPage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new Setting(this.container);
+    this.currentPage = page;
+    await page.render();
+  }
+
+  /**
+   * Mount the authenticated translation-history route.
+   */
+  private async loadHistoryPage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new History(this.container);
+    this.currentPage = page;
+    await page.render();
+  }
+
+  /**
+   * Mount the authenticated favorites route.
+   */
+  private async loadFavoritesPage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new Favorites(this.container);
+    this.currentPage = page;
+    await page.render();
+  }
+
+  /**
+   * Mount the authenticated profile route.
+   */
+  private async loadProfilePage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new Profile(this.container);
+    this.currentPage = page;
+    await page.render();
+  }
+
+  /**
+   * Mount the standalone Transnet translation page.
+   */
+  private async loadTransnetPage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new Transnet(this.container);
+    this.currentPage = page;
+    await page.render();
+  }
+
+  /**
+   * Mount the Metaland world entry page.
+   */
+  private loadMetalandPage(): void {
+  }
+
+  /**
+   * Mount the Metaland house sub-route.
+   */
+  private async loadHousePage(): Promise<void> {
+    this.destroyCurrentPage();
+    const page = new House(this.container);
+    this.currentPage = page;
+    await page.render();
   }
 }
 
