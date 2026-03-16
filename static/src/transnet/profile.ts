@@ -7,6 +7,7 @@ import { ApiService, Profile as ProfileType } from './api';
 import { AuthService } from '../shared/auth';
 import { PageShell } from '../shared/page-shell';
 import { Toast } from '../shared/toast';
+import { t } from '../shared/language';
 
 export class Profile {
   private container: HTMLElement;
@@ -54,12 +55,12 @@ export class Profile {
 
             <form class="profile-form">
               <div class="input-group">
-                <label class="input-label">用户名</label>
+                <label class="input-label">${t('profileUsername')}</label>
                 <input type="text" class="input-field profile-username" value="${this.profile?.username || ''}" ${!this.isEditing ? 'disabled' : ''}>
               </div>
 
               <div class="input-group">
-                <label class="input-label">邮箱</label>
+                <label class="input-label">${t('profileEmail')}</label>
                 <input type="email" class="input-field profile-email" value="${this.profile?.email || ''}" ${!this.isEditing ? 'disabled' : ''}>
               </div>
 
@@ -85,22 +86,22 @@ export class Profile {
 
             <form class="password-form">
               <div class="input-group">
-                <label class="input-label">Current Password</label>
-                <input type="password" class="input-field current-password" placeholder="Enter current password" required>
+                <label class="input-label">${t('currentPassword')}</label>
+                <input type="password" class="input-field current-password" placeholder="${t('enterCurrentPassword')}" required>
               </div>
 
               <div class="input-group">
-                <label class="input-label">New Password</label>
-                <input type="password" class="input-field new-password" placeholder="At least 8 chars with uppercase, lowercase and number" required minlength="8">
+                <label class="input-label">${t('newPassword')}</label>
+                <input type="password" class="input-field new-password" placeholder="${t('newPasswordPlaceholder')}" required minlength="8">
               </div>
 
               <div class="input-group">
-                <label class="input-label">Confirm New Password</label>
-                <input type="password" class="input-field confirm-password" placeholder="Re-enter new password" required>
+                <label class="input-label">${t('confirmNewPassword')}</label>
+                <input type="password" class="input-field confirm-password" placeholder="${t('confirmNewPasswordPlaceholder')}" required>
               </div>
 
               <button type="submit" class="btn btn--primary profile-form__full">
-                Update Password
+                ${t('updatePassword')}
               </button>
             </form>
           </section>
@@ -129,7 +130,7 @@ export class Profile {
     if (response.success && response.data) {
       this.profile = response.data;
     } else {
-      Toast.error('Failed to load user info');
+      Toast.error(t('profileFailedToLoad'));
     }
   }
 
@@ -146,20 +147,20 @@ export class Profile {
           ${user?.username.charAt(0).toUpperCase() || '?'}
         </div>
         <div class="profile-header__info">
-          <h1 class="profile-header__name">${user?.username || 'User'}</h1>
+          <h1 class="profile-header__name">${user?.username || t('user')}</h1>
           <p class="profile-header__email">${user?.email || ''}</p>
           <div class="profile-header__stats">
             <div class="profile-header__stat">
               <div class="profile-header__stat-value">${stats?.total_translations || 0}</div>
-              <div class="profile-header__stat-label">Translations</div>
+              <div class="profile-header__stat-label">${t('profileTranslations')}</div>
             </div>
             <div class="profile-header__stat">
               <div class="profile-header__stat-value">${stats?.total_favorites || 0}</div>
-              <div class="profile-header__stat-label">Favorites</div>
+              <div class="profile-header__stat-label">${t('profileFavorites')}</div>
             </div>
             <div class="profile-header__stat">
               <div class="profile-header__stat-value">${stats?.languages_used?.length || 0}</div>
-              <div class="profile-header__stat-label">Languages</div>
+              <div class="profile-header__stat-label">${t('profileLanguages')}</div>
             </div>
           </div>
         </div>
@@ -194,7 +195,7 @@ export class Profile {
     });
 
     this.mainElement?.querySelector('.profile-logout')?.addEventListener('click', async () => {
-      if (confirm('Are you sure you want to logout?')) {
+      if (!confirm(t('profileLogoutConfirm'))) {
         await AuthService.logout();
         router.navigate('/transnet');
       }
@@ -209,20 +210,20 @@ export class Profile {
     const email = (this.mainElement?.querySelector('.profile-email') as HTMLInputElement)?.value;
 
     if (!username || !email) {
-      Toast.error('请填写完整信息');
+      Toast.error(t('profilePleaseFillInfo'));
       return;
     }
 
     const response = await ApiService.updateProfile({ username, email });
     if (response.success) {
-      Toast.success('Profile updated');
+      Toast.success(t('profileUpdated'));
       this.isEditing = false;
       await AuthService.updateUserInfo();
       await this.loadProfile();
       this.renderContent();
       this.bindEvents();
     } else {
-      Toast.error(response.error?.message || 'Update failed');
+      Toast.error(t('profileUpdateFailed'));
     }
   }
 
@@ -235,27 +236,27 @@ export class Profile {
     const confirmPassword = (this.mainElement?.querySelector('.confirm-password') as HTMLInputElement)?.value;
 
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Toast.error('请填写所有密码字段');
+      Toast.error(t('profilePleaseFillAllPasswordFields'));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Toast.error('两次输入的新密码不一致');
+      Toast.error(t('profilePasswordsDoNotMatch'));
       return;
     }
 
     if (newPassword.length < 8) {
-      Toast.error('新密码至少需要8位');
+      Toast.error(t('profileNewPasswordTooShort'));
       return;
     }
 
     const response = await ApiService.changePassword(currentPassword, newPassword);
     if (response.success) {
-      Toast.success('Password updated, please login again');
+      Toast.success(t('profilePasswordUpdated'));
       const form = this.mainElement?.querySelector('.password-form') as HTMLFormElement;
       form?.reset();
     } else {
-      Toast.error(response.error?.message || 'Password update failed');
+      Toast.error(t('profilePasswordUpdateFailed'));
     }
   }
 

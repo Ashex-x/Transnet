@@ -46,6 +46,13 @@ class Router {
   }
 
   /**
+   * Go back in browser history.
+   */
+  back(): void {
+    window.history.back();
+  }
+
+  /**
    * Strip a trailing slash from non-root paths so routes stay canonical.
    */
   private normalizePath(path: string): string {

@@ -89,13 +89,23 @@ export class Header {
           <span class="home-user-chip__name">${this.escapeHtml(user.username)}</span>
         </button>
       `;
-      return;
+    } else {
+      authContainer.innerHTML = `
+        <button type="button" class="home-nav__link" data-route="/login">${t('login')}</button>
+        <button type="button" class="home-nav__link" data-route="/register">${t('signup')}</button>
+      `;
     }
-
-    authContainer.innerHTML = `
-      <button type="button" class="home-nav__link" data-route="/login">${t('login')}</button>
-      <button type="button" class="home-nav__link" data-route="/register">${t('signup')}</button>
-    `;
+    
+    // Bind click events to newly created auth buttons only
+    authContainer.querySelectorAll('[data-route]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        const route = (button as HTMLElement).getAttribute('data-route');
+        if (route) {
+          router.navigate(route);
+        }
+      });
+    });
   }
 
   /**
@@ -112,8 +122,8 @@ export class Header {
    * Wire SPA navigation and language/theme controls.
    */
   private bindEvents(): void {
-    // Handle route button clicks
-    this.element.querySelectorAll('[data-route]').forEach((link) => {
+    // Handle route button clicks for navigation buttons
+    this.element.querySelectorAll('.home-nav__section--left [data-route]').forEach((link) => {
       link.addEventListener('click', (event) => {
         event.preventDefault();
         const route = (link as HTMLElement).getAttribute('data-route');
@@ -129,6 +139,8 @@ export class Header {
       langSelect.addEventListener('change', (event) => {
         const target = event.target as HTMLSelectElement;
         setLanguage(target.value as 'en' | 'zh');
+        // Refresh page to apply the new language
+        window.location.reload();
       });
     }
 

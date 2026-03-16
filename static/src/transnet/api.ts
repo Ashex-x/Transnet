@@ -337,8 +337,21 @@ class ApiServiceClass {
     const url = `${this.baseUrl}${endpoint}`;
     const method = options.method || 'GET';
     
-    // Log the request
+    // Log the request method and URL
     console.log(`[API] ${method} ${url}`);
+    
+    // Log the request body/payload if it exists
+    if (options.body) {
+      try {
+        const bodyData = typeof options.body === 'string' 
+          ? JSON.parse(options.body) 
+          : options.body;
+        console.log(`[API] Request payload:`, bodyData);
+      } catch (e) {
+        // If body is not JSON, log it as-is
+        console.log(`[API] Request payload:`, options.body);
+      }
+    }
     
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

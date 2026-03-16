@@ -5,6 +5,7 @@
 import { PageShell } from '../shared/page-shell';
 import { Toast } from '../shared/toast';
 import { ApiService, HistoryItem, HistoryResponse } from './api';
+import { t } from '../shared/language';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -47,18 +48,18 @@ export class History {
     this.mainElement.innerHTML = `
       <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
-          <h1 style="font-size: 2rem; font-weight: 700;">Translation History</h1>
+          <h1 style="font-size: 2rem; font-weight: 700;">${t('translationHistory')}</h1>
           <div style="display: flex; gap: 12px;">
             <select class="input-field filter-source" style="width: 140px; padding: 8px 12px;">
-              <option value="">Source</option>
+              <option value="">${t('historySource')}</option>
               ${LANGUAGES.map(lang => `<option value="${lang.code}">${lang.name}</option>`).join('')}
             </select>
             <select class="input-field filter-target" style="width: 140px; padding: 8px 12px;">
-              <option value="">Target</option>
+              <option value="">${t('historyTarget')}</option>
               ${LANGUAGES.map(lang => `<option value="${lang.code}">${lang.name}</option>`).join('')}
             </select>
             <select class="input-field filter-type" style="width: 120px; padding: 8px 12px;">
-              <option value="">Type</option>
+              <option value="">${t('historyType')}</option>
               <option value="word">Word</option>
               <option value="phrase">Phrase</option>
               <option value="sentence">Sentence</option>
@@ -121,7 +122,7 @@ export class History {
       this.renderHistoryList();
       this.renderPagination();
     } else {
-      Toast.error('Failed to load history');
+      Toast.error(t('historyFailedToLoad'));
     }
   }
 
@@ -138,8 +139,8 @@ export class History {
       container.innerHTML = `
         <div class="empty-state">
           <div class="empty-state__icon">📜</div>
-          <h3 class="empty-state__title">No History Yet</h3>
-          <p class="empty-state__description">Start translating and your history will appear here</p>
+          <h3 class="empty-state__title">${t('historyNoHistoryYet')}</h3>
+          <p class="empty-state__description">${t('historyStartTranslating')}</p>
         </div>
       `;
       return;
@@ -153,7 +154,7 @@ export class History {
         const text = btn.getAttribute('data-text');
         if (text) {
           navigator.clipboard.writeText(text);
-          Toast.success('Copied');
+          Toast.success(t('historyCopied'));
         }
       });
     });
@@ -305,14 +306,14 @@ export class History {
    * Remove a single history entry after user confirmation.
    */
   private async deleteHistoryItem(translation_id: string): Promise<void> {
-    if (!confirm('Are you sure you want to delete this translation?')) return;
+    if (!confirm(t('historyDeleteConfirm'))) return;
 
     const response = await ApiService.deleteHistoryItem(translation_id);
     if (response.success) {
-      Toast.success('Deleted');
+      Toast.success(t('historyDeleted'));
       this.loadHistory();
     } else {
-      Toast.error('Delete failed');
+      Toast.error(t('historyDeleteFailed'));
     }
   }
 

@@ -11,21 +11,21 @@
 [ ] `GET api/about`
 [ ] `GET api/stats`
 [ ] `GET api/health`
-[ ] `POST api/account/register`
-[ ] `POST api/account/login`
-[ ] `POST api/account/logout`
-[ ] `POST api/account/refresh`
-[ ] `POST api/account/change-password`
+[x] `POST api/account/register`
+[x] `POST api/account/login`
+[x] `POST api/account/logout`
+[x] `POST api/account/refresh`
+[x] `POST api/account/change-password`
 [x] `POST api/transnet/translate`
-[ ] `GET api/transnet/history`
-[ ] `GET api/transnet/history/:translation_id`
-[ ] `DELETE api/transnet/history/:translation_id`
-[ ] `POST api/transnet/favorites`
-[ ] `GET api/transnet/favorites`
-[ ] `PUT api/transnet/favorites/:translation_id`
-[ ] `DELETE api/transnet/favorites/:translation_id`
-[ ] `GET api/profile`
-[ ] `PUT api/profile`
+[x] `GET api/transnet/history`
+[x] `GET api/transnet/history/:translation_id`
+[x] `DELETE api/transnet/history/:translation_id`
+[x] `POST api/transnet/favorites`
+[x] `GET api/transnet/favorites`
+[x] `PUT api/transnet/favorites/:translation_id`
+[x] `DELETE api/transnet/favorites/:translation_id`
+[x] `GET api/profile`
+[x] `PUT api/profile`
 
 ## Architecture
 

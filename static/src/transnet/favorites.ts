@@ -5,6 +5,7 @@
 import { PageShell } from '../shared/page-shell';
 import { Toast } from '../shared/toast';
 import { ApiService, Favorite, FavoritesResponse } from './api';
+import { t } from '../shared/language';
 
 export class Favorites {
   private container: HTMLElement;
@@ -33,9 +34,9 @@ export class Favorites {
     this.mainElement.innerHTML = `
       <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
-          <h1 style="font-size: 2rem; font-weight: 700;">My Favorites</h1>
+          <h1 style="font-size: 2rem; font-weight: 700;">${t('myFavorites')}</h1>
           <div style="font-size: 0.9rem; color: var(--text-secondary);">
-            <span class="favorites-count">0</span> items
+            <span class="favorites-count">0</span> ${t('favoritesItems')}
           </div>
         </div>
 
@@ -65,7 +66,7 @@ export class Favorites {
       this.renderFavorites();
       this.renderPagination();
     } else {
-      Toast.error('Failed to load favorites');
+      Toast.error(t('favoritesFailedToLoad'));
     }
   }
 
@@ -92,8 +93,8 @@ export class Favorites {
       container.innerHTML = `
         <div class="empty-state">
           <div class="empty-state__icon">⭐</div>
-          <h3 class="empty-state__title">No Favorites Yet</h3>
-          <p class="empty-state__description">Click the star icon next to translation results to add them to favorites</p>
+          <h3 class="empty-state__title">${t('favoritesNoFavoritesYet')}</h3>
+          <p class="empty-state__description">${t('favoritesClickStar')}</p>
         </div>
       `;
       return;
@@ -126,19 +127,19 @@ export class Favorites {
             ${item.updated_at ? `<span style="font-size: 0.8rem; color: var(--text-tertiary);">${this.formatDate(item.updated_at)}</span>` : ''}
           </div>
           <div style="display: flex; gap: 8px;">
-            <button class="btn btn--ghost btn--icon favorite-copy-btn" data-text="${this.escapeHtml(this.getTranslationText(translation))}" title="复制">
+            <button class="btn btn--ghost btn--icon favorite-copy-btn" data-text="${this.escapeHtml(this.getTranslationText(translation))}" title="${t('historyCopy')}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
             </button>
-            <button class="btn btn--ghost btn--icon favorite-edit-btn" data-id="${item.translation_id}" title="编辑备注">
+            <button class="btn btn--ghost btn--icon favorite-edit-btn" data-id="${item.translation_id}" title="${t('favoritesEditNote')}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
               </svg>
             </button>
-            <button class="btn btn--ghost btn--icon favorite-delete-btn" data-id="${item.translation_id}" title="删除">
+            <button class="btn btn--ghost btn--icon favorite-delete-btn" data-id="${item.translation_id}" title="${t('favoritesDelete')}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -178,14 +179,14 @@ export class Favorites {
         <div class="note-section" data-id="${item.translation_id}">
           ${item.note ? `
             <div class="note-display" style="font-size: 0.9rem; color: var(--text-tertiary); padding: 8px; background: rgba(255,255,255,0.03); border-radius: 8px;">
-              <span style="color: var(--text-secondary);">Note:</span> ${this.escapeHtml(item.note)}
+              <span style="color: var(--text-secondary);">${t('favoritesNote')}:</span> ${this.escapeHtml(item.note)}
             </div>
           ` : '<div class="note-display" style="font-size: 0.85rem; color: var(--text-tertiary); font-style: italic;">Click edit to add a note...</div>'}
 
           <div class="note-edit hidden" style="display: flex; gap: 8px; margin-top: 8px;">
             <input type="text" class="input-field note-input" value="${this.escapeHtml(item.note || '')}" placeholder="Add a note..." style="flex: 1; padding: 8px 12px;">
-            <button class="btn btn--primary note-save" style="padding: 8px 16px;">Save</button>
-            <button class="btn btn--ghost note-cancel" style="padding: 8px 16px;">Cancel</button>
+            <button class="btn btn--primary note-save" style="padding: 8px 16px;">${t('favoritesSave')}</button>
+            <button class="btn btn--ghost note-cancel" style="padding: 8px 16px;">${t('favoritesCancel')}</button>
           </div>
         </div>
       </div>
@@ -201,7 +202,7 @@ export class Favorites {
         const text = btn.getAttribute('data-text');
         if (text) {
           navigator.clipboard.writeText(text);
-          Toast.success('Copied');
+          Toast.success(t('historyCopied'));
         }
       });
     });
@@ -301,14 +302,14 @@ export class Favorites {
    * Delete a favorite entry after user confirmation.
    */
   private async deleteFavorite(translation_id: string): Promise<void> {
-    if (!confirm('Are you sure you want to delete this favorite?')) return;
+    if (!confirm(t('favoritesDeleteConfirm'))) return;
 
     const response = await ApiService.deleteFavorite(translation_id);
     if (response.success) {
-      Toast.success('Deleted');
+      Toast.success(t('historyDeleted'));
       this.loadFavorites();
     } else {
-      Toast.error('Delete failed');
+      Toast.error(t('historyDeleteFailed'));
     }
   }
 
