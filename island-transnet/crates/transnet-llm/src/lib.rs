@@ -56,6 +56,7 @@ impl TranslationService {
       match self.send_request(&endpoint, &body).await {
         Ok(model_response) => {
           return Ok(TranslateResponse {
+            text: request.text,
             translation: model_response.translation,
             source_lang: request.source_lang,
             target_lang: request.target_lang,
