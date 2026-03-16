@@ -25,7 +25,7 @@ Core Backend (Rust) ← SQLite + Qdrant
 
 ## System Information
 
-### GET `/about`
+### GET `/api/about`
 Get system version and information.
 
 **Response (200 OK)**:
@@ -49,7 +49,7 @@ Get system version and information.
 }
 ```
 
-### GET `/stats`
+### GET `/api/stats`
 Get real-time system statistics and health status.
 
 **Response (200 OK)**:
@@ -68,7 +68,7 @@ Get real-time system statistics and health status.
 }
 ```
 
-### GET `/health`
+### GET `/api/health`
 
 Combined liveness and readiness check.
 
@@ -118,7 +118,7 @@ Readiness: Core dependencies (e.g. Qdrant, LLM API) are reachable and healthy.
 
 ## Account Management
 
-### POST `/account/register`
+### POST `/api/account/register`
 Register a new account.
 
 **Request Body**:
@@ -153,7 +153,7 @@ Register a new account.
 
 ---
 
-### POST `/account/login`
+### POST `/api/account/login`
 Login to account.
 
 **Request Body**:
@@ -189,7 +189,7 @@ Login to account.
 
 ---
 
-### POST `/account/logout`
+### POST `/api/account/logout`
 Logout from account (invalidate tokens).
 
 **Headers**:
@@ -213,7 +213,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### POST `/account/refresh`
+### POST `/api/account/refresh`
 Refresh access token using refresh token.
 
 **Request Body**:
@@ -241,7 +241,7 @@ Refresh access token using refresh token.
 
 ---
 
-### POST `/account/change-password`
+### POST `/api/account/change-password`
 Change user password.
 
 **Headers**:
@@ -275,7 +275,7 @@ Authorization: Bearer <access_token>
 
 ## Translation
 
-### POST `/translate`
+### POST `/api/transnet/translate`
 Translate text.
 
 **Authentication**: Optional (JWT Bearer token)
@@ -380,7 +380,7 @@ For detailed JSON schemas and examples of each translation field type, see `type
 
 ## Translation History
 
-### GET `/history`
+### GET `/api/history`
 Get translation history for authenticated user.
 
 **Headers** (Required):
@@ -397,7 +397,7 @@ Authorization: Bearer <access_token>
 
 **Example Request**:
 ```
-GET /history?page=1&limit=20&source_lang=en&target_lang=es
+GET /api/history?page=1&limit=20&source_lang=en&target_lang=es
 ```
 
 **Response (200 OK)**:
@@ -446,7 +446,7 @@ GET /history?page=1&limit=20&source_lang=en&target_lang=es
 
 ---
 
-### GET `/history/:translation_id`
+### GET `/api/history/:translation_id`
 Get a specific translation by ID.
 
 **Headers** (Required):
@@ -493,7 +493,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### DELETE `/history/:translation_id`
+### DELETE `/api/history/:translation_id`
 Delete a translation from history.
 
 **Headers** (Required):
@@ -526,7 +526,7 @@ Authorization: Bearer <access_token>
 
 Favorites are history records with `is_favorite = true` and an optional `note`. There is no separate favorite ID; use `translation_id` to identify a favorited item.
 
-### POST `/favorites`
+### POST `/api/favorites`
 Mark a translation as favorite (sets `is_favorite = true` on the history record and optionally stores a note).
 
 **Headers** (Required):
@@ -567,7 +567,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### GET `/favorites`
+### GET `/api/favorites`
 Get user's favorites (history records where `is_favorite = true`).
 
 **Headers** (Required):
@@ -633,7 +633,7 @@ GET /favorites?page=1&limit=20
 
 ---
 
-### PUT `/favorites/:translation_id`
+### PUT `/api/favorites/:translation_id`
 Update the note for a favorited translation.
 
 **Headers** (Required):
@@ -669,7 +669,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### DELETE `/favorites/:translation_id`
+### DELETE `/api/favorites/:translation_id`
 Remove a translation from favorites (sets `is_favorite = false` on the history record).
 
 **Headers** (Required):
@@ -696,7 +696,7 @@ Authorization: Bearer <access_token>
 
 ## User Profile
 
-### GET `/profile`
+### GET `/api/profile`
 Get current user profile.
 
 **Headers** (Required):
@@ -727,7 +727,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### PUT `/profile`
+### PUT `/api/profile`
 Update user profile.
 
 **Headers** (Required):
@@ -810,13 +810,13 @@ Authorization: Bearer <access_token>
 
 The gateway (transnet-server) should:
 
-1. **Validate JWT tokens** on protected routes (`/history`, `/favorites`, `/profile`)
+1. **Validate JWT tokens** on protected routes (`/api/history`, `/api/favorites`, `/api/profile`)
 2. **Forward user_id** to translate requests from JWT claim (for history tracking)
-3. **Do not require authentication** for `/translate` (anonymous access)
+3. **Do not require authentication** for `/api/transnet/translate` (anonymous access)
 4. **Add user_id** to translation response only when JWT is provided (authenticated user)
-5. **Cache responses** for public routes (`/about`, `/health`, `/stats`)
+5. **Cache responses** for public routes (`/api/about`, `/api/health`, `/api/stats`)
 
-### Authentication Logic for `/translate`
+### Authentication Logic for `/api/transnet/translate`
 
 **If JWT is NOT provided (empty/null):**
 - Return translation WITHOUT `user_id` field

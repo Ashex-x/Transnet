@@ -23,7 +23,7 @@
 
 ## 系统信息
 
-### GET `/about`
+### GET `/api/about`
 获取系统版本和信息。
 
 **响应 (200 OK):**
@@ -47,7 +47,7 @@
 }
 ```
 
-### GET `/stats`
+### GET `/api/stats`
 获取实时系统统计信息和健康状态。
 
 **响应 (200 OK):**
@@ -66,7 +66,7 @@
 }
 ```
 
-### GET `/health`
+### GET `/api/health`
 
 组合的健康检查和就绪检查。
 
@@ -113,7 +113,7 @@
 
 ## 账户管理
 
-### POST `/account/register`
+### POST `/api/account/register`
 注册新账户。
 
 **请求体:**
@@ -148,7 +148,7 @@
 
 ---
 
-### POST `/account/login`
+### POST `/api/account/login`
 登录账户。
 
 **请求体:**
@@ -184,7 +184,7 @@
 
 ---
 
-### POST `/account/logout`
+### POST `/api/account/logout`
 登出账户（使 token 失效）。
 
 **Headers:**
@@ -208,7 +208,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### POST `/account/refresh`
+### POST `/api/account/refresh`
 使用 refresh token 刷新 access token。
 
 **请求体:**
@@ -236,7 +236,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### POST `/account/change-password`
+### POST `/api/account/change-password`
 更改用户密码。
 
 **Headers:**
@@ -270,7 +270,7 @@ Authorization: Bearer <access_token>
 
 ## 翻译
 
-### POST `/translate`
+### POST `/api/transnet/translate`
 翻译文本。
 
 **认证**: 可选（JWT Bearer token）
@@ -375,7 +375,7 @@ Authorization: Bearer <access_token>
 
 ## 翻译历史
 
-### GET `/history`
+### GET `/api/history`
 获取已认证用户的翻译历史。
 
 **Headers (必需):**
@@ -392,7 +392,7 @@ Authorization: Bearer <access_token>
 
 **示例请求:**
 ```
-GET /history?page=1&limit=20&source_lang=en&target_lang=es
+GET /api/history?page=1&limit=20&source_lang=en&target_lang=es
 ```
 
 **响应 (200 OK):**
@@ -441,7 +441,7 @@ GET /history?page=1&limit=20&source_lang=en&target_lang=es
 
 ---
 
-### GET `/history/:translation_id`
+### GET `/api/history/:translation_id`
 通过 ID 获取特定翻译。
 
 **Headers (必需):**
@@ -488,7 +488,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### DELETE `/history/:translation_id`
+### DELETE `/api/history/:translation_id`
 从历史记录中删除翻译。
 
 **Headers (必需):**
@@ -521,7 +521,7 @@ Authorization: Bearer <access_token>
 
 收藏即历史记录中 `is_favorite = true` 且带有可选 `note` 的项。无单独的收藏 ID；用 `translation_id` 标识一条收藏。
 
-### POST `/favorites`
+### POST `/api/favorites`
 将某条翻译标记为收藏（在对应历史记录上设置 `is_favorite = true` 并可选保存备注）。
 
 **Headers (必需):**
@@ -562,7 +562,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### GET `/favorites`
+### GET `/api/favorites`
 获取用户收藏（即历史记录中 `is_favorite = true` 的项）。
 
 **Headers (必需):**
@@ -576,7 +576,7 @@ Authorization: Bearer <access_token>
 
 **示例请求:**
 ```
-GET /favorites?page=1&limit=20
+GET /api/favorites?page=1&limit=20
 ```
 
 **响应 (200 OK):**
@@ -628,7 +628,7 @@ GET /favorites?page=1&limit=20
 
 ---
 
-### PUT `/favorites/:translation_id`
+### PUT `/api/favorites/:translation_id`
 更新某条收藏翻译的备注。
 
 **Headers (必需):**
@@ -664,7 +664,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### DELETE `/favorites/:translation_id`
+### DELETE `/api/favorites/:translation_id`
 取消收藏（将对应历史记录的 `is_favorite` 设为 false）。
 
 **Headers (必需):**
@@ -691,7 +691,7 @@ Authorization: Bearer <access_token>
 
 ## 用户资料
 
-### GET `/profile`
+### GET `/api/profile`
 获取当前用户资料。
 
 **Headers (必需):**
@@ -722,7 +722,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### PUT `/profile`
+### PUT `/api/profile`
 更新用户资料。
 
 **Headers (必需):**
@@ -804,13 +804,13 @@ Authorization: Bearer <access_token>
 
 网关 (transnet-server) 应该：
 
-1. **验证 JWT token**：在受保护的路由 (`/history`, `/favorites`, `/profile`) 上
+1. **验证 JWT token**：在受保护的路由 (`/api/history`, `/api/favorites`, `/api/profile`) 上
 2. **转发 user_id**：从 JWT claim 转发到翻译请求（用于历史记录跟踪）
-3. **不要求认证**：对于 `/translate`（匿名访问）
+3. **不要求认证**：对于 `/api/transnet/translate`（匿名访问）
 4. **添加 user_id**：仅在提供 JWT 时（已认证用户）在翻译响应中添加 `user_id` 字段
-5. **缓存响应**：对于公共路由 (`/about`, `/health`, `/stats`)
+5. **缓存响应**：对于公共路由 (`/api/about`, `/api/health`, `/api/stats`)
 
-## `/translate` 的认证逻辑
+## `/api/transnet/translate` 的认证逻辑
 
 **如果未提供 JWT (空/null)**:
 - 返回翻译，**不包含** `user_id` 字段

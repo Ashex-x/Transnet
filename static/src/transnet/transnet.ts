@@ -7,22 +7,128 @@ import { PageShell } from '../shared/page-shell';
 interface TranslateApiSuccess {
   success: true;
   data: {
-    translation: string;
+    translation_id: string;
+    text: string;
     source_lang: string;
     target_lang: string;
-    input_type: string;
+    input_type: 'word' | 'phrase' | 'sentence' | 'paragraph' | 'essay';
     provider: string;
     model: string;
+    user_id?: string;
+    translation: TranslationData;
   };
 }
 
 interface TranslateApiError {
   success: false;
-  error?: {
+  error: {
     code?: string;
     message?: string;
   };
 }
+
+interface WordMeaning {
+  source: string;
+  translation: string;
+}
+
+interface Explain {
+  meaning: string;
+  story: string;
+  when_to_use: string;
+  how_to_use: string;
+  context: string;
+  lexical_analysis: {
+    root?: string;
+    structure?: string;
+    idiomatic?: boolean;
+    related_phrases?: string[];
+  };
+}
+
+interface RelatedWord {
+  word: string;
+  type: string;
+  similarity: number;
+}
+
+interface Relationships {
+  related_words?: RelatedWord[];
+  related_phrases?: Array<{
+    phrase: string;
+    type: string;
+    similarity: number;
+  }>;
+  related_concepts?: string[];
+  by_pos?: {
+    nouns?: string[];
+    verbs?: string[];
+    adjectives?: string[];
+  };
+}
+
+interface TranslationWordBasic {
+  headword: string;
+  part_of_speech: string;
+  phonetic: string;
+  translations: string[];
+  synonyms: string[];
+  antonyms: string[];
+  examples: WordMeaning[];
+}
+
+interface TranslationWordExplain extends TranslationWordBasic {
+  explain: Explain;
+}
+
+interface TranslationWordFullAnalysis extends TranslationWordExplain {
+  relationships: Relationships;
+}
+
+interface TranslationPhraseBasic {
+  phrase: string;
+  headword: string;
+  part_of_speech: string;
+  translations: string[];
+  examples: WordMeaning[];
+}
+
+interface TranslationPhraseExplain extends TranslationPhraseBasic {
+  explain: Explain;
+}
+
+interface TranslationPhraseFullAnalysis extends TranslationPhraseExplain {
+  relationships: Relationships;
+}
+
+interface TranslationSentenceBasic {
+  tone: string;
+  rephrasing: string;
+}
+
+interface TranslationSentenceExplain extends TranslationSentenceBasic {
+  explain: {
+    meaning: string;
+    usage: string;
+    context: string;
+  };
+}
+
+interface TranslationParagraphEssayBasic {
+  text: string;
+  translation: string;
+}
+
+type TranslationData =
+  | TranslationWordBasic
+  | TranslationWordExplain
+  | TranslationWordFullAnalysis
+  | TranslationPhraseBasic
+  | TranslationPhraseExplain
+  | TranslationPhraseFullAnalysis
+  | TranslationSentenceBasic
+  | TranslationSentenceExplain
+  | TranslationParagraphEssayBasic;
 
 export class Transnet {
   private container: HTMLElement;
@@ -32,7 +138,7 @@ export class Transnet {
 
   constructor(container: HTMLElement) {
     this.container = container;
-    this.apiUrl = '/transnet/api';
+    this.apiUrl = '/api/transnet';
   }
 
   /**
@@ -306,17 +412,23 @@ export class Transnet {
     status.dataset.state = 'loading';
 
     try {
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      const authToken = this.getAuthToken();
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
       const response = await fetch(`${this.apiUrl}/translate`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           text,
           source_lang: sourceLang.value,
           target_lang: targetLang.value,
           mode: outputType.value,
-          input_type: 'auto',
         }),
       });
 
@@ -329,7 +441,9 @@ export class Transnet {
         throw new Error(message);
       }
 
-      targetText.value = payload.data.translation;
+      this.renderTranslation(payload.data.translation, targetText);
+      this.displayExtraOutput(payload.data);
+
       status.textContent = `Translated as ${payload.data.input_type} via ${payload.data.model}.`;
       status.dataset.state = 'success';
     } catch (error) {
@@ -341,6 +455,279 @@ export class Transnet {
       translateButton.disabled = false;
       translateButton.textContent = 'Translate';
     }
+  }
+
+  /**
+   * Get JWT token from localStorage if available.
+   */
+  private getAuthToken(): string | null {
+    try {
+      const authData = localStorage.getItem('auth');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        return parsed.access_token || null;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  /**
+   * Render main translation text in target textarea based on translation type.
+   */
+  private renderTranslation(translationData: TranslationData, targetElement: HTMLTextAreaElement): void {
+    if ('translations' in translationData) {
+      targetElement.value = translationData.translations.join(', ');
+    } else if ('rephrasing' in translationData) {
+      targetElement.value = translationData.rephrasing;
+    } else if ('translation' in translationData && 'text' in translationData) {
+      targetElement.value = translationData.translation;
+    } else {
+      targetElement.value = '';
+    }
+  }
+
+  /**
+   * Display extra output details in the extra output section.
+   */
+  private displayExtraOutput(data: TranslateApiSuccess['data']): void {
+    const extraOutputContent = this.mainElement?.querySelector('.transnet-extra-output__content');
+    if (!extraOutputContent) {
+      return;
+    }
+
+    const { translation, input_type } = data;
+    let html = '';
+
+    if (input_type === 'word') {
+      html = this.renderWordExtra(
+        translation as TranslationWordBasic | TranslationWordExplain | TranslationWordFullAnalysis,
+      );
+    } else if (input_type === 'phrase') {
+      html = this.renderPhraseExtra(
+        translation as TranslationPhraseBasic | TranslationPhraseExplain | TranslationPhraseFullAnalysis,
+      );
+    } else if (input_type === 'sentence') {
+      html = this.renderSentenceExtra(translation as TranslationSentenceBasic | TranslationSentenceExplain);
+    } else if (input_type === 'paragraph' || input_type === 'essay') {
+      html = this.renderParagraphEssayExtra(translation as TranslationParagraphEssayBasic);
+    }
+
+    extraOutputContent.innerHTML = html;
+  }
+
+  /**
+   * Render extra output for word translations.
+   */
+  private renderWordExtra(
+    translation: TranslationWordBasic | TranslationWordExplain | TranslationWordFullAnalysis,
+  ): string {
+    const isFullAnalysis = 'relationships' in translation;
+    const hasExplain = 'explain' in translation;
+
+    let html = `
+      <div class="transnet-extra-output__section">
+        <h4>Word Information</h4>
+        <p><strong>Word:</strong> ${translation.headword}</p>
+        <p><strong>Part of Speech:</strong> ${translation.part_of_speech}</p>
+        <p><strong>Phonetic:</strong> ${translation.phonetic}</p>
+      </div>
+    `;
+
+    if (translation.synonyms && translation.synonyms.length > 0) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>Synonyms</h4>
+          <p>${translation.synonyms.join(', ')}</p>
+        </div>
+      `;
+    }
+
+    if (translation.antonyms && translation.antonyms.length > 0) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>Antonyms</h4>
+          <p>${translation.antonyms.join(', ')}</p>
+        </div>
+      `;
+    }
+
+    if (translation.examples && translation.examples.length > 0) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>Examples</h4>
+          ${translation.examples.map(
+            (ex) => `
+              <div class="transnet-extra-output__example">
+                <p class="source">${ex.source}</p>
+                <p class="translation">${ex.translation}</p>
+              </div>
+            `,
+          ).join('')}
+        </div>
+      `;
+    }
+
+    if (hasExplain) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>Explanation</h4>
+          <p><strong>Meaning:</strong> ${translation.explain.meaning}</p>
+          <p><strong>Story:</strong> ${translation.explain.story}</p>
+          <p><strong>When to use:</strong> ${translation.explain.when_to_use}</p>
+          <p><strong>How to use:</strong> ${translation.explain.how_to_use}</p>
+          <p><strong>Context:</strong> ${translation.explain.context}</p>
+          ${translation.explain.lexical_analysis.root ? `<p><strong>Root:</strong> ${translation.explain.lexical_analysis.root}</p>` : ''}
+          ${translation.explain.lexical_analysis.structure ? `<p><strong>Structure:</strong> ${translation.explain.lexical_analysis.structure}</p>` : ''}
+          ${translation.explain.lexical_analysis.idiomatic ? `<p><strong>Idiomatic:</strong> Yes</p>` : ''}
+        </div>
+      `;
+    }
+
+    if (isFullAnalysis) {
+      const rels = translation.relationships;
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>Relationships</h4>
+          ${rels.related_words && rels.related_words.length > 0 ? `
+            <h5>Related Words</h5>
+            <ul>
+              ${rels.related_words.map((rw) => `<li>${rw.word} (${rw.type}, similarity: ${rw.similarity})</li>`).join('')}
+            </ul>
+          ` : ''}
+          ${rels.by_pos ? `
+            <h5>By Part of Speech</h5>
+            ${rels.by_pos.nouns ? `<p><strong>Nouns:</strong> ${rels.by_pos.nouns.join(', ')}</p>` : ''}
+            ${rels.by_pos.verbs ? `<p><strong>Verbs:</strong> ${rels.by_pos.verbs.join(', ')}</p>` : ''}
+            ${rels.by_pos.adjectives ? `<p><strong>Adjectives:</strong> ${rels.by_pos.adjectives.join(', ')}</p>` : ''}
+          ` : ''}
+        </div>
+      `;
+    }
+
+    return html;
+  }
+
+  /**
+   * Render extra output for phrase translations.
+   */
+  private renderPhraseExtra(
+    translation: TranslationPhraseBasic | TranslationPhraseExplain | TranslationPhraseFullAnalysis,
+  ): string {
+    const isFullAnalysis = 'relationships' in translation;
+    const hasExplain = 'explain' in translation;
+
+    let html = `
+      <div class="transnet-extra-output__section">
+        <h4>Phrase Information</h4>
+        <p><strong>Phrase:</strong> ${translation.phrase}</p>
+        <p><strong>Part of Speech:</strong> ${translation.part_of_speech}</p>
+      </div>
+    `;
+
+    if (translation.examples && translation.examples.length > 0) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>Examples</h4>
+          ${translation.examples.map(
+            (ex) => `
+              <div class="transnet-extra-output__example">
+                <p class="source">${ex.source}</p>
+                <p class="translation">${ex.translation}</p>
+              </div>
+            `,
+          ).join('')}
+        </div>
+      `;
+    }
+
+    if (hasExplain) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>Explanation</h4>
+          <p><strong>Meaning:</strong> ${translation.explain.meaning}</p>
+          <p><strong>Story:</strong> ${translation.explain.story}</p>
+          <p><strong>When to use:</strong> ${translation.explain.when_to_use}</p>
+          <p><strong>How to use:</strong> ${translation.explain.how_to_use}</p>
+          <p><strong>Context:</strong> ${translation.explain.context}</p>
+          ${translation.explain.lexical_analysis.structure ? `<p><strong>Structure:</strong> ${translation.explain.lexical_analysis.structure}</p>` : ''}
+          ${translation.explain.lexical_analysis.idiomatic ? `<p><strong>Idiomatic:</strong> Yes</p>` : ''}
+          ${translation.explain.lexical_analysis.related_phrases && translation.explain.lexical_analysis.related_phrases.length > 0 ? `
+            <p><strong>Related Phrases:</strong> ${translation.explain.lexical_analysis.related_phrases.join(', ')}</p>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    if (isFullAnalysis) {
+      const rels = translation.relationships;
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>Relationships</h4>
+          ${rels.related_phrases && rels.related_phrases.length > 0 ? `
+            <h5>Related Phrases</h5>
+            <ul>
+              ${rels.related_phrases.map((rp) => `<li>${rp.phrase} (${rp.type}, similarity: ${rp.similarity})</li>`).join('')}
+            </ul>
+          ` : ''}
+          ${rels.related_concepts && rels.related_concepts.length > 0 ? `
+            <h5>Related Concepts</h5>
+            <p>${rels.related_concepts.join(', ')}</p>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    return html;
+  }
+
+  /**
+   * Render extra output for sentence translations.
+   */
+  private renderSentenceExtra(
+    translation: TranslationSentenceBasic | TranslationSentenceExplain,
+  ): string {
+    let html = `
+      <div class="transnet-extra-output__section">
+        <h4>Sentence Information</h4>
+        <p><strong>Tone:</strong> ${translation.tone}</p>
+      </div>
+    `;
+
+    if ('explain' in translation) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>Explanation</h4>
+          <p><strong>Meaning:</strong> ${translation.explain.meaning}</p>
+          <p><strong>Usage:</strong> ${translation.explain.usage}</p>
+          <p><strong>Context:</strong> ${translation.explain.context}</p>
+        </div>
+      `;
+    }
+
+    return html;
+  }
+
+  /**
+   * Render extra output for paragraph/essay translations.
+   */
+  private renderParagraphEssayExtra(translation: TranslationParagraphEssayBasic): string {
+    return `
+      <div class="transnet-extra-output__section">
+        <h4>Translation Comparison</h4>
+        <div class="transnet-extra-output__comparison">
+          <div class="transnet-extra-output__comparison-side">
+            <h5>Original</h5>
+            <p>${translation.text}</p>
+          </div>
+          <div class="transnet-extra-output__comparison-side">
+            <h5>Translation</h5>
+            <p>${translation.translation}</p>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   /**

@@ -158,6 +158,7 @@ pub fn create_router() -> Router<AppState> {
   Router::new()
     .route("/health", get(health))
     .route("/translate", post(translate))
+    .route("/api/transnet/translate", post(translate))
     .nest_service("/assets", ServeDir::new(static_dir.join("dist")))
     .nest_service("/resource", ServeDir::new(static_dir.join("resource")))
     .route("/index.html", get(serve_index_html))
