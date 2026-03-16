@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::time::{sleep, Duration};
 use tracing::warn;
-use transnet_types::{InputType, LlmConfig, TranslateRequest, TranslateResponse, TransnetError};
+use crate::types::{InputType, LlmConfig, TranslateRequest, TranslateResponse, TransnetError};
 
 #[derive(Clone)]
 pub struct TranslationService {

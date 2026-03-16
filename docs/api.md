@@ -7,6 +7,26 @@
 **Authentication**: JWT Bearer Token (for protected endpoints only)
 **ID Format**: UUID v7. Primary identifiers: `user_id` (users), `translation_id` (history/favorites).
 
+## Routes
+[ ] `GET api/about`
+[ ] `GET api/stats`
+[ ] `GET api/health`
+[ ] `POST api/account/register`
+[ ] `POST api/account/login`
+[ ] `POST api/account/logout`
+[ ] `POST api/account/refresh`
+[ ] `POST api/account/change-password`
+[x] `POST api/transnet/translate`
+[ ] `GET api/transnet/history`
+[ ] `GET api/transnet/history/:translation_id`
+[ ] `DELETE api/transnet/history/:translation_id`
+[ ] `POST api/transnet/favorites`
+[ ] `GET api/transnet/favorites`
+[ ] `PUT api/transnet/favorites/:translation_id`
+[ ] `DELETE api/transnet/favorites/:translation_id`
+[ ] `GET api/profile`
+[ ] `PUT api/profile`
+
 ## Architecture
 
 ```
@@ -380,7 +400,7 @@ For detailed JSON schemas and examples of each translation field type, see `type
 
 ## Translation History
 
-### GET `/api/history`
+### GET `/api/transnet/history`
 Get translation history for authenticated user.
 
 **Headers** (Required):
@@ -446,7 +466,7 @@ GET /api/history?page=1&limit=20&source_lang=en&target_lang=es
 
 ---
 
-### GET `/api/history/:translation_id`
+### GET `/api/transnet/history/:translation_id`
 Get a specific translation by ID.
 
 **Headers** (Required):
@@ -493,7 +513,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### DELETE `/api/history/:translation_id`
+### DELETE `/api/transnet/history/:translation_id`
 Delete a translation from history.
 
 **Headers** (Required):
@@ -526,7 +546,7 @@ Authorization: Bearer <access_token>
 
 Favorites are history records with `is_favorite = true` and an optional `note`. There is no separate favorite ID; use `translation_id` to identify a favorited item.
 
-### POST `/api/favorites`
+### POST `/api/transnet/favorites`
 Mark a translation as favorite (sets `is_favorite = true` on the history record and optionally stores a note).
 
 **Headers** (Required):
@@ -567,7 +587,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### GET `/api/favorites`
+### GET `/api/transnet/favorites`
 Get user's favorites (history records where `is_favorite = true`).
 
 **Headers** (Required):
@@ -633,7 +653,7 @@ GET /favorites?page=1&limit=20
 
 ---
 
-### PUT `/api/favorites/:translation_id`
+### PUT `/api/transnet/favorites/:translation_id`
 Update the note for a favorited translation.
 
 **Headers** (Required):
@@ -669,7 +689,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### DELETE `/api/favorites/:translation_id`
+### DELETE `/api/transnet/favorites/:translation_id`
 Remove a translation from favorites (sets `is_favorite = false` on the history record).
 
 **Headers** (Required):

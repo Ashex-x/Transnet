@@ -19,10 +19,11 @@ Web 服务器使用 MySQL 存储用户身份、资料及与每个用户关联的
 
 | 字段           | 类型      | 说明                     |
 | -------------- | --------- | ------------------------ |
-| user_id        | uuid      | 主键（如 UUID v7）       |
+| id             | int(11)   | 主键，自增，唯一          |
+| user_id        | binary(16)| 外键 → Users              |
 | username       | string    | 3–50 字符，唯一          |
 | email          | string    | 合法邮箱，唯一           |
-| password_hash  | string    | 哈希存储（如 bcrypt）    |
+| password       | string    | MD5                      |
 | updated_at     | timestamp | 最近一次资料更新时间     |
 | active         | boolean   | 可选；用于账号停用状态   |
 
@@ -32,8 +33,8 @@ Web 服务器使用 MySQL 存储用户身份、资料及与每个用户关联的
 
 | 字段           | 类型      | 说明                             |
 | -------------- | --------- | -------------------------------- |
-| translation_id | uuid      | 主键                             |
-| user_id        | uuid      | 外键 → Users                     |
+| translation_id | int(11)   | 主键                             |
+| user_id        | binary(16)| 外键 → Users                     |
 | text           | string    | 原文                             |
 | translation    | string    | 译文                             |
 | source_lang    | string    | 语言代码（如 en）                |

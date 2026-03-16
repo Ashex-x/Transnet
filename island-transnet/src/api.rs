@@ -8,8 +8,8 @@ use axum::{
   Json, Router,
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use transnet_llm::TranslationService;
-use transnet_types::{
+use crate::llm::TranslationService;
+use crate::types::{
   ErrorResponse, HealthData, SuccessResponse, TranslateRequest, TransnetError,
 };
 
@@ -75,7 +75,7 @@ fn map_error(error: TransnetError) -> axum::response::Response {
 mod tests {
   use axum::{body::Body, http::Request};
   use tower::util::ServiceExt;
-  use transnet_types::LlmConfig;
+  use crate::types::LlmConfig;
 
   use super::*;
 

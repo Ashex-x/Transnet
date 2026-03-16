@@ -1,9 +1,9 @@
 use std::{env, fs, path::Path};
 
 use anyhow::{Context, Result};
-use transnet_api::{app_router, AppState};
-use transnet_llm::TranslationService;
-use transnet_types::{LlmFileConfig, ServerFileConfig};
+use transnet::api::{app_router, AppState};
+use transnet::llm::TranslationService;
+use transnet::types::{LlmFileConfig, ServerFileConfig};
 
 #[tokio::main]
 async fn main() -> Result<()> {
