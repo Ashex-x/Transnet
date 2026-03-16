@@ -4,6 +4,9 @@ __pycache__
 
 # log
 logs/*.log
+*.log.*
+logs/
+island-transnet/Transnet/logs/
 
 # database
 database/processed_data/*.u8

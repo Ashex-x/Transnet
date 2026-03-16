@@ -28,6 +28,7 @@ export class Profile {
     this.shell = new PageShell(this.container, {
       requiresAuth: true,
       showFooter: false,
+      showTransnetNav: true,
       mainClassName: 'profile-page',
     });
 

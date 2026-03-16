@@ -98,6 +98,9 @@ const translations: Translations = {
     builtWithAI: 'Built with cutting-edge AI technology',
 
     // Transnet page
+    navTranslate: 'Translate',
+    navHistory: 'History',
+    navFavorites: 'Favorites',
     transnetSource: 'Source',
     transnetTarget: 'Target',
     transnetSourcePlaceholder: 'Enter text to translate... Press Ctrl+Enter to translate quickly.',
@@ -301,6 +304,9 @@ const translations: Translations = {
     builtWithAI: '采用尖端 AI 技术构建',
 
     // Transnet page
+    navTranslate: '翻译',
+    navHistory: '历史',
+    navFavorites: '收藏',
     transnetSource: '原文',
     transnetTarget: '译文',
     transnetSourcePlaceholder: '输入要翻译的文本... 按 Ctrl+Enter 快速翻译。',

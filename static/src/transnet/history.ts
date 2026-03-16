@@ -40,6 +40,7 @@ export class History {
     this.shell = new PageShell(this.container, {
       requiresAuth: true,
       showFooter: false,
+      showTransnetNav: true,
       mainClassName: 'profile-page',
     });
 
@@ -111,7 +112,7 @@ export class History {
   private async loadHistory(): Promise<void> {
     const response = await ApiService.getHistory({
       page: this.currentPage,
-      limit: 10,
+      limit: 20,
       ...this.filters,
       sort_by: 'created_at',
       sort_order: 'desc',
@@ -146,9 +147,88 @@ export class History {
       return;
     }
 
-    container.innerHTML = items.map((item, index) => this.renderHistoryCard(item, index)).join('');
+    // Render split layout
+    container.innerHTML = `
+      <div class="history-split-layout">
+        <div class="history-split-layout__list">
+          ${items.map((item, index) => this.renderHistoryListItem(item, index)).join('')}
+        </div>
+        <div class="history-split-layout__details">
+          ${items.length > 0 ? this.renderHistoryDetails(items[0]) : ''}
+        </div>
+      </div>
+    `;
 
-    container.querySelectorAll('.history-copy-btn').forEach(btn => {
+    this.bindListEvents();
+  }
+
+  /**
+   * Render a single history list item.
+   */
+  private renderHistoryListItem(item: HistoryItem, index: number): string {
+    const isActive = index === 0 ? 'history-split-layout__item--active' : '';
+    return `
+      <div class="history-split-layout__item ${isActive}" data-id="${item.translation_id}" data-index="${index}">
+        <div class="history-split-layout__item-text truncated">${this.escapeHtml(item.text)}</div>
+        <div class="history-split-layout__item-meta">
+          <span class="history-card__badge">${item.source_lang.toUpperCase()} → ${item.target_lang.toUpperCase()}</span>
+          <span>${item.input_type}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render detailed view for a history item.
+   */
+  private renderHistoryDetails(item: HistoryItem): string {
+    return `
+      <div class="history-split-layout__details-header">
+        <div style="font-size: 0.85rem; color: var(--text-tertiary);">${item.translation_id ? this.formatDate(new Date().toISOString()) : ''}</div>
+        <div class="history-card__actions">
+          <button class="btn btn--ghost btn--icon history-copy-btn" data-text="${this.escapeHtml(this.getTranslationText(item))}" title="${t('historyCopy')}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+          <button class="btn btn--ghost btn--icon history-favorite-btn" data-id="${item.translation_id}" title="${t('historyFavorite')}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </button>
+          <button class="btn btn--ghost btn--icon history-delete-btn" data-id="${item.translation_id}" title="${t('historyDelete')}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="history-split-layout__details-content">
+        <div class="history-split-layout__details-source">${this.escapeHtml(item.text)}</div>
+        <div class="history-split-layout__details-translation">${this.escapeHtml(this.getTranslationText(item))}</div>
+      </div>
+    `;
+  }
+
+  /**
+   * Bind list item click and action events.
+   */
+  private bindListEvents(): void {
+    // List item clicks to update details
+    this.mainElement?.querySelectorAll('.history-split-layout__item').forEach((item) => {
+      item.addEventListener('click', () => {
+        const index = parseInt((item as HTMLElement).dataset.index || '0');
+        const items = this.historyData?.translations || [];
+        if (items[index]) {
+          this.updateDetails(items[index], index);
+        }
+      });
+    });
+
+    // Copy button
+    this.mainElement?.querySelectorAll('.history-copy-btn').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const text = btn.getAttribute('data-text');
@@ -159,7 +239,8 @@ export class History {
       });
     });
 
-    container.querySelectorAll('.history-favorite-btn').forEach(btn => {
+    // Favorite button
+    this.mainElement?.querySelectorAll('.history-favorite-btn').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = btn.getAttribute('data-id');
@@ -167,7 +248,8 @@ export class History {
       });
     });
 
-    container.querySelectorAll('.history-delete-btn').forEach(btn => {
+    // Delete button
+    this.mainElement?.querySelectorAll('.history-delete-btn').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = btn.getAttribute('data-id');
@@ -177,47 +259,26 @@ export class History {
   }
 
   /**
-   * Render one history entry card.
+   * Update details panel when a list item is clicked.
    */
-  private renderHistoryCard(item: HistoryItem, index: number): string {
-    return `
-      <div class="glass-card history-card animate-fade-in-up" style="animation-delay: ${index * 0.05}s;">
-        <div class="history-card__timeline">
-          <div class="history-card__dot"></div>
-          <div class="history-card__line"></div>
-        </div>
-        <div class="history-card__content">
-          <div class="history-card__header">
-            <div style="font-size: 0.85rem; color: var(--text-tertiary);">${item.translation_id ? this.formatDate(new Date().toISOString()) : ''}</div>
-            <div class="history-card__actions">
-              <button class="btn btn--ghost btn--icon history-copy-btn" data-text="${this.escapeHtml(this.getTranslationText(item))}" title="复制">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              </button>
-              <button class="btn btn--ghost btn--icon history-favorite-btn" data-id="${item.translation_id}" title="收藏">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                </svg>
-              </button>
-              <button class="btn btn--ghost btn--icon history-delete-btn" data-id="${item.translation_id}" title="删除">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div class="history-card__text">${this.escapeHtml(item.text)}</div>
-          <div class="history-card__translation">${this.escapeHtml(this.getTranslationText(item))}</div>
-          <div class="history-card__meta">
-            <span class="history-card__badge">${item.source_lang.toUpperCase()} → ${item.target_lang.toUpperCase()}</span>
-            <span>${item.input_type}</span>
-          </div>
-        </div>
-      </div>
-    `;
+  private updateDetails(item: HistoryItem, index: number): void {
+    const items = this.mainElement?.querySelectorAll('.history-split-layout__item');
+    const details = this.mainElement?.querySelector('.history-split-layout__details');
+
+    if (items) {
+      items.forEach((itemEl, i) => {
+        if (i === index) {
+          itemEl.classList.add('history-split-layout__item--active');
+        } else {
+          itemEl.classList.remove('history-split-layout__item--active');
+        }
+      });
+    }
+
+    if (details && item) {
+      details.innerHTML = this.renderHistoryDetails(item);
+      this.bindListEvents();
+    }
   }
 
   /**
