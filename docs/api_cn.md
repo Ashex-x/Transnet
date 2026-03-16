@@ -395,11 +395,7 @@ Authorization: Bearer <access_token>
 
 ## 翻译历史
 
-<<<<<<< HEAD
-### GET `/api/history`
-=======
 ### GET `/api/transnet/history`
->>>>>>> frontend/api
 获取已认证用户的翻译历史。
 
 **Headers (必需):**
@@ -465,11 +461,7 @@ GET /api/history?page=1&limit=20&source_lang=en&target_lang=es
 
 ---
 
-<<<<<<< HEAD
-### GET `/api/history/:translation_id`
-=======
 ### GET `/api/transnet/history/:translation_id`
->>>>>>> frontend/api
 通过 ID 获取特定翻译。
 
 **Headers (必需):**
@@ -516,11 +508,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-<<<<<<< HEAD
-### DELETE `/api/history/:translation_id`
-=======
 ### DELETE `/api/transnet/history/:translation_id`
->>>>>>> frontend/api
 从历史记录中删除翻译。
 
 **Headers (必需):**
@@ -553,11 +541,7 @@ Authorization: Bearer <access_token>
 
 收藏即历史记录中 `is_favorite = true` 且带有可选 `note` 的项。无单独的收藏 ID；用 `translation_id` 标识一条收藏。
 
-<<<<<<< HEAD
-### POST `/api/favorites`
-=======
 ### POST `/api/transnet/favorites`
->>>>>>> frontend/api
 将某条翻译标记为收藏（在对应历史记录上设置 `is_favorite = true` 并可选保存备注）。
 
 **Headers (必需):**
@@ -598,11 +582,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-<<<<<<< HEAD
-### GET `/api/favorites`
-=======
 ### GET `/api/transnet/favorites`
->>>>>>> frontend/api
 获取用户收藏（即历史记录中 `is_favorite = true` 的项）。
 
 **Headers (必需):**
@@ -668,11 +648,7 @@ GET /api/favorites?page=1&limit=20
 
 ---
 
-<<<<<<< HEAD
-### PUT `/api/favorites/:translation_id`
-=======
 ### PUT `/api/transnet/favorites/:translation_id`
->>>>>>> frontend/api
 更新某条收藏翻译的备注。
 
 **Headers (必需):**
@@ -708,11 +684,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-<<<<<<< HEAD
-### DELETE `/api/favorites/:translation_id`
-=======
 ### DELETE `/api/transnet/favorites/:translation_id`
->>>>>>> frontend/api
 取消收藏（将对应历史记录的 `is_favorite` 设为 false）。
 
 **Headers (必需):**

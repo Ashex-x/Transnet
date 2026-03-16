@@ -32,20 +32,11 @@ impl TranslationService {
     );
 
     // Select URL and model based on language types
-    let is_normal_pair = crate::types::is_normal_language(&request.source_lang)
-      && crate::types::is_normal_language(&request.target_lang);
-
-    let (base_url, model) = if is_normal_pair {
-      (
-        self.config.normal_lang_base_url.as_ref().unwrap_or(&self.config.base_url),
-        self.config.normal_lang_model.as_ref().unwrap_or(&self.config.model),
-      )
-    } else {
-      (&self.config.base_url, &self.config.model)
-    };
+    let base_url = &self.config.base_url;
+    let model = &self.config.model;
 
     // Use a specific prompt for Qwen models to disable thinking mode
-    let system_prompt = if model.to_lowercase().contains("qwen") {
+    let system_prompt: &str = if model.to_lowercase().contains("qwen") {
       QWEN_SYSTEM_PROMPT
     } else {
       SYSTEM_PROMPT
@@ -66,7 +57,7 @@ impl TranslationService {
       temperature: 0.2,
     };
 
-    let endpoint = format!(
+    let endpoint: String = format!(
       "{}/chat/completions",
       base_url.trim_end_matches('/')
     );
