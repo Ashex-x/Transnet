@@ -25,14 +25,14 @@ Transnet is a translation service with a layered architecture:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Browser Client                            │
-│                   (TypeScript + SCSS + WebGL)                    │
+│                        Browser Client                           │
+│                   (TypeScript + SCSS + WebGL)                   │
 └───────────────────────────┬─────────────────────────────────────┘
                             │ HTTP/REST
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Gateway Server                              │
-│                    (transnet-server/)                            │
+│                      Gateway Server                             │
+│                    (transnet-server/)                           │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │   Routes    │  │   Static    │  │    Backend Client       │  │
 │  │  (Axum)     │  │   Files     │  │    (reqwest)            │  │
@@ -41,8 +41,8 @@ Transnet is a translation service with a layered architecture:
                             │ HTTP (internal)
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Backend Server                              │
-│                  (island-transnet/bins/)                         │
+│                      Backend Server                             │
+│                  (island-transnet/bins/)                        │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │  transnet-  │──│  transnet-  │──│     transnet-llm        │  │
 │  │    api      │  │   types     │  │   (OpenAI-compatible)   │  │
@@ -71,16 +71,16 @@ Transnet is a translation service with a layered architecture:
 
 ```
 Transnet/
-├── transnet-server/              # Gateway Server (standalone crate)
+├── transnet-server/             # Gateway Server (standalone crate)
 │   ├── Cargo.toml
 │   └── src/
 │       ├── main.rs              # Entry point
 │       ├── lib.rs               # Routes, types, state
 │       └── backend_client.rs    # Backend HTTP client
 │
-├── island-transnet/              # Backend Core (workspace)
+├── island-transnet/             # Backend Core (workspace)
 │   ├── Cargo.toml               # Workspace definition
-│   ├── config/                  # Configuration files
+│   ├── config/                   # Configuration files
 │   │   ├── transnet.toml        # Server config
 │   │   ├── transnet_api.toml    # API config (CORS, auth, ratelimit)
 │   │   ├── transnet_db.toml     # Database config
@@ -92,7 +92,7 @@ Transnet/
 │   └── bins/
 │       └── transnet-server/     # Backend entry point
 │
-├── static/                       # Frontend
+├── static/                      # Frontend
 │   ├── src/
 │   │   ├── app.ts               # App bootstrap
 │   │   ├── router.ts            # SPA router
