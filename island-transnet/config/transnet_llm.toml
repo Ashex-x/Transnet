@@ -9,4 +9,4 @@ max_retries = 3
 # For normal languages (English, Chinese, Spanish, French, Japanese, Korean, German)
 # Uses Qwen3.5 on port 35793
 normal_lang_base_url = "http://127.0.0.1:35793/v1"
-normal_lang_model = "Qwen3.5"
+normal_lang_model = "Qwen/Qwen3.5-27B"

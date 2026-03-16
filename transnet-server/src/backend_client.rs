@@ -1,6 +1,7 @@
 use reqwest::Client;
 
-use crate::{HealthData, TranslateRequest, TranslateResponse, TransnetError};
+use crate::{HealthData, InputType, TranslateRequest, TranslateResponse, TransnetError};
+use transnet::types::{InputType as BackendInputType, TranslateResponse as BackendTranslateResponse};
 
 pub struct BackendClient {
   base_url: String,
@@ -74,11 +75,28 @@ impl BackendClient {
       };
     }
 
-    let body: crate::SuccessResponse<TranslateResponse> = response
+    let body: crate::SuccessResponse<BackendTranslateResponse> = response
       .json()
       .await
       .map_err(|e| TransnetError::Backend(format!("failed to parse translation response: {e}")))?;
 
-    Ok(body.data)
+    // Convert backend response to gateway response format
+    let backend_response = body.data;
+    Ok(TranslateResponse {
+      translation_id: backend_response.translation_id,
+      text: backend_response.text,
+      source_lang: backend_response.source_lang,
+      target_lang: backend_response.target_lang,
+      input_type: match backend_response.input_type {
+        BackendInputType::Word => InputType::Word,
+        BackendInputType::Phrase => InputType::Phrase,
+        BackendInputType::Sentence => InputType::Sentence,
+        BackendInputType::Paragraph => InputType::Paragraph,
+        BackendInputType::Essay => InputType::Essay,
+        BackendInputType::Auto => InputType::Auto,
+      },
+      user_id: None, // Will be set by handler if JWT is present
+      translation: backend_response.translation,
+    })
   }
 }

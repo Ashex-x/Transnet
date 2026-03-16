@@ -1,0 +1,55 @@
+=== Translation Response Log [2026-03-16:20-35-07] ===
+Endpoint: http://127.0.0.1:35793/v1/chat/completions
+Model: Qwen/Qwen3.5-27B
+
+Request:
+{
+  "model": "Qwen/Qwen3.5-27B",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a translation engine. Return strict JSON only. Do not think, reason, or explain - just translate directly without any additional processing."
+    },
+    {
+      "role": "user",
+      "content": "Translate the word 'luxury' from en to zh. Return a compact JSON object with this exact structure:\n{\n\"headword\": \"the word\",\n\"part_of_speech\": \"noun|verb|adjective|etc\",\n\"phonetic\": \"/ipa/pronunciation/\",\n\"translations\": [\"translation1\", \"translation2\"],\n\"synonyms\": [\"synonym1\", \"synonym2\"],\n\"antonyms\": [\"antonym1\", \"antonym2\"],\n\"examples\": [\n{\n\"source\": \"example sentence in en\",\n\"translation\": \"example sentence in zh\"\n}\n]\n}\n\nProvide 1-3 primary translations, 2-5 synonyms, and 1-2 examples. Return strict JSON only."
+    }
+  ],
+  "temperature": 0.2,
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  }
+}
+
+Response (sent to gateway):
+{
+  "antonyms": [
+    "frugality",
+    "austerity"
+  ],
+  "examples": [
+    {
+      "source": "The hotel offers a luxury experience for its guests.",
+      "translation": "这家酒店为客人提供豪华体验。"
+    },
+    {
+      "source": "Buying a new car is a luxury for many families.",
+      "translation": "对许多家庭来说，买新车是一种奢侈。"
+    }
+  ],
+  "headword": "luxury",
+  "part_of_speech": "noun",
+  "phonetic": "/ˈlʌkʃəri/",
+  "synonyms": [
+    "opulence",
+    "extravagance",
+    "splendor"
+  ],
+  "translations": [
+    "奢侈",
+    "豪华",
+    "奢侈品"
+  ]
+}
+=== End Log ===
+
