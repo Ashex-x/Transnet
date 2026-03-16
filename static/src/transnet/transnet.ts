@@ -162,80 +162,115 @@ export class Transnet {
     this.mainElement.innerHTML = `
       <main class="transnet-stage">
         <div class="transnet-stage__content">
-          <!-- Translation Section -->
-          <div class="transnet-translation">
-            <!-- Input Section -->
-            <div class="transnet-translation__section">
-              <div class="transnet-section__header">
-                <label>${t('transnetSource')}</label>
-              </div>
-              <textarea class="transnet-source-text" placeholder="${t('transnetSourcePlaceholder')}"></textarea>
-              <div class="transnet-image-upload-area">
-                <input type="file" accept="image/*" class="transnet-image-input">
-                <div class="transnet-upload-placeholder">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                  </svg>
-                  <span>${t('transnetUploadImage')}</span>
-                </div>
-              </div>
-              <img class="transnet-image-preview" alt="Preview">
+          <!-- Input Section -->
+          <section class="transnet-section transnet-section--input">
+            <div class="transnet-section__header">
+              <label>${t('transnetSource')}</label>
             </div>
+            <textarea class="transnet-source-text" placeholder="${t('transnetSourcePlaceholder')}"></textarea>
+            <div class="transnet-image-upload-area">
+              <input type="file" accept="image/*" class="transnet-image-input">
+              <div class="transnet-upload-placeholder">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <span>${t('transnetUploadImage')}</span>
+              </div>
+            </div>
+            <img class="transnet-image-preview" alt="Preview">
+          </section>
 
-            <!-- Output Section -->
-            <div class="transnet-translation__section">
-              <div class="transnet-section__header">
-                <label>${t('transnetTarget')}</label>
-              </div>
-              <textarea class="transnet-target-text" placeholder="${t('transnetTargetPlaceholder')}" readonly></textarea>
-            </div>
-          </div>
+          <div class="transnet-divider"></div>
 
           <!-- Translation Config Section -->
-          <div class="transnet-config">
+          <section class="transnet-section transnet-section--config">
             <div class="transnet-config__controls">
-              <!-- Language selectors row -->
-              <div class="transnet-config__row">
-                <select class="transnet-source-lang"></select>
-                <button class="transnet-swap-button">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 7l-8 5 8 5"></path>
-                    <path d="M13 7l8 5-8 5"></path>
+              <!-- Language Selection Group -->
+              <div class="transnet-config__group">
+                <div class="transnet-config__group-title">Languages</div>
+                <div class="transnet-config__row transnet-config__row--languages">
+                  <div class="transnet-config__select-wrapper">
+                    <select class="transnet-source-lang"></select>
+                  </div>
+                  <button class="transnet-swap-button" aria-label="Swap languages">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M7 16V4M7 4L3 8M7 4L11 8M17 8V20M17 20L21 16M17 20L13 16"></path>
+                    </svg>
+                  </button>
+                  <div class="transnet-config__select-wrapper">
+                    <select class="transnet-target-lang"></select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="transnet-divider transnet-divider--compact"></div>
+
+              <!-- Translation Mode Group -->
+              <div class="transnet-config__group">
+                <div class="transnet-config__group-title">Translation Mode</div>
+                <div class="transnet-config__row">
+                  <label for="outputType">${t('transnetOutputType')}</label>
+                  <select id="outputType" class="transnet-output-type">
+                    <option value="basic">Basic Translation</option>
+                    <option value="explain">Detailed Explanation</option>
+                    <option value="full_analysis">Full Analysis</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="transnet-divider transnet-divider--compact"></div>
+
+              <!-- Input Method Group -->
+              <div class="transnet-config__group">
+                <div class="transnet-config__group-title">Input Method</div>
+                <div class="transnet-config__row">
+                  <label for="inputType">${t('transnetInputType')}</label>
+                  <select id="inputType" class="transnet-input-type">
+                    <option value="text">Text Input</option>
+                    <option value="image">Image Upload</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="transnet-divider"></div>
+
+              <!-- Action Button -->
+              <div class="transnet-config__row transnet-config__row--action">
+                <button class="transnet-translate-button">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 8l6 6"></path>
+                    <path d="M4 14h6"></path>
+                    <path d="M2 5h12"></path>
+                    <path d="M7 2l1 2"></path>
+                    <path d="M12 19l-6 6"></path>
+                    <path d="M13 19h6"></path>
+                    <path d="M12 22l1 2"></path>
+                    <path d="M2 5l12 14"></path>
                   </svg>
+                  ${t('transnetTranslate')}
                 </button>
-                <select class="transnet-target-lang"></select>
-              </div>
-
-              <!-- Output type selector row -->
-              <div class="transnet-config__row">
-                <label>${t('transnetOutputType')}</label>
-                <select class="transnet-output-type">
-                  <option value="basic" selected>Basic</option>
-                  <option value="explain">Explain</option>
-                  <option value="full_analysis">Full</option>
-                </select>
-              </div>
-
-              <!-- Input type selector row -->
-              <div class="transnet-config__row">
-                <label>${t('transnetInputType')}</label>
-                <select class="transnet-input-type">
-                  <option value="text" selected>${t('transnetText')}</option>
-                  <option value="image">${t('transnetImage')}</option>
-                </select>
-              </div>
-
-              <!-- Translate button row -->
-              <div class="transnet-config__row">
-                <button class="transnet-translate-button">${t('transnetTranslate')}</button>
               </div>
             </div>
-          </div>
+          </section>
+
+          <div class="transnet-divider"></div>
+
+          <!-- Output Section -->
+          <section class="transnet-section transnet-section--output">
+            <div class="transnet-section__header">
+              <label>${t('transnetTarget')}</label>
+            </div>
+            <textarea class="transnet-target-text" placeholder="${t('transnetTargetPlaceholder')}" readonly></textarea>
+          </section>
 
           <!-- Status Section -->
-          <p class="transnet-status" data-state="idle"></p>
+          <div class="transnet-status-container">
+            <p class="transnet-status" data-state="idle"></p>
+          </div>
+
+          <div class="transnet-divider"></div>
 
           <!-- Extra Output Section -->
           <div class="transnet-extra-output">
@@ -256,18 +291,43 @@ export class Transnet {
 
     // Attach event listeners
     const sourceText = this.mainElement.querySelector('.transnet-source-text') as HTMLTextAreaElement;
+    const targetText = this.mainElement.querySelector('.transnet-target-text') as HTMLTextAreaElement;
     const imageUploadArea = this.mainElement.querySelector('.transnet-image-upload-area') as HTMLElement;
     const imageInput = this.mainElement.querySelector('.transnet-image-input') as HTMLInputElement;
     const swapButton = this.mainElement.querySelector('.transnet-swap-button') as HTMLButtonElement;
     const inputTypeSelect = this.mainElement.querySelector('.transnet-input-type') as HTMLSelectElement;
     const translateButton = this.mainElement.querySelector('.transnet-translate-button') as HTMLButtonElement;
 
+    // Auto-resize textareas
+    const autoResize = (textarea: HTMLTextAreaElement) => {
+      textarea.style.height = 'auto';
+      const newHeight = Math.max(60, Math.min(400, textarea.scrollHeight));
+      textarea.style.height = newHeight + 'px';
+    };
+
     if (sourceText) {
+      // Set initial height
+      sourceText.style.height = '60px';
+
+      sourceText.addEventListener('input', () => {
+        autoResize(sourceText);
+      });
+
       sourceText.addEventListener('keydown', (event: KeyboardEvent) => {
         if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
           event.preventDefault();
           void this.onTranslate();
         }
+      });
+    }
+
+    if (targetText) {
+      // Set initial height
+      targetText.style.height = '60px';
+
+      // Add input listener for when translation is manually pasted
+      targetText.addEventListener('input', () => {
+        autoResize(targetText);
       });
     }
 
@@ -487,6 +547,11 @@ export class Transnet {
     } else {
       targetElement.value = '';
     }
+
+    // Auto-resize after setting the value
+    targetElement.style.height = 'auto';
+    const newHeight = Math.max(60, Math.min(400, targetElement.scrollHeight));
+    targetElement.style.height = newHeight + 'px';
   }
 
   /**
