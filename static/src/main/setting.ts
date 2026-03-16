@@ -3,6 +3,7 @@
  */
 
 import { PageShell } from '../shared/page-shell';
+import { t } from '../shared/language';
 
 export class Setting {
   private container: HTMLElement;
@@ -28,18 +29,18 @@ export class Setting {
     main.innerHTML = `
       <div class="container">
         <div class="glass-card" style="max-width: 800px; margin: 0 auto; padding: 40px;">
-          <h1 style="font-size: 2.5rem; font-weight: 700; margin-bottom: 24px;">Settings</h1>
+          <h1 style="font-size: 2.5rem; font-weight: 700; margin-bottom: 24px;">${t('settings')}</h1>
           <p style="color: var(--text-secondary); margin-bottom: 40px;">
-            Customize your Transnet experience with these settings.
+            ${t('settingsDescription')}
           </p>
 
           <div style="display: flex; flex-direction: column; gap: 32px;">
             <div>
-              <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px;">Appearance</h3>
+              <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px;">${t('appearance')}</h3>
               <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
                 <div>
-                  <div style="font-weight: 500; margin-bottom: 4px;">Dark Mode</div>
-                  <div style="font-size: 0.9rem; color: var(--text-tertiary);">Currently fixed to dark theme</div>
+                  <div style="font-weight: 500; margin-bottom: 4px;">${t('darkMode')}</div>
+                  <div style="font-size: 0.9rem; color: var(--text-tertiary);">${t('darkModeFixed')}</div>
                 </div>
                 <div style="width: 48px; height: 24px; background: var(--accent-primary); border-radius: 12px; position: relative; cursor: not-allowed;">
                   <div style="width: 20px; height: 20px; background: white; border-radius: 50%; position: absolute; right: 2px; top: 2px;"></div>
@@ -48,23 +49,23 @@ export class Setting {
             </div>
 
             <div>
-              <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px;">Language</h3>
+              <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px;">${t('languageSettings')}</h3>
               <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
                 <div>
-                  <div style="font-weight: 500; margin-bottom: 4px;">Interface Language</div>
-                  <div style="font-size: 0.9rem; color: var(--text-tertiary);">Set via home page language selector</div>
+                  <div style="font-weight: 500; margin-bottom: 4px;">${t('interfaceLanguage')}</div>
+                  <div style="font-size: 0.9rem; color: var(--text-tertiary);">${t('languageSetViaHome')}</div>
                 </div>
-                <button style="padding: 8px 16px; background: rgba(0,240,255,0.1); color: var(--accent-primary); border: 1px solid var(--accent-primary); border-radius: 8px; cursor: not-allowed;" disabled>Configure</button>
+                <button style="padding: 8px 16px; background: rgba(0,240,255,0.1); color: var(--accent-primary); border: 1px solid var(--accent-primary); border-radius: 8px; cursor: not-allowed;" disabled>${t('configure')}</button>
               </div>
             </div>
 
             <div>
-              <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px;">Translation</h3>
+              <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px;">${t('translationSettings')}</h3>
               <div style="display: flex; flex-direction: column; gap: 16px;">
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
                   <div>
-                    <div style="font-weight: 500; margin-bottom: 4px;">Auto-detect Input Type</div>
-                    <div style="font-size: 0.9rem; color: var(--text-tertiary);">Smart detection enabled by default</div>
+                    <div style="font-weight: 500; margin-bottom: 4px;">${t('autoDetectInput')}</div>
+                    <div style="font-size: 0.9rem; color: var(--text-tertiary);">${t('smartDetectionEnabled')}</div>
                   </div>
                   <div style="width: 48px; height: 24px; background: var(--success); border-radius: 12px; position: relative; cursor: not-allowed;">
                     <div style="width: 20px; height: 20px; background: white; border-radius: 50%; position: absolute; right: 2px; top: 2px;"></div>
@@ -72,8 +73,8 @@ export class Setting {
                 </div>
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
                   <div>
-                    <div style="font-weight: 500; margin-bottom: 4px;">Save to History</div>
-                    <div style="font-size: 0.9rem; color: var(--text-tertiary);">Automatically save translations</div>
+                    <div style="font-weight: 500; margin-bottom: 4px;">${t('saveToHistory')}</div>
+                    <div style="font-size: 0.9rem; color: var(--text-tertiary);">${t('autoSaveTranslations')}</div>
                   </div>
                   <div style="width: 48px; height: 24px; background: var(--success); border-radius: 12px; position: relative; cursor: not-allowed;">
                     <div style="width: 20px; height: 20px; background: white; border-radius: 50%; position: absolute; right: 2px; top: 2px;"></div>
@@ -83,12 +84,12 @@ export class Setting {
             </div>
 
             <div>
-              <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px;">Privacy</h3>
+              <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 16px;">${t('privacy')}</h3>
               <div style="display: flex; flex-direction: column; gap: 16px;">
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
                   <div>
-                    <div style="font-weight: 500; margin-bottom: 4px;">Data Storage</div>
-                    <div style="font-size: 0.9rem; color: var(--text-tertiary);">Your translations are stored securely</div>
+                    <div style="font-weight: 500; margin-bottom: 4px;">${t('dataStorage')}</div>
+                    <div style="font-size: 0.9rem; color: var(--text-tertiary);">${t('dataStoredSecurely')}</div>
                   </div>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
                     <path d="M20 6L9 17l-5-5"></path>
@@ -97,10 +98,10 @@ export class Setting {
                 </div>
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
                   <div>
-                    <div style="font-weight: 500; margin-bottom: 4px;">Account Deletion</div>
-                    <div style="font-size: 0.9rem; color: var(--text-tertiary);">Remove all your data permanently</div>
+                    <div style="font-weight: 500; margin-bottom: 4px;">${t('accountDeletion')}</div>
+                    <div style="font-size: 0.9rem; color: var(--text-tertiary);">${t('removeDataPermanently')}</div>
                   </div>
-                  <button style="padding: 8px 16px; background: rgba(255,99,71,0.1); color: var(--error); border: 1px solid var(--error); border-radius: 8px; cursor: not-allowed;" disabled>Request Deletion</button>
+                  <button style="padding: 8px 16px; background: rgba(255,99,71,0.1); color: var(--error); border: 1px solid var(--error); border-radius: 8px; cursor: not-allowed;" disabled>${t('requestDeletion')}</button>
                 </div>
               </div>
             </div>
@@ -108,7 +109,7 @@ export class Setting {
 
           <div style="margin-top: 40px; padding: 20px; background: rgba(184, 41, 247, 0.05); border: 1px solid rgba(184, 41, 247, 0.2); border-radius: 12px;">
             <p style="font-size: 0.9rem; color: var(--text-secondary); margin: 0;">
-              <strong>Settings Coming Soon:</strong> More customization options will be available in future updates. Stay tuned for enhanced personalization features.
+              <strong>${t('settingsComingSoon')}</strong> ${t('settingsComingSoonDesc')}
             </p>
           </div>
         </div>

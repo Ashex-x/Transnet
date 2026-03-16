@@ -3,7 +3,10 @@
  */
 
 import { PageShell } from '../shared/page-shell';
+import { ApiService, TranslationData, Translation, isTranslationWordExplain, isTranslationWordFullAnalysis, isTranslationPhraseExplain, isTranslationPhraseFullAnalysis, isTranslationSentenceExplain } from './api';
+import { t } from '../shared/language';
 
+<<<<<<< HEAD
 interface TranslateApiSuccess {
   success: true;
   data: {
@@ -67,6 +70,48 @@ interface Relationships {
   };
 }
 
+=======
+interface TranslationExample {
+  source: string;
+  translation: string;
+}
+
+interface Explain {
+  meaning: string;
+  story: string;
+  when_to_use: string;
+  how_to_use: string;
+  context: string;
+  lexical_analysis: {
+    root?: string;
+    structure?: string;
+    idiomatic?: boolean;
+    related_phrases?: string[];
+  };
+}
+
+interface RelatedWord {
+  word: string;
+  type: string;
+  similarity: number;
+}
+
+interface Relationships {
+  related_words?: RelatedWord[];
+  related_phrases?: Array<{
+    phrase: string;
+    type: string;
+    similarity: number;
+  }>;
+  related_concepts?: string[];
+  by_pos?: {
+    nouns?: string[];
+    verbs?: string[];
+    adjectives?: string[];
+  };
+}
+
+>>>>>>> frontend/api
 interface TranslationWordBasic {
   headword: string;
   part_of_speech: string;
@@ -74,7 +119,11 @@ interface TranslationWordBasic {
   translations: string[];
   synonyms: string[];
   antonyms: string[];
+<<<<<<< HEAD
   examples: WordMeaning[];
+=======
+  examples: TranslationExample[];
+>>>>>>> frontend/api
 }
 
 interface TranslationWordExplain extends TranslationWordBasic {
@@ -90,7 +139,11 @@ interface TranslationPhraseBasic {
   headword: string;
   part_of_speech: string;
   translations: string[];
+<<<<<<< HEAD
   examples: WordMeaning[];
+=======
+  examples: TranslationExample[];
+>>>>>>> frontend/api
 }
 
 interface TranslationPhraseExplain extends TranslationPhraseBasic {
@@ -119,6 +172,7 @@ interface TranslationParagraphEssayBasic {
   translation: string;
 }
 
+<<<<<<< HEAD
 type TranslationData =
   | TranslationWordBasic
   | TranslationWordExplain
@@ -130,15 +184,19 @@ type TranslationData =
   | TranslationSentenceExplain
   | TranslationParagraphEssayBasic;
 
+=======
+>>>>>>> frontend/api
 export class Transnet {
   private container: HTMLElement;
-  private readonly apiUrl: string;
   private shell: PageShell | null = null;
   private mainElement: HTMLElement | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
+<<<<<<< HEAD
     this.apiUrl = '/api/transnet';
+=======
+>>>>>>> frontend/api
   }
 
   /**
@@ -165,9 +223,9 @@ export class Transnet {
             <!-- Input Section -->
             <div class="transnet-translation__section">
               <div class="transnet-section__header">
-                <label>Source</label>
+                <label>${t('transnetSource')}</label>
               </div>
-              <textarea class="transnet-source-text" placeholder="Enter text to translate... Press Ctrl+Enter to translate quickly."></textarea>
+              <textarea class="transnet-source-text" placeholder="${t('transnetSourcePlaceholder')}"></textarea>
               <div class="transnet-image-upload-area">
                 <input type="file" accept="image/*" class="transnet-image-input">
                 <div class="transnet-upload-placeholder">
@@ -176,7 +234,7 @@ export class Transnet {
                     <polyline points="17 8 12 3 7 8"></polyline>
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                   </svg>
-                  <span>Click to upload an image</span>
+                  <span>${t('transnetUploadImage')}</span>
                 </div>
               </div>
               <img class="transnet-image-preview" alt="Preview">
@@ -185,9 +243,9 @@ export class Transnet {
             <!-- Output Section -->
             <div class="transnet-translation__section">
               <div class="transnet-section__header">
-                <label>Target</label>
+                <label>${t('transnetTarget')}</label>
               </div>
-              <textarea class="transnet-target-text" placeholder="Translation will appear here..." readonly></textarea>
+              <textarea class="transnet-target-text" placeholder="${t('transnetTargetPlaceholder')}" readonly></textarea>
             </div>
           </div>
 
@@ -208,7 +266,7 @@ export class Transnet {
 
               <!-- Output type selector row -->
               <div class="transnet-config__row">
-                <label>Output Type:</label>
+                <label>${t('transnetOutputType')}</label>
                 <select class="transnet-output-type">
                   <option value="basic" selected>Basic</option>
                   <option value="explain">Explain</option>
@@ -218,16 +276,16 @@ export class Transnet {
 
               <!-- Input type selector row -->
               <div class="transnet-config__row">
-                <label>Input Type:</label>
+                <label>${t('transnetInputType')}</label>
                 <select class="transnet-input-type">
-                  <option value="text" selected>Text</option>
-                  <option value="image">Image</option>
+                  <option value="text" selected>${t('transnetText')}</option>
+                  <option value="image">${t('transnetImage')}</option>
                 </select>
               </div>
 
               <!-- Translate button row -->
               <div class="transnet-config__row">
-                <button class="transnet-translate-button">Translate</button>
+                <button class="transnet-translate-button">${t('transnetTranslate')}</button>
               </div>
             </div>
           </div>
@@ -237,7 +295,7 @@ export class Transnet {
 
           <!-- Extra Output Section -->
           <div class="transnet-extra-output">
-            <div class="transnet-extra-output__title">Extra Output</div>
+            <div class="transnet-extra-output__title">${t('transnetExtraOutput')}</div>
             <div class="transnet-extra-output__content"></div>
           </div>
         </div>
@@ -401,17 +459,18 @@ export class Transnet {
     const text = sourceText.value.trim();
     if (!text) {
       targetText.value = '';
-      status.textContent = 'Enter text before translating.';
+      status.textContent = t('transnetEnterTextBeforeTranslating');
       status.dataset.state = 'error';
       return;
     }
 
     translateButton.disabled = true;
-    translateButton.textContent = 'Translating...';
-    status.textContent = 'Contacting Transnet backend...';
+    translateButton.textContent = t('transnetTranslating');
+    status.textContent = t('transnetContactingBackend');
     status.dataset.state = 'loading';
 
     try {
+<<<<<<< HEAD
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
@@ -430,31 +489,294 @@ export class Transnet {
           target_lang: targetLang.value,
           mode: outputType.value,
         }),
+=======
+      const response = await ApiService.translate({
+        text,
+        source_lang: sourceLang.value,
+        target_lang: targetLang.value,
+        mode: outputType.value as 'basic' | 'explain' | 'full_analysis',
+>>>>>>> frontend/api
       });
 
-      const payload = (await response.json()) as TranslateApiSuccess | TranslateApiError;
-      if (!response.ok || !payload.success) {
-        const message =
-          payload.success === false
-            ? payload.error?.message ?? 'Translation failed.'
-            : `Request failed with status ${response.status}.`;
+      if (!response.success || !response.data) {
+        const message = response.error?.message ?? t('transnetTranslationFailed');
         throw new Error(message);
       }
 
+<<<<<<< HEAD
       this.renderTranslation(payload.data.translation, targetText);
       this.displayExtraOutput(payload.data);
 
       status.textContent = `Translated as ${payload.data.input_type} via ${payload.data.model}.`;
+=======
+      const translationData = response.data;
+      this.renderTranslation(translationData.translation, targetText);
+      this.displayExtraOutput(translationData);
+
+      status.textContent = t('transnetTranslatedAs').replace('{input_type}', translationData.input_type).replace('{model}', translationData.model);
+>>>>>>> frontend/api
       status.dataset.state = 'success';
     } catch (error) {
       targetText.value = '';
       status.textContent =
-        error instanceof Error ? error.message : 'Unable to reach the Transnet backend.';
+        error instanceof Error ? error.message : t('transnetUnableToReach');
       status.dataset.state = 'error';
     } finally {
       translateButton.disabled = false;
       translateButton.textContent = 'Translate';
     }
+  }
+
+
+  /**
+   * Render main translation text in target textarea based on translation type.
+   */
+  private renderTranslation(translationData: TranslationData, targetElement: HTMLTextAreaElement): void {
+    if ('translations' in translationData) {
+      targetElement.value = translationData.translations.join(', ');
+    } else if ('rephrasing' in translationData) {
+      targetElement.value = translationData.rephrasing;
+    } else if ('translation' in translationData && 'text' in translationData) {
+      targetElement.value = translationData.translation;
+    } else {
+      targetElement.value = '';
+    }
+  }
+
+  /**
+   * Display extra output details in the extra output section.
+   */
+  private displayExtraOutput(data: Translation): void {
+    const extraOutputContent = this.mainElement?.querySelector('.transnet-extra-output__content');
+    if (!extraOutputContent) {
+      return;
+    }
+
+    const { translation, input_type } = data;
+    let html = '';
+
+    if (input_type === 'word') {
+      html = this.renderWordExtra(
+        translation as TranslationWordBasic | TranslationWordExplain | TranslationWordFullAnalysis,
+      );
+    } else if (input_type === 'phrase') {
+      html = this.renderPhraseExtra(
+        translation as TranslationPhraseBasic | TranslationPhraseExplain | TranslationPhraseFullAnalysis,
+      );
+    } else if (input_type === 'sentence') {
+      html = this.renderSentenceExtra(translation as TranslationSentenceBasic | TranslationSentenceExplain);
+    } else if (input_type === 'paragraph' || input_type === 'essay') {
+      html = this.renderParagraphEssayExtra(translation as TranslationParagraphEssayBasic);
+    }
+
+    extraOutputContent.innerHTML = html;
+  }
+
+  /**
+   * Render extra output for word translations.
+   */
+  private renderWordExtra(translation: TranslationWordBasic | TranslationWordExplain | TranslationWordFullAnalysis): string {
+    const isFullAnalysis = isTranslationWordFullAnalysis(translation);
+    const hasExplain = isTranslationWordExplain(translation) || isFullAnalysis;
+
+    let html = `
+      <div class="transnet-extra-output__section">
+        <h4>${t('transnetWordInformation')}</h4>
+        <p><strong>${t('transnetWord')}:</strong> ${translation.headword}</p>
+        <p><strong>${t('transnetPartOfSpeech')}:</strong> ${translation.part_of_speech}</p>
+        <p><strong>${t('transnetPhonetic')}:</strong> ${translation.phonetic}</p>
+      </div>
+    `;
+
+    if (translation.synonyms && translation.synonyms.length > 0) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>${t('transnetSynonyms')}</h4>
+          <p>${translation.synonyms.join(', ')}</p>
+        </div>
+      `;
+    }
+
+    if (translation.antonyms && translation.antonyms.length > 0) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>${t('transnetAntonyms')}</h4>
+          <p>${translation.antonyms.join(', ')}</p>
+        </div>
+      `;
+    }
+
+    if (translation.examples && translation.examples.length > 0) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>${t('transnetExamples')}</h4>
+          ${translation.examples.map(
+            (ex) => `
+              <div class="transnet-extra-output__example">
+                <p class="source">${ex.source}</p>
+                <p class="translation">${ex.translation}</p>
+              </div>
+            `,
+          ).join('')}
+        </div>
+      `;
+    }
+
+    if (hasExplain) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>${t('transnetExplanation')}</h4>
+          <p><strong>${t('transnetMeaning')}:</strong> ${translation.explain.meaning}</p>
+          <p><strong>${t('transnetStory')}:</strong> ${translation.explain.story}</p>
+          <p><strong>${t('transnetWhenToUse')}:</strong> ${translation.explain.when_to_use}</p>
+          <p><strong>${t('transnetHowToUse')}:</strong> ${translation.explain.how_to_use}</p>
+          <p><strong>${t('transnetContext')}:</strong> ${translation.explain.context}</p>
+          ${translation.explain.lexical_analysis.root ? `<p><strong>${t('transnetRoot')}:</strong> ${translation.explain.lexical_analysis.root}</p>` : ''}
+          ${translation.explain.lexical_analysis.structure ? `<p><strong>${t('transnetStructure')}:</strong> ${translation.explain.lexical_analysis.structure}</p>` : ''}
+          ${translation.explain.lexical_analysis.idiomatic ? `<p><strong>${t('transnetIdiomatic')}:</strong> ${t('transnetYes')}</p>` : ''}
+        </div>
+      `;
+    }
+
+    if (isFullAnalysis) {
+      const rels = translation.relationships;
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>${t('transnetRelationships')}</h4>
+          ${rels.related_words && rels.related_words.length > 0 ? `
+            <h5>${t('transnetRelatedWords')}</h5>
+            <ul>
+              ${rels.related_words.map((rw) => `<li>${rw.word} (${rw.type}, similarity: ${rw.similarity})</li>`).join('')}
+            </ul>
+          ` : ''}
+          ${rels.by_pos ? `
+            <h5>${t('transnetByPartOfSpeech')}</h5>
+            ${rels.by_pos.nouns ? `<p><strong>${t('transnetNouns')}:</strong> ${rels.by_pos.nouns.join(', ')}</p>` : ''}
+            ${rels.by_pos.verbs ? `<p><strong>${t('transnetVerbs')}:</strong> ${rels.by_pos.verbs.join(', ')}</p>` : ''}
+            ${rels.by_pos.adjectives ? `<p><strong>${t('transnetAdjectives')}:</strong> ${rels.by_pos.adjectives.join(', ')}</p>` : ''}
+          ` : ''}
+        </div>
+      `;
+    }
+
+    return html;
+  }
+
+  /**
+   * Render extra output for phrase translations.
+   */
+  private renderPhraseExtra(translation: TranslationPhraseBasic | TranslationPhraseExplain | TranslationPhraseFullAnalysis): string {
+    const isFullAnalysis = isTranslationPhraseFullAnalysis(translation);
+    const hasExplain = isTranslationPhraseExplain(translation) || isFullAnalysis;
+
+    let html = `
+      <div class="transnet-extra-output__section">
+        <h4>${t('transnetPhraseInformation')}</h4>
+        <p><strong>${t('transnetPhrase')}:</strong> ${translation.phrase}</p>
+        <p><strong>${t('transnetPartOfSpeech')}:</strong> ${translation.part_of_speech}</p>
+      </div>
+    `;
+
+    if (translation.examples && translation.examples.length > 0) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>${t('transnetExamples')}</h4>
+          ${translation.examples.map(
+            (ex) => `
+              <div class="transnet-extra-output__example">
+                <p class="source">${ex.source}</p>
+                <p class="translation">${ex.translation}</p>
+              </div>
+            `,
+          ).join('')}
+        </div>
+      `;
+    }
+
+    if (hasExplain) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>${t('transnetExplanation')}</h4>
+          <p><strong>${t('transnetMeaning')}:</strong> ${translation.explain.meaning}</p>
+          <p><strong>${t('transnetStory')}:</strong> ${translation.explain.story}</p>
+          <p><strong>${t('transnetWhenToUse')}:</strong> ${translation.explain.when_to_use}</p>
+          <p><strong>${t('transnetHowToUse')}:</strong> ${translation.explain.how_to_use}</p>
+          <p><strong>${t('transnetContext')}:</strong> ${translation.explain.context}</p>
+          ${translation.explain.lexical_analysis.structure ? `<p><strong>${t('transnetStructure')}:</strong> ${translation.explain.lexical_analysis.structure}</p>` : ''}
+          ${translation.explain.lexical_analysis.idiomatic ? `<p><strong>${t('transnetIdiomatic')}:</strong> ${t('transnetYes')}</p>` : ''}
+          ${translation.explain.lexical_analysis.related_phrases && translation.explain.lexical_analysis.related_phrases.length > 0 ? `
+            <p><strong>${t('transnetRelatedPhrases')}:</strong> ${translation.explain.lexical_analysis.related_phrases.join(', ')}</p>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    if (isFullAnalysis) {
+      const rels = translation.relationships;
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>${t('transnetRelationships')}</h4>
+          ${rels.related_phrases && rels.related_phrases.length > 0 ? `
+            <h5>${t('transnetRelatedPhrases')}</h5>
+            <ul>
+              ${rels.related_phrases.map((rp) => `<li>${rp.phrase} (${rp.type}, similarity: ${rp.similarity})</li>`).join('')}
+            </ul>
+          ` : ''}
+          ${rels.related_concepts && rels.related_concepts.length > 0 ? `
+            <h5>${t('transnetRelatedConcepts')}</h5>
+            <p>${rels.related_concepts.join(', ')}</p>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    return html;
+  }
+
+  /**
+   * Render extra output for sentence translations.
+   */
+  private renderSentenceExtra(translation: TranslationSentenceBasic | TranslationSentenceExplain): string {
+    let html = `
+      <div class="transnet-extra-output__section">
+        <h4>${t('transnetSentenceInformation')}</h4>
+        <p><strong>${t('transnetTone')}:</strong> ${translation.tone}</p>
+      </div>
+    `;
+
+    if (isTranslationSentenceExplain(translation)) {
+      html += `
+        <div class="transnet-extra-output__section">
+          <h4>${t('transnetExplanation')}</h4>
+          <p><strong>${t('transnetMeaning')}:</strong> ${translation.explain.meaning}</p>
+          <p><strong>${t('transnetUsage')}:</strong> ${translation.explain.usage}</p>
+          <p><strong>${t('transnetContext')}:</strong> ${translation.explain.context}</p>
+        </div>
+      `;
+    }
+
+    return html;
+  }
+
+  /**
+   * Render extra output for paragraph/essay translations.
+   */
+  private renderParagraphEssayExtra(translation: TranslationParagraphEssayBasic): string {
+    return `
+      <div class="transnet-extra-output__section">
+        <h4>${t('transnetTranslationComparison')}</h4>
+        <div class="transnet-extra-output__comparison">
+          <div class="transnet-extra-output__comparison-side">
+            <h5>${t('transnetOriginal')}</h5>
+            <p>${translation.text}</p>
+          </div>
+          <div class="transnet-extra-output__comparison-side">
+            <h5>${t('transnetTranslation')}</h5>
+            <p>${translation.translation}</p>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   /**

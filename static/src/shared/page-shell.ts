@@ -8,7 +8,7 @@
 
 import { ParticleBackground } from './particle-background';
 import { Header } from './header';
-import { AuthService } from '../services/auth';
+import { AuthService } from './auth';
 import { Toast } from './toast';
 import { router } from '../router';
 

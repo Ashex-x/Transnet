@@ -3,7 +3,7 @@
  * Manages JWT tokens and authentication state
  */
 
-import { ApiService, AuthResponse, User } from './tran_api/api';
+import { ApiService, AuthResponse, User } from '../transnet/api';
 
 const STORAGE_KEY = 'transnet_auth';
 
@@ -32,6 +32,8 @@ class AuthServiceClass {
         // Check if token is expired
         if (auth.expires_at > Date.now()) {
           this.currentUser = auth.user;
+          // Update ApiService with stored token
+          ApiService.setAccessToken(auth.access_token);
         } else {
           // Token expired, clear storage
           this.clearStorage();
@@ -49,6 +51,8 @@ class AuthServiceClass {
   private clearStorage(): void {
     localStorage.removeItem(STORAGE_KEY);
     this.currentUser = null;
+    // Clear ApiService token
+    ApiService.clearAccessToken();
   }
 
   // ==================== TOKEN MANAGEMENT ====================
@@ -154,6 +158,9 @@ class AuthServiceClass {
     
     this.currentUser = authResponse.user;
     this.saveToStorage(auth);
+    
+    // Update ApiService with new token
+    ApiService.setAccessToken(authResponse.access_token);
   }
 
   // ==================== STATE ====================
@@ -189,7 +196,7 @@ class AuthServiceClass {
     const response = await ApiService.getProfile();
     if (response.success && response.data) {
       this.currentUser = {
-        uuid: response.data.uuid,
+        user_id: response.data.user_id,
         username: response.data.username,
         email: response.data.email,
       };

@@ -7,7 +7,8 @@
 
 import { router } from './router';
 import { Home } from './main/home';
-import { Auth } from './main/auth';
+import { Login } from './main/login';
+import { Register } from './main/register';
 import { About } from './main/about';
 import { Setting } from './main/setting';
 import { History } from './transnet/history';
@@ -38,8 +39,8 @@ class App {
   init(): void {
     router.register('/', () => this.redirectToHome());
     router.register('/home', () => this.loadHomePage());
-    router.register('/login', () => this.loadAuthPage());
-    router.register('/register', () => this.loadAuthPage());
+    router.register('/login', () => this.loadLoginPage());
+    router.register('/register', () => this.loadRegisterPage());
     router.register('/about', () => this.loadAboutPage());
     router.register('/setting', () => this.loadSettingPage());
     router.register('/transnet', () => this.loadTransnetPage());
@@ -77,11 +78,21 @@ class App {
   }
 
   /**
-   * Mount the shared authentication page for `/login` and `/register`.
+   * Mount the login page.
    */
-  private loadAuthPage(): void {
+  private loadLoginPage(): void {
     this.destroyCurrentPage();
-    const page = new Auth(this.container);
+    const page = new Login(this.container);
+    this.currentPage = page;
+    page.render();
+  }
+
+  /**
+   * Mount the register page.
+   */
+  private loadRegisterPage(): void {
+    this.destroyCurrentPage();
+    const page = new Register(this.container);
     this.currentPage = page;
     page.render();
   }

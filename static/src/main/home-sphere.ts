@@ -6,6 +6,7 @@
  */
 
 import { router } from '../router';
+import { t } from '../shared/language';
 
 interface SphereNode {
   kind: 'normal' | 'metaland' | 'transnet';
@@ -45,7 +46,9 @@ export class HomeSphere {
   private velocityY = -0.0022;
   private isDragging = false;
   private lastPointer = { x: 0, y: 0 };
+  private startPointer = { x: 0, y: 0 };
   private hoveredNode: ProjectedNode | null = null;
+  private hasMoved = false;
   private size = { width: 0, height: 0, radius: 0 };
   private readonly connectionThreshold = 140;
   private readonly perspective = 900;
@@ -308,8 +311,8 @@ export class HomeSphere {
         driftThetaAmplitude: 0.035,
         driftPhiAmplitude: 0.028,
         radius: 4.2,
-        label: 'Metaland',
-        description: 'Enter the living digital world',
+        label: t('metaland'),
+        description: t('metalandDesc'),
         href: '/metaland',
       },
       {
@@ -321,8 +324,8 @@ export class HomeSphere {
         driftThetaAmplitude: 0.035,
         driftPhiAmplitude: 0.028,
         radius: 4.2,
-        label: 'Transnet',
-        description: 'Open the AI translation bridge',
+        label: t('transnet'),
+        description: t('transnetDesc'),
         href: '/transnet',
       },
     ];
@@ -352,16 +355,15 @@ export class HomeSphere {
   }
 
   /**
-   * Start rotating only on right-click drag, per the interaction spec.
+   * Start rotating on pointer drag. Supports touch on mobile devices.
    */
   private handlePointerDown(event: PointerEvent): void {
-    if (event.button !== 2) {
-      return;
-    }
-
+    // Allow drag with left-click (0) and touch, but prevent default to avoid scrolling
     event.preventDefault();
     this.isDragging = true;
     this.lastPointer = { x: event.clientX, y: event.clientY };
+    this.startPointer = { x: event.clientX, y: event.clientY };
+    this.hasMoved = false;
     this.canvas.style.cursor = 'grabbing';
   }
 
@@ -377,8 +379,22 @@ export class HomeSphere {
       const deltaX = this.lastPointer.x - event.clientX;
       const deltaY = this.lastPointer.y - event.clientY;
       this.lastPointer = { x: event.clientX, y: event.clientY };
-      this.rotationY += deltaX * 0.008;
-      this.rotationX += deltaY * 0.008;
+
+      // Check if we've moved beyond a small threshold to distinguish tap from drag
+      const totalMovement = Math.sqrt(
+        Math.pow(event.clientX - this.startPointer.x, 2) +
+        Math.pow(event.clientY - this.startPointer.y, 2)
+      );
+      if (totalMovement > 5) {
+        this.hasMoved = true;
+      }
+
+      // Adjust sensitivity for touch events
+      const isTouch = event.pointerType === 'touch';
+      const sensitivity = isTouch ? 0.012 : 0.008;
+
+      this.rotationY += deltaX * sensitivity;
+      this.rotationX += deltaY * sensitivity;
       this.velocityY = deltaX * 0.0004;
       this.velocityX = deltaY * 0.0004;
       return;
@@ -394,19 +410,26 @@ export class HomeSphere {
   private handlePointerUp(): void {
     this.isDragging = false;
     this.canvas.style.cursor = this.hoveredNode ? 'pointer' : 'grab';
+    // Reset hasMoved after click event fires (click fires ~300ms after pointerup on touch)
+    setTimeout(() => {
+      this.hasMoved = false;
+    }, 100);
   }
 
   /**
    * Navigate when a special node is clicked.
+   * Only trigger if this was a tap (not a drag).
    */
   private handleClick(): void {
-    if (this.hoveredNode?.href) {
+    // Only navigate if we didn't move the pointer (it's a tap, not a drag)
+    if (!this.hasMoved && this.hoveredNode?.href) {
       router.navigate(this.hoveredNode.href);
     }
   }
 
   /**
    * Detect whether the pointer is over one of the special navigable nodes.
+   * Larger hit radius for better touch interaction on mobile devices.
    */
   private findHoveredSpecialNode(pointerX: number, pointerY: number): ProjectedNode | null {
     const candidates = this.projectedNodes
@@ -416,7 +439,8 @@ export class HomeSphere {
     for (const node of candidates) {
       const dx = pointerX - node.screenX;
       const dy = pointerY - node.screenY;
-      const hitRadius = Math.max(18, node.renderRadius + 12);
+      // Increase hit radius for better touch target size on mobile
+      const hitRadius = Math.max(30, node.renderRadius + 20);
       if (Math.sqrt(dx * dx + dy * dy) <= hitRadius) {
         return node;
       }

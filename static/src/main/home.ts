@@ -7,7 +7,7 @@
 
 import { PageShell } from '../shared/page-shell';
 import { HomeSphere } from './home-sphere';
-import { t } from '../services/language';
+import { t } from '../shared/language';
 
 export class Home {
   private container: HTMLElement;

@@ -4,7 +4,7 @@
  * Provides a consistent footer with configurable content.
  */
 
-import { t } from '../services/language';
+import { t } from './language';
 
 export interface FooterOptions {
   /**

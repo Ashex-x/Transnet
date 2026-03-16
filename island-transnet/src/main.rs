@@ -1,22 +1,12 @@
-use std::{env, fs, path::Path};
+use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
-use transnet_api::{app_router, AppState};
-use transnet_llm::TranslationService;
-use transnet_types::{LlmFileConfig, ServerFileConfig};
+use transnet::api::{app_router, AppState};
+use transnet::llm::TranslationService;
+use transnet::types::{LlmFileConfig, ServerFileConfig};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-  // Load .env from the project root (parent directory)
-  let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
-  let project_root = Path::new(&manifest_dir)
-    .parent()
-    .and_then(|p| p.parent())
-    .and_then(|p| p.parent())
-    .context("failed to find project root")?;
-  let env_path = project_root.join(".env");
-  let _ = dotenvy::from_path(&env_path);
-
   let server_config: ServerFileConfig = read_config("config/transnet.toml")?;
   let llm_config: LlmFileConfig = read_config("config/transnet_llm.toml")?;
 
@@ -54,19 +44,7 @@ where
   T: serde::de::DeserializeOwned,
 {
   let content = fs::read_to_string(path).with_context(|| format!("failed to read {path}"))?;
-  let expanded = expand_env_placeholders(&content);
-  toml::from_str(&expanded).with_context(|| format!("failed to parse {path}"))
-}
-
-fn expand_env_placeholders(content: &str) -> String {
-  let mut expanded = content.to_string();
-  for (key, value) in env::vars() {
-    let needle = format!("${{{key}}}");
-    if expanded.contains(&needle) {
-      expanded = expanded.replace(&needle, &value);
-    }
-  }
-  expanded
+  toml::from_str(&content).with_context(|| format!("failed to parse {path}"))
 }
 
 fn init_tracing(level: &str, format: &str) -> Result<()> {

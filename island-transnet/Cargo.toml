@@ -1,30 +1,25 @@
-[workspace]
-members = [
-    "crates/transnet-types",
-    "crates/transnet-llm",
-    "crates/transnet-api",
-    "bins/transnet-server",
-]
-resolver = "2"
-
-[workspace.package]
+[package]
+name = "transnet"
 version = "0.1.0"
 edition = "2021"
 authors = ["Island Team"]
 license = "MIT"
 
-[workspace.dependencies]
-tokio = { version = "1", features = ["full"] }
+[dependencies]
 anyhow = "1.0"
+axum = { version = "0.7", features = ["macros"] }
+dotenvy = "0.15.7"
+reqwest = { version = "0.13.2", features = ["json", "rustls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 thiserror = "1.0"
-axum = { version = "0.7", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+toml = "1.0.6"
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 
-transnet-types = { path = "crates/transnet-types" }
-transnet-llm = { path = "crates/transnet-llm" }
-transnet-api = { path = "crates/transnet-api" }
+[[bin]]
+name = "transnet-server"
+path = "src/main.rs"

@@ -5,7 +5,8 @@
 import { PageShell } from '../shared/page-shell';
 import { Toast } from '../shared/toast';
 import { router } from '../router';
-import { AuthService } from '../services/auth';
+import { AuthService } from '../shared/auth';
+import { t } from '../shared/language';
 
 export class Auth {
   private container: HTMLElement;
@@ -43,19 +44,19 @@ export class Auth {
     this.mainElement.innerHTML = `
       <div class="glass-card auth-card animate-fade-in-up">
         <div class="auth-card__header">
-          <h1 class="auth-card__title">Welcome Back</h1>
-          <p class="auth-card__subtitle">Login or register to save your translation history</p>
+          <h1 class="auth-card__title">${t('welcomeBack')}</h1>
+          <p class="auth-card__subtitle">${t('loginOrRegister')}</p>
         </div>
 
         <div class="auth-card__tabs">
-          <button class="auth-card__tab ${this.isLogin ? 'active' : ''}" data-tab="login">Login</button>
-          <button class="auth-card__tab ${!this.isLogin ? 'active' : ''}" data-tab="register">Register</button>
+          <button class="auth-card__tab ${this.isLogin ? 'active' : ''}" data-tab="login">${t('login')}</button>
+          <button class="auth-card__tab ${!this.isLogin ? 'active' : ''}" data-tab="register">${t('signup')}</button>
         </div>
 
         <form class="auth-form" id="auth-form">
           ${this.renderFormFields()}
           <button type="submit" class="btn btn--primary btn--lg auth-form__submit">
-            ${this.isLogin ? 'Login' : 'Register'}
+            ${this.isLogin ? t('login') : t('signup')}
           </button>
         </form>
       </div>
@@ -69,28 +70,28 @@ export class Auth {
     if (this.isLogin) {
       return `
         <div class="input-group">
-          <label class="input-label">Email</label>
-          <input type="email" class="input-field" name="email" placeholder="your@email.com" required>
+          <label class="input-label">${t('email')}</label>
+          <input type="email" class="input-field" name="email" placeholder="${t('emailPlaceholder')}" required>
         </div>
         <div class="input-group">
-          <label class="input-label">Password</label>
-          <input type="password" class="input-field" name="password" placeholder="Enter password" required minlength="8">
+          <label class="input-label">${t('password')}</label>
+          <input type="password" class="input-field" name="password" placeholder="${t('passwordPlaceholder')}" required minlength="8">
         </div>
       `;
     }
 
     return `
       <div class="input-group">
-        <label class="input-label">Username</label>
-        <input type="text" class="input-field" name="username" placeholder="3-50 chars, alphanumeric and underscore" required minlength="3" maxlength="50" pattern="[a-zA-Z0-9_]+">
+        <label class="input-label">${t('username')}</label>
+        <input type="text" class="input-field" name="username" placeholder="${t('usernamePlaceholder')}" required minlength="3" maxlength="50" pattern="[a-zA-Z0-9_]+">
       </div>
       <div class="input-group">
-        <label class="input-label">Email</label>
-        <input type="email" class="input-field" name="email" placeholder="your@email.com" required>
+        <label class="input-label">${t('email')}</label>
+        <input type="email" class="input-field" name="email" placeholder="${t('emailPlaceholder')}" required>
       </div>
       <div class="input-group">
-        <label class="input-label">Password</label>
-        <input type="password" class="input-field" name="password" placeholder="At least 8 chars with uppercase, lowercase and number" required minlength="8">
+        <label class="input-label">${t('password')}</label>
+        <input type="password" class="input-field" name="password" placeholder="${t('passwordPlaceholderRegister')}" required minlength="8">
         <div class="password-strength"></div>
       </div>
     `;
@@ -139,7 +140,7 @@ export class Auth {
     if (password.match(/[0-9]/)) strength++;
 
     const colors = ['var(--error)', 'var(--warning)', 'var(--warning)', 'var(--success)', 'var(--success)'];
-    const labels = ['Too short', 'Weak', 'Fair', 'Strong', 'Very Strong'];
+    const labels = [t('passwordTooShort'), t('passwordWeak'), t('passwordFair'), t('passwordStrong'), t('passwordVeryStrong')];
 
     strengthEl.innerHTML = `
       <div class="password-strength__bar">
@@ -157,7 +158,7 @@ export class Auth {
     const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
 
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="loading-spinner"></span> Processing...';
+    submitBtn.innerHTML = `<span class="loading-spinner"></span> ${t('processing')}`;
 
     if (this.isLogin) {
       const email = formData.get('email') as string;
@@ -165,12 +166,12 @@ export class Auth {
       const result = await AuthService.login(email, password);
 
       if (result.success) {
-        Toast.success('Login successful');
+        Toast.success(t('loginSuccessful'));
         router.navigate('/transnet');
       } else {
-        Toast.error(result.error || 'Login failed');
+        Toast.error(result.error || t('loginFailed'));
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Login';
+        submitBtn.textContent = t('login');
       }
 
       return;
@@ -182,14 +183,14 @@ export class Auth {
     const result = await AuthService.register(username, email, password);
 
     if (result.success) {
-      Toast.success('Registration successful, please log in');
+      Toast.success(t('registrationSuccessful'));
       this.isLogin = true;
       this.renderContent();
       this.bindEvents();
     } else {
-      Toast.error(result.error || 'Registration failed');
+      Toast.error(result.error || t('registrationFailed'));
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Register';
+      submitBtn.textContent = t('signup');
     }
   }
 

@@ -32,6 +32,7 @@ pub struct TranslateRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TranslateResponse {
+<<<<<<< HEAD:island-transnet/crates/transnet-types/src/lib.rs
     pub text: String,
     pub translation: String,
     pub source_lang: String,
@@ -39,6 +40,15 @@ pub struct TranslateResponse {
     pub input_type: InputType,
     pub provider: String,
     pub model: String,
+=======
+  pub text: String,
+  pub translation: String,
+  pub source_lang: String,
+  pub target_lang: String,
+  pub input_type: InputType,
+  pub provider: String,
+  pub model: String,
+>>>>>>> frontend/api:island-transnet/src/types.rs
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -111,13 +121,52 @@ pub struct LlmFileConfig {
     pub openai: LlmConfig,
 }
 
+fn deserialize_optional_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+  D: serde::Deserializer<'de>,
+{
+  let s = String::deserialize(deserializer)?;
+  if s.is_empty() {
+    Ok(None)
+  } else {
+    Ok(Some(s))
+  }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct LlmConfig {
+<<<<<<< HEAD:island-transnet/crates/transnet-types/src/lib.rs
     pub api_key: String,
     pub base_url: String,
     pub model: String,
     pub timeout_seconds: u64,
     pub max_retries: u32,
+=======
+  pub api_key: String,
+  pub base_url: String,
+  pub model: String,
+  pub timeout_seconds: u64,
+  pub max_retries: u32,
+  #[serde(deserialize_with = "deserialize_optional_string", default)]
+  pub normal_lang_base_url: Option<String>,
+  #[serde(deserialize_with = "deserialize_optional_string", default)]
+  pub normal_lang_model: Option<String>,
+}
+
+const NORMAL_LANGUAGES: &[&str] = &[
+  "english", "en",
+  "chinese", "zh", "mandarin",
+  "spanish", "es",
+  "french", "fr",
+  "japanese", "ja",
+  "korean", "ko",
+  "german", "de",
+];
+
+pub fn is_normal_language(lang: &str) -> bool {
+  let lang_lower = lang.to_lowercase();
+  NORMAL_LANGUAGES.contains(&lang_lower.as_str())
+>>>>>>> frontend/api:island-transnet/src/types.rs
 }
 
 #[derive(Debug, Error)]
@@ -138,11 +187,19 @@ pub fn infer_input_type(text: &str) -> InputType {
         return InputType::Text;
     }
 
+<<<<<<< HEAD:island-transnet/crates/transnet-types/src/lib.rs
     let word_count = trimmed.split_whitespace().count();
     let sentence_markers = trimmed
         .chars()
         .filter(|ch| matches!(ch, '.' | '!' | '?' | '\n'))
         .count();
+=======
+  let word_count = trimmed.split_whitespace().count();
+  let sentence_markers = trimmed
+    .chars()
+    .filter(|ch| matches!(ch, '.' | '!' | '?' | '\n'))
+    .count();
+>>>>>>> frontend/api:island-transnet/src/types.rs
 
     if word_count <= 1 {
         InputType::Word
