@@ -93,8 +93,8 @@ export class Transnet {
                 <select class="transnet-source-lang"></select>
                 <button class="transnet-swap-button">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M7 10l5-5 5 5"></path>
-                    <path d="M7 14l5 5 5-5"></path>
+                    <path d="M11 7l-8 5 8 5"></path>
+                    <path d="M13 7l8 5-8 5"></path>
                   </svg>
                 </button>
                 <select class="transnet-target-lang"></select>
