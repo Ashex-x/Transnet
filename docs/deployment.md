@@ -62,15 +62,11 @@ Translation behavior is determined by **input type** and **translation mode** as
   "data": {
     "translation_id": "550e8400-e29b-41d4-a716-446655440000",
     "text": "The quick brown fox",
-    "translation": "El rápido zorro marrón",
     "source_lang": "en",
     "target_lang": "es",
     "input_type": "sentence",
-    "provider": "openai-compatible",
-    "model": "ACTION",
     "translation": {
-      "tone": "neutral",
-      "rephrasing": "El astuto zorro marrón salta por encima del perro perezoso."
+      // Translation field type specific data
     }
   }
 }

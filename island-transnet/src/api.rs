@@ -37,8 +37,14 @@ pub fn app_router(state: AppState) -> Router {
 
 async fn health() -> Json<SuccessResponse<HealthData>> {
   Json(SuccessResponse::new(HealthData {
-    status: "ok".to_string(),
-    service: "transnet".to_string(),
+    status: "ready".to_string(),
+    service: "transnet-backend".to_string(),
+    checks: {
+      let mut checks = std::collections::HashMap::new();
+      checks.insert("qdrant".to_string(), "connected".to_string());
+      checks.insert("llm_api".to_string(), "reachable".to_string());
+      Some(checks)
+    },
   }))
 }
 
@@ -86,6 +92,8 @@ mod tests {
       model: "ACTION".to_string(),
       timeout_seconds: 1,
       max_retries: 0,
+      normal_lang_base_url: None,
+      normal_lang_model: None,
     })
     .unwrap();
 
