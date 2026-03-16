@@ -3,8 +3,8 @@
  */
 
 import { router } from '../router';
-import { ApiService, Profile as ProfileType } from '../services/tran_api/api';
-import { AuthService } from '../services/auth';
+import { ApiService, Profile as ProfileType } from './api';
+import { AuthService } from '../shared/auth';
 import { PageShell } from '../shared/page-shell';
 import { Toast } from '../shared/toast';
 

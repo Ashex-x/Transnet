@@ -86,6 +86,8 @@ mod tests {
       model: "ACTION".to_string(),
       timeout_seconds: 1,
       max_retries: 0,
+      normal_lang_base_url: None,
+      normal_lang_model: None,
     })
     .unwrap();
 

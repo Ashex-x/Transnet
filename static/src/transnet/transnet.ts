@@ -3,31 +3,9 @@
  */
 
 import { PageShell } from '../shared/page-shell';
+import { ApiService, TranslationData, Translation, isTranslationWordExplain, isTranslationWordFullAnalysis, isTranslationPhraseExplain, isTranslationPhraseFullAnalysis, isTranslationSentenceExplain } from './api';
 
-interface TranslateApiSuccess {
-  success: true;
-  data: {
-    translation_id: string;
-    text: string;
-    source_lang: string;
-    target_lang: string;
-    input_type: 'word' | 'phrase' | 'sentence' | 'paragraph' | 'essay';
-    provider: string;
-    model: string;
-    user_id?: string;
-    translation: TranslationData;
-  };
-}
-
-interface TranslateApiError {
-  success: false;
-  error: {
-    code?: string;
-    message?: string;
-  };
-}
-
-interface WordMeaning {
+interface TranslationExample {
   source: string;
   translation: string;
 }
@@ -74,7 +52,7 @@ interface TranslationWordBasic {
   translations: string[];
   synonyms: string[];
   antonyms: string[];
-  examples: WordMeaning[];
+  examples: TranslationExample[];
 }
 
 interface TranslationWordExplain extends TranslationWordBasic {
@@ -90,7 +68,7 @@ interface TranslationPhraseBasic {
   headword: string;
   part_of_speech: string;
   translations: string[];
-  examples: WordMeaning[];
+  examples: TranslationExample[];
 }
 
 interface TranslationPhraseExplain extends TranslationPhraseBasic {
@@ -119,26 +97,13 @@ interface TranslationParagraphEssayBasic {
   translation: string;
 }
 
-type TranslationData =
-  | TranslationWordBasic
-  | TranslationWordExplain
-  | TranslationWordFullAnalysis
-  | TranslationPhraseBasic
-  | TranslationPhraseExplain
-  | TranslationPhraseFullAnalysis
-  | TranslationSentenceBasic
-  | TranslationSentenceExplain
-  | TranslationParagraphEssayBasic;
-
 export class Transnet {
   private container: HTMLElement;
-  private readonly apiUrl: string;
   private shell: PageShell | null = null;
   private mainElement: HTMLElement | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
-    this.apiUrl = '/api/transnet';
   }
 
   /**
@@ -412,39 +377,23 @@ export class Transnet {
     status.dataset.state = 'loading';
 
     try {
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-
-      const authToken = this.getAuthToken();
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
-
-      const response = await fetch(`${this.apiUrl}/translate`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          text,
-          source_lang: sourceLang.value,
-          target_lang: targetLang.value,
-          mode: outputType.value,
-        }),
+      const response = await ApiService.translate({
+        text,
+        source_lang: sourceLang.value,
+        target_lang: targetLang.value,
+        mode: outputType.value as 'basic' | 'explain' | 'full_analysis',
       });
 
-      const payload = (await response.json()) as TranslateApiSuccess | TranslateApiError;
-      if (!response.ok || !payload.success) {
-        const message =
-          payload.success === false
-            ? payload.error?.message ?? 'Translation failed.'
-            : `Request failed with status ${response.status}.`;
+      if (!response.success || !response.data) {
+        const message = response.error?.message ?? 'Translation failed.';
         throw new Error(message);
       }
 
-      this.renderTranslation(payload.data.translation, targetText);
-      this.displayExtraOutput(payload.data);
+      const translationData = response.data;
+      this.renderTranslation(translationData.translation, targetText);
+      this.displayExtraOutput(translationData);
 
-      status.textContent = `Translated as ${payload.data.input_type} via ${payload.data.model}.`;
+      status.textContent = `Translated as ${translationData.input_type} via ${translationData.model}.`;
       status.dataset.state = 'success';
     } catch (error) {
       targetText.value = '';
@@ -457,21 +406,6 @@ export class Transnet {
     }
   }
 
-  /**
-   * Get JWT token from localStorage if available.
-   */
-  private getAuthToken(): string | null {
-    try {
-      const authData = localStorage.getItem('auth');
-      if (authData) {
-        const parsed = JSON.parse(authData);
-        return parsed.access_token || null;
-      }
-    } catch {
-      return null;
-    }
-    return null;
-  }
 
   /**
    * Render main translation text in target textarea based on translation type.
@@ -491,7 +425,7 @@ export class Transnet {
   /**
    * Display extra output details in the extra output section.
    */
-  private displayExtraOutput(data: TranslateApiSuccess['data']): void {
+  private displayExtraOutput(data: Translation): void {
     const extraOutputContent = this.mainElement?.querySelector('.transnet-extra-output__content');
     if (!extraOutputContent) {
       return;
@@ -520,11 +454,9 @@ export class Transnet {
   /**
    * Render extra output for word translations.
    */
-  private renderWordExtra(
-    translation: TranslationWordBasic | TranslationWordExplain | TranslationWordFullAnalysis,
-  ): string {
-    const isFullAnalysis = 'relationships' in translation;
-    const hasExplain = 'explain' in translation;
+  private renderWordExtra(translation: TranslationWordBasic | TranslationWordExplain | TranslationWordFullAnalysis): string {
+    const isFullAnalysis = isTranslationWordFullAnalysis(translation);
+    const hasExplain = isTranslationWordExplain(translation) || isFullAnalysis;
 
     let html = `
       <div class="transnet-extra-output__section">
@@ -612,11 +544,9 @@ export class Transnet {
   /**
    * Render extra output for phrase translations.
    */
-  private renderPhraseExtra(
-    translation: TranslationPhraseBasic | TranslationPhraseExplain | TranslationPhraseFullAnalysis,
-  ): string {
-    const isFullAnalysis = 'relationships' in translation;
-    const hasExplain = 'explain' in translation;
+  private renderPhraseExtra(translation: TranslationPhraseBasic | TranslationPhraseExplain | TranslationPhraseFullAnalysis): string {
+    const isFullAnalysis = isTranslationPhraseFullAnalysis(translation);
+    const hasExplain = isTranslationPhraseExplain(translation) || isFullAnalysis;
 
     let html = `
       <div class="transnet-extra-output__section">
@@ -685,9 +615,7 @@ export class Transnet {
   /**
    * Render extra output for sentence translations.
    */
-  private renderSentenceExtra(
-    translation: TranslationSentenceBasic | TranslationSentenceExplain,
-  ): string {
+  private renderSentenceExtra(translation: TranslationSentenceBasic | TranslationSentenceExplain): string {
     let html = `
       <div class="transnet-extra-output__section">
         <h4>Sentence Information</h4>
@@ -695,7 +623,7 @@ export class Transnet {
       </div>
     `;
 
-    if ('explain' in translation) {
+    if (isTranslationSentenceExplain(translation)) {
       html += `
         <div class="transnet-extra-output__section">
           <h4>Explanation</h4>

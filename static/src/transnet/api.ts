@@ -4,8 +4,6 @@
  * Base URL: /api (as per API documentation)
  */
 
-import { AuthService } from '../auth';
-
 // API Response Types
 export interface ApiResponse<T> {
   success: boolean;
@@ -21,20 +19,166 @@ export interface TranslationRequest {
   text: string;
   source_lang: string;
   target_lang: string;
-  mode?: 'basic' | 'explain';
-  input_type?: 'auto' | 'word' | 'phrase' | 'sentence' | 'text';
+  mode?: 'basic' | 'explain' | 'full_analysis';
+  input_type?: 'auto' | 'word' | 'phrase' | 'sentence' | 'paragraph' | 'essay' | 'text';
+}
+
+// Translation Data Types (from docs/types.md)
+
+interface TranslationExample {
+  source: string;
+  translation: string;
+}
+
+interface Explain {
+  meaning: string;
+  story: string;
+  when_to_use: string;
+  how_to_use: string;
+  context: string;
+  lexical_analysis: {
+    root?: string;
+    structure?: string;
+    idiomatic?: boolean;
+    related_phrases?: string[];
+  };
+}
+
+interface RelatedWord {
+  word: string;
+  type: string;
+  similarity: number;
+}
+
+interface Relationships {
+  related_words?: RelatedWord[];
+  related_phrases?: Array<{
+    phrase: string;
+    type: string;
+    similarity: number;
+  }>;
+  related_concepts?: string[];
+  by_pos?: {
+    nouns?: string[];
+    verbs?: string[];
+    adjectives?: string[];
+  };
+}
+
+// Word Translation Types
+export interface TranslationWordBasic {
+  headword: string;
+  part_of_speech: string;
+  phonetic: string;
+  translations: string[];
+  synonyms: string[];
+  antonyms: string[];
+  examples: TranslationExample[];
+}
+
+export interface TranslationWordExplain extends TranslationWordBasic {
+  explain: Explain;
+}
+
+export interface TranslationWordFullAnalysis extends TranslationWordExplain {
+  relationships: Relationships;
+}
+
+// Phrase Translation Types
+export interface TranslationPhraseBasic {
+  phrase: string;
+  headword: string;
+  part_of_speech: string;
+  translations: string[];
+  examples: TranslationExample[];
+}
+
+export interface TranslationPhraseExplain extends TranslationPhraseBasic {
+  explain: Explain;
+}
+
+export interface TranslationPhraseFullAnalysis extends TranslationPhraseExplain {
+  relationships: Relationships;
+}
+
+// Sentence Translation Types
+export interface TranslationSentenceBasic {
+  tone: string;
+  rephrasing: string;
+}
+
+export interface TranslationSentenceExplain extends TranslationSentenceBasic {
+  explain: {
+    meaning: string;
+    usage: string;
+    context: string;
+  };
+}
+
+// Paragraph/Essay Translation Type (shared for both)
+export interface TranslationParagraphEssayBasic {
+  text: string;
+  translation: string;
+}
+
+// Discriminated union for all translation data types
+export type TranslationData =
+  | TranslationWordBasic
+  | TranslationWordExplain
+  | TranslationWordFullAnalysis
+  | TranslationPhraseBasic
+  | TranslationPhraseExplain
+  | TranslationPhraseFullAnalysis
+  | TranslationSentenceBasic
+  | TranslationSentenceExplain
+  | TranslationParagraphEssayBasic;
+
+// Type guards for translation data
+export function isTranslationWordBasic(data: TranslationData): data is TranslationWordBasic {
+  return 'headword' in data && !('explain' in data);
+}
+
+export function isTranslationWordExplain(data: TranslationData): data is TranslationWordExplain {
+  return 'headword' in data && 'explain' in data && !('relationships' in data);
+}
+
+export function isTranslationWordFullAnalysis(data: TranslationData): data is TranslationWordFullAnalysis {
+  return 'headword' in data && 'explain' in data && 'relationships' in data;
+}
+
+export function isTranslationPhraseBasic(data: TranslationData): data is TranslationPhraseBasic {
+  return 'phrase' in data && !('explain' in data);
+}
+
+export function isTranslationPhraseExplain(data: TranslationData): data is TranslationPhraseExplain {
+  return 'phrase' in data && 'explain' in data && !('relationships' in data);
+}
+
+export function isTranslationPhraseFullAnalysis(data: TranslationData): data is TranslationPhraseFullAnalysis {
+  return 'phrase' in data && 'explain' in data && 'relationships' in data;
+}
+
+export function isTranslationSentenceBasic(data: TranslationData): data is TranslationSentenceBasic {
+  return 'rephrasing' in data && !('explain' in data);
+}
+
+export function isTranslationSentenceExplain(data: TranslationData): data is TranslationSentenceExplain {
+  return 'rephrasing' in data && 'explain' in data;
+}
+
+export function isTranslationParagraphEssayBasic(data: TranslationData): data is TranslationParagraphEssayBasic {
+  return 'translation' in data && 'text' in data;
 }
 
 export interface Translation {
-  id: string;
+  translation_id: string;
   text: string;
-  translation: string;
   source_lang: string;
   target_lang: string;
-  input_type: string;
+  input_type: 'word' | 'phrase' | 'sentence' | 'paragraph' | 'essay';
   provider: string;
   model: string;
-  created_at: string;
+  translation: TranslationData;
   user_id?: string;
 }
 
@@ -51,7 +195,7 @@ export interface LoginRequest {
 }
 
 export interface User {
-  uuid: string;
+  user_id: string;
   username: string;
   email: string;
 }
@@ -89,11 +233,9 @@ export interface HistoryFilters {
 
 // Favorites Types
 export interface Favorite {
-  id: string;
   user_id: string;
   translation_id: string;
   note?: string;
-  created_at: string;
   updated_at?: string;
   translation?: Translation;
   word_meaning?: WordMeaning;
@@ -134,10 +276,9 @@ export interface FavoriteFilters {
 
 // Profile Types
 export interface Profile {
-  uuid: string;
+  user_id: string;
   username: string;
   email: string;
-  created_at: string;
   updated_at: string;
   stats: {
     total_translations: number;
@@ -173,12 +314,31 @@ export interface SystemStats {
 
 class ApiServiceClass {
   private baseUrl: string = '/api';
+  private accessToken: string | null = null;
+
+  /**
+   * Set access token for API requests
+   */
+  setAccessToken(token: string): void {
+    this.accessToken = token;
+  }
+
+  /**
+   * Clear access token
+   */
+  clearAccessToken(): void {
+    this.accessToken = null;
+  }
 
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
+    const method = options.method || 'GET';
+    
+    // Log the request
+    console.log(`[API] ${method} ${url}`);
     
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -186,9 +346,8 @@ class ApiServiceClass {
     };
 
     // Add auth token if available
-    const token = AuthService.getAccessToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
     try {
@@ -199,16 +358,10 @@ class ApiServiceClass {
 
       const data = await response.json();
 
+      // Log the response status code
+      console.log(`[API] ${method} ${url} - ${response.status} ${response.statusText}`);
+
       if (!response.ok) {
-        // Handle 401 - try to refresh token
-        if (response.status === 401 && token) {
-          const refreshed = await AuthService.refreshToken();
-          if (refreshed) {
-            // Retry the request with new token
-            return this.request(endpoint, options);
-          }
-        }
-        
         return {
           success: false,
           error: data.error || { code: 'UNKNOWN_ERROR', message: 'An error occurred' },
@@ -217,6 +370,8 @@ class ApiServiceClass {
 
       return data;
     } catch (error) {
+      // Log network errors
+      console.error(`[API] ${method} ${url} - Network Error:`, error);
       return {
         success: false,
         error: {
@@ -283,7 +438,7 @@ class ApiServiceClass {
   // ==================== TRANSLATION ====================
 
   async translate(request: TranslationRequest): Promise<ApiResponse<Translation>> {
-    return this.request<Translation>('/translate', {
+    return this.request<Translation>('/transnet/translate', {
       method: 'POST',
       body: JSON.stringify(request),
     });
@@ -303,15 +458,15 @@ class ApiServiceClass {
     if (filters.sort_order) params.set('sort_order', filters.sort_order);
 
     const query = params.toString();
-    return this.request<HistoryResponse>(`/history${query ? `?${query}` : ''}`);
+    return this.request<HistoryResponse>(`/transnet/history${query ? `?${query}` : ''}`);
   }
 
-  async getHistoryItem(id: string): Promise<ApiResponse<HistoryItem>> {
-    return this.request<HistoryItem>(`/history/${id}`);
+  async getHistoryItem(translation_id: string): Promise<ApiResponse<HistoryItem>> {
+    return this.request<HistoryItem>(`/transnet/history/${translation_id}`);
   }
 
-  async deleteHistoryItem(id: string): Promise<ApiResponse<{ message: string }>> {
-    return this.request<{ message: string }>(`/history/${id}`, {
+  async deleteHistoryItem(translation_id: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request<{ message: string }>(`/transnet/history/${translation_id}`, {
       method: 'DELETE',
     });
   }
@@ -327,25 +482,25 @@ class ApiServiceClass {
     if (filters.sort_order) params.set('sort_order', filters.sort_order);
 
     const query = params.toString();
-    return this.request<FavoritesResponse>(`/favorites${query ? `?${query}` : ''}`);
+    return this.request<FavoritesResponse>(`/transnet/favorites${query ? `?${query}` : ''}`);
   }
 
   async addFavorite(request: CreateFavoriteRequest): Promise<ApiResponse<Favorite>> {
-    return this.request<Favorite>('/favorites', {
+    return this.request<Favorite>('/transnet/favorites', {
       method: 'POST',
       body: JSON.stringify(request),
     });
   }
 
-  async updateFavorite(id: string, note: string): Promise<ApiResponse<Favorite>> {
-    return this.request<Favorite>(`/favorites/${id}`, {
+  async updateFavorite(translation_id: string, note: string): Promise<ApiResponse<Favorite>> {
+    return this.request<Favorite>(`/transnet/favorites/${translation_id}`, {
       method: 'PUT',
       body: JSON.stringify({ note }),
     });
   }
 
-  async deleteFavorite(id: string): Promise<ApiResponse<{ message: string }>> {
-    return this.request<{ message: string }>(`/favorites/${id}`, {
+  async deleteFavorite(translation_id: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request<{ message: string }>(`/transnet/favorites/${translation_id}`, {
       method: 'DELETE',
     });
   }

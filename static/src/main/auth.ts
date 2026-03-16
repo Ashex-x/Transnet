@@ -5,7 +5,7 @@
 import { PageShell } from '../shared/page-shell';
 import { Toast } from '../shared/toast';
 import { router } from '../router';
-import { AuthService } from '../services/auth';
+import { AuthService } from '../shared/auth';
 
 export class Auth {
   private container: HTMLElement;

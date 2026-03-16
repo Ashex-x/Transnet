@@ -5,9 +5,9 @@
  * with active state highlighting only on Home/About/Setting routes.
  */
 
-import { AuthService } from '../services/auth';
+import { AuthService } from './auth';
 import { router } from '../router';
-import { t, getCurrentLanguage, setLanguage, onLanguageChange } from '../services/language';
+import { t, getCurrentLanguage, setLanguage, onLanguageChange } from './language';
 
 export class Header {
   private element: HTMLElement;

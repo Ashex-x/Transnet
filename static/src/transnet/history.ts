@@ -4,7 +4,7 @@
 
 import { PageShell } from '../shared/page-shell';
 import { Toast } from '../shared/toast';
-import { ApiService, HistoryItem, HistoryResponse } from '../services/tran_api/api';
+import { ApiService, HistoryItem, HistoryResponse } from './api';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -187,20 +187,20 @@ export class History {
         </div>
         <div class="history-card__content">
           <div class="history-card__header">
-            <div style="font-size: 0.85rem; color: var(--text-tertiary);">${this.formatDate(item.created_at)}</div>
+            <div style="font-size: 0.85rem; color: var(--text-tertiary);">${item.translation_id ? this.formatDate(new Date().toISOString()) : ''}</div>
             <div class="history-card__actions">
-              <button class="btn btn--ghost btn--icon history-copy-btn" data-text="${this.escapeHtml(item.translation)}" title="复制">
+              <button class="btn btn--ghost btn--icon history-copy-btn" data-text="${this.escapeHtml(this.getTranslationText(item))}" title="复制">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                 </svg>
               </button>
-              <button class="btn btn--ghost btn--icon history-favorite-btn" data-id="${item.id}" title="收藏">
+              <button class="btn btn--ghost btn--icon history-favorite-btn" data-id="${item.translation_id}" title="收藏">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
                 </svg>
               </button>
-              <button class="btn btn--ghost btn--icon history-delete-btn" data-id="${item.id}" title="删除">
+              <button class="btn btn--ghost btn--icon history-delete-btn" data-id="${item.translation_id}" title="删除">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3 6 5 6 21 6"></polyline>
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -209,7 +209,7 @@ export class History {
             </div>
           </div>
           <div class="history-card__text">${this.escapeHtml(item.text)}</div>
-          <div class="history-card__translation">${this.escapeHtml(item.translation)}</div>
+          <div class="history-card__translation">${this.escapeHtml(this.getTranslationText(item))}</div>
           <div class="history-card__meta">
             <span class="history-card__badge">${item.source_lang.toUpperCase()} → ${item.target_lang.toUpperCase()}</span>
             <span>${item.input_type}</span>
@@ -281,12 +281,33 @@ export class History {
   }
 
   /**
+   * Extract translation text from translation object (handles type-specific structures)
+   */
+  private getTranslationText(item: HistoryItem): string {
+    if (typeof item.translation === 'string') {
+      return item.translation;
+    }
+    if (item.translation && typeof item.translation === 'object') {
+      // Try common fields that might contain the translated text
+      if ('translation' in item.translation && typeof item.translation.translation === 'string') {
+        return item.translation.translation;
+      }
+      if ('translations' in item.translation && Array.isArray(item.translation.translations) && item.translation.translations.length > 0) {
+        return item.translation.translations[0];
+      }
+      // Fallback: try to stringify or return empty
+      return JSON.stringify(item.translation);
+    }
+    return '';
+  }
+
+  /**
    * Remove a single history entry after user confirmation.
    */
-  private async deleteHistoryItem(id: string): Promise<void> {
+  private async deleteHistoryItem(translation_id: string): Promise<void> {
     if (!confirm('Are you sure you want to delete this translation?')) return;
 
-    const response = await ApiService.deleteHistoryItem(id);
+    const response = await ApiService.deleteHistoryItem(translation_id);
     if (response.success) {
       Toast.success('Deleted');
       this.loadHistory();

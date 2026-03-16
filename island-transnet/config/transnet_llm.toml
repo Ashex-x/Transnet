@@ -1,8 +1,12 @@
 # LLM configuration
 
 [openai]
-api_key = "${OPENAI_API_KEY}"
-base_url = "${OPENAI_BASE_URL}"
-model = "${OPENAI_MODEL}"
-timeout_seconds = 30
+api_key = "local-llama-server"
+base_url = "http://127.0.0.1:35794/v1"
+model = "TranslateGemma"
+timeout_seconds = 60
 max_retries = 3
+# For normal languages (English, Chinese, Spanish, French, Japanese, Korean, German)
+# Uses Qwen3.5 on port 35793
+normal_lang_base_url = "http://127.0.0.1:35793/v1"
+normal_lang_model = "Qwen3.5"
