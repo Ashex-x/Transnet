@@ -26,6 +26,7 @@ export class Favorites {
     this.shell = new PageShell(this.container, {
       requiresAuth: true,
       showFooter: false,
+      showTransnetNav: true,
       mainClassName: 'profile-page',
     });
 
@@ -55,7 +56,7 @@ export class Favorites {
   private async loadFavorites(): Promise<void> {
     const response = await ApiService.getFavorites({
       page: this.currentPage,
-      limit: 10,
+      limit: 20,
       sort_by: 'created_at',
       sort_order: 'desc',
     });
@@ -100,54 +101,85 @@ export class Favorites {
       return;
     }
 
-    container.innerHTML = items.map((item, index) => this.renderFavoriteCard(item, index)).join('');
+    // Render split layout
+    container.innerHTML = `
+      <div class="favorites-split-layout">
+        <div class="favorites-split-layout__list">
+          ${items.map((item, index) => this.renderFavoriteListItem(item, index)).join('')}
+        </div>
+        <div class="favorites-split-layout__details">
+          ${items.length > 0 ? this.renderFavoriteDetails(items[0]) : ''}
+        </div>
+      </div>
+    `;
 
-    this.bindCardEvents();
+    this.bindListEvents();
   }
 
   /**
-   * Render one favorite translation card with note-edit controls.
+   * Render a single favorite list item with note.
    */
-  private renderFavoriteCard(item: Favorite, index: number): string {
+  private renderFavoriteListItem(item: Favorite, index: number): string {
+    const translation = item.translation;
+    const note = item.note;
+
+    if (!translation) return '';
+
+    const isActive = index === 0 ? 'favorites-split-layout__item--active' : '';
+
+    return `
+      <div class="favorites-split-layout__item ${isActive}" data-id="${item.translation_id}" data-index="${index}">
+        <div class="favorites-split-layout__item-text truncated">${this.escapeHtml(translation.text)}</div>
+        ${note ? `
+          <div class="favorites-split-layout__item-note">${this.escapeHtml(note)}</div>
+        ` : ''}
+        <div class="history-split-layout__item-meta">
+          <span class="history-card__badge">${translation.source_lang.toUpperCase()} → ${translation.target_lang.toUpperCase()}</span>
+          ${item.updated_at ? `<span>${this.formatDate(item.updated_at)}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render detailed view for a favorite item.
+   */
+  private renderFavoriteDetails(item: Favorite): string {
     const translation = item.translation;
     const wordMeaning = item.word_meaning;
 
     if (!translation) return '';
 
     return `
-      <div class="glass-card favorite-card animate-fade-in-up" style="
-        animation-delay: ${index * 0.05}s;
-        padding: 24px;
-        position: relative;
-      " data-id="${item.translation_id}">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 1.5rem;">⭐</span>
-            <span class="history-card__badge">${translation.source_lang.toUpperCase()} → ${translation.target_lang.toUpperCase()}</span>
-            ${item.updated_at ? `<span style="font-size: 0.8rem; color: var(--text-tertiary);">${this.formatDate(item.updated_at)}</span>` : ''}
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn btn--ghost btn--icon favorite-copy-btn" data-text="${this.escapeHtml(this.getTranslationText(translation))}" title="${t('historyCopy')}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
-            <button class="btn btn--ghost btn--icon favorite-edit-btn" data-id="${item.translation_id}" title="${t('favoritesEditNote')}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
-            </button>
-            <button class="btn btn--ghost btn--icon favorite-delete-btn" data-id="${item.translation_id}" title="${t('favoritesDelete')}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-            </button>
-          </div>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.5rem;">⭐</span>
+          <span class="history-card__badge">${translation.source_lang.toUpperCase()} → ${translation.target_lang.toUpperCase()}</span>
+          ${item.updated_at ? `<span style="font-size: 0.8rem; color: var(--text-tertiary);">${this.formatDate(item.updated_at)}</span>` : ''}
         </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn--ghost btn--icon favorite-copy-btn" data-text="${this.escapeHtml(this.getTranslationText(translation))}" title="${t('historyCopy')}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+          <button class="btn btn--ghost btn--icon favorite-edit-btn" data-id="${item.translation_id}" title="${t('favoritesEditNote')}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+          </button>
+          <button class="btn btn--ghost btn--icon favorite-delete-btn" data-id="${item.translation_id}" title="${t('favoritesDelete')}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
 
+      <div class="favorites-split-layout__details-content">
         <div style="margin-bottom: 16px;">
           <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 4px;">${this.escapeHtml(translation.text)}</div>
           <div style="font-size: 1.1rem; color: var(--accent-primary); font-weight: 500;">${this.escapeHtml(this.getTranslationText(translation))}</div>
@@ -194,10 +226,22 @@ export class Favorites {
   }
 
   /**
-   * Bind card-level actions such as copy, edit, save, and delete.
+   * Bind list item click and action events.
    */
-  private bindCardEvents(): void {
-    this.mainElement?.querySelectorAll('.favorite-copy-btn').forEach(btn => {
+  private bindListEvents(): void {
+    // List item clicks to update details
+    this.mainElement?.querySelectorAll('.favorites-split-layout__item').forEach((item) => {
+      item.addEventListener('click', () => {
+        const index = parseInt((item as HTMLElement).dataset.index || '0');
+        const items = this.favoritesData?.favorites || [];
+        if (items[index]) {
+          this.updateDetails(items[index], index);
+        }
+      });
+    });
+
+    // Copy button
+    this.mainElement?.querySelectorAll('.favorite-copy-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const text = btn.getAttribute('data-text');
         if (text) {
@@ -207,24 +251,27 @@ export class Favorites {
       });
     });
 
-    this.mainElement?.querySelectorAll('.favorite-edit-btn').forEach(btn => {
+    // Edit button
+    this.mainElement?.querySelectorAll('.favorite-edit-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
         if (id) this.startEditing(id);
       });
     });
 
-    this.mainElement?.querySelectorAll('.favorite-delete-btn').forEach(btn => {
+    // Delete button
+    this.mainElement?.querySelectorAll('.favorite-delete-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
         if (id) this.deleteFavorite(id);
       });
     });
 
-    this.mainElement?.querySelectorAll('.note-save').forEach(btn => {
+    // Note save
+    this.mainElement?.querySelectorAll('.note-save').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const card = btn.closest('.favorite-card');
-        const id = card?.getAttribute('data-id');
+        const card = btn.closest('.favorites-split-layout__details');
+        const id = card?.querySelector('.note-section')?.getAttribute('data-id');
         const input = card?.querySelector('.note-input') as HTMLInputElement;
         if (id && input) {
           this.saveNote(id, input.value);
@@ -232,7 +279,8 @@ export class Favorites {
       });
     });
 
-    this.mainElement?.querySelectorAll('.note-cancel').forEach(btn => {
+    // Note cancel
+    this.mainElement?.querySelectorAll('.note-cancel').forEach((btn) => {
       btn.addEventListener('click', () => {
         this.stopEditing();
       });
@@ -240,7 +288,30 @@ export class Favorites {
   }
 
   /**
-   * Extract translation text from translation object (handles type-specific structures)
+   * Update details panel when a list item is clicked.
+   */
+  private updateDetails(item: Favorite, index: number): void {
+    const items = this.mainElement?.querySelectorAll('.favorites-split-layout__item');
+    const details = this.mainElement?.querySelector('.favorites-split-layout__details');
+
+    if (items) {
+      items.forEach((itemEl, i) => {
+        if (i === index) {
+          itemEl.classList.add('favorites-split-layout__item--active');
+        } else {
+          itemEl.classList.remove('favorites-split-layout__item--active');
+        }
+      });
+    }
+
+    if (details && item) {
+      details.innerHTML = this.renderFavoriteDetails(item);
+      this.bindListEvents();
+    }
+  }
+
+  /**
+   * Show the inline note editor for the chosen favorite card.
    */
   private getTranslationText(translation: any): string {
     if (typeof translation.translation === 'string') {

@@ -152,6 +152,7 @@ export class Transnet {
     this.shell = new PageShell(this.container, {
       requiresAuth: false,
       showFooter: true,
+      showTransnetNav: true,
       mainClassName: 'transnet-page',
     });
 

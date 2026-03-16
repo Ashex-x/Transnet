@@ -8,6 +8,7 @@
 
 import { ParticleBackground } from './particle-background';
 import { Header } from './header';
+import { TransnetNav } from './transnet-nav';
 import { AuthService } from './auth';
 import { Toast } from './toast';
 import { router } from '../router';
@@ -28,6 +29,11 @@ export interface PageShellOptions {
    * CSS class name to apply to the main content container.
    */
   mainClassName?: string;
+
+  /**
+   * Whether to show the Transnet secondary navigation bar.
+   */
+  showTransnetNav?: boolean;
 }
 
 export class PageShell {
@@ -35,6 +41,7 @@ export class PageShell {
   private options: Required<PageShellOptions>;
   private particleBackground: ParticleBackground | null = null;
   private header: Header | null = null;
+  private transnetNav: TransnetNav | null = null;
   private mainElement: HTMLElement | null = null;
   private footerElement: HTMLElement | null = null;
 
@@ -42,6 +49,7 @@ export class PageShell {
     requiresAuth: false,
     showFooter: false,
     mainClassName: '',
+    showTransnetNav: false,
   };
 
   constructor(container: HTMLElement, options: PageShellOptions = {}) {
@@ -56,8 +64,9 @@ export class PageShell {
    * 1. Checks auth requirements and redirects if needed
    * 2. Mounts particle background
    * 3. Mounts universal header
-   * 4. Creates and returns main content element
-   * 5. Mounts footer if enabled
+   * 4. Mounts Transnet secondary nav if enabled
+   * 5. Creates and returns main content element
+   * 6. Mounts footer if enabled
    *
    * @returns The main content HTMLElement where page-specific content should be appended
    */
@@ -80,6 +89,12 @@ export class PageShell {
     // Mount universal header
     this.header = new Header();
     this.header.mount(this.container);
+
+    // Mount Transnet secondary nav if enabled
+    if (this.options.showTransnetNav) {
+      this.transnetNav = new TransnetNav();
+      this.transnetNav.mount(this.container);
+    }
 
     // Create main content element
     this.mainElement = document.createElement('main');
@@ -144,6 +159,9 @@ export class PageShell {
 
     this.header?.destroy();
     this.header = null;
+
+    this.transnetNav?.destroy();
+    this.transnetNav = null;
 
     this.footerElement?.remove();
     this.footerElement = null;
