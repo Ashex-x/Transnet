@@ -1,4 +1,4 @@
-# Database configuration
+# Deferred persistence configuration. The current server does not load this file.
 
 [sqlite]
 path = "data/transnet.db"

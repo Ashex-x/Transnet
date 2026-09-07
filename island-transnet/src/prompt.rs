@@ -1,5 +1,14 @@
+//! Provider prompt selection for supported input types and translation modes.
+//!
+//! Prompt strings describe the JSON contract expected by [`crate::format`].
+//! Provider transport, retries, and validation do not belong in this module.
+
 use crate::types::{InputType, TranslationMode};
 
+/// Selects the system prompt for an OpenAI-compatible model.
+///
+/// Qwen models receive an explicit instruction to avoid reasoning output because
+/// Transnet expects the first response content to be strict JSON.
 pub fn build_system_prompt(model_name: &str) -> &'static str {
   if model_name.to_lowercase().contains("qwen") {
     QWEN_SYSTEM_PROMPT
@@ -8,6 +17,11 @@ pub fn build_system_prompt(model_name: &str) -> &'static str {
   }
 }
 
+/// Builds the user prompt for a classified request.
+///
+/// Unsupported combinations produce a diagnostic prompt for backward
+/// compatibility. [`crate::llm::TranslationService`] rejects those combinations
+/// before making a provider request.
 pub fn build_user_prompt(
   text: &str,
   source_lang: &str,
@@ -16,26 +30,42 @@ pub fn build_user_prompt(
   mode: TranslationMode,
 ) -> String {
   match (input_type, mode) {
-    (InputType::Word, TranslationMode::Basic) => build_word_basic_prompt(text, source_lang, target_lang),
-    (InputType::Word, TranslationMode::Explain) => build_word_explain_prompt(text, source_lang, target_lang),
-    (InputType::Word, TranslationMode::FullAnalysis) => build_word_full_analysis_prompt(text, source_lang, target_lang),
+    (InputType::Word, TranslationMode::Basic) => {
+      build_word_basic_prompt(text, source_lang, target_lang)
+    }
+    (InputType::Word, TranslationMode::Explain) => {
+      build_word_explain_prompt(text, source_lang, target_lang)
+    }
+    (InputType::Word, TranslationMode::FullAnalysis) => {
+      build_word_full_analysis_prompt(text, source_lang, target_lang)
+    }
 
-    (InputType::Phrase, TranslationMode::Basic) => build_phrase_basic_prompt(text, source_lang, target_lang),
-    (InputType::Phrase, TranslationMode::Explain) => build_phrase_explain_prompt(text, source_lang, target_lang),
-    (InputType::Phrase, TranslationMode::FullAnalysis) => build_phrase_full_analysis_prompt(text, source_lang, target_lang),
+    (InputType::Phrase, TranslationMode::Basic) => {
+      build_phrase_basic_prompt(text, source_lang, target_lang)
+    }
+    (InputType::Phrase, TranslationMode::Explain) => {
+      build_phrase_explain_prompt(text, source_lang, target_lang)
+    }
+    (InputType::Phrase, TranslationMode::FullAnalysis) => {
+      build_phrase_full_analysis_prompt(text, source_lang, target_lang)
+    }
 
-    (InputType::Sentence, TranslationMode::Basic) => build_sentence_basic_prompt(text, source_lang, target_lang),
-    (InputType::Sentence, TranslationMode::Explain) => build_sentence_explain_prompt(text, source_lang, target_lang),
+    (InputType::Sentence, TranslationMode::Basic) => {
+      build_sentence_basic_prompt(text, source_lang, target_lang)
+    }
+    (InputType::Sentence, TranslationMode::Explain) => {
+      build_sentence_explain_prompt(text, source_lang, target_lang)
+    }
 
     (InputType::Paragraph, TranslationMode::Basic) | (InputType::Essay, TranslationMode::Basic) => {
       build_paragraph_essay_basic_prompt(text, source_lang, target_lang)
     }
 
     (InputType::Sentence, TranslationMode::FullAnalysis)
-    | (InputType::Paragraph, TranslationMode::Explain | TranslationMode::FullAnalysis)
-    | (InputType::Essay, TranslationMode::Explain | TranslationMode::FullAnalysis) => {
-      build_unsupported_combination_prompt(input_type, mode)
-    }
+    | (
+      InputType::Paragraph | InputType::Essay,
+      TranslationMode::Explain | TranslationMode::FullAnalysis,
+    ) => build_unsupported_combination_prompt(input_type, mode),
 
     _ => build_default_prompt(text, source_lang, target_lang, input_type),
   }
@@ -281,7 +311,12 @@ Return strict JSON only."
   )
 }
 
-fn build_default_prompt(text: &str, source_lang: &str, target_lang: &str, input_type: InputType) -> String {
+fn build_default_prompt(
+  text: &str,
+  source_lang: &str,
+  target_lang: &str,
+  input_type: InputType,
+) -> String {
   format!(
     "Translate the following text from {source_lang} to {target_lang}. \
 Return a compact JSON object with exactly one key named \"translation\". \
@@ -301,3 +336,23 @@ fn build_unsupported_combination_prompt(input_type: InputType, mode: Translation
 const SYSTEM_PROMPT: &str = "You are a translation engine. Return strict JSON only.";
 
 const QWEN_SYSTEM_PROMPT: &str = "You are a translation engine. Return strict JSON only. Do not think, reason, or explain - just translate directly without any additional processing.";
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_build_system_prompt_selects_qwen_instruction_case_insensitively() {
+    assert_eq!(build_system_prompt("QWEN-3"), QWEN_SYSTEM_PROMPT);
+    assert_eq!(build_system_prompt("other-model"), SYSTEM_PROMPT);
+  }
+
+  #[test]
+  fn test_build_user_prompt_selects_word_basic_schema() {
+    let prompt = build_user_prompt("hello", "en", "es", InputType::Word, TranslationMode::Basic);
+
+    assert!(prompt.contains("Translate the word 'hello' from en to es"));
+    assert!(prompt.contains("\"phonetic\""));
+    assert!(!prompt.contains("\"relationships\""));
+  }
+}

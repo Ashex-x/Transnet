@@ -1,3 +1,8 @@
+//! Transnet server executable.
+//!
+//! This binary loads TOML configuration, assembles the translation service and
+//! HTTP router, and coordinates graceful process shutdown.
+
 use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
@@ -7,8 +12,9 @@ use transnet::types::{LlmFileConfig, ServerFileConfig};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-  let server_config: ServerFileConfig = read_config("config/transnet.toml")?;
-  let llm_config: LlmFileConfig = read_config("config/transnet_llm.toml")?;
+  let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+  let server_config: ServerFileConfig = read_config(&crate_root.join("config/transnet.toml"))?;
+  let llm_config: LlmFileConfig = read_config(&crate_root.join("config/transnet_llm.toml"))?;
 
   init_tracing(&server_config.logging.level, &server_config.logging.format)?;
 
@@ -39,12 +45,13 @@ async fn main() -> Result<()> {
   Ok(())
 }
 
-fn read_config<T>(path: &str) -> Result<T>
+fn read_config<T>(path: &Path) -> Result<T>
 where
   T: serde::de::DeserializeOwned,
 {
-  let content = fs::read_to_string(path).with_context(|| format!("failed to read {path}"))?;
-  toml::from_str(&content).with_context(|| format!("failed to parse {path}"))
+  let content =
+    fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+  toml::from_str(&content).with_context(|| format!("failed to parse {}", path.display()))
 }
 
 fn init_tracing(level: &str, format: &str) -> Result<()> {
@@ -91,7 +98,15 @@ async fn shutdown_signal() {
   tracing::info!("shutdown signal received");
 }
 
-#[allow(dead_code)]
-fn config_exists(path: &str) -> bool {
-  Path::new(path).exists()
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_read_config_loads_server_configuration_from_crate_root() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("config/transnet.toml");
+    let config: ServerFileConfig = read_config(&path).expect("server config should parse");
+
+    assert_eq!(config.server.port, 35792);
+  }
 }

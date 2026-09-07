@@ -1,4 +1,4 @@
-# API configuration
+# Reserved API configuration. The current server does not load this file.
 
 [auth]
 token_expiry_hours = 24
