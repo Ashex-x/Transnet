@@ -1,4 +1,4 @@
-# LLM configuration
+# Runtime provider configuration consumed by transnet-core.
 
 [openai]
 api_key = "local-llama-server"

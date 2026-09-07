@@ -1,3 +1,8 @@
+//! HTTP transport for Transnet's health and translation endpoints.
+//!
+//! Handlers translate HTTP input and domain errors but leave translation logic
+//! to [`crate::llm::TranslationService`]. Authentication and persistence do not belong here.
+
 use std::sync::Arc;
 
 use axum::{
@@ -8,17 +13,18 @@ use axum::{
   Json, Router,
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use crate::llm::TranslationService;
-use crate::types::{
-  ErrorResponse, HealthData, SuccessResponse, TranslateRequest, TransnetError,
-};
 
+use crate::llm::TranslationService;
+use crate::types::{ErrorResponse, HealthData, SuccessResponse, TranslateRequest, TransnetError};
+
+/// Shared dependencies used by HTTP request handlers.
 #[derive(Clone)]
 pub struct AppState {
   translation_service: Arc<TranslationService>,
 }
 
 impl AppState {
+  /// Creates handler state backed by the supplied translation service.
   pub fn new(translation_service: TranslationService) -> Self {
     Self {
       translation_service: Arc::new(translation_service),
@@ -26,6 +32,10 @@ impl AppState {
   }
 }
 
+/// Builds the Transnet HTTP router.
+///
+/// The router exposes `GET /health` and `POST /translate` and installs permissive
+/// CORS for compatibility with existing clients.
 pub fn app_router(state: AppState) -> Router {
   Router::new()
     .route("/health", get(health))
@@ -39,12 +49,9 @@ async fn health() -> Json<SuccessResponse<HealthData>> {
   Json(SuccessResponse::new(HealthData {
     status: "ready".to_string(),
     service: "transnet-backend".to_string(),
-    checks: {
-      let mut checks = std::collections::HashMap::new();
-      checks.insert("qdrant".to_string(), "connected".to_string());
-      checks.insert("llm_api".to_string(), "reachable".to_string());
-      Some(checks)
-    },
+    // Readiness currently means the process can serve requests; provider health
+    // is established only when a translation request is made.
+    checks: None,
   }))
 }
 
@@ -53,11 +60,7 @@ async fn translate(
   Json(request): Json<TranslateRequest>,
 ) -> impl IntoResponse {
   match state.translation_service.translate(request).await {
-    Ok(response) => (
-      StatusCode::OK,
-      Json(SuccessResponse::new(response)),
-    )
-      .into_response(),
+    Ok(response) => (StatusCode::OK, Json(SuccessResponse::new(response))).into_response(),
     Err(error) => map_error(error),
   }
 }
@@ -70,17 +73,14 @@ fn map_error(error: TransnetError) -> axum::response::Response {
     TransnetError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
   };
 
-  (
-    status,
-    Json(ErrorResponse::new(code, error.to_string())),
-  )
-    .into_response()
+  (status, Json(ErrorResponse::new(code, error.to_string()))).into_response()
 }
 
 #[cfg(test)]
 mod tests {
   use axum::{body::Body, http::Request};
   use tower::util::ServiceExt;
+
   use crate::types::LlmConfig;
 
   use super::*;
@@ -101,9 +101,14 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn health_endpoint_returns_ok() {
+  async fn test_health_endpoint_returns_ok() {
     let response = test_router()
-      .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+      .oneshot(
+        Request::builder()
+          .uri("/health")
+          .body(Body::empty())
+          .unwrap(),
+      )
       .await
       .unwrap();
 
@@ -111,7 +116,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn translate_endpoint_rejects_empty_text() {
+  async fn test_translate_endpoint_rejects_empty_text() {
     let response = test_router()
       .oneshot(
         Request::builder()

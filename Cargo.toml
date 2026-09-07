@@ -1,0 +1,4 @@
+[workspace]
+members = ["island-transnet", "transnet-server"]
+resolver = "2"
+
