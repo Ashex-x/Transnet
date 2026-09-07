@@ -1,13 +1,14 @@
+//! Process entry point for the Transnet JSON gateway.
+
 use std::{env, path::Path};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use tower_http::trace::TraceLayer;
 
 use transnet_server::{create_router, AppState, ServerConfig};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-  // Load .env from the project root (parent directory)
   let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
   let project_root = Path::new(&manifest_dir)
     .parent()
@@ -53,19 +54,22 @@ fn init_tracing(level: &str) -> Result<()> {
   let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
     .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(level));
 
-  let _subscriber = tracing_subscriber::fmt()
+  tracing_subscriber::fmt()
     .with_env_filter(env_filter)
     .with_target(false)
     .with_writer(std::io::stdout)
     .compact()
-    .init();
+    .try_init()
+    .map_err(|error| anyhow!("failed to initialize tracing subscriber: {error}"))?;
 
   Ok(())
 }
 
 async fn shutdown_signal() {
   let ctrl_c = async {
-    let _ = tokio::signal::ctrl_c().await;
+    if let Err(error) = tokio::signal::ctrl_c().await {
+      tracing::warn!(%error, "failed to install Ctrl-C handler");
+    }
   };
 
   #[cfg(unix)]
