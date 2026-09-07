@@ -1,4 +1,4 @@
-# Gateway
+# Gateway reference
 
 ## Contents
 
@@ -27,7 +27,7 @@ flowchart LR
 
 ## API
 
-Call [`create_router`](../../transnet-server/src/routes.rs) and attach an [`AppState`](../../transnet-server/src/routes.rs) configured with the backend base URL. The returned router exposes JSON endpoints documented in [api.md](api.md). Unknown paths, `/`, `/index.html`, `/assets/*`, and `/resource/*` return `404 Not Found`.
+Call [`create_router`](../../../transnet-server/src/routes.rs) and attach an [`AppState`](../../../transnet-server/src/routes.rs) configured with the backend base URL. The returned router exposes JSON endpoints documented in the [gateway API index](api/README.md). Unknown paths, `/`, `/index.html`, `/assets/*`, and `/resource/*` return `404 Not Found`.
 
 `ServerConfig::from_env` reads `GATEWAY_HOST` (default `0.0.0.0`), `GATEWAY_PORT` (default `8080`), `WORKERS` (default `4`), and `RUST_LOG` (default `info`). Invalid numeric values stop startup with contextual errors. `BACKEND_HOST` and `BACKEND_PORT` are composed by the binary and default to `127.0.0.1:35792`.
 

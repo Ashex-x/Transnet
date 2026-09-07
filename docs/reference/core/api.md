@@ -1,4 +1,6 @@
-# Transnet HTTP API
+# Core HTTP API
+
+Parent: [Translation core reference](README.md).
 
 ## Contents
 

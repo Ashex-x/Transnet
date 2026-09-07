@@ -33,7 +33,7 @@ pub fn parse_llm_response(content: &str) -> anyhow::Result<serde_json::Value> {
 
 ## Markdown documentation
 
-Hand-written architecture, API, operations, and module documentation lives under `docs/`. Keep Rust API detail in source comments and generate it with rustdoc; do not edit generated output.
+Hand-written documentation lives under `docs/` and starts at `docs/README.md`. System-wide design stays at the top level, task-oriented instructions live in `docs/guides/`, and code-facing service contracts live in `docs/reference/<service>/`. Keep Rust API detail in source comments and generate it with rustdoc; do not edit generated output.
 
 Keep each prose paragraph and simple list item on one physical line. Markdown is exempt from the Rust line-width limit. Use Mermaid for architecture, flows, and state relationships; do not use ASCII art for diagrams. Compact directory trees and literal terminal output may use fenced text blocks.
 
@@ -43,7 +43,7 @@ Update the relevant document in the same change whenever a public API, configura
 
 ### Module documents
 
-Each non-trivial public module should have one document below `docs/`. A small adapter or single-purpose utility may use a short free-form document. A module with state, concurrency, multiple dependencies, non-obvious algorithms, or a public surface used by other modules should cover:
+Each service has a `docs/reference/<service>/README.md` entry point. Each non-trivial public module should have one document beside that index. A small adapter or single-purpose utility may use a short free-form document. A module with state, concurrency, multiple dependencies, non-obvious algorithms, or a public surface used by other modules should cover:
 
 - **Overview**: purpose, ownership boundaries, and dependencies.
 - **Architecture**: data flow and process boundaries.
@@ -55,7 +55,7 @@ Complex documents begin with a **Contents** list linking to those sections. Add 
 
 ## HTTP API contracts
 
-Hand-written HTTP contracts live in `docs/api.md`, or in `docs/api/<domain>.md` if the API becomes too large for one file. Update a contract in the same change as its handler.
+Hand-written HTTP contracts live below the owning service at `docs/reference/<service>/api.md`. When the contract has multiple domains, use `docs/reference/<service>/api/README.md` for shared rules and place one file per domain beside it. Update a contract in the same change as its handler.
 
 Each route must state authentication, request fields, success status and payload, and exact error statuses and wire codes. Use field names and enum literals exactly as serialized by the server. Prefer one minimal JSON request and response over tables that repeat type declarations. Document shared envelopes, timestamp formats, identifiers, content types, and validation limits once in a common interface section.
 

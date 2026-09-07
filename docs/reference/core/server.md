@@ -1,4 +1,6 @@
-# Transnet server
+# Core server process
+
+Parent: [Translation core reference](README.md).
 
 The `transnet-core` binary loads server and provider TOML relative to the crate manifest, initializes structured tracing, binds the Axum listener, and handles Ctrl-C or Unix termination signals. Manifest-relative paths make startup independent of the shell working directory.
 

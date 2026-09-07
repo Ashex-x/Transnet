@@ -25,4 +25,4 @@ The gateway reads environment variables at startup:
 
 The binary attempts to load `.env` from the repository root for local development. `.env` is ignored by Git. Invalid numeric values stop startup with a contextual configuration error.
 
-Related: [architecture](architecture.md), [development](development.md), [core server](core/transnet/server.md), and [gateway design](gateway/gateway.md).
+Related: [architecture](../architecture.md), [development](development.md), [core server](../reference/core/server.md), and [gateway](../reference/gateway/README.md).

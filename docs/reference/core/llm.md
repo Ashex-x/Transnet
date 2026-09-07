@@ -1,5 +1,7 @@
 # LLM translation service
 
+Parent: [Translation core reference](README.md).
+
 ## Contents
 
 - [Overview](#overview)

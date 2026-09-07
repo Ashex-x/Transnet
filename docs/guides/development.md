@@ -48,4 +48,4 @@ The current services have no authentication and use permissive CORS. Bind them t
 
 The gateway is API-only. Deploy any browser interface as a separate application; `/`, `/index.html`, `/assets/*`, and `/resource/*` intentionally return `404 Not Found`.
 
-Related: [configuration](configuration.md), [API index](api.md), and [architecture](architecture.md).
+Related: [configuration](configuration.md), [service reference](../reference/README.md), and [architecture](../architecture.md).

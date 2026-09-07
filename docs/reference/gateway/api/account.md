@@ -1,5 +1,7 @@
 # Account API
 
+Parent: [Gateway HTTP API](README.md).
+
 ## Contents
 
 - [Overview](#overview)
@@ -17,7 +19,7 @@ Account routes require no credentials. Returned tokens are mock values and are n
 
 ## Interfaces
 
-Responses use the [gateway envelopes and shared wire rules](../api.md).
+Responses use the [gateway envelopes and shared wire rules](README.md).
 
 ## Routes
 

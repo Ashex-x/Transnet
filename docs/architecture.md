@@ -52,4 +52,4 @@ No database is used by the current implementation. The checked-in service config
 - The core health endpoint reports process liveness and does not probe model providers.
 - Translation responses depend on the configured model following the requested JSON schema.
 
-Related: [API index](api.md), [configuration](configuration.md), [development](development.md), [core translation service](core/transnet/llm.md), and [gateway](gateway/gateway.md).
+Related: [documentation index](README.md), [service reference](reference/README.md), [configuration](guides/configuration.md), and [development](guides/development.md).

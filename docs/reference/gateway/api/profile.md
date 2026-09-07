@@ -1,5 +1,7 @@
 # Profile API
 
+Parent: [Gateway HTTP API](README.md).
+
 ## Contents
 
 - [Overview](#overview)
@@ -17,7 +19,7 @@ Both routes require authentication, but the gateway does not yet validate creden
 
 ## Interfaces
 
-Responses use the [gateway envelopes and shared wire rules](../api.md).
+Responses use the [gateway envelopes and shared wire rules](README.md).
 
 ## Routes
 

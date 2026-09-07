@@ -36,10 +36,10 @@ The core service defaults to `127.0.0.1:35792`. The gateway defaults to `0.0.0.0
 ## Documentation
 
 - [Coding conventions](conventions.md)
+- [Documentation index](docs/README.md)
 - [Architecture](docs/architecture.md)
-- [API index](docs/api.md)
-- [Configuration](docs/configuration.md)
-- [Development and operations](docs/development.md)
+- [Service reference](docs/reference/README.md)
+- [Development and operations](docs/guides/development.md)
 
 ## License
 

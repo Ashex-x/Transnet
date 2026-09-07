@@ -1,5 +1,7 @@
 # System API
 
+Parent: [Gateway HTTP API](README.md).
+
 ## Contents
 
 - [Overview](#overview)
@@ -17,7 +19,7 @@ System routes require no credentials.
 
 ## Interfaces
 
-Responses use the [gateway envelopes and shared wire rules](../api.md).
+Responses use the [gateway envelopes and shared wire rules](README.md).
 
 ## Routes
 

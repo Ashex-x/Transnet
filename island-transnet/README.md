@@ -32,7 +32,7 @@ The default listener is `127.0.0.1:35792`. The default provider endpoints are lo
 
 ## HTTP API
 
-`GET /health` returns the standard success envelope. `POST /translate` accepts `text`, `source_lang`, `target_lang`, and optional `mode` and `input_type` fields. See [the core API contract](../docs/core/transnet/api.md) for wire examples and errors.
+`GET /health` returns the standard success envelope. `POST /translate` accepts `text`, `source_lang`, `target_lang`, and optional `mode` and `input_type` fields. See [the core API contract](../docs/reference/core/api.md) for wire examples and errors.
 
 ## Development
 
@@ -45,7 +45,7 @@ cargo test -p transnet
 cargo clippy -p transnet --all-targets -- -D warnings
 ```
 
-Module design notes live under [`docs/core/transnet`](../docs/core/transnet/).
+Module design notes start at the [core reference index](../docs/reference/core/README.md).
 
 ## License
 

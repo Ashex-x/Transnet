@@ -1,5 +1,7 @@
 # Gateway HTTP API
 
+Parent: [Gateway reference](../README.md).
+
 The gateway exposes JSON APIs only. It does not serve HTML, browser assets, or an SPA fallback; unknown paths return 404.
 
 Requests with bodies use `Content-Type: application/json`. Successful JSON responses use `{"success":true,"data":...}`. Errors use `{"success":false,"error":{"code":"CODE","message":"description"}}`.
@@ -8,9 +10,9 @@ Authentication is not enforced in the current implementation. Account endpoints 
 
 Route contracts are grouped by domain:
 
-- [System and health](api/system.md)
-- [Account](api/account.md)
-- [Translation, history, and favorites](api/transnet.md)
-- [Profile](api/profile.md)
+- [System and health](system.md)
+- [Account](account.md)
+- [Translation, history, and favorites](transnet.md)
+- [Profile](profile.md)
 
 Language fields use short identifiers such as `en` and `zh`. `input_type` accepts `auto`, `word`, `phrase`, `sentence`, `paragraph`, or `essay`. Pagination is one-based and contains `page`, `limit`, `total`, and `total_pages`.
