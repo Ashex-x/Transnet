@@ -1,0 +1,21 @@
+[server]
+host = "127.0.0.1"
+port = 35792
+log_level = "info"
+log_format = "json"
+
+[translation]
+long_text_chars = 4000
+timeout_seconds = 60
+max_retries = 3
+retry_delay_ms = 250
+
+[gemma4]
+base_url = "http://127.0.0.1:18011/v1"
+model = "Gemma4"
+api_key = "local-model-server"
+
+[translate_gemma]
+base_url = "http://127.0.0.1:18007/v1"
+model = "TranslateGemma"
+api_key = "local-model-server"

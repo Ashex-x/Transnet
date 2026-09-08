@@ -1,22 +1,18 @@
-# log
-logs/*.log
-*.log.*
-logs/
-island-transnet/Transnet/logs/
+# Rust
+target/
 
-*.cmake
+# Logs and runtime state
+logs/
+*.log
+*.log.*
+
+# Local environment and credentials
+.env
+
+# Editor and temporary files
 *.swp
 *.swo
 *~
 
-# some docs
-docs/ARCHITECTURE.pdf
-
-# Rust
-target/
-
-# environment variables
-.env
-
-# docs
+# Generated documentation
 docs/*.pdf
