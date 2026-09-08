@@ -1,34 +1,9 @@
 # Transnet documentation
 
-Start here for project documentation. The tree separates system-wide design, task-oriented guides, and code-facing service reference.
+- [System design](transnet.md): service boundary, request flow, and model routing.
+- [API contract](reference/transnet-api.md): public routes and JSON shapes.
+- [Configuration](guides/configuration.md): listener, routing, and provider settings.
+- [Development](guides/development.md): local startup, checks, and deployment notes.
+- [Coding conventions](../conventions.md): repository, Rust, documentation, and Git rules.
 
-## System design
-
-- [Architecture](architecture.md): processes, request flow, ownership boundaries, and current limitations.
-- [Coding conventions](../conventions.md): source, documentation, testing, and Git requirements.
-
-## Guides
-
-- [Development and operations](guides/development.md): prerequisites, workspace checks, local startup, and deployment safeguards.
-- [Configuration](guides/configuration.md): active core TOML settings, gateway environment variables, and deferred configuration.
-
-## Service reference
-
-- [Service reference index](reference/README.md): choose between the core and gateway contracts.
-- [Translation core](reference/core/README.md): core modules, HTTP API, provider integration, prompts, formats, and shared types.
-- [Gateway](reference/gateway/README.md): gateway design and JSON API boundary.
-
-```text
-docs/
-├── README.md                 # this index
-├── architecture.md          # system-wide design
-├── guides/                  # task-oriented instructions
-│   ├── configuration.md
-│   └── development.md
-└── reference/               # code-facing contracts and module notes
-    ├── README.md
-    ├── core/
-    └── gateway/
-```
-
-Documentation must describe implemented behavior. Planned capabilities belong in [`island-transnet/TODO.md`](../island-transnet/TODO.md) and must be labeled as deferred.
+Use descriptive filenames and keep every document aligned with the current implementation.

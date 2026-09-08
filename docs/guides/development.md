@@ -2,50 +2,31 @@
 
 ## Prerequisites
 
-Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Provide one or both OpenAI-compatible model endpoints configured in `island-transnet/config/transnet_llm.toml`.
+Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start OpenAI-compatible Gemma 4 and TranslateGemma servers at the configured endpoints.
 
-## Verify the workspace
+## Verify
 
-Run the complete local gate from the repository root:
+Run from the repository root:
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo doc --workspace --no-deps
+cargo clippy --all-targets -- -D warnings
+cargo test --all-targets
+cargo doc --no-deps
 ```
 
 ## Run locally
 
-Start the translation core first:
-
 ```bash
-cargo run -p transnet
+cargo run
 ```
 
-In another terminal, start the optional gateway:
+The default listener is `127.0.0.1:35792`. See the [root README](../../README.md) for curl examples.
 
-```bash
-cargo run -p transnet-server
-```
+## Deploy
 
-Check the core directly:
+Run the binary under a process supervisor and collect standard output. The process handles Ctrl-C and Unix termination for graceful shutdown.
 
-```bash
-curl http://127.0.0.1:35792/health
-curl --request POST http://127.0.0.1:35792/translate \
-  --header 'content-type: application/json' \
-  --data '{"text":"hello","source_lang":"en","target_lang":"zh","mode":"basic","input_type":"word"}'
-```
+Transnet has no authentication, TLS, CORS policy, or request-size limit. Keep it on a trusted interface or place it behind a policy-enforcing edge before public exposure.
 
-Check translation through the gateway by sending the same body to `http://127.0.0.1:8080/translate`.
-
-## Deployment notes
-
-Run each binary under a process supervisor and send logs to standard output. Both binaries handle Ctrl-C and Unix termination for graceful shutdown.
-
-The current services have no authentication and use permissive CORS. Bind them to a trusted interface or put them behind a reverse proxy that provides TLS, authentication, request limits, and an explicit origin policy. Do not expose placeholder account routes as a real identity service.
-
-The gateway is API-only. Deploy any browser interface as a separate application; `/`, `/index.html`, `/assets/*`, and `/resource/*` intentionally return `404 Not Found`.
-
-Related: [configuration](configuration.md), [service reference](../reference/README.md), and [architecture](../architecture.md).
+Related: [configuration](configuration.md), [design](../transnet.md), and [API contract](../reference/transnet-api.md).
