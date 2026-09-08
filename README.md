@@ -1,45 +1,32 @@
 # Transnet
 
-Transnet is a Rust translation service backed by an OpenAI-compatible language-model API. The repository contains a core translation service and an optional HTTP gateway; it does not contain a WebUI.
-
-## Components
-
-- `island-transnet`: validates translation requests, selects prompts and model endpoints, parses model responses, and exposes the core `/health` and `/translate` API.
-- `transnet-server`: forwards translation requests to the core service and exposes the wider gateway contract. Account, history, favorites, profile, and statistics routes are currently placeholder interfaces and do not persist data.
+Transnet is a small Rust HTTP service for text translation. Gemma 4 handles text up to 4,000 Unicode characters; longer text is sent intact to TranslateGemma.
 
 ```mermaid
 flowchart LR
-  client["API client"] --> gateway["Gateway :8080"]
-  gateway --> core["Translation core :35792"]
-  core --> model["OpenAI-compatible LLM"]
+  client["HTTP client"] --> service["Transnet :35792"]
+  service -->|"at most 4,000 characters"| gemma4["Gemma 4 :18011"]
+  service -->|"over 4,000 characters"| translate["TranslateGemma :18007"]
 ```
 
-## Development
+## Run
 
-The repository is a Cargo workspace. Install a current stable Rust toolchain, then run the checks from the repository root:
+Configure the listener and model servers in `config/transnet.toml`, then run:
 
 ```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo run
 ```
 
-Configure the model endpoints in `island-transnet/config/transnet_llm.toml`. Do not commit real API keys. Start the services in separate terminals:
+Verify the service:
 
 ```bash
-cargo run -p transnet
-cargo run -p transnet-server
+curl http://127.0.0.1:35792/health
+curl --request POST http://127.0.0.1:35792/translate \
+  --header 'content-type: application/json' \
+  --data '{"text":"Hello","source_lang":"en","target_lang":"zh-CN"}'
 ```
 
-The core service defaults to `127.0.0.1:35792`. The gateway defaults to `0.0.0.0:8080` and connects to the core through `BACKEND_HOST` and `BACKEND_PORT`.
-
-## Documentation
-
-- [Coding conventions](conventions.md)
-- [Documentation index](docs/README.md)
-- [Architecture](docs/architecture.md)
-- [Service reference](docs/reference/README.md)
-- [Development and operations](docs/guides/development.md)
+See the [design](docs/transnet.md), [API contract](docs/reference/transnet-api.md), and [development guide](docs/guides/development.md).
 
 ## License
 

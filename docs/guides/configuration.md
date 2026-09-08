@@ -1,28 +1,11 @@
 # Configuration
 
-## Translation core
+The process reads `config/transnet.toml` relative to the Cargo manifest, independent of the shell working directory.
 
-The core binary reads checked-in TOML from `island-transnet/config/`, resolving paths from the crate manifest so startup does not depend on the current directory.
+`[server]` configures `host`, `port`, `log_level`, and `log_format`. `RUST_LOG` overrides `log_level`; `log_format = "json"` selects JSON output and other values select compact logs.
 
-`transnet.toml` configures `[server]` fields `host`, `port`, and `workers`, plus `[logging]` fields `level`, `format`, and the currently reserved `file`. The `format` value selects compact output by default and JSON output when set to `json`. The server reports `workers` in startup metadata; Tokio runtime sizing is not currently customized by this value.
+`[translation]` configures the Unicode-character routing boundary, per-attempt timeout, retry count after the first attempt, and delay between attempts.
 
-`transnet_llm.toml` configures the `[openai]` provider. `api_key`, `base_url`, `model`, `timeout_seconds`, and `max_retries` are required. `normal_lang_base_url` and `normal_lang_model` are optional overrides used when both source and target match the common-language allowlist.
+`[gemma4]` and `[translate_gemma]` each configure an OpenAI-compatible `base_url`, `model`, and `api_key`. Defaults target Gemma 4 on port 18011 and TranslateGemma on port 18007. Real credentials must be provisioned without committing them to Git.
 
-The checked-in API key is a local placeholder. For deployments that use credentials, provision the file through a secret-aware deployment mechanism and keep the real value out of Git. The current core does not override TOML provider values from environment variables.
-
-`transnet_api.toml` and `transnet_db.toml` describe deferred API-policy and persistence settings. No current process loads them; changing them has no runtime effect.
-
-## Gateway
-
-The gateway reads environment variables at startup:
-
-- `GATEWAY_HOST`: listener address, default `0.0.0.0`.
-- `GATEWAY_PORT`: listener port, default `8080`.
-- `WORKERS`: compatibility metadata, default `4`; it does not resize the Tokio runtime.
-- `RUST_LOG`: tracing filter, default `info`.
-- `BACKEND_HOST`: core service host, default `127.0.0.1`.
-- `BACKEND_PORT`: core service port, default `35792`.
-
-The binary attempts to load `.env` from the repository root for local development. `.env` is ignored by Git. Invalid numeric values stop startup with a contextual configuration error.
-
-Related: [architecture](../architecture.md), [development](development.md), [core server](../reference/core/server.md), and [gateway](../reference/gateway/README.md).
+Related: [design](../transnet.md), [API contract](../reference/transnet-api.md), and [development](development.md).
