@@ -1519,6 +1519,59 @@ impl CanonicalSenseDetails {
   pub fn history(&self) -> &[SenseHistoryAssertion] {
     &self.history
   }
+
+  /// Returns whether every detail is safe to serve for one pinned canonical sense read.
+  ///
+  /// The release and sense identifiers must match the aggregate target. Both the owning lexeme
+  /// and target sense must be active, and every returned factual assertion must permit
+  /// `evidence_use` through its complete source and asset lineage. This method deliberately
+  /// treats one inaccessible assertion as making the aggregate ineligible rather than silently
+  /// omitting a section and making a policy exclusion indistinguishable from absent content.
+  pub fn is_eligible_for(
+    &self,
+    release_id: &ReleaseId,
+    sense_id: &SenseId,
+    evidence_use: EvidenceUse,
+  ) -> bool {
+    self.target.release_id() == release_id
+      && self.target.sense_id() == sense_id
+      && self.target.is_lookup_eligible()
+      && self
+        .localized_glosses
+        .iter()
+        .all(|detail| detail.assertion().permits(evidence_use))
+      && self
+        .pronunciations
+        .iter()
+        .all(|detail| detail.assertion().permits(evidence_use))
+      && self
+        .usage_labels
+        .iter()
+        .all(|detail| detail.assertion().permits(evidence_use))
+      && self
+        .grammar_patterns
+        .iter()
+        .all(|detail| detail.assertion().permits(evidence_use))
+      && self
+        .collocations
+        .iter()
+        .all(|detail| detail.assertion().permits(evidence_use))
+      && self
+        .examples
+        .iter()
+        .all(|detail| detail.assertion().permits(evidence_use))
+      && self.pitfalls.iter().all(|detail| {
+        detail.mistake().permits(evidence_use) && detail.correction().permits(evidence_use)
+      })
+      && self
+        .etymologies
+        .iter()
+        .all(|detail| detail.assertion().permits(evidence_use))
+      && self
+        .history
+        .iter()
+        .all(|detail| detail.assertion().permits(evidence_use))
+  }
 }
 
 trait SenseScopedDetail {
@@ -2095,6 +2148,56 @@ mod tests {
       oversized,
       Err(CanonicalContentValidationError::TooManyDetails)
     );
+  }
+
+  #[test]
+  fn detail_aggregate_requires_its_pinned_target_and_every_evidence_permission() {
+    let target = target(CanonicalStatus::Active);
+    let assertion = CanonicalFactualAssertion::new(
+      CanonicalDetailKind::LocalizedGloss,
+      target.release_id().clone(),
+      CanonicalStatus::Active,
+      "跑",
+      vec![licensed_lineage(
+        "gloss-evidence",
+        target.release_id().clone(),
+        EvidenceKind::LocalizedGloss,
+        CanonicalStatus::Active,
+        false,
+      )],
+    )
+    .unwrap();
+    let details = CanonicalSenseDetails::new(CanonicalSenseDetailsInput {
+      target: target.clone(),
+      localized_glosses: vec![LocalizedGloss::new(
+        canonical_id("gloss-a"),
+        target.clone(),
+        language("zh-CN"),
+        assertion,
+      )
+      .unwrap()],
+      pronunciations: Vec::new(),
+      usage_labels: Vec::new(),
+      grammar_patterns: Vec::new(),
+      collocations: Vec::new(),
+      examples: Vec::new(),
+      pitfalls: Vec::new(),
+      etymologies: Vec::new(),
+      history: Vec::new(),
+    })
+    .unwrap();
+
+    assert!(details.is_eligible_for(target.release_id(), target.sense_id(), EvidenceUse::Display));
+    assert!(!details.is_eligible_for(
+      target.release_id(),
+      target.sense_id(),
+      EvidenceUse::ApiRedistribution
+    ));
+    assert!(!details.is_eligible_for(
+      &release("other-release"),
+      target.sense_id(),
+      EvidenceUse::Display
+    ));
   }
 
   #[test]
