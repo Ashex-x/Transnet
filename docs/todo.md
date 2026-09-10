@@ -2,7 +2,7 @@
 
 ## Status
 
-This plan tracks delivery of the English-learning platform on `feat/basic-core`. The first model-only structured translation slice is implemented; canonical retrieval, persistence, graph, feedback, and practice remain future work.
+This plan tracks delivery of the English-learning platform. The default executable still runs the model-only structured learning slice. The repository also contains reusable Rust foundations for canonical content and retrieval, content-release transitions, typed graph reads, private learner, feedback, and layout state, lookup-job lifecycle, and boundary ports with in-memory adapters. Those foundations are not production integrations: the default executable does not wire canonical content, a durable persistence backend, a worker, or authentication. They do not change the unfinished roadmap checkboxes or satisfy a phase exit criterion.
 
 Checkbox meanings:
 

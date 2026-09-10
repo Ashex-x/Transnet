@@ -2,9 +2,11 @@
 
 ## Status and compatibility
 
-`POST /v1/lookups` has an implemented model-only basic-core slice. `GET /v1/lookup-jobs/{job_id}` and the graph-read routes are implemented only when their explicit application dependencies are injected; the default process does not inject them, so those routes are absent. All other endpoints in this document remain proposed. The implemented `GET /health`, `GET /livez`, `GET /readyz`, and `POST /translate` contracts remain in [Transnet HTTP API](transnet-api.md).
+`POST /v1/lookups` has an implemented model-only default path and an optional canonical path when a host injects its explicit application dependency. `GET /v1/lookup-jobs/{job_id}` and the graph-read routes are likewise implemented only when their dependencies are injected; the default process does not inject them, so those conditional routes are absent. All other endpoints in this document remain proposed. The implemented `GET /health`, `GET /livez`, `GET /readyz`, and `POST /translate` contracts remain in [Transnet HTTP API](transnet-api.md).
 
-The implemented lookup does not yet have canonical lexical content, retrieval, persistence, or authentication. It returns synchronous anonymous results with `Cache-Control: no-store`; identifies every generated assertion; uses null canonical sense and relation IDs; exposes no evidence IDs; and reports `evidence_backed: false`. The richer evidence-backed shape below is the target contract that will replace these provisional gaps without inventing canonical data.
+The default model-only lookup returns synchronous anonymous results with `Cache-Control: no-store`; identifies every generated assertion; uses null canonical sense and relation IDs; exposes no evidence IDs; and reports `evidence_backed: false`. With an injected `CanonicalLookupService`, an explicit source language and no context select the synchronous, release-pinned evidence-backed path; automatic language and context-bearing requests remain on the model path. The crate has reusable canonical retrieval, card, cache, release, graph, learner, feedback, view, worker, and job foundations with in-memory adapters, but they do not supply production persistence, licensed content, authentication, or default optional-dependency wiring.
+
+`GET /v1/lookup-jobs/{job_id}` is a conditional polling foundation: it is registered only when `AppState` receives an injected lookup-job store, and it can poll an already-created job using a trusted owner extension or a capability header. Default startup does not register it, and no current request handler creates, enqueues, encrypts, or erases lookup-job payloads. All other endpoints in this document remain proposed.
 
 The learning API uses JSON, opaque public IDs, UTC RFC 3339 timestamps, OpenAPI, and versioned JSON Schemas. Removing fields or changing enum meaning requires a new API version.
 
@@ -46,8 +48,8 @@ Content responses identify the applicable schema, lexicon release, vector collec
 | `GET /v1/auth/callback` | OIDC state | Complete OIDC and issue a service session |
 | `POST /v1/auth/refresh` | Session cookie | Rotate the refresh token |
 | `POST /v1/auth/logout` | Required | Revoke current or all sessions |
-| `POST /v1/lookups` | Optional | Implemented model-only learning card; evidence-backed retrieval remains proposed |
-| `GET /v1/lookup-jobs/{job_id}` | Owner or capability | Implemented when a lookup-job store is injected; poll asynchronous generation |
+| `POST /v1/lookups` | Optional | Model-only default; release-pinned canonical card when its service is injected and the request is eligible |
+| `GET /v1/lookup-jobs/{job_id}` | Owner or capability | Conditional polling foundation for an already-created job; not registered by default |
 | `GET /v1/senses/{sense_id}` | Optional | Read a current sense card |
 | `GET /v1/graph` | None | Implemented when a graph service is injected; read a bounded graph for a typed root |
 | `GET /v1/graph/nodes/{node_kind}/{node_id}/neighbors` | None | Implemented when a graph service is injected; expand one typed graph node |
@@ -78,6 +80,8 @@ Content responses identify the applicable schema, lexicon release, vector collec
 ## POST /v1/lookups
 
 Creates or retrieves an evidence-backed learning card.
+
+The remaining asynchronous, persistence, and personalization behavior in this section is target-only. The current route returns a synchronous model-generated result by default and can use an injected in-memory or future persistent canonical lookup service for eligible requests; it does not create asynchronous jobs.
 
 ```json
 {
@@ -164,9 +168,9 @@ Coverage values are `available`, `partial`, `unavailable`, `disputed`, `not_requ
 
 ## GET /v1/lookup-jobs/{job_id}
 
-Returns `202` while queued or running, `200` with the completed lookup envelope, or the stored typed failure. An authenticated job requires ownership. An anonymous job requires `Lookup-Capability`.
+When the conditional route is configured, the current handler returns `202` while an injected store reports a pending or running job, `200` with its completed envelope or stored redacted failure, and `410` after expiry. It accepts either a trusted owner extension supplied by future authentication middleware or an anonymous `Lookup-Capability` header. It does not create jobs, schedule work, or establish storage atomicity.
 
-Expired jobs return `410 lookup_job_expired`. Raw query and context payloads are encrypted during the job and erased at completion or expiry.
+The durable job, ownership, encryption, and retention behavior described by the target contract remains proposed. A future implementation must persist a job before returning `202`, protect raw query and context payloads, and erase them at completion or expiry.
 
 ## Graph reads
 

@@ -2,7 +2,7 @@
 
 ## Document status
 
-This document owns the system design and architecture for Transnet. The [current implementation](#current-implementation) describes behavior on `feat/basic-core`. Sections marked as target architecture remain proposed and are not yet implemented.
+This document owns the system design and architecture for Transnet. The [current implementation](#current-implementation) describes the default executable on `master` and the reusable foundations already present in the crate. Sections marked as target architecture remain proposed; a reusable foundation does not by itself make a target deployment capability implemented.
 
 Detailed contracts and procedures live in focused documents:
 
@@ -58,7 +58,7 @@ MySQL is the source of truth for lexical assertions, relationship versions, user
 
 ## Current implementation
 
-Transnet is one Rust package and one HTTP process. It preserves the direct text translator and implements the first model-backed structured English-learning lookup slice.
+Transnet is one Rust package and one HTTP process. Its default executable preserves the direct text translator and implements the first model-backed structured English-learning lookup slice.
 
 ```mermaid
 flowchart LR
@@ -90,9 +90,13 @@ flowchart LR
 
 The structured lookup normalizes query and context text to Unicode NFC, accepts an explicit BCP-47 source language or `auto`, supports `en-US` and `en-GB`, and optionally adapts explanations to a CEFR level. Its model contract separates English meanings by part of speech and returns definitions, localized glosses, pronunciations, forms, usage notes, examples, etymology, and typed related-word suggestions.
 
-This slice has no canonical lexical store or retrieval index. It therefore marks every learning assertion as generated, returns null canonical IDs, exposes empty evidence lists, sets `evidence_backed` to false, and prevents generated relations from appearing to be graph facts. Responses are synchronous, anonymous, and `no-store`. History, persistence, retrieval, canonical sense resolution, and graph feedback remain target work.
+The default executable does not inject canonical lexical content or retrieval dependencies. It therefore marks every learning assertion as generated, returns null canonical IDs, exposes empty evidence lists, sets `evidence_backed` to false, and prevents generated relations from appearing to be graph facts. Responses are synchronous, anonymous, and `no-store`.
 
-The default executable exposes `GET /health`, `GET /livez`, `GET /readyz`, `POST /translate`, and `POST /v1/lookups`. A host that explicitly injects a canonical `GraphService` also receives bounded public graph-read routes, but this executable does not inject one and has no production graph adapter. There is no authentication, persistence, vector index, canonical lexical content, history, private graph feedback overlay, or practice system in the default runtime. Liveness reports process availability without probing providers; readiness delegates to an injected dependency probe and is always ready in the current model-only runtime. The HTTP boundary applies a configured request-size limit, safe request IDs, redacted structured request tracing, and exact-origin CORS when configured. Provider telemetry exposes static boundary and outcome fields plus redacted in-process counters; it never records learner input, generated output, provider response bodies, credentials, or identity data.
+The crate also provides reusable, in-memory-testable foundations: version-pinned canonical entities and content-release state; deterministic candidate retrieval with a lexical-only fallback; bounded evidence-backed canonical-card and public snapshot-cache assembly; typed bounded graph traversal; private learner, feedback, and saved-layout state; and generic clock, public-ID, cache, idempotency, job-lifecycle, and redacted-metrics ports. These components are not wired into the default executable and do not introduce a production persistence backend, licensed content import or publication, authentication or session handling, a worker process, or default graph, history, feedback, layout, or practice behavior. The in-memory adapters support tests and local composition rather than durable production state.
+
+The crate also includes run-once durable-worker orchestration, a rebuildable public graph-topology snapshot cache, and a contract-tested OpenAPI document for default runtime routes. These remain composition foundations: no production worker process, persistent cache, database, vector index, or canonical content source is configured by default.
+
+The default executable wires `GET /health`, `GET /livez`, `GET /readyz`, `POST /translate`, and the model-only `POST /v1/lookups` path. A host may inject canonical lookup, lookup-job polling, or graph-read dependencies, but default startup does not register or use those optional capabilities. Liveness reports process availability without probing providers; readiness delegates to an injected dependency probe and is always ready in the current model-only runtime. The HTTP boundary applies a configured request-size limit, safe request IDs, redacted structured request tracing, and exact-origin CORS when configured. Provider telemetry exposes static boundary and outcome fields plus redacted in-process counters; it never records learner input, generated output, provider response bodies, credentials, or identity data.
 
 Related implemented contracts: [API](reference/transnet-api.md), [configuration](guides/configuration.md), and [development](guides/development.md).
 
