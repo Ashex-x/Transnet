@@ -1,6 +1,7 @@
 //! Deterministic in-memory adapters for application tests and local development.
 
 mod cache;
+mod canonical_sense_details;
 mod content_release;
 mod feedback;
 mod graph_repository;
@@ -14,6 +15,7 @@ mod repository;
 mod retriever;
 
 pub use cache::InMemoryCache;
+pub use canonical_sense_details::InMemoryCanonicalSenseDetailsRepository;
 pub use content_release::InMemoryContentReleaseRepository;
 pub use feedback::{InMemoryGraphFeedbackCatalog, InMemoryGraphFeedbackStore};
 pub use graph_repository::InMemoryGraphRepository;

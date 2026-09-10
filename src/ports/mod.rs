@@ -4,6 +4,8 @@
 pub mod cache;
 /// Canonical lexical repository interface.
 pub mod canonical_repository;
+/// Release-pinned canonical sense-details repository interface.
+pub mod canonical_sense_details_repository;
 /// UTC time source used by application and infrastructure code.
 pub mod clock;
 /// Atomic content-release staging, publication, rollback, and source-quarantine interface.

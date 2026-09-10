@@ -6,6 +6,8 @@ pub mod canonical_lookup;
 pub mod canonical_lookup_cache;
 /// Bounded deterministic canonical lookup-card assembly without HTTP or model generation.
 pub mod canonical_lookup_card;
+/// Release-pinned bounded canonical sense-detail reads without HTTP or model generation.
+pub mod canonical_sense_details;
 /// Content-release staging, validation, publication, rollback, and source quarantine.
 pub mod content_release;
 /// Private graph-feedback validation and projection orchestration.
