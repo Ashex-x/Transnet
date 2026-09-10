@@ -5,7 +5,8 @@ use std::collections::BTreeSet;
 use thiserror::Error;
 
 use super::canonical::{
-  CanonicalId, EvidenceConfidence, EvidenceId, LanguageTag, LexicalPartOfSpeech, ReleaseId,
+  CanonicalId, CanonicalValidationError, EvidenceConfidence, EvidenceId, LanguageTag,
+  LexicalPartOfSpeech, ReleaseId,
 };
 
 /// Default number of hops returned for a graph read.
@@ -71,6 +72,12 @@ pub enum GraphValidationError {
   /// A cursor issued for one graph content version was used with another version.
   #[error("graph cursor belongs to a different graph content version")]
   CursorContentMismatch,
+  /// A cursor issued with one normalized relation filter was used with another filter.
+  #[error("graph cursor belongs to a different relation filter")]
+  CursorFilterMismatch,
+  /// A direct-neighbor page did not reserve room for one root and one adjacent endpoint.
+  #[error("graph neighbor node limit must be between 2 and {MAX_GRAPH_NODE_LIMIT}")]
+  InvalidNeighborNodeLimit,
 }
 
 /// Kind of canonical entity represented by a graph node.
@@ -153,6 +160,15 @@ impl GraphNode {
 pub struct GraphEdgeId(String);
 
 impl GraphEdgeId {
+  /// Parses one stable stored or derived graph edge identifier.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when `value` is blank after trimming surrounding whitespace.
+  pub fn parse(value: impl AsRef<str>) -> Result<Self, CanonicalValidationError> {
+    Ok(Self(CanonicalId::new(value)?.to_string()))
+  }
+
   /// Creates the public ID of a feedback-enabled stored relation.
   pub fn stored(id: CanonicalId) -> Self {
     Self(id.to_string())
@@ -759,7 +775,7 @@ pub fn compare_graph_edge_ordering_keys(
 }
 
 /// Optional relation-type filter applied before node and edge limits.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct GraphFilter {
   /// Included relation types; an empty set includes every relation type.
   pub relation_types: BTreeSet<GraphRelationType>,
@@ -779,6 +795,8 @@ pub struct GraphCursor {
   pub root: GraphNodeKey,
   /// Content version against which the ordering was issued.
   pub content: GraphContentVersion,
+  /// Exact normalized relation filter against which the ordering was issued.
+  pub filter: GraphFilter,
   /// Last edge returned on the preceding page.
   pub after: GraphEdgeOrderingKey,
 }
@@ -861,7 +879,7 @@ impl GraphNeighborRequest {
   ///
   /// # Errors
   ///
-  /// Returns an error when `edge_limit` is outside the graph contract.
+  /// Returns an error when either limit cannot produce a complete direct-neighbor page.
   pub fn new(
     root: GraphNodeKey,
     node_limit: usize,
@@ -869,8 +887,8 @@ impl GraphNeighborRequest {
     filter: GraphFilter,
     cursor: Option<GraphCursor>,
   ) -> Result<Self, GraphValidationError> {
-    if !(1..=MAX_GRAPH_NODE_LIMIT).contains(&node_limit) {
-      return Err(GraphValidationError::InvalidNodeLimit);
+    if !(2..=MAX_GRAPH_NODE_LIMIT).contains(&node_limit) {
+      return Err(GraphValidationError::InvalidNeighborNodeLimit);
     }
     if !(1..=MAX_GRAPH_EDGE_LIMIT).contains(&edge_limit) {
       return Err(GraphValidationError::InvalidEdgeLimit);
@@ -953,6 +971,17 @@ mod tests {
       feedback_capabilities: BTreeSet::from([GraphFeedbackCapability::Accuracy]),
       ranking: ranking(9_000),
     }
+  }
+
+  #[test]
+  fn edge_id_parsing_accepts_stored_and_derived_public_identifiers() {
+    assert_eq!(
+      GraphEdgeId::parse("derived:scale:release-1:temperature:warm:hot")
+        .unwrap()
+        .as_str(),
+      "derived:scale:release-1:temperature:warm:hot"
+    );
+    assert!(GraphEdgeId::parse("   ").is_err());
   }
 
   #[test]
@@ -1060,6 +1089,14 @@ mod tests {
       MAX_GRAPH_NODE_LIMIT + 1,
       DEFAULT_GRAPH_EDGE_LIMIT,
       GraphFilter::default(),
+    )
+    .is_err());
+    assert!(GraphNeighborRequest::new(
+      key("root"),
+      1,
+      DEFAULT_GRAPH_EDGE_LIMIT,
+      GraphFilter::default(),
+      None,
     )
     .is_err());
     assert!(GraphNeighborRequest::new(

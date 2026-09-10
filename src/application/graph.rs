@@ -155,8 +155,9 @@ impl GraphService {
 
   /// Returns one deterministic, internally complete page of direct neighbor projections.
   ///
-  /// The cursor is tied to both the typed root and pinned content version. It resumes after the
-  /// last returned ordering key, so storage order can never affect page boundaries.
+  /// The cursor is tied to the typed root, pinned content version, and normalized relation filter.
+  /// It resumes after the last returned ordering key, so storage order can never affect page
+  /// boundaries.
   ///
   /// # Errors
   ///
@@ -172,6 +173,9 @@ impl GraphService {
       }
       if cursor.content != content {
         return Err(GraphValidationError::CursorContentMismatch.into());
+      }
+      if cursor.filter != request.filter {
+        return Err(GraphValidationError::CursorFilterMismatch.into());
       }
     }
 
@@ -210,7 +214,8 @@ impl GraphService {
         .count();
       if selected_nodes.len() + required_nodes > request.node_limit {
         limited_by_nodes = true;
-        continue;
+        has_remaining = true;
+        break;
       }
       selected_nodes.insert(edge.source.clone());
       selected_nodes.insert(edge.target.clone());
@@ -240,6 +245,7 @@ impl GraphService {
       complete_edges.last().map(|edge| GraphCursor {
         root: request.root.clone(),
         content: content.clone(),
+        filter: request.filter.clone(),
         after: edge.ordering_key(),
       })
     } else {
@@ -556,6 +562,90 @@ mod tests {
     assert_eq!(second.edges[0].id.as_str(), "edge-a");
     assert_eq!(third.edges[0].id.as_str(), "edge-b");
     assert!(third.next_cursor.is_none());
+  }
+
+  #[tokio::test]
+  async fn direct_neighbor_node_cap_pages_without_skipping_ranked_edges() {
+    let repository = InMemoryGraphRepository::new(content())
+      .with_node(node("root"))
+      .with_node(node("first"))
+      .with_node(node("second"))
+      .with_node(node("third"))
+      .with_relation(relation("root", "first", "edge-1", 9_000))
+      .with_relation(relation("root", "second", "edge-2", 8_000))
+      .with_relation(relation("root", "third", "edge-3", 7_000));
+    let service = service(repository);
+    let first = service
+      .neighbors(
+        GraphNeighborRequest::new(key("root"), 2, 200, GraphFilter::default(), None).unwrap(),
+      )
+      .await
+      .unwrap();
+    let second = service
+      .neighbors(
+        GraphNeighborRequest::new(
+          key("root"),
+          2,
+          200,
+          GraphFilter::default(),
+          first.next_cursor.clone(),
+        )
+        .unwrap(),
+      )
+      .await
+      .unwrap();
+    let third = service
+      .neighbors(
+        GraphNeighborRequest::new(
+          key("root"),
+          2,
+          200,
+          GraphFilter::default(),
+          second.next_cursor.clone(),
+        )
+        .unwrap(),
+      )
+      .await
+      .unwrap();
+
+    assert_eq!(first.edges[0].id.as_str(), "edge-1");
+    assert_eq!(second.edges[0].id.as_str(), "edge-2");
+    assert_eq!(third.edges[0].id.as_str(), "edge-3");
+    assert!(first.next_cursor.is_some());
+    assert!(second.next_cursor.is_some());
+    assert!(third.next_cursor.is_none());
+  }
+
+  #[tokio::test]
+  async fn direct_neighbor_cursor_rejects_a_changed_relation_filter() {
+    let repository = InMemoryGraphRepository::new(content())
+      .with_node(node("root"))
+      .with_node(node("first"))
+      .with_node(node("second"))
+      .with_relation(relation("root", "first", "edge-1", 9_000))
+      .with_relation(relation("root", "second", "edge-2", 8_000));
+    let service = service(repository);
+    let filter = GraphFilter {
+      relation_types: [GraphRelationType::Hypernym].into_iter().collect(),
+    };
+    let first = service
+      .neighbors(GraphNeighborRequest::new(key("root"), 2, 1, filter.clone(), None).unwrap())
+      .await
+      .unwrap();
+
+    let result = service
+      .neighbors(
+        GraphNeighborRequest::new(key("root"), 2, 1, GraphFilter::default(), first.next_cursor)
+          .unwrap(),
+      )
+      .await;
+
+    assert_eq!(
+      result,
+      Err(GraphReadError::Validation(
+        GraphValidationError::CursorFilterMismatch
+      ))
+    );
   }
 
   #[tokio::test]

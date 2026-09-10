@@ -2,7 +2,7 @@
 
 ## Status and compatibility
 
-`POST /v1/lookups` has an implemented model-only basic-core slice. All other endpoints in this document remain proposed. The implemented `GET /health`, `GET /livez`, `GET /readyz`, and `POST /translate` contracts remain in [Transnet HTTP API](transnet-api.md).
+`POST /v1/lookups` has an implemented model-only basic-core slice. `GET /v1/lookup-jobs/{job_id}` and the graph-read routes are implemented only when their explicit application dependencies are injected; the default process does not inject them, so those routes are absent. All other endpoints in this document remain proposed. The implemented `GET /health`, `GET /livez`, `GET /readyz`, and `POST /translate` contracts remain in [Transnet HTTP API](transnet-api.md).
 
 The implemented lookup does not yet have canonical lexical content, retrieval, persistence, or authentication. It returns synchronous anonymous results with `Cache-Control: no-store`; identifies every generated assertion; uses null canonical sense and relation IDs; exposes no evidence IDs; and reports `evidence_backed: false`. The richer evidence-backed shape below is the target contract that will replace these provisional gaps without inventing canonical data.
 
@@ -28,7 +28,7 @@ The server retains a scoped HMAC and normalized request hash for at least 24 hou
 
 ### Pagination and caching
 
-Mutable lists use opaque cursors. Graph and content reads expose `ETag`. Saved-layout replacements require `If-Match`.
+Mutable lists use opaque cursors. Content reads expose `ETag`; the implemented graph reads are `no-store` and use an opaque neighbor cursor. Saved-layout replacements require `If-Match`.
 
 Context-bearing and personalized responses use `Cache-Control: private`; context-bearing lookup envelopes use `no-store`. Shared caches contain only context-free canonical content and never lookup IDs or private fields.
 
@@ -47,10 +47,10 @@ Content responses identify the applicable schema, lexicon release, vector collec
 | `POST /v1/auth/refresh` | Session cookie | Rotate the refresh token |
 | `POST /v1/auth/logout` | Required | Revoke current or all sessions |
 | `POST /v1/lookups` | Optional | Implemented model-only learning card; evidence-backed retrieval remains proposed |
-| `GET /v1/lookup-jobs/{job_id}` | Owner or capability | Poll asynchronous generation |
+| `GET /v1/lookup-jobs/{job_id}` | Owner or capability | Implemented when a lookup-job store is injected; poll asynchronous generation |
 | `GET /v1/senses/{sense_id}` | Optional | Read a current sense card |
-| `GET /v1/graph` | Optional | Read a bounded graph for a typed root |
-| `GET /v1/graph/nodes/{node_kind}/{node_id}/neighbors` | Optional | Expand one typed graph node |
+| `GET /v1/graph` | None | Implemented when a graph service is injected; read a bounded graph for a typed root |
+| `GET /v1/graph/nodes/{node_kind}/{node_id}/neighbors` | None | Implemented when a graph service is injected; expand one typed graph node |
 | `POST /v1/graph-edges/{edge_id}/feedback` | Required | Append usefulness or accuracy feedback |
 | `GET /v1/history` | Required | Cursor-page private history |
 | `GET /v1/history/{lookup_id}` | Required | Reopen current content or a retained snapshot |
@@ -170,12 +170,23 @@ Expired jobs return `410 lookup_job_expired`. Raw query and context payloads are
 
 ## Graph reads
 
-`GET /v1/graph` accepts a typed `root_kind`, `root_id`, requested depth, relation filters, level filters, node cap, edge cap, and cursor. Basic core defaults to depth 1, at most 75 nodes and 200 edges, with a hard maximum depth of 2.
+The graph routes are registered only when the process injects a `GraphService`; this keeps the default model-only executable from implying that canonical graph content exists. They are public, canonical reads with `Cache-Control: no-store`, have no private feedback overlay, and never carry saved layout coordinates.
+
+`GET /v1/graph` requires `root_kind` (`sense`, `lexeme`, `construction`, or `scale`) and `root_id`. `root_id` is a nonblank opaque canonical identifier of at most 256 Unicode scalar values. Optional `depth`, `node_limit`, and `edge_limit` default to 1, 75, and 200; their inclusive ranges are 0 through 2, 1 through 75, and 1 through 200. `relation_types` is an optional comma-separated set of at most 21 supported snake-case relation types. Malformed query syntax and unknown query fields return `400 invalid_graph_request`; malformed identifiers and out-of-range limits return `422 invalid_graph_request`, without echoing request values.
+
+Supported `relation_types` values are `synonym`, `near_synonym`, `translation_equivalent`, `antonym`, `hypernym`, `hyponym`, `holonym`, `meronym`, `confusable_with`, `associated_with`, `inflection_of`, `has_inflection`, `derivationally_related_to`, `etymologically_derived_from`, `etymological_source_of`, `construction_member`, `has_construction_member`, `scale_contains`, `member_of_scale`, `lower_degree`, and `higher_degree`.
+
+`GET /v1/graph/nodes/{node_kind}/{node_id}/neighbors` expands only one typed node; its path parameters use the same kind and identifier constraints as `root_kind` and `root_id`. Its `node_limit` is 2 through 75 so every page can contain the root plus at least one adjacent endpoint; `edge_limit` and `relation_types` use the same limits as the full graph read. It accepts an opaque `cursor` of at most 4,096 UTF-8 bytes from the prior neighbor response. The cursor is integrity-protected and bound to the typed root, active graph content version, exact normalized relation filter, and prior ordering key; it must be treated as an opaque string. A cursor for another root, a stale content version, a changed relation filter, or a modified cursor returns `422 invalid_graph_request`.
 
 ```json
 {
   "schema_version": "1.0",
   "root": {"kind": "sense", "id": "01JEXAMPLEENGLISHSENSE00"},
+  "content_version": {
+    "release_id": "01JLEXICONRELEASE000000000",
+    "ranking_version": "graph-rank-v1",
+    "community_aggregate_version": "community-v42"
+  },
   "nodes": [
     {
       "id": "01JEXAMPLEENGLISHSENSE00",
@@ -198,29 +209,65 @@ Expired jobs return `410 lookup_job_expired`. Raw query and context payloads are
   ],
   "edges": [
     {
-      "id": "derived:temperature-scale:3:4",
-      "source": "01JEXAMPLEENGLISHSENSE00",
-      "target": "01JEXAMPLESCORCHINGSENSE0",
-      "type": "higher_degree",
-      "directed": true,
+      "id": "derived:scale:01JLEXICONRELEASE000000000:01JEXAMPLETEMPERATURESCALE:01JEXAMPLEENGLISHSENSE00:01JEXAMPLESCORCHINGSENSE0",
+      "source": {"kind": "sense", "id": "01JEXAMPLEENGLISHSENSE00"},
+      "target": {"kind": "sense", "id": "01JEXAMPLESCORCHINGSENSE0"},
+      "relation_type": "higher_degree",
+      "direction": {
+        "directed": true,
+        "canonical_projection": {
+          "kind": "scale_adjacency",
+          "scale_id": "01JEXAMPLETEMPERATURESCALE"
+        }
+      },
       "relation_version": null,
       "feedback_capabilities": [],
-      "display_rank": 0.84,
-      "ranking_version": "graph-rank-v1"
+      "evidence": {
+        "evidence_ids": ["ev_scale_01"],
+        "confidence": "high"
+      },
+      "scope": {
+        "dialect": null,
+        "domain": "weather",
+        "register": null,
+        "note": null
+      },
+      "ranking": {
+        "display_rank_basis_points": 8400,
+        "components": {
+          "evidence_basis_points": 9000,
+          "community_basis_points": null,
+          "pedagogical_basis_points": 7000
+        },
+        "version": "graph-rank-v1"
+      }
     }
   ],
-  "lexicon_release": "01JLEXICONRELEASE000000000",
-  "ranking_version": "graph-rank-v1",
-  "community_aggregate_version": "community-v42",
-  "personal_overlay_version": null,
+  "relation_list": [
+    {
+      "edge_id": "derived:scale:01JLEXICONRELEASE000000000:01JEXAMPLETEMPERATURESCALE:01JEXAMPLEENGLISHSENSE00:01JEXAMPLESCORCHINGSENSE0",
+      "source": {"kind": "sense", "id": "01JEXAMPLEENGLISHSENSE00", "label": "hot"},
+      "relation_type": "higher_degree",
+      "direction": {
+        "directed": true,
+        "canonical_projection": {
+          "kind": "scale_adjacency",
+          "scale_id": "01JEXAMPLETEMPERATURESCALE"
+        }
+      },
+      "target": {"kind": "sense", "id": "01JEXAMPLESCORCHINGSENSE0", "label": "scorching"}
+    }
+  ],
   "truncated": false,
   "next_cursor": null
 }
 ```
 
-All edge endpoints are present in `nodes`. Stored feedback-enabled edges use opaque public IDs and a non-null relation version. Derived edges use namespaced IDs, have a null relation version, and advertise no feedback capability.
+Every edge endpoint is present in `nodes`. `direction.canonical_projection` is `stored`, `inverse_projection`, `scale_adjacency`, or `scale_membership`; clients retain it rather than attempting to infer canonical direction from a label. Stored feedback-enabled edges use opaque public IDs and a non-null relation version. Derived edges use namespaced IDs, have a null relation version, and advertise no feedback capability. Scores are basis points, not probabilities or semantic truth, and are comparable only within the returned ranking version.
 
-The graph response contains topology and optional deterministic layout hints, never authoritative coordinates. Clients incrementally expand nodes instead of requesting an unrestricted component.
+`relation_list` duplicates each ranked edge in the same deterministic order with typed source and target labels, so an accessible client can present relationships without relying on graph coordinates or a 3D renderer. The response contains canonical topology only; it has no layout hints or authoritative coordinates. Clients incrementally expand nodes instead of requesting an unrestricted component.
+
+An absent typed root returns `404 graph_root_not_found`. A graph dependency failure or internally inconsistent graph read returns `503 graph_unavailable` without internal storage details.
 
 ## POST /v1/graph-edges/{edge_id}/feedback
 

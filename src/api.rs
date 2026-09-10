@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use axum::{
-  extract::{rejection::JsonRejection, DefaultBodyLimit, Request, State},
+  extract::{rejection::JsonRejection, DefaultBodyLimit, MatchedPath, Request, State},
   http::{header, HeaderName, Method, StatusCode},
   middleware,
   response::{IntoResponse, Response},
@@ -19,7 +19,8 @@ use tracing::Level;
 
 use crate::{
   application::{
-    canonical_lookup::CanonicalLookupService, lookup::LookupService, lookup_job::LookupJobService,
+    canonical_lookup::CanonicalLookupService, graph::GraphService, lookup::LookupService,
+    lookup_job::LookupJobService,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
   ports::{
@@ -46,6 +47,8 @@ pub struct AppState {
   lookup: Option<Arc<LookupService>>,
   canonical_lookup: Option<Arc<CanonicalLookupService>>,
   lookup_jobs: Option<Arc<LookupJobService>>,
+  graph: Option<Arc<GraphService>>,
+  graph_cursor_key: Arc<[u8]>,
   readiness: Arc<dyn Readiness>,
 }
 
@@ -57,6 +60,8 @@ impl AppState {
       lookup: None,
       canonical_lookup: None,
       lookup_jobs: None,
+      graph: None,
+      graph_cursor_key: Arc::from(ulid::Ulid::new().to_string().into_bytes()),
       readiness: Arc::new(AlwaysReady),
     }
   }
@@ -85,6 +90,15 @@ impl AppState {
     self
   }
 
+  /// Adds the canonical graph service used by the conditional graph-read routes.
+  ///
+  /// Without this injected dependency, graph routes are intentionally not registered so the
+  /// default model-only runtime cannot imply that canonical graph content is available.
+  pub fn with_graph_service(mut self, service: Arc<GraphService>) -> Self {
+    self.graph = Some(service);
+    self
+  }
+
   /// Adds the dependency probe used by `GET /readyz`.
   pub fn with_readiness(mut self, readiness: Arc<dyn Readiness>) -> Self {
     self.readiness = readiness;
@@ -99,8 +113,20 @@ impl AppState {
     self.canonical_lookup.as_ref()
   }
 
+  pub(crate) fn graph_service(&self) -> Option<&Arc<GraphService>> {
+    self.graph.as_ref()
+  }
+
+  pub(crate) fn graph_cursor_key(&self) -> &[u8] {
+    &self.graph_cursor_key
+  }
+
   fn has_lookup_job_service(&self) -> bool {
     self.lookup_jobs.is_some()
+  }
+
+  fn has_graph_service(&self) -> bool {
+    self.graph.is_some()
   }
 }
 
@@ -146,7 +172,10 @@ fn build_router(state: AppState, max_request_body_bytes: usize, cors: Option<Cor
     .route("/livez", get(livez))
     .route("/readyz", get(readyz))
     .route("/translate", post(translate))
-    .nest("/v1", v1::router(state.has_lookup_job_service()))
+    .nest(
+      "/v1",
+      v1::router(state.has_lookup_job_service(), state.has_graph_service()),
+    )
     .with_state(state)
     .layer(DefaultBodyLimit::max(max_request_body_bytes))
     .layer(RequestBodyLimitLayer::new(max_request_body_bytes))
@@ -164,17 +193,25 @@ fn build_router(state: AppState, max_request_body_bytes: usize, cors: Option<Cor
             .extensions()
             .get::<RequestId>()
             .map_or("missing", RequestId::as_str);
+          let route = trace_route(request);
           tracing::info_span!(
             "http.request",
             request_id = %request_id,
             method = %request.method(),
-            path = %request.uri().path(),
+            route = %route,
           )
         })
         .on_response(DefaultOnResponse::new().level(Level::INFO))
         .on_failure(DefaultOnFailure::new().level(Level::WARN)),
     )
     .layer(middleware::from_fn(request_id::propagate_request_id))
+}
+
+fn trace_route<B>(request: &Request<B>) -> &str {
+  request
+    .extensions()
+    .get::<MatchedPath>()
+    .map_or("unmatched", MatchedPath::as_str)
 }
 
 fn cors_layer(config: &HttpConfig) -> Result<Option<CorsLayer>, HttpConfigError> {
@@ -271,4 +308,70 @@ fn error(status: StatusCode, message: impl Into<String>) -> Response {
     }),
   )
     .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+  use std::sync::{Arc, Mutex};
+
+  use axum::{
+    body::Body,
+    extract::{Request as AxumRequest, State},
+    http::{Request, StatusCode},
+    middleware,
+    response::Response,
+    routing::get,
+    Router,
+  };
+  use tower::ServiceExt;
+
+  use super::trace_route;
+
+  #[test]
+  fn trace_route_never_falls_back_to_a_raw_unmatched_path() {
+    let request =
+      Request::get("/v1/graph/nodes/sense/source-text-that-must-not-be-logged/neighbors")
+        .body(())
+        .unwrap();
+
+    assert_eq!(trace_route(&request), "unmatched");
+  }
+
+  #[tokio::test]
+  async fn trace_route_uses_the_matched_template_for_dynamic_graph_identifiers() {
+    let recorded = Arc::new(Mutex::new(None));
+    let router = Router::new()
+      .route(
+        "/v1/graph/nodes/:node_kind/:node_id/neighbors",
+        get(|| async { StatusCode::OK }),
+      )
+      .layer(middleware::from_fn_with_state(
+        recorded.clone(),
+        capture_route,
+      ));
+
+    let response = router
+      .oneshot(
+        Request::get("/v1/graph/nodes/sense/source-text-that-must-not-be-logged/neighbors")
+          .body(Body::empty())
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+      recorded.lock().unwrap().as_deref(),
+      Some("/v1/graph/nodes/:node_kind/:node_id/neighbors")
+    );
+  }
+
+  async fn capture_route(
+    State(recorded): State<Arc<Mutex<Option<String>>>>,
+    request: AxumRequest,
+    next: middleware::Next,
+  ) -> Response {
+    *recorded.lock().unwrap() = Some(trace_route(&request).to_string());
+    next.run(request).await
+  }
 }
