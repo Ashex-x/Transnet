@@ -15,7 +15,7 @@ use tower::ServiceExt;
 use transnet::{
   adapters::{
     clock::FixedClock,
-    in_memory::InMemoryCache,
+    in_memory::{InMemoryCache, InMemoryMetricsRecorder},
     in_memory_retrieval::{InMemoryRetrievalAdapter, InMemoryVectorAvailability},
   },
   app_router,
@@ -131,7 +131,7 @@ fn translation_service() -> TranslationService {
   let provider = ProviderConfig {
     base_url: "http://127.0.0.1:1/v1".to_string(),
     model: "unused".to_string(),
-    api_key: "unused".to_string(),
+    api_key: "unused".to_string().into(),
   };
   TranslationService::new(
     TranslationConfig {
@@ -272,6 +272,35 @@ async fn injected_canonical_lookup_returns_separated_evidence_backed_fields() {
         )
     })
   }));
+}
+
+#[tokio::test]
+async fn canonical_lookup_short_circuits_before_model_only_metrics() {
+  let canonical = in_memory_canonical_service(
+    InMemoryRetrievalAdapter::new(content())
+      .with_candidate(candidate())
+      .with_vector_match(matching_vector()),
+  );
+  let recorder = InMemoryMetricsRecorder::new();
+  let response = app_router(
+    AppState::new(translation_service())
+      .with_canonical_lookup(canonical)
+      .with_metrics_recorder(Arc::new(recorder.clone())),
+  )
+  .oneshot(
+    Request::post("/v1/lookups")
+      .header(header::CONTENT_TYPE, "application/json")
+      .body(Body::from(
+        r#"{"query":"hotter","source_language":"en","history_mode":"incognito"}"#,
+      ))
+      .unwrap(),
+  )
+  .await
+  .unwrap();
+
+  assert_eq!(response.status(), StatusCode::OK);
+  tokio::task::yield_now().await;
+  assert!(recorder.events().await.is_empty());
 }
 
 #[tokio::test]

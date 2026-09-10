@@ -14,6 +14,7 @@ use crate::{
     request_id::RequestId,
     AppState,
   },
+  domain::observability::{LookupStage, MetricEvent, MetricOutcome, ModelValidationOutcome},
   domain::{
     canonical::{
       EvidenceConfidence, EvidenceKind, EvidenceUse, FormKind, LanguageTag, LexicalPartOfSpeech,
@@ -337,9 +338,19 @@ pub(crate) async fn lookup(
   let Json(request) = match payload {
     Ok(request) => request,
     Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
-      return problem::payload_too_large(&request_id)
+      record_lookup_stage(
+        &state,
+        LookupStage::RequestValidation,
+        MetricOutcome::Rejected,
+      );
+      return problem::payload_too_large(&request_id);
     }
     Err(_) => {
+      record_lookup_stage(
+        &state,
+        LookupStage::RequestValidation,
+        MetricOutcome::Rejected,
+      );
       return problem::response(
         StatusCode::BAD_REQUEST,
         "invalid_json",
@@ -348,11 +359,16 @@ pub(crate) async fn lookup(
         &request_id,
         false,
         Vec::new(),
-      )
+      );
     }
   };
 
   if !request.target_language.eq_ignore_ascii_case("en") {
+    record_lookup_stage(
+      &state,
+      LookupStage::RequestValidation,
+      MetricOutcome::Rejected,
+    );
     return validation_problem(
       TranslationValidationError {
         field: "target_language",
@@ -371,7 +387,14 @@ pub(crate) async fn lookup(
     request.learner_level.map(Into::into),
   ) {
     Ok(input) => input,
-    Err(error) => return validation_problem(error, &request_id),
+    Err(error) => {
+      record_lookup_stage(
+        &state,
+        LookupStage::RequestValidation,
+        MetricOutcome::Rejected,
+      );
+      return validation_problem(error, &request_id);
+    }
   };
 
   if let Some(service) = state.canonical_lookup_service() {
@@ -395,6 +418,12 @@ pub(crate) async fn lookup(
     }
   }
 
+  record_lookup_stage(
+    &state,
+    LookupStage::RequestValidation,
+    MetricOutcome::Succeeded,
+  );
+
   let Some(service) = &state.lookup else {
     return problem::response(
       StatusCode::SERVICE_UNAVAILABLE,
@@ -410,6 +439,11 @@ pub(crate) async fn lookup(
   match service.lookup(&input).await {
     Ok(result) => {
       let response = build_response(request, input, result);
+      record_lookup_stage(
+        &state,
+        LookupStage::ResponseAssembly,
+        MetricOutcome::Succeeded,
+      );
       problem::no_store((StatusCode::OK, Json(response)).into_response())
     }
     Err(LearningModelError::Unavailable) => problem::response(
@@ -421,16 +455,32 @@ pub(crate) async fn lookup(
       true,
       Vec::new(),
     ),
-    Err(LearningModelError::InvalidOutput) => problem::response(
-      StatusCode::BAD_GATEWAY,
-      "invalid_model_output",
-      "Invalid model output",
-      "The learning model could not satisfy the structured output contract.",
-      &request_id,
-      true,
-      Vec::new(),
-    ),
+    Err(LearningModelError::InvalidOutput) => {
+      record_lookup_event(
+        &state,
+        MetricEvent::ModelValidation {
+          outcome: ModelValidationOutcome::Rejected,
+        },
+      );
+      problem::response(
+        StatusCode::BAD_GATEWAY,
+        "invalid_model_output",
+        "Invalid model output",
+        "The learning model could not satisfy the structured output contract.",
+        &request_id,
+        true,
+        Vec::new(),
+      )
+    }
   }
+}
+
+fn record_lookup_stage(state: &AppState, stage: LookupStage, outcome: MetricOutcome) {
+  record_lookup_event(state, MetricEvent::LookupStage { stage, outcome });
+}
+
+fn record_lookup_event(state: &AppState, event: MetricEvent) {
+  state.dispatch_lookup_metric(event);
 }
 
 fn build_response(
