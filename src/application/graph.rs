@@ -8,11 +8,15 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-  domain::graph::{
-    compare_graph_edge_ordering_keys, compare_graph_edges, GraphContentVersion, GraphCursor,
-    GraphEdge, GraphEdgeId, GraphEdgeOrderingKey, GraphEdgeOrigin, GraphFilter,
-    GraphNeighborRequest, GraphNode, GraphNodeKey, GraphNodeKind, GraphReadRequest,
-    GraphReadResult, GraphValidationError, MAX_GRAPH_EDGE_LIMIT,
+  application::observability::ClosedMetricsDispatcher,
+  domain::{
+    graph::{
+      compare_graph_edge_ordering_keys, compare_graph_edges, GraphContentVersion, GraphCursor,
+      GraphEdge, GraphEdgeId, GraphEdgeOrderingKey, GraphEdgeOrigin, GraphFilter,
+      GraphNeighborRequest, GraphNode, GraphNodeKey, GraphNodeKind, GraphReadRequest,
+      GraphReadResult, GraphValidationError, MAX_GRAPH_EDGE_LIMIT,
+    },
+    observability::{GraphOperation, MetricEvent, MetricOutcome},
   },
   ports::graph_repository::{
     GraphAdjacency, GraphAdjacencyRequest, GraphNeighborPage, GraphNeighborPageRequest,
@@ -38,12 +42,28 @@ pub enum GraphReadError {
 #[derive(Clone)]
 pub struct GraphService {
   repository: Arc<dyn GraphRepository>,
+  metrics: Option<Arc<ClosedMetricsDispatcher>>,
 }
 
 impl GraphService {
   /// Creates a graph service from an explicit immutable-topology repository port.
   pub fn new(repository: Arc<dyn GraphRepository>) -> Self {
-    Self { repository }
+    Self {
+      repository,
+      metrics: None,
+    }
+  }
+
+  /// Adds bounded, response-neutral delivery for full and neighbor graph-read outcomes.
+  ///
+  /// The service reports only the closed traversal and neighbor-expansion operation categories.
+  /// A truncated but complete bounded result is degraded; malformed or mismatched requests are
+  /// rejected; repository failures are failed. A missing root has no matching closed outcome and
+  /// is deliberately omitted. Cache hit or miss is intentionally not emitted because the catalog
+  /// has no cache-status dimension.
+  pub fn with_metrics_dispatcher(mut self, dispatcher: Arc<ClosedMetricsDispatcher>) -> Self {
+    self.metrics = Some(dispatcher);
+    self
   }
 
   /// Resolves the active immutable public graph content tuple for a new read.
@@ -70,6 +90,12 @@ impl GraphService {
   /// Returns an error when the root is absent or the graph repository cannot provide consistent
   /// immutable content.
   pub async fn read(&self, request: GraphReadRequest) -> Result<GraphReadResult, GraphReadError> {
+    let result = self.read_inner(request).await;
+    self.record_graph_outcome(GraphOperation::Traversal, &result);
+    result
+  }
+
+  async fn read_inner(&self, request: GraphReadRequest) -> Result<GraphReadResult, GraphReadError> {
     let content = self.repository.active_graph_content().await?;
     let root = self.load_root(&content, &request.root).await?;
     let mut nodes = BTreeMap::from([(root.key.clone(), root)]);
@@ -178,6 +204,15 @@ impl GraphService {
   ///
   /// Returns an error for a foreign cursor, absent root, or inconsistent repository result.
   pub async fn neighbors(
+    &self,
+    request: GraphNeighborRequest,
+  ) -> Result<GraphReadResult, GraphReadError> {
+    let result = self.neighbors_inner(request).await;
+    self.record_graph_outcome(GraphOperation::NeighborExpansion, &result);
+    result
+  }
+
+  async fn neighbors_inner(
     &self,
     request: GraphNeighborRequest,
   ) -> Result<GraphReadResult, GraphReadError> {
@@ -333,6 +368,24 @@ impl GraphService {
     let raw_records = adjacency.relations.len() + adjacency.scales.len();
     let edges = project_adjacency(adjacency, content, node, filter)?;
     Ok((edges, raw_records >= record_limit))
+  }
+
+  fn record_graph_outcome(
+    &self,
+    operation: GraphOperation,
+    result: &Result<GraphReadResult, GraphReadError>,
+  ) {
+    let Some(metrics) = &self.metrics else {
+      return;
+    };
+    let outcome = match result {
+      Ok(result) if result.truncated => MetricOutcome::Degraded,
+      Ok(_) => MetricOutcome::Succeeded,
+      Err(GraphReadError::Validation(_)) => MetricOutcome::Rejected,
+      Err(GraphReadError::Repository(_)) => MetricOutcome::Failed,
+      Err(GraphReadError::RootNotFound) => return,
+    };
+    metrics.dispatch(MetricEvent::GraphOperation { operation, outcome });
   }
 }
 

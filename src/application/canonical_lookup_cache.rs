@@ -69,6 +69,9 @@ impl CanonicalLookupSnapshotCacheResult {
 /// Failure that prevents public canonical retrieval from safely producing a snapshot.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum CanonicalLookupSnapshotCacheError {
+  /// The authoritative active-content pointer could not select a usable immutable tuple.
+  #[error(transparent)]
+  ContentResolution(CanonicalRetrievalError),
   /// The authoritative canonical retrieval path could not produce a public fallback.
   #[error(transparent)]
   Retrieval(#[from] CanonicalRetrievalError),
@@ -89,7 +92,9 @@ impl CanonicalLookupSnapshotCacheError {
   pub fn is_retryable(&self) -> bool {
     matches!(
       self,
-      Self::Retrieval(CanonicalRetrievalError::Repository(
+      Self::ContentResolution(CanonicalRetrievalError::Repository(
+        crate::ports::canonical_repository::CanonicalRepositoryError::Unavailable
+      )) | Self::Retrieval(CanonicalRetrievalError::Repository(
         crate::ports::canonical_repository::CanonicalRepositoryError::Unavailable
       ))
     )
@@ -99,11 +104,11 @@ impl CanonicalLookupSnapshotCacheError {
 /// Caches rebuildable public canonical-card snapshots while refusing private lookup influences.
 ///
 /// Cache reads and writes are strictly best effort. A miss or cache-adapter unavailability invokes
-/// the canonical retrieval service; only a retrieval or public-contract failure is returned as an
-/// error. A lexical-only fallback is intentionally not cached, so vector recovery can improve the
-/// next lookup. When eligibility is a bypass, this service still performs the same pinned public
-/// canonical retrieval but does not touch shared cache state; callers may apply their private or
-/// personalized projection only after receiving that uncached base snapshot.
+/// the canonical retrieval service; only active-content resolution, retrieval, or public-contract
+/// failures are returned as errors. A lexical-only fallback is intentionally not cached, so vector
+/// recovery can improve the next lookup. When eligibility is a bypass, this service still performs
+/// the same pinned public canonical retrieval but does not touch shared cache state; callers may
+/// apply their private or personalized projection only after receiving that uncached base snapshot.
 #[derive(Clone)]
 pub struct CanonicalLookupSnapshotCacheService {
   retrieval: Arc<CanonicalRetrievalService>,
@@ -143,15 +148,19 @@ impl CanonicalLookupSnapshotCacheService {
   ///
   /// # Errors
   ///
-  /// Returns an error only when the authoritative canonical retrieval path or public snapshot
-  /// contract cannot produce a safe result. Cache misses and cache adapter failures degrade to
-  /// retrieval rather than becoming lookup failures.
+  /// Returns an error only when the authoritative active-content pointer, canonical retrieval path,
+  /// or public snapshot contract cannot produce a safe result. Cache misses and cache adapter
+  /// failures degrade to retrieval rather than becoming lookup failures.
   pub async fn lookup(
     &self,
     request: &PublicCanonicalLookupRequest,
     eligibility: CanonicalLookupCacheEligibility,
   ) -> Result<CanonicalLookupSnapshotCacheResult, CanonicalLookupSnapshotCacheError> {
-    let content = self.retrieval.active_content_version().await?;
+    let content = self
+      .retrieval
+      .active_content_version()
+      .await
+      .map_err(CanonicalLookupSnapshotCacheError::ContentResolution)?;
     let key = CanonicalLookupSnapshotKey::new(request, content)?;
     if let CanonicalLookupCacheEligibility::Bypass(reason) = eligibility {
       let snapshot = self.rebuild_snapshot(request, &key).await?;

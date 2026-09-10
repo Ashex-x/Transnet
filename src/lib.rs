@@ -28,6 +28,7 @@ pub use api::{
   MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES,
 };
 pub use application::canonical_lookup::{CanonicalLookupError, CanonicalLookupService};
+pub use application::observability::{ClosedMetricsDispatcher, MAX_IN_FLIGHT_METRIC_RECORDS};
 pub use config::{
   AppConfig, HttpConfig, HttpConfigError, ProviderApiKey, ProviderConfig, ProviderResilienceConfig,
   ProviderResilienceConfigs, TranslationConfig,

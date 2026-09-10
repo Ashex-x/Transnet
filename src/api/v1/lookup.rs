@@ -480,7 +480,7 @@ fn record_lookup_stage(state: &AppState, stage: LookupStage, outcome: MetricOutc
 }
 
 fn record_lookup_event(state: &AppState, event: MetricEvent) {
-  state.dispatch_lookup_metric(event);
+  state.dispatch_metric(event);
 }
 
 fn build_response(

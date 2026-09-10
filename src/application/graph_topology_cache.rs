@@ -17,7 +17,10 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-  application::graph::{GraphReadError, GraphService},
+  application::{
+    graph::{GraphReadError, GraphService},
+    observability::ClosedMetricsDispatcher,
+  },
   domain::graph::{
     compare_graph_edges, GraphContentVersion, GraphFilter, GraphNodeKey, GraphReadRequest,
     GraphReadResult, GraphValidationError,
@@ -358,6 +361,16 @@ impl GraphTopologySnapshotCacheService {
       clock,
       ttl,
     })
+  }
+
+  /// Returns this cache composition with metrics attached to its authoritative graph service.
+  pub fn with_metrics_dispatcher(mut self, dispatcher: Arc<ClosedMetricsDispatcher>) -> Self {
+    self.graph = Arc::new(
+      (*self.graph)
+        .clone()
+        .with_metrics_dispatcher(dispatcher),
+    );
+    self
   }
 
   /// Reads a bounded public graph topology through a version-pinned shared snapshot cache.
