@@ -8,7 +8,7 @@ The process reads `config/transnet.toml` relative to the Cargo manifest, indepen
 
 `[translation]` configures the Unicode-character routing boundary plus legacy defaults for a provider's per-attempt timeout, retry count after the first attempt, and retry delay. Provider-specific overrides take precedence.
 
-`[gemma4]` and `[translate_gemma]` each configure an OpenAI-compatible `base_url`, `model`, and `api_key`. Defaults target Gemma 4 on port 18011 and TranslateGemma on port 18007. Real credentials must be provisioned without committing them to Git.
+`[gemma4]` and `[translate_gemma]` each configure an OpenAI-compatible `base_url`, `model`, and `api_key`. Defaults target Gemma 4 on port 18011 and TranslateGemma on port 18007. Real credentials must be provisioned without committing them to Git; parsed credentials are redacted from Rust `Debug` diagnostics and are used only for outbound bearer authentication.
 
 `[provider_resilience.gemma4]` and `[provider_resilience.translate_gemma]` configure independent provider bounds. `timeout_seconds`, `max_retries`, and `retry_delay_ms` are optional overrides of `[translation]`; `max_retry_delay_ms` caps a provider-supplied `Retry-After` delay, `max_concurrent_requests` is a fail-fast bulkhead, `circuit_failure_threshold` is the number of consecutive transient logical-call failures that opens the circuit, and `circuit_open_ms` is the open interval before one half-open probe. Omitted tables use the Rust defaults of 8 concurrent attempts, a threshold of 5, a 30-second open interval, and a five-second retry-delay cap; the checked-in TranslateGemma policy tightens concurrency to 4.
 

@@ -16,7 +16,7 @@ fn app() -> axum::Router {
   let provider = ProviderConfig {
     base_url: "http://127.0.0.1:1/v1".to_string(),
     model: "unused".to_string(),
-    api_key: "unused".to_string(),
+    api_key: "unused".into(),
   };
   let service = TranslationService::new(
     TranslationConfig {
@@ -78,7 +78,7 @@ async fn app_with_provider() -> axum::Router {
   let provider = ProviderConfig {
     base_url: format!("http://{address}/v1"),
     model: "Gemma4".to_string(),
-    api_key: "test".to_string(),
+    api_key: "test".into(),
   };
   let translation = TranslationConfig {
     long_text_chars: 4000,

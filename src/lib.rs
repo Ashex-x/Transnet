@@ -27,7 +27,7 @@ pub use api::{
   Readiness,
 };
 pub use config::{
-  AppConfig, HttpConfig, HttpConfigError, ProviderConfig, ProviderResilienceConfig,
+  AppConfig, HttpConfig, HttpConfigError, ProviderApiKey, ProviderConfig, ProviderResilienceConfig,
   ProviderResilienceConfigs, TranslationConfig,
 };
 pub use provider::{TranslationError, TranslationProviderMetrics, TranslationService};
