@@ -2,6 +2,8 @@
 
 /// Canonical lexical entities, source permissions, and evidence.
 pub mod canonical;
+/// Public-only canonical lookup snapshot cache contracts and privacy boundaries.
+pub mod canonical_lookup_cache;
 /// Immutable content-release staging, validation, publication, and rollback invariants.
 pub mod content_release;
 /// Version-pinned private usefulness and accuracy feedback values.

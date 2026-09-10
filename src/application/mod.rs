@@ -1,5 +1,7 @@
 //! Application use cases.
 
+/// Public canonical lookup snapshot caching with private-input bypasses.
+pub mod canonical_lookup_cache;
 /// Content-release staging, validation, publication, rollback, and source quarantine.
 pub mod content_release;
 /// Private graph-feedback validation and projection orchestration.

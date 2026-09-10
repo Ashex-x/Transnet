@@ -68,6 +68,17 @@ impl CanonicalRetrievalService {
     }
   }
 
+  /// Resolves the immutable content tuple currently selected for new canonical lookups.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when the authoritative canonical repository cannot read its active pointer.
+  pub async fn active_content_version(
+    &self,
+  ) -> Result<ActiveContentVersion, CanonicalRetrievalError> {
+    Ok(self.repository.active_content_version().await?)
+  }
+
   /// Retrieves canonical candidates and falls back to lexical-only results when vectors fail.
   ///
   /// The service never calls a model. A repository failure remains an error because it is the
@@ -81,7 +92,25 @@ impl CanonicalRetrievalService {
     &self,
     request: RetrievalRequest,
   ) -> Result<RetrievalOutcome, CanonicalRetrievalError> {
-    let content = self.repository.active_content_version().await?;
+    let content = self.active_content_version().await?;
+    self.retrieve_with_content(request, content).await
+  }
+
+  /// Retrieves candidates against an already selected immutable content tuple.
+  ///
+  /// This method is intended for callers that must make the content tuple part of an external
+  /// consistency boundary, such as a public snapshot cache key. The supplied tuple is used for
+  /// every lexical and vector request; it is not replaced by a later active-pointer read.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when a required canonical repository read fails. Vector failures retain the
+  /// same lexical-only degradation behavior as [`Self::retrieve`].
+  pub async fn retrieve_with_content(
+    &self,
+    request: RetrievalRequest,
+    content: ActiveContentVersion,
+  ) -> Result<RetrievalOutcome, CanonicalRetrievalError> {
     let lexical_request = LexicalSearchRequest {
       retrieval: request.clone(),
       content: content.clone(),
