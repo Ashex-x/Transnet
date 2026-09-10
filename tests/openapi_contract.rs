@@ -26,7 +26,7 @@ fn provider_config(base_url: String) -> ProviderConfig {
   ProviderConfig {
     base_url,
     model: "test-model".to_string(),
-    api_key: "test-key".to_string(),
+    api_key: "test-key".to_string().into(),
   }
 }
 
