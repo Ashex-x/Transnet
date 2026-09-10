@@ -4,6 +4,8 @@
 pub mod content_release;
 /// Typed bounded canonical graph reads and neighbor expansion.
 pub mod graph;
+/// Private learner state and privacy-plan orchestration.
+pub mod learner_state;
 /// Structured lookup orchestration.
 pub mod lookup;
 /// Private lookup-job lifecycle and deadline orchestration.

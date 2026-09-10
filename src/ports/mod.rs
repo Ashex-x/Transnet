@@ -14,6 +14,8 @@ pub mod durable_job;
 pub mod graph_repository;
 /// Scoped idempotency reservation and response-storage interface.
 pub mod idempotency;
+/// Private learner-profile, history, saved-vocabulary, and inventory interfaces.
+pub mod learner_state;
 /// Structured learning-model interface.
 pub mod learning_model;
 /// Private lookup-job lifecycle and polling interface.
