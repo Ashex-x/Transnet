@@ -1,0 +1,640 @@
+//! `POST /v1/lookups` transport contract.
+
+use axum::{
+  extract::{rejection::JsonRejection, State},
+  http::{header, HeaderValue, StatusCode},
+  response::{IntoResponse, Response},
+  Json,
+};
+use serde::{Deserialize, Serialize};
+use ulid::Ulid;
+
+use crate::{
+  api::AppState,
+  domain::translation::{
+    CefrLevel, Confidence, EnglishDialect, EnglishEntry, PartOfSpeech, RelationKind,
+    TranslationInput, TranslationValidationError, UsageNoteKind,
+  },
+  ports::learning_model::LearningModelError,
+};
+
+/// Public request for a model-backed learning lookup.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct LookupRequest {
+  query: String,
+  #[serde(default = "default_source_language")]
+  source_language: String,
+  #[serde(default = "default_target_language")]
+  target_language: String,
+  context: Option<String>,
+  #[serde(default = "default_explanation_language")]
+  explanation_language: String,
+  #[serde(default)]
+  english_dialect: ApiEnglishDialect,
+  learner_level: Option<ApiCefrLevel>,
+  #[serde(default)]
+  detail: Detail,
+  include: Option<Vec<IncludeSection>>,
+  #[serde(default)]
+  history_mode: HistoryMode,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+enum ApiEnglishDialect {
+  #[default]
+  #[serde(rename = "en-US")]
+  American,
+  #[serde(rename = "en-GB")]
+  British,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+enum ApiCefrLevel {
+  A1,
+  A2,
+  B1,
+  B2,
+  C1,
+  C2,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Detail {
+  Brief,
+  #[default]
+  Full,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum IncludeSection {
+  Relations,
+  WordHistory,
+  PracticePreview,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum HistoryMode {
+  Save,
+  #[default]
+  Incognito,
+}
+
+#[derive(Debug, Serialize)]
+struct LookupResponse {
+  schema_version: &'static str,
+  query: QueryAnalysis,
+  matches: Vec<GeneratedMatch>,
+  coverage: Coverage,
+  warnings: Vec<String>,
+  provenance: LookupProvenance,
+}
+
+#[derive(Debug, Serialize)]
+struct QueryAnalysis {
+  original: String,
+  normalized: String,
+  language: String,
+  language_confidence: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct GeneratedMatch {
+  source_sense_id: Option<String>,
+  english_senses: Vec<GeneratedSense>,
+  context_relevance: Option<f32>,
+}
+
+#[derive(Debug, Serialize)]
+struct GeneratedSense {
+  sense_id: Option<String>,
+  lemma: String,
+  part_of_speech: &'static str,
+  definition: GeneratedText,
+  localized_gloss: Option<LocalizedGeneratedText>,
+  confidence: &'static str,
+  rank: u16,
+  pronunciations: Vec<PronunciationResponse>,
+  forms: Vec<WordFormResponse>,
+  usage_notes: Vec<UsageNoteResponse>,
+  examples: Vec<ExampleResponse>,
+  etymology: Option<GeneratedText>,
+  related_words: Vec<RelatedWordResponse>,
+  generated: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct GeneratedText {
+  text: String,
+  evidence_ids: Vec<String>,
+  generated: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalizedGeneratedText {
+  text: String,
+  language: String,
+  evidence_ids: Vec<String>,
+  generated: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct PronunciationResponse {
+  value: String,
+  notation: String,
+  dialect: Option<String>,
+  generated: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct WordFormResponse {
+  form: String,
+  label: String,
+  generated: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct UsageNoteResponse {
+  kind: &'static str,
+  text: String,
+  generated: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct ExampleResponse {
+  english: String,
+  localized: Option<String>,
+  evidence_ids: Vec<String>,
+  generated: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct RelatedWordResponse {
+  relation_id: Option<String>,
+  lemma: String,
+  relation: &'static str,
+  note: Option<String>,
+  generated: bool,
+  canonical: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct Coverage {
+  parts_of_speech: &'static str,
+  examples: &'static str,
+  word_history: &'static str,
+  relations: &'static str,
+  canonical_evidence: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct LookupProvenance {
+  lexicon_release: Option<String>,
+  index_version: Option<String>,
+  ranking_version: &'static str,
+  generation_contract: &'static str,
+  evidence_backed: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct ProblemResponse {
+  #[serde(rename = "type")]
+  problem_type: &'static str,
+  title: &'static str,
+  status: u16,
+  code: &'static str,
+  detail: String,
+  request_id: String,
+  retryable: bool,
+  errors: Vec<FieldError>,
+}
+
+#[derive(Debug, Serialize)]
+struct FieldError {
+  field: &'static str,
+  message: String,
+}
+
+pub(crate) async fn lookup(
+  State(state): State<AppState>,
+  payload: Result<Json<LookupRequest>, JsonRejection>,
+) -> Response {
+  let request_id = Ulid::new().to_string();
+  let Json(request) = match payload {
+    Ok(request) => request,
+    Err(_) => {
+      return problem(
+        StatusCode::BAD_REQUEST,
+        "invalid_json",
+        "Invalid JSON request",
+        "The request body is not valid lookup JSON.",
+        request_id,
+        false,
+        Vec::new(),
+      )
+    }
+  };
+
+  if !request.target_language.eq_ignore_ascii_case("en") {
+    return validation_problem(
+      TranslationValidationError {
+        field: "target_language",
+        message: "must be `en` in basic core".to_string(),
+      },
+      request_id,
+    );
+  }
+
+  let input = match TranslationInput::new(
+    &request.query,
+    &request.source_language,
+    request.context.as_deref(),
+    &request.explanation_language,
+    request.english_dialect.into(),
+    request.learner_level.map(Into::into),
+  ) {
+    Ok(input) => input,
+    Err(error) => return validation_problem(error, request_id),
+  };
+
+  let Some(service) = &state.lookup else {
+    return problem(
+      StatusCode::SERVICE_UNAVAILABLE,
+      "learning_model_unavailable",
+      "Learning model unavailable",
+      "The structured learning model is not configured.",
+      request_id,
+      true,
+      Vec::new(),
+    );
+  };
+
+  match service.lookup(&input).await {
+    Ok(result) => {
+      let response = build_response(request, input, result);
+      with_common_headers(
+        (StatusCode::OK, Json(response)).into_response(),
+        &request_id,
+      )
+    }
+    Err(LearningModelError::Unavailable) => problem(
+      StatusCode::SERVICE_UNAVAILABLE,
+      "learning_model_unavailable",
+      "Learning model unavailable",
+      "The learning model did not return a result.",
+      request_id,
+      true,
+      Vec::new(),
+    ),
+    Err(LearningModelError::InvalidOutput) => problem(
+      StatusCode::BAD_GATEWAY,
+      "invalid_model_output",
+      "Invalid model output",
+      "The learning model could not satisfy the structured output contract.",
+      request_id,
+      true,
+      Vec::new(),
+    ),
+  }
+}
+
+fn build_response(
+  request: LookupRequest,
+  input: TranslationInput,
+  result: crate::domain::translation::TranslationResult,
+) -> LookupResponse {
+  let include_relations = requested(&request, IncludeSection::Relations);
+  let include_history = requested(&request, IncludeSection::WordHistory);
+  let mut warnings = result.warnings;
+  warnings.push(
+    "This result is model-generated and is not backed by the canonical lexicon yet.".to_string(),
+  );
+  if matches!(request.history_mode, HistoryMode::Save) {
+    warnings.push("History is not stored by the current anonymous basic-core slice.".to_string());
+  }
+  if request
+    .include
+    .as_ref()
+    .is_some_and(|sections| sections.contains(&IncludeSection::PracticePreview))
+  {
+    warnings.push("Practice preview is not implemented yet.".to_string());
+  }
+
+  let entry_limit = if matches!(request.detail, Detail::Brief) {
+    3
+  } else {
+    usize::MAX
+  };
+  let entries = result
+    .entries
+    .into_iter()
+    .take(entry_limit)
+    .map(|entry| GeneratedMatch {
+      source_sense_id: None,
+      english_senses: vec![sense_response(
+        entry,
+        &input.explanation_language,
+        request.detail,
+        include_relations,
+        include_history,
+      )],
+      context_relevance: None,
+    })
+    .collect::<Vec<_>>();
+  let examples = coverage(entries.iter().any(|value| {
+    value
+      .english_senses
+      .iter()
+      .any(|sense| !sense.examples.is_empty())
+  }));
+  let word_history = coverage(entries.iter().any(|value| {
+    value
+      .english_senses
+      .iter()
+      .any(|sense| sense.etymology.is_some())
+  }));
+  let relations = coverage(entries.iter().any(|value| {
+    value
+      .english_senses
+      .iter()
+      .any(|sense| !sense.related_words.is_empty())
+  }));
+
+  LookupResponse {
+    schema_version: "1.0",
+    query: QueryAnalysis {
+      original: request.query,
+      normalized: input.query,
+      language: result.source_language,
+      language_confidence: confidence(result.language_confidence),
+    },
+    matches: entries,
+    coverage: Coverage {
+      parts_of_speech: "available",
+      examples,
+      word_history,
+      relations,
+      canonical_evidence: "unavailable",
+    },
+    warnings,
+    provenance: LookupProvenance {
+      lexicon_release: None,
+      index_version: None,
+      ranking_version: "model-ranking-v1",
+      generation_contract: "learning-card-v1",
+      evidence_backed: false,
+    },
+  }
+}
+
+fn sense_response(
+  mut entry: EnglishEntry,
+  explanation_language: &str,
+  detail: Detail,
+  include_relations: bool,
+  include_history: bool,
+) -> GeneratedSense {
+  if matches!(detail, Detail::Brief) {
+    entry.usage_notes.truncate(2);
+    entry.examples.truncate(1);
+    entry.related_words.truncate(4);
+  }
+  if !include_relations {
+    entry.related_words.clear();
+  }
+  if !include_history {
+    entry.etymology = None;
+  }
+
+  GeneratedSense {
+    sense_id: None,
+    lemma: entry.lemma,
+    part_of_speech: part_of_speech(entry.part_of_speech),
+    definition: generated_text(entry.definition),
+    localized_gloss: entry.localized_gloss.map(|text| LocalizedGeneratedText {
+      text,
+      language: explanation_language.to_string(),
+      evidence_ids: Vec::new(),
+      generated: true,
+    }),
+    confidence: confidence(entry.confidence),
+    rank: entry.rank,
+    pronunciations: entry
+      .pronunciations
+      .into_iter()
+      .map(|value| PronunciationResponse {
+        value: value.value,
+        notation: value.notation,
+        dialect: value.dialect,
+        generated: true,
+      })
+      .collect(),
+    forms: entry
+      .forms
+      .into_iter()
+      .map(|value| WordFormResponse {
+        form: value.form,
+        label: value.label,
+        generated: true,
+      })
+      .collect(),
+    usage_notes: entry
+      .usage_notes
+      .into_iter()
+      .map(|value| UsageNoteResponse {
+        kind: usage_note_kind(value.kind),
+        text: value.text,
+        generated: true,
+      })
+      .collect(),
+    examples: entry
+      .examples
+      .into_iter()
+      .map(|value| ExampleResponse {
+        english: value.english,
+        localized: value.localized,
+        evidence_ids: Vec::new(),
+        generated: true,
+      })
+      .collect(),
+    etymology: entry.etymology.map(generated_text),
+    related_words: entry
+      .related_words
+      .into_iter()
+      .map(|value| RelatedWordResponse {
+        relation_id: None,
+        lemma: value.lemma,
+        relation: relation_kind(value.relation),
+        note: value.note,
+        generated: true,
+        canonical: false,
+      })
+      .collect(),
+    generated: true,
+  }
+}
+
+fn requested(request: &LookupRequest, section: IncludeSection) -> bool {
+  request
+    .include
+    .as_ref()
+    .is_none_or(|sections| sections.contains(&section))
+}
+
+fn generated_text(text: String) -> GeneratedText {
+  GeneratedText {
+    text,
+    evidence_ids: Vec::new(),
+    generated: true,
+  }
+}
+
+fn coverage(available: bool) -> &'static str {
+  if available {
+    "available"
+  } else {
+    "unavailable"
+  }
+}
+
+fn confidence(value: Confidence) -> &'static str {
+  match value {
+    Confidence::High => "high",
+    Confidence::Medium => "medium",
+    Confidence::Low => "low",
+  }
+}
+
+fn part_of_speech(value: PartOfSpeech) -> &'static str {
+  match value {
+    PartOfSpeech::Noun => "noun",
+    PartOfSpeech::Verb => "verb",
+    PartOfSpeech::Adjective => "adjective",
+    PartOfSpeech::Adverb => "adverb",
+    PartOfSpeech::Pronoun => "pronoun",
+    PartOfSpeech::Preposition => "preposition",
+    PartOfSpeech::Conjunction => "conjunction",
+    PartOfSpeech::Determiner => "determiner",
+    PartOfSpeech::Interjection => "interjection",
+    PartOfSpeech::Numeral => "numeral",
+    PartOfSpeech::Other => "other",
+  }
+}
+
+fn usage_note_kind(value: UsageNoteKind) -> &'static str {
+  match value {
+    UsageNoteKind::Register => "register",
+    UsageNoteKind::Dialect => "dialect",
+    UsageNoteKind::Grammar => "grammar",
+    UsageNoteKind::Collocation => "collocation",
+    UsageNoteKind::Pitfall => "pitfall",
+    UsageNoteKind::Habit => "habit",
+  }
+}
+
+fn relation_kind(value: RelationKind) -> &'static str {
+  match value {
+    RelationKind::Synonym => "synonym",
+    RelationKind::Antonym => "antonym",
+    RelationKind::Broader => "broader",
+    RelationKind::Narrower => "narrower",
+    RelationKind::WordFamily => "word_family",
+    RelationKind::LowerDegree => "lower_degree",
+    RelationKind::HigherDegree => "higher_degree",
+    RelationKind::Confusable => "confusable",
+    RelationKind::Related => "related",
+  }
+}
+
+fn validation_problem(error: TranslationValidationError, request_id: String) -> Response {
+  problem(
+    StatusCode::UNPROCESSABLE_ENTITY,
+    "validation_error",
+    "Invalid lookup request",
+    "One or more lookup fields are invalid.",
+    request_id,
+    false,
+    vec![FieldError {
+      field: error.field,
+      message: error.message,
+    }],
+  )
+}
+
+fn problem(
+  status: StatusCode,
+  code: &'static str,
+  title: &'static str,
+  detail: impl Into<String>,
+  request_id: String,
+  retryable: bool,
+  errors: Vec<FieldError>,
+) -> Response {
+  let response = (
+    status,
+    Json(ProblemResponse {
+      problem_type: "about:blank",
+      title,
+      status: status.as_u16(),
+      code,
+      detail: detail.into(),
+      request_id: request_id.clone(),
+      retryable,
+      errors,
+    }),
+  )
+    .into_response();
+  let mut response = with_common_headers(response, &request_id);
+  response.headers_mut().insert(
+    header::CONTENT_TYPE,
+    HeaderValue::from_static("application/problem+json"),
+  );
+  response
+}
+
+fn with_common_headers(mut response: Response, request_id: &str) -> Response {
+  response
+    .headers_mut()
+    .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+  if let Ok(value) = HeaderValue::from_str(request_id) {
+    response.headers_mut().insert("x-request-id", value);
+  }
+  response
+}
+
+fn default_source_language() -> String {
+  "auto".to_string()
+}
+
+fn default_target_language() -> String {
+  "en".to_string()
+}
+
+fn default_explanation_language() -> String {
+  "en".to_string()
+}
+
+impl From<ApiEnglishDialect> for EnglishDialect {
+  fn from(value: ApiEnglishDialect) -> Self {
+    match value {
+      ApiEnglishDialect::American => Self::American,
+      ApiEnglishDialect::British => Self::British,
+    }
+  }
+}
+
+impl From<ApiCefrLevel> for CefrLevel {
+  fn from(value: ApiCefrLevel) -> Self {
+    match value {
+      ApiCefrLevel::A1 => Self::A1,
+      ApiCefrLevel::A2 => Self::A2,
+      ApiCefrLevel::B1 => Self::B1,
+      ApiCefrLevel::B2 => Self::B2,
+      ApiCefrLevel::C1 => Self::C1,
+      ApiCefrLevel::C2 => Self::C2,
+    }
+  }
+}

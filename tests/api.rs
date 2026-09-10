@@ -6,8 +6,11 @@ use axum::{
   Json, Router,
 };
 use serde_json::Value;
+use std::sync::Arc;
 use tower::ServiceExt;
-use transnet::{app_router, AppState, ProviderConfig, TranslationConfig, TranslationService};
+use transnet::{
+  app_router, AppState, OpenAiLearningModel, ProviderConfig, TranslationConfig, TranslationService,
+};
 
 fn app() -> axum::Router {
   let provider = ProviderConfig {
@@ -33,7 +36,32 @@ async fn json(response: axum::response::Response) -> Value {
   serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
 }
 
-async fn completion(State(translation): State<&'static str>) -> Json<Value> {
+async fn completion(
+  State(translation): State<&'static str>,
+  Json(body): Json<Value>,
+) -> Json<Value> {
+  if body.get("response_format").is_some() {
+    return Json(serde_json::json!({
+      "choices": [{"message": {"content": serde_json::json!({
+        "source_language": "es",
+        "language_confidence": "high",
+        "entries": [{
+          "lemma": "hot",
+          "part_of_speech": "adjective",
+          "definition": "having a high temperature",
+          "localized_gloss": "温度高的",
+          "confidence": "high",
+          "pronunciations": [{"value": "hɑt", "notation": "ipa", "dialect": "en-US"}],
+          "forms": [{"form": "hotter", "label": "comparative"}],
+          "usage_notes": [{"kind": "collocation", "text": "hot soup"}],
+          "examples": [{"english": "The soup is hot.", "localized": "汤很烫。"}],
+          "etymology": "From Old English.",
+          "related_words": [{"lemma": "warm", "relation": "lower_degree", "note": null}]
+        }],
+        "warnings": []
+      }).to_string()}}]
+    }));
+  }
   Json(serde_json::json!({
     "choices": [{"message": {"content": translation}}]
   }))
@@ -52,18 +80,16 @@ async fn app_with_provider() -> axum::Router {
     model: "Gemma4".to_string(),
     api_key: "test".to_string(),
   };
-  let service = TranslationService::new(
-    TranslationConfig {
-      long_text_chars: 4000,
-      timeout_seconds: 1,
-      max_retries: 0,
-      retry_delay_ms: 0,
-    },
-    provider.clone(),
-    provider,
-  )
-  .unwrap();
-  app_router(AppState::new(service))
+  let translation = TranslationConfig {
+    long_text_chars: 4000,
+    timeout_seconds: 1,
+    max_retries: 0,
+    retry_delay_ms: 0,
+  };
+  let service =
+    TranslationService::new(translation.clone(), provider.clone(), provider.clone()).unwrap();
+  let learning_model = OpenAiLearningModel::new(&translation, provider).unwrap();
+  app_router(AppState::new(service).with_learning_model(Arc::new(learning_model)))
 }
 
 #[tokio::test]
@@ -171,4 +197,79 @@ async fn removed_routes_return_not_found() {
       .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND, "path: {path}");
   }
+}
+
+#[tokio::test]
+async fn lookup_returns_generated_learning_card_without_canonical_ids() {
+  let response = app_with_provider()
+    .await
+    .oneshot(
+      Request::post("/v1/lookups")
+        .header("content-type", "application/json")
+        .body(Body::from(
+          r#"{"query":"caliente","source_language":"es","target_language":"en","context":"La sopa está caliente.","explanation_language":"zh-CN","english_dialect":"en-US","learner_level":"B1","detail":"full","include":["relations","word_history"],"history_mode":"incognito"}"#,
+        ))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::OK);
+  assert_eq!(response.headers()["cache-control"], "no-store");
+  assert!(response.headers().contains_key("x-request-id"));
+  let body = json(response).await;
+  assert_eq!(body["schema_version"], "1.0");
+  assert_eq!(body["query"]["normalized"], "caliente");
+  assert_eq!(body["matches"][0]["source_sense_id"], Value::Null);
+  assert_eq!(body["matches"][0]["english_senses"][0]["lemma"], "hot");
+  assert_eq!(
+    body["matches"][0]["english_senses"][0]["part_of_speech"],
+    "adjective"
+  );
+  assert_eq!(
+    body["matches"][0]["english_senses"][0]["related_words"][0]["canonical"],
+    false
+  );
+  assert_eq!(body["provenance"]["evidence_backed"], false);
+}
+
+#[tokio::test]
+async fn lookup_rejects_non_english_target_with_problem_details() {
+  let response = app()
+    .oneshot(
+      Request::post("/v1/lookups")
+        .header("content-type", "application/json")
+        .body(Body::from(
+          r#"{"query":"hello","source_language":"en","target_language":"zh-CN"}"#,
+        ))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+  assert_eq!(
+    response.headers()["content-type"],
+    "application/problem+json"
+  );
+  let body = json(response).await;
+  assert_eq!(body["code"], "validation_error");
+  assert_eq!(body["errors"][0]["field"], "target_language");
+  assert_eq!(body["retryable"], false);
+}
+
+#[tokio::test]
+async fn lookup_reports_unconfigured_model() {
+  let response = app()
+    .oneshot(
+      Request::post("/v1/lookups")
+        .header("content-type", "application/json")
+        .body(Body::from(r#"{"query":"hola","source_language":"es"}"#))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+  assert_eq!(json(response).await["code"], "learning_model_unavailable");
 }

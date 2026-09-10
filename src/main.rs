@@ -1,9 +1,9 @@
 //! Transnet process entry point.
 
-use std::{fs, path::Path};
+use std::{fs, path::Path, sync::Arc};
 
 use anyhow::{Context, Result};
-use transnet::{app_router, AppConfig, AppState, TranslationService};
+use transnet::{app_router, AppConfig, AppState, OpenAiLearningModel, TranslationService};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -16,16 +16,20 @@ async fn main() -> Result<()> {
 
   init_tracing(&config.server.log_level, &config.server.log_format)?;
   let address = format!("{}:{}", config.server.host, config.server.port);
+  let learning_model = OpenAiLearningModel::new(&config.translation, config.gemma4.clone())?;
   let service = TranslationService::new(config.translation, config.gemma4, config.translate_gemma)?;
   let listener = tokio::net::TcpListener::bind(&address)
     .await
     .with_context(|| format!("failed to bind to {address}"))?;
 
   tracing::info!(address = %address, "starting transnet");
-  axum::serve(listener, app_router(AppState::new(service)))
-    .with_graceful_shutdown(shutdown_signal())
-    .await
-    .context("transnet server failed")?;
+  axum::serve(
+    listener,
+    app_router(AppState::new(service).with_learning_model(Arc::new(learning_model))),
+  )
+  .with_graceful_shutdown(shutdown_signal())
+  .await
+  .context("transnet server failed")?;
   Ok(())
 }
 
