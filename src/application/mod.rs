@@ -2,6 +2,8 @@
 
 /// Public canonical lookup snapshot caching with private-input bypasses.
 pub mod canonical_lookup_cache;
+/// Bounded deterministic canonical lookup-card assembly without HTTP or model generation.
+pub mod canonical_lookup_card;
 /// Content-release staging, validation, publication, rollback, and source quarantine.
 pub mod content_release;
 /// Private graph-feedback validation and projection orchestration.

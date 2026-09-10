@@ -12,6 +12,8 @@ pub mod feedback;
 pub mod graph;
 /// Private learner-owned profile, history, vocabulary, and privacy-plan values.
 pub mod learner;
+/// Bounded canonical lookup-card presentation values with assertion-level provenance.
+pub mod lookup_card;
 /// Deterministic hybrid-retrieval values and candidate fusion.
 pub mod retrieval;
 /// Structured multilingual-to-English translation.
