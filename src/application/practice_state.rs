@@ -329,8 +329,9 @@ impl PracticeStateService {
   /// The service has exact catalog categories only for item claims and attempt submissions, so it
   /// intentionally emits nothing for session creation, exercise freezing, or mastery reads.
   /// Metrics contain no learner, exercise, target, response-time, answer, evaluator, or
-  /// idempotency data. Replayed mutations remain successful; owner-safe missing and terminal
-  /// state outcomes are rejected transitions rather than successful updates.
+  /// idempotency data. Replayed accepted mutations remain successful; owner-safe missing,
+  /// exhausted-session, and terminal state outcomes are rejected transitions rather than
+  /// successful updates.
   pub fn with_metrics_dispatcher(mut self, dispatcher: Arc<ClosedMetricsDispatcher>) -> Self {
     self.metrics = Some(dispatcher);
     self
@@ -528,6 +529,11 @@ impl PracticeStateService {
       return;
     };
     let outcome = match result {
+      Ok(
+        PracticeClaimSubmission::Recorded(receipt) | PracticeClaimSubmission::Replayed(receipt),
+      ) if matches!(receipt.outcome(), PracticeClaimOutcome::NoItemAvailable) => {
+        MetricOutcome::Rejected
+      }
       Ok(PracticeClaimSubmission::Recorded(_) | PracticeClaimSubmission::Replayed(_)) => {
         MetricOutcome::Succeeded
       }
@@ -1015,5 +1021,56 @@ mod tests {
         ));
       }
     }
+  }
+
+  #[tokio::test]
+  async fn exhausted_claims_and_their_replays_are_rejected_not_successful() {
+    let recorder = InMemoryMetricsRecorder::new();
+    let service = service([public_id(200)]).with_metrics_dispatcher(Arc::new(
+      ClosedMetricsDispatcher::new(Arc::new(recorder.clone())),
+    ));
+    let private_owner = owner("learner-private-exhausted-8172");
+    let session = service
+      .create_session(
+        private_owner.clone(),
+        CreatePracticeSession::new(session_limit(1)),
+      )
+      .await
+      .unwrap();
+    let request = ClaimPracticeItem::new(
+      session.id().clone(),
+      PracticeIdempotencyKey::new([7; 32]),
+      PracticeRequestFingerprint::new([8; 32]),
+    );
+
+    let first = service
+      .claim_or_return(private_owner.clone(), request.clone())
+      .await
+      .unwrap();
+    let replay = service
+      .claim_or_return(private_owner, request)
+      .await
+      .unwrap();
+    assert!(matches!(
+      first.outcome(),
+      Some(PracticeClaimOutcome::NoItemAvailable)
+    ));
+    assert!(replay.is_replayed());
+    assert_eq!(replay.outcome(), first.outcome());
+
+    let _ = recorded_events(&recorder, 2).await;
+    assert_eq!(
+      settled_events(&recorder).await,
+      vec![
+        MetricEvent::PracticeOperation {
+          operation: PracticeOperation::ItemClaim,
+          outcome: MetricOutcome::Rejected,
+        },
+        MetricEvent::PracticeOperation {
+          operation: PracticeOperation::ItemClaim,
+          outcome: MetricOutcome::Rejected,
+        },
+      ]
+    );
   }
 }
