@@ -24,3 +24,15 @@ api_key = "local-model-server"
 base_url = "http://127.0.0.1:18007/v1"
 model = "TranslateGemma"
 api_key = "local-model-server"
+
+[provider_resilience.gemma4]
+max_retry_delay_ms = 5000
+max_concurrent_requests = 8
+circuit_failure_threshold = 5
+circuit_open_ms = 30000
+
+[provider_resilience.translate_gemma]
+max_retry_delay_ms = 5000
+max_concurrent_requests = 4
+circuit_failure_threshold = 5
+circuit_open_ms = 30000

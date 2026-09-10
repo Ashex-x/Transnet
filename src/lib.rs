@@ -16,6 +16,8 @@ pub mod domain;
 pub mod ports;
 /// OpenAI-compatible model clients and routing.
 pub mod provider;
+/// Bounded, redacted resilience controls for outbound providers.
+pub mod resilience;
 /// Public HTTP request and response types.
 pub mod types;
 
@@ -24,6 +26,10 @@ pub use api::{
   app_router, app_router_with_http_config, AlwaysReady, AppState, AuthenticatedLookupJobOwner,
   Readiness,
 };
-pub use config::{AppConfig, HttpConfig, HttpConfigError, ProviderConfig, TranslationConfig};
-pub use provider::{TranslationError, TranslationService};
+pub use config::{
+  AppConfig, HttpConfig, HttpConfigError, ProviderConfig, ProviderResilienceConfig,
+  ProviderResilienceConfigs, TranslationConfig,
+};
+pub use provider::{TranslationError, TranslationProviderMetrics, TranslationService};
+pub use resilience::{ProviderMetricsSnapshot, ProviderPolicy, ProviderPolicyError};
 pub use types::{TranslateRequest, TranslateResponse};

@@ -1,21 +1,23 @@
 //! OpenAI-compatible adapter for structured learning-card generation.
 
-use std::time::Duration;
-
+use anyhow::Context;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio::time::sleep;
 use tracing::warn;
 
 use crate::{
-  config::{ProviderConfig, TranslationConfig},
+  config::{ProviderConfig, ProviderResilienceConfig, TranslationConfig},
   domain::translation::{
     CefrLevel, Confidence, EnglishEntry, PartOfSpeech, Pronunciation, RelatedWord, RelationKind,
     TranslationInput, TranslationResult, UsageExample, UsageNote, UsageNoteKind, WordForm,
   },
   ports::learning_model::{LearningModel, LearningModelError},
+  resilience::{
+    response_failure, status_failure, transport_failure, ProviderAttemptError,
+    ProviderMetricsSnapshot, ProviderPolicy, ProviderResilience,
+  },
   types::is_language_code,
 };
 
@@ -24,8 +26,7 @@ use crate::{
 pub struct OpenAiLearningModel {
   client: Client,
   provider: ProviderConfig,
-  max_retries: u32,
-  retry_delay: Duration,
+  resilience: ProviderResilience,
 }
 
 impl OpenAiLearningModel {
@@ -35,14 +36,31 @@ impl OpenAiLearningModel {
   ///
   /// Returns an error if the HTTP client cannot be constructed.
   pub fn new(settings: &TranslationConfig, provider: ProviderConfig) -> anyhow::Result<Self> {
+    let policy = ProviderResilienceConfig::default()
+      .resolve(settings)
+      .context("invalid default learning-model provider resilience policy")?;
+    Self::with_provider_policy(provider, policy)
+  }
+
+  /// Builds a reusable client with its own provider timeout, retry, bulkhead, and circuit policy.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the HTTP client cannot be constructed.
+  pub fn with_provider_policy(
+    provider: ProviderConfig,
+    policy: ProviderPolicy,
+  ) -> anyhow::Result<Self> {
     Ok(Self {
-      client: Client::builder()
-        .timeout(Duration::from_secs(settings.timeout_seconds))
-        .build()?,
+      client: Client::builder().timeout(policy.timeout()).build()?,
       provider,
-      max_retries: settings.max_retries,
-      retry_delay: Duration::from_millis(settings.retry_delay_ms),
+      resilience: ProviderResilience::new("gemma4_learning", policy),
     })
+  }
+
+  /// Returns redacted counters for structured learning-model requests.
+  pub fn provider_metrics(&self) -> ProviderMetricsSnapshot {
+    self.resilience.metrics().snapshot()
   }
 
   async fn request(&self, messages: Vec<ChatMessage>) -> Result<String, LearningModelError> {
@@ -56,55 +74,37 @@ impl OpenAiLearningModel {
       temperature: 0.0,
       response_format: learning_card_response_format(),
     };
+    self
+      .resilience
+      .execute("learning_generate", || self.send(&endpoint, &body))
+      .await
+      .map_err(|_| LearningModelError::Unavailable)
+  }
 
-    for attempt in 0..=self.max_retries {
-      let result = self
-        .client
-        .post(&endpoint)
-        .bearer_auth(&self.provider.api_key)
-        .json(&body)
-        .send()
-        .await;
-      match result {
-        Ok(response) => match response.error_for_status() {
-          Ok(response) => match response.json::<ChatResponse>().await {
-            Ok(payload) => {
-              if let Some(content) = payload
-                .choices
-                .into_iter()
-                .next()
-                .and_then(|choice| choice.message.content)
-                .map(|content| content.trim().to_string())
-                .filter(|content| !content.is_empty())
-              {
-                return Ok(content);
-              }
-            }
-            Err(_) => warn!(
-              attempt,
-              model = %self.provider.model,
-              "invalid learning model envelope"
-            ),
-          },
-          Err(_) => warn!(
-            attempt,
-            model = %self.provider.model,
-            "learning model request failed"
-          ),
-        },
-        Err(_) => warn!(
-          attempt,
-          model = %self.provider.model,
-          "learning model transport failed"
-        ),
-      }
-
-      if attempt < self.max_retries {
-        sleep(self.retry_delay).await;
-      }
+  async fn send(&self, endpoint: &str, body: &ChatRequest) -> Result<String, ProviderAttemptError> {
+    let response = self
+      .client
+      .post(endpoint)
+      .bearer_auth(&self.provider.api_key)
+      .json(body)
+      .send()
+      .await
+      .map_err(|error| transport_failure(&error))?;
+    if !response.status().is_success() {
+      return Err(status_failure(response.status(), response.headers()));
     }
-
-    Err(LearningModelError::Unavailable)
+    let payload: ChatResponse = response
+      .json()
+      .await
+      .map_err(|error| response_failure(&error))?;
+    payload
+      .choices
+      .into_iter()
+      .next()
+      .and_then(|choice| choice.message.content)
+      .map(|content| content.trim().to_string())
+      .filter(|content| !content.is_empty())
+      .ok_or(ProviderAttemptError::InvalidEnvelope)
   }
 }
 

@@ -18,8 +18,25 @@ async fn main() -> Result<()> {
 
   init_tracing(&config.server.log_level, &config.server.log_format)?;
   let address = format!("{}:{}", config.server.host, config.server.port);
-  let learning_model = OpenAiLearningModel::new(&config.translation, config.gemma4.clone())?;
-  let service = TranslationService::new(config.translation, config.gemma4, config.translate_gemma)?;
+  let gemma4_policy = config
+    .provider_resilience
+    .gemma4
+    .resolve(&config.translation)
+    .context("invalid Gemma 4 provider resilience policy")?;
+  let translate_gemma_policy = config
+    .provider_resilience
+    .translate_gemma
+    .resolve(&config.translation)
+    .context("invalid TranslateGemma provider resilience policy")?;
+  let learning_model =
+    OpenAiLearningModel::with_provider_policy(config.gemma4.clone(), gemma4_policy.clone())?;
+  let service = TranslationService::with_provider_policies(
+    config.translation,
+    config.gemma4,
+    gemma4_policy,
+    config.translate_gemma,
+    translate_gemma_policy,
+  )?;
   let listener = tokio::net::TcpListener::bind(&address)
     .await
     .with_context(|| format!("failed to bind to {address}"))?;

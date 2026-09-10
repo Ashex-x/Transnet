@@ -72,7 +72,7 @@ flowchart LR
 
 Gemma 4 receives standard system and user chat messages. TranslateGemma receives one structured user content item containing `type`, `source_lang_code`, `target_lang_code`, and complete source `text`. Long text is not chunked.
 
-Each provider call uses the configured timeout. Transport errors, non-success statuses, malformed envelopes, and empty responses are retried according to `max_retries`; exhausted attempts become HTTP 503 without exposing provider bodies.
+Each direct-translation provider has its own timeout, bounded-concurrency bulkhead, retry policy, circuit breaker, and redacted counters. Only timeouts, connection-establishment failures, `429`, selected transient statuses (`500`, `502`, `503`, and `504`), and unusable successful envelopes retry; a valid `Retry-After` is honored within the configured maximum. A full bulkhead or open circuit returns the existing HTTP 503 provider-unavailable response without sending another provider request. Structured lookup uses the Gemma 4 resilience policy independently and applies the same classification.
 
 ```mermaid
 flowchart LR
@@ -92,7 +92,7 @@ The structured lookup normalizes query and context text to Unicode NFC, accepts 
 
 This slice has no canonical lexical store or retrieval index. It therefore marks every learning assertion as generated, returns null canonical IDs, exposes empty evidence lists, sets `evidence_backed` to false, and prevents generated relations from appearing to be graph facts. Responses are synchronous, anonymous, and `no-store`. History, persistence, retrieval, canonical sense resolution, and graph feedback remain target work.
 
-The implemented public routes are `GET /health`, `GET /livez`, `GET /readyz`, `POST /translate`, and `POST /v1/lookups`. There is no authentication, persistence, vector index, canonical lexical content, graph, history, feedback, or practice system. Liveness reports process availability without probing providers; readiness delegates to an injected dependency probe and is always ready in the current model-only runtime. The HTTP boundary applies a configured request-size limit, safe request IDs, redacted structured request tracing, and exact-origin CORS when configured.
+The implemented public routes are `GET /health`, `GET /livez`, `GET /readyz`, `POST /translate`, and `POST /v1/lookups`. There is no authentication, persistence, vector index, canonical lexical content, graph, history, feedback, or practice system. Liveness reports process availability without probing providers; readiness delegates to an injected dependency probe and is always ready in the current model-only runtime. The HTTP boundary applies a configured request-size limit, safe request IDs, redacted structured request tracing, and exact-origin CORS when configured. Provider telemetry exposes static boundary and outcome fields plus redacted in-process counters; it never records learner input, generated output, provider response bodies, credentials, or identity data.
 
 Related implemented contracts: [API](reference/transnet-api.md), [configuration](guides/configuration.md), and [development](guides/development.md).
 

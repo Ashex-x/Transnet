@@ -1,15 +1,16 @@
 //! OpenAI-compatible provider clients and text-length routing.
 
-use std::time::Duration;
-
+use anyhow::Context;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::time::sleep;
-use tracing::{info, warn};
 
 use crate::{
-  config::{ProviderConfig, TranslationConfig},
+  config::{ProviderConfig, ProviderResilienceConfig, TranslationConfig},
+  resilience::{
+    response_failure, status_failure, transport_failure, ProviderAttemptError,
+    ProviderMetricsSnapshot, ProviderPolicy, ProviderResilience,
+  },
   types::{is_language_code, TranslateRequest, TranslateResponse},
 };
 
@@ -27,10 +28,25 @@ pub enum TranslationError {
 /// Translation service backed by Gemma 4 and TranslateGemma.
 #[derive(Clone)]
 pub struct TranslationService {
-  client: Client,
   translation: TranslationConfig,
-  gemma4: ProviderConfig,
-  translate_gemma: ProviderConfig,
+  gemma4: TranslationProvider,
+  translate_gemma: TranslationProvider,
+}
+
+#[derive(Clone)]
+struct TranslationProvider {
+  client: Client,
+  config: ProviderConfig,
+  resilience: ProviderResilience,
+}
+
+/// Redacted provider counters for the two direct-translation routes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TranslationProviderMetrics {
+  /// Counters for requests routed to Gemma 4.
+  pub gemma4: ProviderMetricsSnapshot,
+  /// Counters for requests routed to TranslateGemma.
+  pub translate_gemma: ProviderMetricsSnapshot,
 }
 
 impl TranslationService {
@@ -44,15 +60,51 @@ impl TranslationService {
     gemma4: ProviderConfig,
     translate_gemma: ProviderConfig,
   ) -> anyhow::Result<Self> {
-    let client = Client::builder()
-      .timeout(Duration::from_secs(translation.timeout_seconds))
-      .build()?;
-    Ok(Self {
-      client,
+    let defaults = ProviderResilienceConfig::default();
+    let gemma4_policy = defaults
+      .resolve(&translation)
+      .context("invalid default Gemma 4 provider resilience policy")?;
+    let translate_gemma_policy = defaults
+      .resolve(&translation)
+      .context("invalid default TranslateGemma provider resilience policy")?;
+    Self::with_provider_policies(
       translation,
       gemma4,
+      gemma4_policy,
       translate_gemma,
+      translate_gemma_policy,
+    )
+  }
+
+  /// Creates a reusable translation service with independent policy state for each provider.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when a provider HTTP client cannot be built.
+  pub fn with_provider_policies(
+    translation: TranslationConfig,
+    gemma4: ProviderConfig,
+    gemma4_policy: ProviderPolicy,
+    translate_gemma: ProviderConfig,
+    translate_gemma_policy: ProviderPolicy,
+  ) -> anyhow::Result<Self> {
+    Ok(Self {
+      translation,
+      gemma4: TranslationProvider::new("gemma4", gemma4, gemma4_policy)?,
+      translate_gemma: TranslationProvider::new(
+        "translate_gemma",
+        translate_gemma,
+        translate_gemma_policy,
+      )?,
     })
+  }
+
+  /// Returns redacted counters for direct translation provider boundaries.
+  pub fn provider_metrics(&self) -> TranslationProviderMetrics {
+    TranslationProviderMetrics {
+      gemma4: self.gemma4.resilience.metrics().snapshot(),
+      translate_gemma: self.translate_gemma.resilience.metrics().snapshot(),
+    }
   }
 
   /// Validates and translates one request with the provider selected by text length.
@@ -71,80 +123,65 @@ impl TranslationService {
     let (provider, body) = if use_translate_gemma {
       (
         &self.translate_gemma,
-        translate_gemma_body(&self.translate_gemma.model, &request),
+        translate_gemma_body(&self.translate_gemma.config.model, &request),
       )
     } else {
-      (&self.gemma4, gemma4_body(&self.gemma4.model, &request))
+      (
+        &self.gemma4,
+        gemma4_body(&self.gemma4.config.model, &request),
+      )
     };
-    let endpoint = format!(
-      "{}/chat/completions",
-      provider.base_url.trim_end_matches('/')
-    );
+    let translation = provider
+      .resilience
+      .execute("translate", || provider.send(&body))
+      .await
+      .map_err(|_| TranslationError::Provider)?;
+    Ok(TranslateResponse { translation })
+  }
+}
 
-    for attempt in 0..=self.translation.max_retries {
-      match self.send(&endpoint, &provider.api_key, &body).await {
-        Ok(translation) => {
-          info!(model = %provider.model, long_text = use_translate_gemma, "translation completed");
-          return Ok(TranslateResponse { translation });
-        }
-        Err(error) => {
-          warn!(
-            attempt,
-            model = %provider.model,
-            error_kind = provider_error_kind(&error),
-            "translation attempt failed"
-          );
-          if attempt < self.translation.max_retries {
-            sleep(Duration::from_millis(self.translation.retry_delay_ms)).await;
-          }
-        }
-      }
-    }
-
-    Err(TranslationError::Provider)
+impl TranslationProvider {
+  fn new(
+    provider_name: &'static str,
+    config: ProviderConfig,
+    policy: ProviderPolicy,
+  ) -> anyhow::Result<Self> {
+    let client = Client::builder().timeout(policy.timeout()).build()?;
+    Ok(Self {
+      client,
+      config,
+      resilience: ProviderResilience::new(provider_name, policy),
+    })
   }
 
-  async fn send(
-    &self,
-    endpoint: &str,
-    api_key: &str,
-    body: &ChatCompletionRequest,
-  ) -> anyhow::Result<String> {
+  async fn send(&self, body: &ChatCompletionRequest) -> Result<String, ProviderAttemptError> {
+    let endpoint = format!(
+      "{}/chat/completions",
+      self.config.base_url.trim_end_matches('/')
+    );
     let response = self
       .client
       .post(endpoint)
-      .bearer_auth(api_key)
+      .bearer_auth(&self.config.api_key)
       .json(body)
       .send()
-      .await?;
-    let response = response.error_for_status()?;
-    let payload: ChatCompletionResponse = response.json().await?;
-    let content = payload
+      .await
+      .map_err(|error| transport_failure(&error))?;
+    if !response.status().is_success() {
+      return Err(status_failure(response.status(), response.headers()));
+    }
+    let payload: ChatCompletionResponse = response
+      .json()
+      .await
+      .map_err(|error| response_failure(&error))?;
+    payload
       .choices
       .into_iter()
       .next()
       .and_then(|choice| choice.message.content)
       .map(|content| content.trim().to_string())
       .filter(|content| !content.is_empty())
-      .ok_or_else(|| anyhow::anyhow!("provider returned no translation"))?;
-    Ok(content)
-  }
-}
-
-fn provider_error_kind(error: &anyhow::Error) -> &'static str {
-  let Some(error) = error.downcast_ref::<reqwest::Error>() else {
-    return "response";
-  };
-  if error.is_timeout() {
-    "timeout"
-  } else if error.is_connect() {
-    "connect"
-  } else if error.is_status() {
-    "status"
-  } else if error.is_decode() {
-    "decode"
-  } else {
-    "transport"
+      .ok_or(ProviderAttemptError::InvalidEnvelope)
   }
 }
 

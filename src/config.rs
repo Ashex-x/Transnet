@@ -1,8 +1,12 @@
-//! Runtime configuration for the server, HTTP boundary, and model providers.
+//! Runtime configuration for the server, HTTP boundary, model providers, and resilience policy.
+
+use std::time::Duration;
 
 use axum::http::{HeaderValue, Uri};
 use serde::Deserialize;
 use thiserror::Error;
+
+use crate::resilience::{ProviderPolicy, ProviderPolicyError};
 
 /// Default maximum accepted HTTP request body size in bytes.
 pub const DEFAULT_MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
@@ -21,6 +25,9 @@ pub struct AppConfig {
   pub gemma4: ProviderConfig,
   /// Provider used for long text.
   pub translate_gemma: ProviderConfig,
+  /// Per-provider timeout, retry, bulkhead, and circuit-breaker policy.
+  #[serde(default)]
+  pub provider_resilience: ProviderResilienceConfigs,
 }
 
 /// Listener and logging settings.
@@ -136,6 +143,76 @@ pub struct TranslationConfig {
   pub retry_delay_ms: u64,
 }
 
+/// Per-provider resilience policy overrides.
+///
+/// Omitted timeout and retry fields inherit the matching value from [`TranslationConfig`]. The
+/// remaining fields have safe defaults so existing deployments can opt in without a configuration
+/// migration.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct ProviderResilienceConfigs {
+  /// Policy for the short-text Gemma 4 provider and structured learning-card requests.
+  pub gemma4: ProviderResilienceConfig,
+  /// Policy for the long-text TranslateGemma provider.
+  pub translate_gemma: ProviderResilienceConfig,
+}
+
+/// Configurable resilience bounds for one outbound provider.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct ProviderResilienceConfig {
+  /// Optional per-attempt deadline override in seconds.
+  pub timeout_seconds: Option<u64>,
+  /// Optional retry-count override after the first request.
+  pub max_retries: Option<u32>,
+  /// Optional retry-delay override in milliseconds when no `Retry-After` is supplied.
+  pub retry_delay_ms: Option<u64>,
+  /// Largest accepted retry delay in milliseconds, including a provider `Retry-After` value.
+  pub max_retry_delay_ms: u64,
+  /// Maximum concurrent HTTP attempts allowed for this provider.
+  pub max_concurrent_requests: usize,
+  /// Consecutive transient logical-call failures that open this provider's circuit.
+  pub circuit_failure_threshold: u32,
+  /// Time in milliseconds that an opened circuit rejects calls before one half-open probe.
+  pub circuit_open_ms: u64,
+}
+
+impl Default for ProviderResilienceConfig {
+  fn default() -> Self {
+    Self {
+      timeout_seconds: None,
+      max_retries: None,
+      retry_delay_ms: None,
+      max_retry_delay_ms: 5_000,
+      max_concurrent_requests: 8,
+      circuit_failure_threshold: 5,
+      circuit_open_ms: 30_000,
+    }
+  }
+}
+
+impl ProviderResilienceConfig {
+  /// Resolves explicit overrides and legacy translation defaults into one validated provider policy.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when a resolved timeout, concurrency bound, or circuit setting is invalid.
+  pub fn resolve(
+    &self,
+    translation: &TranslationConfig,
+  ) -> Result<ProviderPolicy, ProviderPolicyError> {
+    ProviderPolicy::new(
+      Duration::from_secs(self.timeout_seconds.unwrap_or(translation.timeout_seconds)),
+      self.max_retries.unwrap_or(translation.max_retries),
+      Duration::from_millis(self.retry_delay_ms.unwrap_or(translation.retry_delay_ms)),
+      Duration::from_millis(self.max_retry_delay_ms),
+      self.max_concurrent_requests,
+      self.circuit_failure_threshold,
+      Duration::from_millis(self.circuit_open_ms),
+    )
+  }
+}
+
 /// One OpenAI-compatible provider endpoint.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProviderConfig {
@@ -145,4 +222,61 @@ pub struct ProviderConfig {
   pub model: String,
   /// Bearer credential sent to the provider.
   pub api_key: String,
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn provider_resilience_overrides_only_the_selected_provider_values() {
+    let translation = TranslationConfig {
+      long_text_chars: 4_000,
+      timeout_seconds: 60,
+      max_retries: 3,
+      retry_delay_ms: 250,
+    };
+    let config = ProviderResilienceConfig {
+      timeout_seconds: Some(5),
+      max_retries: None,
+      retry_delay_ms: Some(10),
+      max_retry_delay_ms: 500,
+      max_concurrent_requests: 2,
+      circuit_failure_threshold: 3,
+      circuit_open_ms: 1_000,
+    };
+
+    assert_eq!(
+      config.resolve(&translation).unwrap(),
+      ProviderPolicy::new(
+        Duration::from_secs(5),
+        3,
+        Duration::from_millis(10),
+        Duration::from_millis(500),
+        2,
+        3,
+        Duration::from_secs(1),
+      )
+      .unwrap()
+    );
+  }
+
+  #[test]
+  fn provider_resilience_rejects_zero_critical_bounds() {
+    let translation = TranslationConfig {
+      long_text_chars: 4_000,
+      timeout_seconds: 60,
+      max_retries: 0,
+      retry_delay_ms: 0,
+    };
+    let config = ProviderResilienceConfig {
+      max_concurrent_requests: 0,
+      ..ProviderResilienceConfig::default()
+    };
+
+    assert_eq!(
+      config.resolve(&translation),
+      Err(ProviderPolicyError::ZeroConcurrency)
+    );
+  }
 }

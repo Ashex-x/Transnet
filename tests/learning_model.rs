@@ -1,15 +1,26 @@
 use std::{
   collections::VecDeque,
-  sync::{Arc, Mutex},
+  sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
+  },
+  time::Duration,
 };
 
-use axum::{extract::State, routing::post, Json, Router};
+use axum::{
+  extract::State,
+  http::StatusCode,
+  response::{IntoResponse, Response},
+  routing::post,
+  Json, Router,
+};
 use serde_json::{json, Value};
+use tokio::sync::Notify;
 use transnet::{
   adapters::learning_model::OpenAiLearningModel,
   domain::translation::{EnglishDialect, TranslationInput},
   ports::learning_model::{LearningModel, LearningModelError},
-  ProviderConfig, TranslationConfig,
+  ProviderConfig, ProviderPolicy, TranslationConfig,
 };
 
 #[derive(Clone)]
@@ -18,10 +29,38 @@ struct MockState {
   bodies: Arc<Mutex<Vec<Value>>>,
 }
 
+#[derive(Clone)]
+struct StatusState {
+  calls: Arc<AtomicUsize>,
+  status: StatusCode,
+}
+
+#[derive(Clone)]
+struct BlockingState {
+  calls: Arc<AtomicUsize>,
+  started: Arc<Notify>,
+  release: Arc<Notify>,
+}
+
 async fn completion(State(state): State<MockState>, Json(body): Json<Value>) -> Json<Value> {
   state.bodies.lock().unwrap().push(body);
   let content = state.responses.lock().unwrap().pop_front().unwrap();
   Json(json!({"choices": [{"message": {"content": content}}]}))
+}
+
+async fn status_completion(State(state): State<StatusState>, Json(_body): Json<Value>) -> Response {
+  state.calls.fetch_add(1, Ordering::SeqCst);
+  state.status.into_response()
+}
+
+async fn blocking_completion(
+  State(state): State<BlockingState>,
+  Json(_body): Json<Value>,
+) -> Response {
+  state.calls.fetch_add(1, Ordering::SeqCst);
+  state.started.notify_one();
+  state.release.notified().await;
+  Json(json!({"choices": [{"message": {"content": output()}}]})).into_response()
 }
 
 async fn model(responses: Vec<String>) -> (OpenAiLearningModel, MockState) {
@@ -49,6 +88,79 @@ async fn model(responses: Vec<String>) -> (OpenAiLearningModel, MockState) {
   };
   (
     OpenAiLearningModel::new(&settings, provider).unwrap(),
+    state,
+  )
+}
+
+fn policy(
+  max_retries: u32,
+  max_concurrent_requests: usize,
+  circuit_failure_threshold: u32,
+) -> ProviderPolicy {
+  ProviderPolicy::new(
+    Duration::from_secs(2),
+    max_retries,
+    Duration::ZERO,
+    Duration::from_secs(1),
+    max_concurrent_requests,
+    circuit_failure_threshold,
+    Duration::from_secs(1),
+  )
+  .unwrap()
+}
+
+async fn status_model(
+  status: StatusCode,
+  policy: ProviderPolicy,
+) -> (OpenAiLearningModel, StatusState) {
+  let state = StatusState {
+    calls: Arc::new(AtomicUsize::new(0)),
+    status,
+  };
+  let app = Router::new()
+    .route("/v1/chat/completions", post(status_completion))
+    .with_state(state.clone());
+  let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let address = listener.local_addr().unwrap();
+  tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+  (
+    OpenAiLearningModel::with_provider_policy(
+      ProviderConfig {
+        base_url: format!("http://{address}/v1"),
+        model: "Gemma4".to_string(),
+        api_key: "test".to_string(),
+      },
+      policy,
+    )
+    .unwrap(),
+    state,
+  )
+}
+
+async fn blocking_model(policy: ProviderPolicy) -> (OpenAiLearningModel, BlockingState) {
+  let state = BlockingState {
+    calls: Arc::new(AtomicUsize::new(0)),
+    started: Arc::new(Notify::new()),
+    release: Arc::new(Notify::new()),
+  };
+  let app = Router::new()
+    .route("/v1/chat/completions", post(blocking_completion))
+    .with_state(state.clone());
+  let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let address = listener.local_addr().unwrap();
+  tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+  (
+    OpenAiLearningModel::with_provider_policy(
+      ProviderConfig {
+        base_url: format!("http://{address}/v1"),
+        model: "Gemma4".to_string(),
+        api_key: "test".to_string(),
+      },
+      policy,
+    )
+    .unwrap(),
     state,
   )
 }
@@ -124,4 +236,38 @@ async fn rejects_output_after_one_failed_repair() {
     Err(LearningModelError::InvalidOutput)
   );
   assert_eq!(state.bodies.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn learning_model_circuit_rejects_calls_without_more_provider_attempts() {
+  let (model, state) = status_model(StatusCode::BAD_GATEWAY, policy(0, 8, 1)).await;
+
+  assert_eq!(
+    model.generate(&input()).await,
+    Err(LearningModelError::Unavailable)
+  );
+  assert_eq!(
+    model.generate(&input()).await,
+    Err(LearningModelError::Unavailable)
+  );
+  assert_eq!(state.calls.load(Ordering::SeqCst), 1);
+  assert_eq!(model.provider_metrics().circuit_open, 1);
+}
+
+#[tokio::test]
+async fn learning_model_bulkhead_rejects_parallel_generation() {
+  let (model, state) = blocking_model(policy(0, 1, 5)).await;
+  let first_model = model.clone();
+  let first_input = input();
+  let first = tokio::spawn(async move { first_model.generate(&first_input).await });
+
+  state.started.notified().await;
+  assert_eq!(
+    model.generate(&input()).await,
+    Err(LearningModelError::Unavailable)
+  );
+  state.release.notify_one();
+  assert!(first.await.unwrap().is_ok());
+  assert_eq!(state.calls.load(Ordering::SeqCst), 1);
+  assert_eq!(model.provider_metrics().bulkhead_rejected, 1);
 }
