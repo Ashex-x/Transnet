@@ -28,6 +28,7 @@ use crate::{
   ports::{
     learning_model::LearningModel,
     lookup_job::{LookupJobOwner, LookupJobStore},
+    metrics::MetricsRecorder,
   },
   provider::{TranslationError, TranslationService},
   types::{ErrorResponse, HealthResponse, TranslateRequest},
@@ -105,6 +106,7 @@ pub struct AppState {
   lookup_jobs: Option<Arc<LookupJobService>>,
   graph: Option<Arc<GraphService>>,
   graph_cursor_protection_key: GraphCursorProtectionKey,
+  metrics: Option<Arc<dyn MetricsRecorder>>,
   readiness: Arc<dyn Readiness>,
 }
 
@@ -122,6 +124,7 @@ impl AppState {
       lookup_jobs: None,
       graph: None,
       graph_cursor_protection_key: GraphCursorProtectionKey::ephemeral(),
+      metrics: None,
       readiness: Arc::new(AlwaysReady),
     }
   }
@@ -168,6 +171,18 @@ impl AppState {
     self
   }
 
+  /// Adds a closed, best-effort metric recorder for model-only lookup outcomes.
+  ///
+  /// The recorder reports request validation, rejected structured model output, and completed
+  /// response assembly. Provider availability remains covered by the provider-resilience metrics,
+  /// because the closed event catalog has no model-availability category. The recorder is optional
+  /// and its error-free port cannot alter the HTTP response. Canonical lookup, translation, health,
+  /// and job routes do not emit through this dependency.
+  pub fn with_metrics_recorder(mut self, recorder: Arc<dyn MetricsRecorder>) -> Self {
+    self.metrics = Some(recorder);
+    self
+  }
+
   /// Adds the dependency probe used by `GET /readyz`.
   pub fn with_readiness(mut self, readiness: Arc<dyn Readiness>) -> Self {
     self.readiness = readiness;
@@ -188,6 +203,10 @@ impl AppState {
 
   pub(crate) fn graph_cursor_protection_key(&self) -> &[u8] {
     self.graph_cursor_protection_key.as_bytes()
+  }
+
+  pub(crate) fn metrics_recorder(&self) -> Option<&Arc<dyn MetricsRecorder>> {
+    self.metrics.as_ref()
   }
 
   fn has_lookup_job_service(&self) -> bool {
