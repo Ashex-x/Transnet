@@ -13,9 +13,14 @@ use super::{problem, request_id::RequestId, AppState};
 pub(crate) mod graph;
 pub(crate) mod lookup;
 pub(crate) mod lookup_job;
+pub(crate) mod sense;
 
 /// Builds the versioned API router before application state is attached.
-pub(crate) fn router(lookup_jobs_enabled: bool, graph_enabled: bool) -> Router<AppState> {
+pub(crate) fn router(
+  lookup_jobs_enabled: bool,
+  graph_enabled: bool,
+  canonical_sense_details_enabled: bool,
+) -> Router<AppState> {
   let router = Router::new().route("/lookups", post(lookup::lookup));
   let router = if lookup_jobs_enabled {
     router.route("/lookup-jobs/:job_id", get(lookup_job::poll))
@@ -27,6 +32,11 @@ pub(crate) fn router(lookup_jobs_enabled: bool, graph_enabled: bool) -> Router<A
       "/graph/nodes/:node_kind/:node_id/neighbors",
       get(graph::neighbors),
     )
+  } else {
+    router
+  };
+  let router = if canonical_sense_details_enabled {
+    router.route("/senses/:sense_id", get(sense::read))
   } else {
     router
   };

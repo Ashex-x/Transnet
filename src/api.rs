@@ -22,12 +22,16 @@ use tracing::Level;
 
 use crate::{
   application::{
-    canonical_lookup::CanonicalLookupService, graph::GraphService, lookup::LookupService,
+    canonical_lookup::CanonicalLookupService,
+    canonical_sense_details::{ActiveCanonicalSenseDetailsService, CanonicalSenseDetailsService},
+    graph::GraphService,
+    lookup::LookupService,
     lookup_job::LookupJobService,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
   domain::observability::MetricEvent,
   ports::{
+    active_content_reader::ActiveContentReader,
     learning_model::LearningModel,
     lookup_job::{LookupJobOwner, LookupJobStore},
     metrics::MetricsRecorder,
@@ -133,6 +137,7 @@ pub struct AppState {
   service: Arc<TranslationService>,
   lookup: Option<Arc<LookupService>>,
   canonical_lookup: Option<Arc<CanonicalLookupService>>,
+  canonical_sense_details: Option<Arc<ActiveCanonicalSenseDetailsService>>,
   lookup_jobs: Option<Arc<LookupJobService>>,
   graph: Option<Arc<GraphService>>,
   graph_cursor_protection_key: GraphCursorProtectionKey,
@@ -151,6 +156,7 @@ impl AppState {
       service: Arc::new(service),
       lookup: None,
       canonical_lookup: None,
+      canonical_sense_details: None,
       lookup_jobs: None,
       graph: None,
       graph_cursor_protection_key: GraphCursorProtectionKey::ephemeral(),
@@ -172,6 +178,23 @@ impl AppState {
   /// private contextual policy.
   pub fn with_canonical_lookup(mut self, lookup: Arc<CanonicalLookupService>) -> Self {
     self.canonical_lookup = Some(lookup);
+    self
+  }
+
+  /// Adds the public active-release-pinned canonical sense-details composition.
+  ///
+  /// The route is registered only when both the narrow active-content reader and dedicated
+  /// details service are injected. The default model-only runtime therefore cannot imply that
+  /// canonical content, source permissions, or a current content release are available.
+  pub fn with_canonical_sense_details(
+    mut self,
+    active_content: Arc<dyn ActiveContentReader>,
+    details: Arc<CanonicalSenseDetailsService>,
+  ) -> Self {
+    self.canonical_sense_details = Some(Arc::new(ActiveCanonicalSenseDetailsService::new(
+      active_content,
+      details,
+    )));
     self
   }
 
@@ -229,6 +252,12 @@ impl AppState {
     self.canonical_lookup.as_ref()
   }
 
+  pub(crate) fn canonical_sense_details_service(
+    &self,
+  ) -> Option<&Arc<ActiveCanonicalSenseDetailsService>> {
+    self.canonical_sense_details.as_ref()
+  }
+
   pub(crate) fn graph_service(&self) -> Option<&Arc<GraphService>> {
     self.graph.as_ref()
   }
@@ -249,6 +278,10 @@ impl AppState {
 
   fn has_graph_service(&self) -> bool {
     self.graph.is_some()
+  }
+
+  fn has_canonical_sense_details_service(&self) -> bool {
+    self.canonical_sense_details.is_some()
   }
 }
 
@@ -296,7 +329,11 @@ fn build_router(state: AppState, max_request_body_bytes: usize, cors: Option<Cor
     .route("/translate", post(translate))
     .nest(
       "/v1",
-      v1::router(state.has_lookup_job_service(), state.has_graph_service()),
+      v1::router(
+        state.has_lookup_job_service(),
+        state.has_graph_service(),
+        state.has_canonical_sense_details_service(),
+      ),
     )
     .with_state(state)
     .layer(DefaultBodyLimit::max(max_request_body_bytes))
@@ -498,6 +535,32 @@ mod tests {
     assert_eq!(
       recorded.lock().unwrap().as_deref(),
       Some("/v1/graph/nodes/:node_kind/:node_id/neighbors")
+    );
+  }
+
+  #[tokio::test]
+  async fn trace_route_uses_the_matched_template_for_dynamic_sense_identifiers() {
+    let recorded = Arc::new(Mutex::new(None));
+    let router = Router::new()
+      .route("/v1/senses/:sense_id", get(|| async { StatusCode::OK }))
+      .layer(middleware::from_fn_with_state(
+        recorded.clone(),
+        capture_route,
+      ));
+
+    let response = router
+      .oneshot(
+        Request::get("/v1/senses/sense-source-text-that-must-not-be-logged")
+          .body(Body::empty())
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+      recorded.lock().unwrap().as_deref(),
+      Some("/v1/senses/:sense_id")
     );
   }
 
