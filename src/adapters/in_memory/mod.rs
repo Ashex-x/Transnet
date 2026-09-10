@@ -2,6 +2,7 @@
 
 mod cache;
 mod content_release;
+mod feedback;
 mod graph_repository;
 mod idempotency;
 mod jobs;
@@ -12,6 +13,7 @@ mod retriever;
 
 pub use cache::InMemoryCache;
 pub use content_release::InMemoryContentReleaseRepository;
+pub use feedback::{InMemoryGraphFeedbackCatalog, InMemoryGraphFeedbackStore};
 pub use graph_repository::InMemoryGraphRepository;
 pub use idempotency::InMemoryIdempotencyStore;
 pub use jobs::InMemoryDurableJobQueue;

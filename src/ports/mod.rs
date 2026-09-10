@@ -10,6 +10,8 @@ pub mod clock;
 pub mod content_release_repository;
 /// Leased durable-work interface for API and worker coordination.
 pub mod durable_job;
+/// Canonical graph-feedback eligibility and private-feedback persistence interfaces.
+pub mod graph_feedback;
 /// Read-only canonical graph topology interface.
 pub mod graph_repository;
 /// Scoped idempotency reservation and response-storage interface.

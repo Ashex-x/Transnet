@@ -2,6 +2,8 @@
 
 /// Content-release staging, validation, publication, rollback, and source quarantine.
 pub mod content_release;
+/// Private graph-feedback validation and projection orchestration.
+pub mod feedback;
 /// Typed bounded canonical graph reads and neighbor expansion.
 pub mod graph;
 /// Private learner state and privacy-plan orchestration.
