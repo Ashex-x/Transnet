@@ -6,6 +6,8 @@ pub mod cache;
 pub mod canonical_repository;
 /// UTC time source used by application and infrastructure code.
 pub mod clock;
+/// Atomic content-release staging, publication, rollback, and source-quarantine interface.
+pub mod content_release_repository;
 /// Leased durable-work interface for API and worker coordination.
 pub mod durable_job;
 /// Read-only canonical graph topology interface.

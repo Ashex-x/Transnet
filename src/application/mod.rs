@@ -1,5 +1,7 @@
 //! Application use cases.
 
+/// Content-release staging, validation, publication, rollback, and source quarantine.
+pub mod content_release;
 /// Typed bounded canonical graph reads and neighbor expansion.
 pub mod graph;
 /// Structured lookup orchestration.
