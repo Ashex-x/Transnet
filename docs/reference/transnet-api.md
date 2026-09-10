@@ -1,6 +1,6 @@
 # Transnet HTTP API
 
-Requests and responses use JSON. No implemented route requires authentication.
+Requests and responses use JSON. No implemented route requires authentication. The hand-maintained [OpenAPI 3.1 contract](transnet-openapi.json) covers only the routes wired by the default Rust process; optional dependency-injected routes are intentionally absent.
 
 ## Request correlation and browser access
 

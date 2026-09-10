@@ -9,6 +9,7 @@
 ## Reference
 
 - [Implemented HTTP API](reference/transnet-api.md): current direct translation and model-only learning lookup routes.
+- [OpenAPI 3.1 contract](reference/transnet-openapi.json): machine-readable contract for only the default runtime HTTP routes.
 - [Learning HTTP API](reference/learning-api.md): implemented `/v1/lookups` boundary and proposed evidence-backed, graph, feedback, practice, and privacy contracts.
 - [Proposed MySQL schema](reference/mysql-schema.md): table catalog, DDL, encryption, retention, and transactional invariants.
 
