@@ -4,6 +4,8 @@
 pub mod api;
 /// Runtime configuration types.
 pub mod config;
+/// Pure business types and invariants.
+pub mod domain;
 /// OpenAI-compatible model clients and routing.
 pub mod provider;
 /// Public HTTP request and response types.
