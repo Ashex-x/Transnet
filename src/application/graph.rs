@@ -46,6 +46,19 @@ impl GraphService {
     Self { repository }
   }
 
+  /// Resolves the active immutable public graph content tuple for a new read.
+  ///
+  /// Callers that cache graph results must include this release, ranker, and community-aggregate
+  /// tuple in their cache identity. The returned value contains no learner state, authorization
+  /// data, or presentation entity tags.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when the canonical graph repository cannot resolve the active content.
+  pub async fn active_content_version(&self) -> Result<GraphContentVersion, GraphReadError> {
+    Ok(self.repository.active_graph_content().await?)
+  }
+
   /// Reads a bounded breadth-first graph rooted at a typed canonical node.
   ///
   /// The service validates canonical records again after loading, derives inverse and adjacent-scale
