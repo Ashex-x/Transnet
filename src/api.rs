@@ -18,7 +18,9 @@ use tower_http::{
 use tracing::Level;
 
 use crate::{
-  application::{lookup::LookupService, lookup_job::LookupJobService},
+  application::{
+    canonical_lookup::CanonicalLookupService, lookup::LookupService, lookup_job::LookupJobService,
+  },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
   ports::{
     learning_model::LearningModel,
@@ -42,6 +44,7 @@ use request_id::RequestId;
 pub struct AppState {
   service: Arc<TranslationService>,
   lookup: Option<Arc<LookupService>>,
+  canonical_lookup: Option<Arc<CanonicalLookupService>>,
   lookup_jobs: Option<Arc<LookupJobService>>,
   readiness: Arc<dyn Readiness>,
 }
@@ -52,6 +55,7 @@ impl AppState {
     Self {
       service: Arc::new(service),
       lookup: None,
+      canonical_lookup: None,
       lookup_jobs: None,
       readiness: Arc::new(AlwaysReady),
     }
@@ -60,6 +64,16 @@ impl AppState {
   /// Adds the structured learning-model dependency used by `/v1/lookups`.
   pub fn with_learning_model(mut self, model: Arc<dyn LearningModel>) -> Self {
     self.lookup = Some(Arc::new(LookupService::new(model)));
+    self
+  }
+
+  /// Adds the deterministic canonical lookup dependency used by eligible `/v1/lookups` requests.
+  ///
+  /// Requests with automatic language detection or nonblank context intentionally remain on the
+  /// injected learning-model path because this foundation does not perform language analysis or
+  /// private contextual policy.
+  pub fn with_canonical_lookup(mut self, lookup: Arc<CanonicalLookupService>) -> Self {
+    self.canonical_lookup = Some(lookup);
     self
   }
 
@@ -79,6 +93,10 @@ impl AppState {
 
   pub(crate) fn lookup_job_service(&self) -> Option<&Arc<LookupJobService>> {
     self.lookup_jobs.as_ref()
+  }
+
+  pub(crate) fn canonical_lookup_service(&self) -> Option<&Arc<CanonicalLookupService>> {
+    self.canonical_lookup.as_ref()
   }
 
   fn has_lookup_job_service(&self) -> bool {

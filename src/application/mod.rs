@@ -1,5 +1,7 @@
 //! Application use cases.
 
+/// Canonical lookup composition through public snapshots and deterministic card assembly.
+pub mod canonical_lookup;
 /// Public canonical lookup snapshot caching with private-input bypasses.
 pub mod canonical_lookup_cache;
 /// Bounded deterministic canonical lookup-card assembly without HTTP or model generation.

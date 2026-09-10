@@ -14,12 +14,30 @@ use crate::{
     request_id::RequestId,
     AppState,
   },
-  domain::translation::{
-    CefrLevel, Confidence, EnglishDialect, EnglishEntry, PartOfSpeech, RelationKind,
-    TranslationInput, TranslationValidationError, UsageNoteKind,
+  domain::{
+    canonical::{
+      EvidenceConfidence, EvidenceKind, EvidenceUse, FormKind, LanguageTag, LexicalPartOfSpeech,
+    },
+    canonical_lookup_cache::{
+      CanonicalCardPolicyVersions, CanonicalLookupCacheEligibility, PublicCanonicalLookupRequest,
+    },
+    lookup_card::{
+      CanonicalLookupAssertionKind, CanonicalLookupCard, CanonicalLookupCardAssertion,
+      CanonicalLookupCardCandidate, CanonicalLookupCardCoverage, CanonicalLookupCardCoverageState,
+      CanonicalLookupCardEvidence, CanonicalLookupCardEvidenceProvenance, CanonicalLookupCardForm,
+      CanonicalLookupCardLexeme, CanonicalLookupCardSectionCoverage, CanonicalLookupCardSense,
+    },
+    retrieval::DEFAULT_RETRIEVAL_LIMIT,
+    translation::{
+      CefrLevel, Confidence, EnglishDialect, EnglishEntry, PartOfSpeech, RelationKind,
+      TranslationInput, TranslationValidationError, UsageNoteKind,
+    },
   },
   ports::learning_model::LearningModelError,
 };
+
+const CANONICAL_RETRIEVAL_POLICY_VERSION: &str = "canonical-retrieval-v1";
+const CANONICAL_PRESENTATION_POLICY_VERSION: &str = "canonical-card-v1";
 
 /// Public request for a model-backed learning lookup.
 #[derive(Debug, Deserialize)]
@@ -97,11 +115,120 @@ struct LookupResponse {
 }
 
 #[derive(Debug, Serialize)]
+struct CanonicalLookupResponse {
+  schema_version: &'static str,
+  query: CanonicalQueryAnalysis,
+  matches: Vec<CanonicalMatch>,
+  coverage: CanonicalCoverage,
+  warnings: Vec<String>,
+  provenance: CanonicalLookupProvenance,
+}
+
+#[derive(Debug, Serialize)]
 struct QueryAnalysis {
   original: String,
   normalized: String,
   language: String,
   language_confidence: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct CanonicalQueryAnalysis {
+  original: String,
+  normalized: String,
+  language: String,
+  language_confidence: &'static str,
+  evidence_use: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct CanonicalMatch {
+  rank: usize,
+  fusion_score: u64,
+  lexeme: CanonicalLexemeResponse,
+  part_of_speech: &'static str,
+  sense: CanonicalSenseResponse,
+  forms: Vec<CanonicalFormResponse>,
+}
+
+#[derive(Debug, Serialize)]
+struct CanonicalLexemeResponse {
+  id: String,
+  lemma: String,
+  language: String,
+}
+
+#[derive(Debug, Serialize)]
+struct CanonicalSenseResponse {
+  id: String,
+  sense_key: String,
+  definition: Option<CanonicalAssertionResponse>,
+}
+
+#[derive(Debug, Serialize)]
+struct CanonicalFormResponse {
+  id: String,
+  kind: &'static str,
+  morphology: Option<String>,
+  assertion: CanonicalAssertionResponse,
+}
+
+#[derive(Debug, Serialize)]
+struct CanonicalAssertionResponse {
+  kind: &'static str,
+  text: String,
+  evidence: Vec<CanonicalEvidenceResponse>,
+}
+
+#[derive(Debug, Serialize)]
+struct CanonicalEvidenceResponse {
+  id: String,
+  kind: &'static str,
+  confidence: &'static str,
+  text: String,
+  provenance: CanonicalEvidenceProvenanceResponse,
+}
+
+#[derive(Debug, Serialize)]
+struct CanonicalEvidenceProvenanceResponse {
+  source_id: String,
+  source_reference: String,
+  release_id: String,
+  language: String,
+  content_hash: String,
+}
+
+#[derive(Debug, Serialize)]
+struct CanonicalCoverage {
+  retrieval: CanonicalSectionCoverage,
+  lexemes: CanonicalSectionCoverage,
+  parts_of_speech: CanonicalSectionCoverage,
+  senses: CanonicalSectionCoverage,
+  definitions: CanonicalSectionCoverage,
+  forms: CanonicalSectionCoverage,
+  evidence: CanonicalSectionCoverage,
+}
+
+#[derive(Debug, Serialize)]
+struct CanonicalSectionCoverage {
+  state: &'static str,
+  available_items: usize,
+  missing_items: usize,
+  filtered_items: usize,
+  truncated_items: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct CanonicalLookupProvenance {
+  lexicon_release: String,
+  index_version: String,
+  schema_version: String,
+  ranking_version: String,
+  retrieval_policy_version: &'static str,
+  presentation_policy_version: &'static str,
+  retrieval_path: &'static str,
+  generation_contract: &'static str,
+  evidence_backed: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -247,6 +374,27 @@ pub(crate) async fn lookup(
     Err(error) => return validation_problem(error, &request_id),
   };
 
+  if let Some(service) = state.canonical_lookup_service() {
+    if let Some(canonical_request) = canonical_request(&request, &input) {
+      let eligibility = canonical_cache_eligibility(&request);
+      return match service.lookup(canonical_request, eligibility).await {
+        Ok(card) => {
+          let response = build_canonical_response(&request, card);
+          problem::no_store((StatusCode::OK, Json(response)).into_response())
+        }
+        Err(error) => problem::response(
+          StatusCode::SERVICE_UNAVAILABLE,
+          "canonical_lookup_unavailable",
+          "Canonical lookup unavailable",
+          "The canonical lookup service could not produce an evidence-backed result.",
+          &request_id,
+          error.is_retryable(),
+          Vec::new(),
+        ),
+      };
+    }
+  }
+
   let Some(service) = &state.lookup else {
     return problem::response(
       StatusCode::SERVICE_UNAVAILABLE,
@@ -371,6 +519,294 @@ fn build_response(
       generation_contract: "learning-card-v1",
       evidence_backed: false,
     },
+  }
+}
+
+fn canonical_request(
+  request: &LookupRequest,
+  input: &TranslationInput,
+) -> Option<PublicCanonicalLookupRequest> {
+  if input.source_language == "auto" || input.context.is_some() {
+    return None;
+  }
+
+  let language = LanguageTag::parse(&input.source_language).ok()?;
+  let policy_versions = CanonicalCardPolicyVersions::new(
+    CANONICAL_RETRIEVAL_POLICY_VERSION,
+    CANONICAL_PRESENTATION_POLICY_VERSION,
+  )
+  .ok()?;
+  PublicCanonicalLookupRequest::new(
+    &input.query,
+    language,
+    canonical_candidate_limit(request.detail),
+    policy_versions,
+  )
+  .ok()
+}
+
+fn canonical_candidate_limit(detail: Detail) -> usize {
+  match detail {
+    Detail::Brief => 3,
+    Detail::Full => DEFAULT_RETRIEVAL_LIMIT,
+  }
+}
+
+fn canonical_cache_eligibility(request: &LookupRequest) -> CanonicalLookupCacheEligibility {
+  match request.history_mode {
+    HistoryMode::Save => CanonicalLookupCacheEligibility::with_history(),
+    HistoryMode::Incognito => CanonicalLookupCacheEligibility::incognito(),
+  }
+}
+
+fn build_canonical_response(
+  request: &LookupRequest,
+  card: CanonicalLookupCard,
+) -> CanonicalLookupResponse {
+  let CanonicalLookupCard {
+    query,
+    content,
+    candidates,
+    coverage,
+  } = card;
+  let retrieval_path = canonical_retrieval_path(coverage.retrieval.state);
+
+  CanonicalLookupResponse {
+    schema_version: "1.0",
+    query: CanonicalQueryAnalysis {
+      original: request.query.clone(),
+      normalized: query.normalized_query,
+      language: query.language.to_string(),
+      language_confidence: "explicit",
+      evidence_use: evidence_use(query.evidence_use),
+    },
+    matches: candidates
+      .into_iter()
+      .map(canonical_match_response)
+      .collect(),
+    coverage: canonical_coverage_response(coverage),
+    warnings: canonical_warnings(request),
+    provenance: CanonicalLookupProvenance {
+      lexicon_release: content.release_id.to_string(),
+      index_version: content.vector_collection_id.to_string(),
+      schema_version: content.schema_version,
+      ranking_version: content.ranking_version,
+      retrieval_policy_version: CANONICAL_RETRIEVAL_POLICY_VERSION,
+      presentation_policy_version: CANONICAL_PRESENTATION_POLICY_VERSION,
+      retrieval_path,
+      generation_contract: "not_generated",
+      evidence_backed: true,
+    },
+  }
+}
+
+fn canonical_warnings(request: &LookupRequest) -> Vec<String> {
+  let mut warnings = vec![
+    "This result contains deterministic canonical lexical content and no generated explanation."
+      .to_string(),
+  ];
+  if matches!(request.history_mode, HistoryMode::Save) {
+    warnings.push("History is not stored by the current anonymous basic-core slice.".to_string());
+  }
+  if request.include.as_ref().is_some_and(|sections| {
+    sections.contains(&IncludeSection::Relations) || sections.contains(&IncludeSection::WordHistory)
+  }) {
+    warnings.push(
+      "Relations and word history are not included by the current canonical lookup foundation."
+        .to_string(),
+    );
+  }
+  if request
+    .include
+    .as_ref()
+    .is_some_and(|sections| sections.contains(&IncludeSection::PracticePreview))
+  {
+    warnings.push("Practice preview is not implemented yet.".to_string());
+  }
+  warnings
+}
+
+fn canonical_match_response(candidate: CanonicalLookupCardCandidate) -> CanonicalMatch {
+  let CanonicalLookupCardCandidate {
+    rank,
+    fusion_score,
+    lexeme,
+    sense,
+    forms,
+  } = candidate;
+  CanonicalMatch {
+    rank,
+    fusion_score,
+    part_of_speech: lexical_part_of_speech(lexeme.part_of_speech),
+    lexeme: canonical_lexeme_response(lexeme),
+    sense: canonical_sense_response(sense),
+    forms: forms.into_iter().map(canonical_form_response).collect(),
+  }
+}
+
+fn canonical_lexeme_response(lexeme: CanonicalLookupCardLexeme) -> CanonicalLexemeResponse {
+  CanonicalLexemeResponse {
+    id: lexeme.id.to_string(),
+    lemma: lexeme.lemma,
+    language: lexeme.language.to_string(),
+  }
+}
+
+fn canonical_sense_response(sense: CanonicalLookupCardSense) -> CanonicalSenseResponse {
+  CanonicalSenseResponse {
+    id: sense.id.to_string(),
+    sense_key: sense.sense_key,
+    definition: sense.definition.map(canonical_assertion_response),
+  }
+}
+
+fn canonical_form_response(form: CanonicalLookupCardForm) -> CanonicalFormResponse {
+  CanonicalFormResponse {
+    id: form.id.to_string(),
+    kind: form_kind(form.kind),
+    morphology: form.morphology,
+    assertion: canonical_assertion_response(form.assertion),
+  }
+}
+
+fn canonical_assertion_response(
+  assertion: CanonicalLookupCardAssertion,
+) -> CanonicalAssertionResponse {
+  CanonicalAssertionResponse {
+    kind: canonical_assertion_kind(assertion.kind),
+    text: assertion.text,
+    evidence: assertion
+      .evidence
+      .into_iter()
+      .map(canonical_evidence_response)
+      .collect(),
+  }
+}
+
+fn canonical_evidence_response(evidence: CanonicalLookupCardEvidence) -> CanonicalEvidenceResponse {
+  CanonicalEvidenceResponse {
+    id: evidence.id.to_string(),
+    kind: evidence_kind(evidence.kind),
+    confidence: evidence_confidence(evidence.confidence),
+    text: evidence.text,
+    provenance: canonical_evidence_provenance_response(evidence.provenance),
+  }
+}
+
+fn canonical_evidence_provenance_response(
+  provenance: CanonicalLookupCardEvidenceProvenance,
+) -> CanonicalEvidenceProvenanceResponse {
+  CanonicalEvidenceProvenanceResponse {
+    source_id: provenance.source_id.to_string(),
+    source_reference: provenance.source_reference,
+    release_id: provenance.release_id.to_string(),
+    language: provenance.language.to_string(),
+    content_hash: provenance.content_hash,
+  }
+}
+
+fn canonical_coverage_response(coverage: CanonicalLookupCardCoverage) -> CanonicalCoverage {
+  CanonicalCoverage {
+    retrieval: canonical_section_coverage(coverage.retrieval),
+    lexemes: canonical_section_coverage(coverage.lexemes),
+    parts_of_speech: canonical_section_coverage(coverage.parts_of_speech),
+    senses: canonical_section_coverage(coverage.senses),
+    definitions: canonical_section_coverage(coverage.definitions),
+    forms: canonical_section_coverage(coverage.forms),
+    evidence: canonical_section_coverage(coverage.evidence),
+  }
+}
+
+fn canonical_section_coverage(
+  coverage: CanonicalLookupCardSectionCoverage,
+) -> CanonicalSectionCoverage {
+  CanonicalSectionCoverage {
+    state: canonical_coverage_state(coverage.state),
+    available_items: coverage.available_items,
+    missing_items: coverage.missing_items,
+    filtered_items: coverage.filtered_items,
+    truncated_items: coverage.truncated_items,
+  }
+}
+
+fn canonical_retrieval_path(state: CanonicalLookupCardCoverageState) -> &'static str {
+  match state {
+    CanonicalLookupCardCoverageState::VectorDegraded => "lexical_fallback",
+    CanonicalLookupCardCoverageState::Available
+    | CanonicalLookupCardCoverageState::Missing
+    | CanonicalLookupCardCoverageState::Filtered => "hybrid",
+  }
+}
+
+fn canonical_coverage_state(value: CanonicalLookupCardCoverageState) -> &'static str {
+  match value {
+    CanonicalLookupCardCoverageState::Available => "available",
+    CanonicalLookupCardCoverageState::Missing => "missing",
+    CanonicalLookupCardCoverageState::Filtered => "filtered",
+    CanonicalLookupCardCoverageState::VectorDegraded => "vector_degraded",
+  }
+}
+
+fn lexical_part_of_speech(value: LexicalPartOfSpeech) -> &'static str {
+  match value {
+    LexicalPartOfSpeech::Noun => "noun",
+    LexicalPartOfSpeech::Verb => "verb",
+    LexicalPartOfSpeech::Adjective => "adjective",
+    LexicalPartOfSpeech::Adverb => "adverb",
+    LexicalPartOfSpeech::Pronoun => "pronoun",
+    LexicalPartOfSpeech::Preposition => "preposition",
+    LexicalPartOfSpeech::Conjunction => "conjunction",
+    LexicalPartOfSpeech::Determiner => "determiner",
+    LexicalPartOfSpeech::Interjection => "interjection",
+    LexicalPartOfSpeech::Numeral => "numeral",
+    LexicalPartOfSpeech::Other => "other",
+  }
+}
+
+fn form_kind(value: FormKind) -> &'static str {
+  match value {
+    FormKind::Lemma => "lemma",
+    FormKind::SpellingVariant => "spelling_variant",
+    FormKind::Inflection => "inflection",
+    FormKind::Phrase => "phrase",
+    FormKind::Alias => "alias",
+  }
+}
+
+fn canonical_assertion_kind(value: CanonicalLookupAssertionKind) -> &'static str {
+  match value {
+    CanonicalLookupAssertionKind::Definition => "definition",
+    CanonicalLookupAssertionKind::Form => "form",
+  }
+}
+
+fn evidence_kind(value: EvidenceKind) -> &'static str {
+  match value {
+    EvidenceKind::Definition => "definition",
+    EvidenceKind::LocalizedGloss => "localized_gloss",
+    EvidenceKind::Example => "example",
+    EvidenceKind::Pronunciation => "pronunciation",
+    EvidenceKind::Usage => "usage",
+    EvidenceKind::Etymology => "etymology",
+    EvidenceKind::Other => "other",
+  }
+}
+
+fn evidence_confidence(value: EvidenceConfidence) -> &'static str {
+  match value {
+    EvidenceConfidence::High => "high",
+    EvidenceConfidence::Medium => "medium",
+    EvidenceConfidence::Low => "low",
+  }
+}
+
+fn evidence_use(value: EvidenceUse) -> &'static str {
+  match value {
+    EvidenceUse::Storage => "storage",
+    EvidenceUse::Display => "display",
+    EvidenceUse::Embedding => "embedding",
+    EvidenceUse::ModelProcessing => "model_processing",
+    EvidenceUse::ApiRedistribution => "api_redistribution",
   }
 }
 

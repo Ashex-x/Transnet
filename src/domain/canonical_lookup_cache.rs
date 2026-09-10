@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use super::{
   canonical::{ActiveContentVersion, EvidenceUse, LanguageTag},
-  retrieval::{RankedCandidate, RetrievalRequest, RetrievalValidationError},
+  retrieval::{RankedCandidate, RetrievalPath, RetrievalRequest, RetrievalValidationError},
 };
 
 /// Validation failure while constructing a public canonical lookup cache contract.
@@ -245,15 +245,17 @@ impl fmt::Debug for CanonicalLookupSnapshotKey {
   }
 }
 
-/// Rebuildable public canonical-card data stored in a shared cache.
+/// Rebuildable public canonical-card data retained by the snapshot-cache service.
 ///
 /// Its `Debug` implementation exposes only version metadata, retrieval cardinality, and no card
 /// or evidence text. The actual candidate payload is filtered to API-redistributable evidence
-/// before construction succeeds. The full redacted key is retained so an adapter that returns a
-/// mismatched value can never turn a different query, language, or candidate limit into a hit.
+/// before construction succeeds. The snapshot also retains the retrieval path that built its
+/// candidates. The full redacted key is retained so an adapter that returns a mismatched value
+/// can never turn a different query, language, or candidate limit into a hit.
 #[derive(Clone, PartialEq, Eq)]
 pub struct CanonicalLookupSnapshot {
   key: CanonicalLookupSnapshotKey,
+  retrieval_path: RetrievalPath,
   candidates: Vec<RankedCandidate>,
 }
 
@@ -270,6 +272,7 @@ impl CanonicalLookupSnapshot {
   pub fn new(
     key: &CanonicalLookupSnapshotKey,
     candidates: Vec<RankedCandidate>,
+    retrieval_path: RetrievalPath,
   ) -> Result<Self, CanonicalLookupCacheValidationError> {
     if candidates.len() > key.candidate_limit {
       return Err(CanonicalLookupCacheValidationError::CandidateLimitExceeded);
@@ -302,6 +305,7 @@ impl CanonicalLookupSnapshot {
 
     Ok(Self {
       key: key.clone(),
+      retrieval_path,
       candidates,
     })
   }
@@ -321,6 +325,15 @@ impl CanonicalLookupSnapshot {
     self.key.content()
   }
 
+  /// Returns the retrieval path that built this immutable snapshot.
+  ///
+  /// A snapshot returned from the shared cache is always [`RetrievalPath::Hybrid`]. A
+  /// lexical-only snapshot may be returned only from an uncached rebuild so that vector recovery
+  /// can improve the next public lookup.
+  pub const fn retrieval_path(&self) -> RetrievalPath {
+    self.retrieval_path
+  }
+
   /// Returns the retrieval and presentation policy versions used to construct the snapshot.
   pub fn policy_versions(&self) -> &CanonicalCardPolicyVersions {
     self.key.policy_versions()
@@ -337,6 +350,7 @@ impl fmt::Debug for CanonicalLookupSnapshot {
     formatter
       .debug_struct("CanonicalLookupSnapshot")
       .field("key", &self.key)
+      .field("retrieval_path", &self.retrieval_path)
       .field("candidate_count", &self.candidates.len())
       .field("candidates", &"[redacted]")
       .finish()
@@ -652,7 +666,8 @@ mod tests {
     let request =
       PublicCanonicalLookupRequest::new("private query text", language(), 4, policies()).unwrap();
     let key = CanonicalLookupSnapshotKey::new(&request, content()).unwrap();
-    let snapshot = CanonicalLookupSnapshot::new(&key, vec![candidate()]).unwrap();
+    let snapshot =
+      CanonicalLookupSnapshot::new(&key, vec![candidate()], RetrievalPath::Hybrid).unwrap();
 
     let debug = format!("{request:?} {key:?} {snapshot:?}");
 
@@ -665,7 +680,8 @@ mod tests {
   #[test]
   fn snapshot_removes_unredistributable_extra_evidence() {
     let key = CanonicalLookupSnapshotKey::new(&request(), content()).unwrap();
-    let snapshot = CanonicalLookupSnapshot::new(&key, vec![candidate()]).unwrap();
+    let snapshot =
+      CanonicalLookupSnapshot::new(&key, vec![candidate()], RetrievalPath::Hybrid).unwrap();
 
     assert_eq!(snapshot.candidates()[0].candidate.evidence.len(), 1);
     assert_eq!(
@@ -682,7 +698,8 @@ mod tests {
       content(),
     )
     .unwrap();
-    let snapshot = CanonicalLookupSnapshot::new(&key, vec![candidate()]).unwrap();
+    let snapshot =
+      CanonicalLookupSnapshot::new(&key, vec![candidate()], RetrievalPath::Hybrid).unwrap();
 
     assert!(!snapshot.matches_key(&different_key));
   }

@@ -22,13 +22,7 @@ use crate::{
 };
 
 /// Retrieval path used to create a deterministic canonical candidate list.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RetrievalPath {
-  /// Pinned vector retrieval completed; eligible vector signals were fused with lexical signals.
-  Hybrid,
-  /// The derived vector dependency failed, so canonical lexical retrieval continued alone.
-  LexicalFallback,
-}
+pub use crate::domain::retrieval::RetrievalPath;
 
 /// Result of canonical retrieval before any model generation or HTTP response assembly.
 #[derive(Debug, Clone, PartialEq, Eq)]
