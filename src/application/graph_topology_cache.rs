@@ -365,11 +365,7 @@ impl GraphTopologySnapshotCacheService {
 
   /// Returns this cache composition with metrics attached to its authoritative graph service.
   pub fn with_metrics_dispatcher(mut self, dispatcher: Arc<ClosedMetricsDispatcher>) -> Self {
-    self.graph = Arc::new(
-      (*self.graph)
-        .clone()
-        .with_metrics_dispatcher(dispatcher),
-    );
+    self.graph = Arc::new((*self.graph).clone().with_metrics_dispatcher(dispatcher));
     self
   }
 

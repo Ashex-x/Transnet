@@ -18,7 +18,10 @@ use axum::{
 };
 use tower::ServiceExt;
 use transnet::{
-  adapters::{clock::FixedClock, in_memory::InMemoryGraphRepository},
+  adapters::{
+    clock::FixedClock,
+    in_memory::{InMemoryGraphRepository, InMemoryMetricsRecorder},
+  },
   app_router,
   application::{
     graph::GraphService,
@@ -33,6 +36,7 @@ use transnet::{
       GraphNodeKey, GraphNodeKind, GraphRanking, GraphRelationType, GraphScope, GraphScore,
       GraphScoreComponents, RelationVersion, StoredGraphRelation,
     },
+    observability::{GraphOperation, MetricEvent, MetricOutcome},
   },
   ports::{
     cache::{Cache, CacheEntry, CacheError},
@@ -389,6 +393,23 @@ async fn wire(response: Response) -> (StatusCode, HeaderMap, Vec<u8>) {
   (status, headers, body)
 }
 
+async fn recorded_events(
+  recorder: &InMemoryMetricsRecorder,
+  expected_count: usize,
+) -> Vec<MetricEvent> {
+  tokio::time::timeout(Duration::from_secs(1), async {
+    loop {
+      let events = recorder.events().await;
+      if events.len() >= expected_count {
+        return events;
+      }
+      tokio::task::yield_now().await;
+    }
+  })
+  .await
+  .expect("cache-owned graph service records the expected closed events")
+}
+
 fn assert_no_cache_state_headers(headers: &HeaderMap) {
   assert_eq!(headers.get(header::CACHE_CONTROL).unwrap(), "no-store");
   assert!(headers.get(header::ETAG).is_none());
@@ -455,6 +476,51 @@ async fn full_graph_cache_hit_miss_and_outage_rebuilds_keep_the_public_wire_cont
   assert_no_cache_state_headers(&outage_headers);
   assert_eq!(outage_body, miss_body);
   assert_eq!(outage_repository.adjacency_calls(), 1);
+}
+
+#[tokio::test]
+async fn cache_owned_graph_service_retains_closed_metrics_for_rebuilds_and_neighbors() {
+  let repository = Arc::new(FixtureGraphRepository::new());
+  let cache = Arc::new(TestTopologyCache::available());
+  let recorder = InMemoryMetricsRecorder::new();
+  let router = app_router(
+    AppState::new(translation_service())
+      .with_metrics_recorder(Arc::new(recorder.clone()))
+      .with_graph_topology_snapshot_cache(topology_cache_service(repository, cache)),
+  );
+
+  let miss = router.clone().oneshot(graph_request("hot")).await.unwrap();
+  assert_eq!(miss.status(), StatusCode::OK);
+  assert_eq!(
+    recorded_events(&recorder, 1).await,
+    vec![MetricEvent::GraphOperation {
+      operation: GraphOperation::Traversal,
+      outcome: MetricOutcome::Succeeded,
+    }]
+  );
+
+  let hit = router.clone().oneshot(graph_request("hot")).await.unwrap();
+  assert_eq!(hit.status(), StatusCode::OK);
+  tokio::task::yield_now().await;
+  assert_eq!(recorder.events().await.len(), 1);
+
+  let neighbor = router.oneshot(neighbor_request()).await.unwrap();
+  assert_eq!(neighbor.status(), StatusCode::OK);
+  let events = recorded_events(&recorder, 2).await;
+  assert_eq!(
+    events,
+    vec![
+      MetricEvent::GraphOperation {
+        operation: GraphOperation::Traversal,
+        outcome: MetricOutcome::Succeeded,
+      },
+      MetricEvent::GraphOperation {
+        operation: GraphOperation::NeighborExpansion,
+        outcome: MetricOutcome::Succeeded,
+      },
+    ]
+  );
+  assert!(!format!("{events:?}").contains("hot"));
 }
 
 #[tokio::test]
