@@ -12,14 +12,19 @@ use axum::{
 use tower_http::trace::TraceLayer;
 
 use crate::{
+  application::lookup::LookupService,
+  ports::learning_model::LearningModel,
   provider::{TranslationError, TranslationService},
   types::{ErrorResponse, HealthResponse, TranslateRequest},
 };
+
+mod v1;
 
 /// Shared dependencies used by request handlers.
 #[derive(Clone)]
 pub struct AppState {
   service: Arc<TranslationService>,
+  lookup: Option<Arc<LookupService>>,
 }
 
 impl AppState {
@@ -27,7 +32,14 @@ impl AppState {
   pub fn new(service: TranslationService) -> Self {
     Self {
       service: Arc::new(service),
+      lookup: None,
     }
+  }
+
+  /// Adds the structured learning-model dependency used by `/v1/lookups`.
+  pub fn with_learning_model(mut self, model: Arc<dyn LearningModel>) -> Self {
+    self.lookup = Some(Arc::new(LookupService::new(model)));
+    self
   }
 }
 
@@ -36,6 +48,7 @@ pub fn app_router(state: AppState) -> Router {
   Router::new()
     .route("/health", get(health))
     .route("/translate", post(translate))
+    .route("/v1/lookups", post(v1::lookup::lookup))
     .layer(TraceLayer::new_for_http())
     .with_state(state)
 }

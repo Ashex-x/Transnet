@@ -6,6 +6,8 @@
 pub mod adapters;
 /// HTTP routing and status mapping.
 pub mod api;
+/// Use-case orchestration.
+pub mod application;
 /// Runtime configuration types.
 pub mod config;
 /// Pure business types and invariants.
@@ -17,6 +19,7 @@ pub mod provider;
 /// Public HTTP request and response types.
 pub mod types;
 
+pub use adapters::learning_model::OpenAiLearningModel;
 pub use api::{app_router, AppState};
 pub use config::{AppConfig, ProviderConfig, TranslationConfig};
 pub use provider::{TranslationError, TranslationService};
