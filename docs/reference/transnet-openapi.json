@@ -1,0 +1,1212 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Transnet HTTP API",
+    "version": "0.1.0",
+    "description": "Hand-maintained contract for only the public routes wired by the default Rust process: health, liveness, readiness, direct translation, and model-backed learning lookup. Routes that require optional application-state injection are intentionally absent. This contract makes no persistence, vector-database, or Web UI claim."
+  },
+  "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
+  "servers": [
+    {
+      "url": "/",
+      "description": "The configured Transnet listener."
+    }
+  ],
+  "security": [],
+  "tags": [
+    {
+      "name": "process",
+      "description": "Unauthenticated process-health routes."
+    },
+    {
+      "name": "translation",
+      "description": "Unauthenticated direct translation that preserves the legacy contract."
+    },
+    {
+      "name": "learning",
+      "description": "Unauthenticated, synchronous, model-generated English-learning lookup."
+    }
+  ],
+  "x-transnet-runtime-scope": {
+    "description": "Only routes registered by src/main.rs are specified. Optional dependency-injected routes are not default runtime routes and are deliberately omitted.",
+    "implementedPaths": [
+      "/health",
+      "/livez",
+      "/readyz",
+      "/translate",
+      "/v1/lookups"
+    ]
+  },
+  "x-transnet-request-correlation": {
+    "responseHeader": "X-Request-Id",
+    "description": "Every response, including route misses, payload-limit failures, and configured CORS preflights, contains X-Request-Id. A single safe supplied value is preserved; missing, duplicate, or unsafe values are replaced with a generated ULID.",
+    "safeInboundValue": "1 through 128 ASCII letters, digits, hyphens, underscores, or periods"
+  },
+  "x-transnet-cors": {
+    "default": "disabled",
+    "configuration": "http.allowed_origins",
+    "exactOriginsOnly": true,
+    "allowedMethods": [
+      "GET",
+      "POST",
+      "OPTIONS"
+    ],
+    "allowedRequestHeaders": [
+      "Content-Type",
+      "X-Request-Id",
+      "Lookup-Capability"
+    ],
+    "exposedResponseHeaders": [
+      "X-Request-Id"
+    ],
+    "credentials": "Returned only when http.allow_credentials is enabled and the origin is exactly configured; wildcard origins are rejected."
+  },
+  "x-transnet-request-body-limit": {
+    "configuration": "http.max_request_body_bytes",
+    "defaultBytes": 1048576,
+    "description": "Oversized /translate requests return the legacy direct error envelope. Oversized /v1 requests return an RFC 9457-style problem with code payload_too_large."
+  },
+  "x-transnet-cache-policy": {
+    "description": "Successful /v1/lookups responses and all versioned problem responses use Cache-Control: no-store. The health and legacy translation routes do not set this directive."
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "process"
+        ],
+        "operationId": "health",
+        "summary": "Report whether the HTTP process can serve requests.",
+        "description": "This process-health check does not probe model providers.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The HTTP process is serving requests.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOk"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/livez": {
+      "get": {
+        "tags": [
+          "process"
+        ],
+        "operationId": "livez",
+        "summary": "Report process liveness.",
+        "description": "Suitable for a supervisor that only needs to know whether the HTTP process is alive.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The HTTP process is alive.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOk"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "process"
+        ],
+        "operationId": "readyz",
+        "summary": "Report whether the process may accept traffic.",
+        "description": "The default process uses an always-ready probe. The implemented route can return 503 when its injected readiness probe reports an unavailable required dependency.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The readiness probe permits traffic.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOk"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The injected readiness probe does not permit traffic.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthUnavailable"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/translate": {
+      "post": {
+        "tags": [
+          "translation"
+        ],
+        "operationId": "translate",
+        "summary": "Translate direct source text.",
+        "description": "Legacy direct-translation contract. The process selects its configured short- or long-text provider internally; provider choice is not part of this API. This route uses the direct error envelope, not the versioned problem envelope.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Translation completed.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request body is not valid JSON.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body exceeds http.max_request_body_bytes.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Text is blank after trimming or either language code is malformed.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The selected translation provider could not produce a response after its bounded policy.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/lookups": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "operationId": "lookupLearningCard",
+        "summary": "Return a synchronous model-generated English-learning card.",
+        "description": "The default process wires a model-backed learning lookup. It does not expose canonical lexical content, retrieval, persistence, authentication, or a Web UI through this operation. Every returned assertion is generated, canonical identifiers are null, evidence lists are empty, and the response is never shared from an HTTP cache.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A synchronous model-generated learning card. Cache-Control is always no-store.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is not valid JSON or includes unknown fields. The stable code is invalid_json. Cache-Control is always no-store.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body exceeds http.max_request_body_bytes. The stable code is payload_too_large. Cache-Control is always no-store.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A well-formed lookup fails validation. The stable code is validation_error. Cache-Control is always no-store.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The learning model returned output that does not satisfy the structured contract. The stable code is invalid_model_output. Cache-Control is always no-store.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The model is not configured or cannot return a result. The stable code is learning_model_unavailable. Cache-Control is always no-store.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "RequestId": {
+        "name": "X-Request-Id",
+        "in": "header",
+        "required": false,
+        "description": "An optional correlation value. A single safe value is echoed; an unsafe, duplicate, or absent value is replaced with a generated ULID.",
+        "schema": {
+          "$ref": "#/components/schemas/RequestId"
+        }
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "description": "Correlation identifier selected for this response.",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/RequestId"
+        }
+      },
+      "NoStore": {
+        "description": "Versioned lookup responses and versioned problem responses are not storable by HTTP caches.",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "const": "no-store"
+        }
+      }
+    },
+    "schemas": {
+      "RequestId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9._-]+$",
+        "description": "Header-safe correlation identifier. Generated values are ULIDs."
+      },
+      "HealthOk": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        }
+      },
+      "HealthUnavailable": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "unavailable"
+          }
+        }
+      },
+      "TranslateRequest": {
+        "type": "object",
+        "required": [
+          "text",
+          "source_lang",
+          "target_lang"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Source text. It must contain at least one non-whitespace character after trimming."
+          },
+          "source_lang": {
+            "$ref": "#/components/schemas/Bcp47LanguageTag"
+          },
+          "target_lang": {
+            "$ref": "#/components/schemas/Bcp47LanguageTag"
+          }
+        }
+      },
+      "TranslateResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "translation"
+        ],
+        "properties": {
+          "translation": {
+            "type": "string",
+            "description": "The text returned by the selected translation model."
+          }
+        }
+      },
+      "DirectError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable direct-translation error message."
+          }
+        }
+      },
+      "Bcp47LanguageTag": {
+        "type": "string",
+        "maxLength": 35,
+        "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
+        "description": "The conservative BCP-47-shaped language-tag form accepted by the service."
+      },
+      "LookupRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "A nonblank word or short expression after Unicode NFC normalization."
+          },
+          "source_language": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "auto"
+              },
+              {
+                "$ref": "#/components/schemas/Bcp47LanguageTag"
+              }
+            ],
+            "default": "auto",
+            "description": "Input language, or auto for model language detection."
+          },
+          "target_language": {
+            "type": "string",
+            "pattern": "^[eE][nN]$",
+            "default": "en",
+            "description": "The current basic core supports English output only; comparison is ASCII case-insensitive."
+          },
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1000,
+            "description": "Optional disambiguating context. Blank context is treated as absent after Unicode NFC normalization."
+          },
+          "explanation_language": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Bcp47LanguageTag"
+              }
+            ],
+            "default": "en",
+            "description": "Language for supporting explanations and localized glosses."
+          },
+          "english_dialect": {
+            "type": "string",
+            "enum": [
+              "en-US",
+              "en-GB"
+            ],
+            "default": "en-US"
+          },
+          "learner_level": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "A1",
+              "A2",
+              "B1",
+              "B2",
+              "C1",
+              "C2",
+              null
+            ],
+            "description": "Optional CEFR level for explanation adaptation."
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "brief",
+              "full"
+            ],
+            "default": "full",
+            "description": "Brief limits entries and selected nested lists; full keeps model-provided detail."
+          },
+          "include": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "relations",
+                "word_history",
+                "practice_preview"
+              ]
+            },
+            "description": "Omit to include relations and word history. practice_preview is accepted but currently produces a warning instead of preview data."
+          },
+          "history_mode": {
+            "type": "string",
+            "enum": [
+              "incognito",
+              "save"
+            ],
+            "default": "incognito",
+            "description": "The default anonymous model-only runtime does not persist either mode; save produces a warning."
+          }
+        }
+      },
+      "LookupResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "query",
+          "matches",
+          "coverage",
+          "warnings",
+          "provenance"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "1.0"
+          },
+          "query": {
+            "$ref": "#/components/schemas/QueryAnalysis"
+          },
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedMatch"
+            }
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/ModelCoverage"
+          },
+          "warnings": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            },
+            "description": "Includes a model-generated, non-canonical warning; may include provider or request-mode limitations."
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ModelLookupProvenance"
+          }
+        }
+      },
+      "QueryAnalysis": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "original",
+          "normalized",
+          "language",
+          "language_confidence"
+        ],
+        "properties": {
+          "original": {
+            "type": "string",
+            "description": "The request query before normalization."
+          },
+          "normalized": {
+            "type": "string",
+            "description": "Unicode NFC-normalized query used for the model request."
+          },
+          "language": {
+            "type": "string",
+            "description": "Source language returned by the structured learning model."
+          },
+          "language_confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          }
+        }
+      },
+      "GeneratedMatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_sense_id",
+          "english_senses",
+          "context_relevance"
+        ],
+        "properties": {
+          "source_sense_id": {
+            "type": "null",
+            "description": "Always null in the default model-only runtime; no canonical source sense is exposed."
+          },
+          "english_senses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedSense"
+            }
+          },
+          "context_relevance": {
+            "type": "null",
+            "description": "Always null in the default model-only runtime; no canonical context reranking score is exposed."
+          }
+        }
+      },
+      "GeneratedSense": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sense_id",
+          "lemma",
+          "part_of_speech",
+          "definition",
+          "localized_gloss",
+          "confidence",
+          "rank",
+          "pronunciations",
+          "forms",
+          "usage_notes",
+          "examples",
+          "etymology",
+          "related_words",
+          "generated"
+        ],
+        "properties": {
+          "sense_id": {
+            "type": "null",
+            "description": "Always null in the default model-only runtime; no canonical English sense is exposed."
+          },
+          "lemma": {
+            "type": "string"
+          },
+          "part_of_speech": {
+            "type": "string",
+            "enum": [
+              "noun",
+              "verb",
+              "adjective",
+              "adverb",
+              "pronoun",
+              "preposition",
+              "conjunction",
+              "determiner",
+              "interjection",
+              "numeral",
+              "other"
+            ]
+          },
+          "definition": {
+            "$ref": "#/components/schemas/GeneratedText"
+          },
+          "localized_gloss": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedGeneratedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "pronunciations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedPronunciation"
+            }
+          },
+          "forms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedWordForm"
+            }
+          },
+          "usage_notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedUsageNote"
+            }
+          },
+          "examples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedExample"
+            }
+          },
+          "etymology": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GeneratedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "related_words": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedRelatedWord"
+            }
+          },
+          "generated": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "GeneratedText": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "evidence_ids",
+          "generated"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {
+              "type": "string"
+            },
+            "description": "Always empty in the default model-only runtime."
+          },
+          "generated": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "LocalizedGeneratedText": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "language",
+          "evidence_ids",
+          "generated"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {
+              "type": "string"
+            },
+            "description": "Always empty in the default model-only runtime."
+          },
+          "generated": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "GeneratedPronunciation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "value",
+          "notation",
+          "dialect",
+          "generated"
+        ],
+        "properties": {
+          "value": {
+            "type": "string"
+          },
+          "notation": {
+            "type": "string"
+          },
+          "dialect": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generated": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "GeneratedWordForm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "form",
+          "label",
+          "generated"
+        ],
+        "properties": {
+          "form": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "generated": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "GeneratedUsageNote": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "text",
+          "generated"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "register",
+              "dialect",
+              "grammar",
+              "collocation",
+              "pitfall",
+              "habit"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "generated": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "GeneratedExample": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "english",
+          "localized",
+          "evidence_ids",
+          "generated"
+        ],
+        "properties": {
+          "english": {
+            "type": "string"
+          },
+          "localized": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {
+              "type": "string"
+            },
+            "description": "Always empty in the default model-only runtime."
+          },
+          "generated": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "GeneratedRelatedWord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "relation_id",
+          "lemma",
+          "relation",
+          "note",
+          "generated",
+          "canonical"
+        ],
+        "properties": {
+          "relation_id": {
+            "type": "null",
+            "description": "Always null in the default model-only runtime."
+          },
+          "lemma": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "synonym",
+              "antonym",
+              "broader",
+              "narrower",
+              "word_family",
+              "lower_degree",
+              "higher_degree",
+              "confusable",
+              "related"
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generated": {
+            "type": "boolean",
+            "const": true
+          },
+          "canonical": {
+            "type": "boolean",
+            "const": false
+          }
+        }
+      },
+      "ModelCoverage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "parts_of_speech",
+          "examples",
+          "word_history",
+          "relations",
+          "canonical_evidence"
+        ],
+        "properties": {
+          "parts_of_speech": {
+            "type": "string",
+            "const": "available"
+          },
+          "examples": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable"
+            ]
+          },
+          "word_history": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable"
+            ]
+          },
+          "relations": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable"
+            ]
+          },
+          "canonical_evidence": {
+            "type": "string",
+            "const": "unavailable"
+          }
+        }
+      },
+      "ModelLookupProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lexicon_release",
+          "index_version",
+          "ranking_version",
+          "generation_contract",
+          "evidence_backed"
+        ],
+        "properties": {
+          "lexicon_release": {
+            "type": "null"
+          },
+          "index_version": {
+            "type": "null"
+          },
+          "ranking_version": {
+            "type": "string",
+            "const": "model-ranking-v1"
+          },
+          "generation_contract": {
+            "type": "string",
+            "const": "learning-card-v1"
+          },
+          "evidence_backed": {
+            "type": "boolean",
+            "const": false
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code",
+          "detail",
+          "request_id",
+          "retryable",
+          "errors"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "about:blank"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable application error code."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Safe, human-readable detail that never echoes request content or provider output."
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/RequestId"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProblemFieldError"
+            }
+          }
+        }
+      },
+      "ProblemFieldError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "message"
+        ],
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
