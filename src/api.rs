@@ -18,9 +18,12 @@ use tower_http::{
 use tracing::Level;
 
 use crate::{
-  application::lookup::LookupService,
+  application::{lookup::LookupService, lookup_job::LookupJobService},
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
-  ports::learning_model::LearningModel,
+  ports::{
+    learning_model::LearningModel,
+    lookup_job::{LookupJobOwner, LookupJobStore},
+  },
   provider::{TranslationError, TranslationService},
   types::{ErrorResponse, HealthResponse, TranslateRequest},
 };
@@ -39,6 +42,7 @@ use request_id::RequestId;
 pub struct AppState {
   service: Arc<TranslationService>,
   lookup: Option<Arc<LookupService>>,
+  lookup_jobs: Option<Arc<LookupJobService>>,
   readiness: Arc<dyn Readiness>,
 }
 
@@ -48,6 +52,7 @@ impl AppState {
     Self {
       service: Arc::new(service),
       lookup: None,
+      lookup_jobs: None,
       readiness: Arc::new(AlwaysReady),
     }
   }
@@ -58,10 +63,44 @@ impl AppState {
     self
   }
 
+  /// Adds the lookup-job store required to expose authorized asynchronous polling.
+  ///
+  /// Without this injected dependency, the lookup-job route is intentionally not registered.
+  pub fn with_lookup_job_store(mut self, store: Arc<dyn LookupJobStore>) -> Self {
+    self.lookup_jobs = Some(Arc::new(LookupJobService::new(store)));
+    self
+  }
+
   /// Adds the dependency probe used by `GET /readyz`.
   pub fn with_readiness(mut self, readiness: Arc<dyn Readiness>) -> Self {
     self.readiness = readiness;
     self
+  }
+
+  pub(crate) fn lookup_job_service(&self) -> Option<&Arc<LookupJobService>> {
+    self.lookup_jobs.as_ref()
+  }
+
+  fn has_lookup_job_service(&self) -> bool {
+    self.lookup_jobs.is_some()
+  }
+}
+
+/// Authenticated owner principal that authorization middleware may attach to a lookup-job poll.
+///
+/// The HTTP handler never accepts an owner identity from a request header. Middleware must derive
+/// this opaque value from an authenticated session before inserting this extension.
+#[derive(Clone)]
+pub struct AuthenticatedLookupJobOwner(LookupJobOwner);
+
+impl AuthenticatedLookupJobOwner {
+  /// Creates an authenticated lookup-job owner extension from a validated opaque principal.
+  pub fn new(owner: LookupJobOwner) -> Self {
+    Self(owner)
+  }
+
+  pub(crate) fn owner(&self) -> &LookupJobOwner {
+    &self.0
   }
 }
 
@@ -89,7 +128,7 @@ fn build_router(state: AppState, max_request_body_bytes: usize, cors: Option<Cor
     .route("/livez", get(livez))
     .route("/readyz", get(readyz))
     .route("/translate", post(translate))
-    .nest("/v1", v1::router())
+    .nest("/v1", v1::router(state.has_lookup_job_service()))
     .with_state(state)
     .layer(DefaultBodyLimit::max(max_request_body_bytes))
     .layer(RequestBodyLimitLayer::new(max_request_body_bytes))
@@ -133,6 +172,7 @@ fn cors_layer(config: &HttpConfig) -> Result<Option<CorsLayer>, HttpConfigError>
     .allow_headers([
       header::CONTENT_TYPE,
       HeaderName::from_static("x-request-id"),
+      HeaderName::from_static("lookup-capability"),
     ])
     .expose_headers([HeaderName::from_static("x-request-id")]);
   if config.allow_credentials {

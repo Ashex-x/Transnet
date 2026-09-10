@@ -21,6 +21,9 @@ use crate::{
 };
 
 /// Shareable durable queue with atomic in-memory lease, retry, dead-letter, and replay behavior.
+///
+/// This adapter is process-local. Its shared handles support deterministic restart-style tests but
+/// do not persist records across a real process restart.
 #[derive(Clone)]
 pub struct InMemoryDurableJobQueue {
   clock: Arc<dyn Clock>,
@@ -36,6 +39,13 @@ impl InMemoryDurableJobQueue {
       ids,
       jobs: Arc::new(Mutex::new(BTreeMap::new())),
     }
+  }
+
+  /// Reopens a handle over the same process-local queue records for deterministic tests.
+  ///
+  /// This does not simulate a durable database or survive an operating-system process restart.
+  pub fn reopen(&self) -> Self {
+    self.clone()
   }
 }
 

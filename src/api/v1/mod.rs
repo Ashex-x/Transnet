@@ -1,15 +1,28 @@
 //! Version 1 learning HTTP API routing and common failures.
 
-use axum::{extract::Extension, http::StatusCode, response::Response, routing::post, Router};
+use axum::{
+  extract::Extension,
+  http::StatusCode,
+  response::Response,
+  routing::{get, post},
+  Router,
+};
 
 use super::{problem, request_id::RequestId, AppState};
 
 pub(crate) mod lookup;
+pub(crate) mod lookup_job;
 
 /// Builds the versioned API router before application state is attached.
-pub(crate) fn router() -> Router<AppState> {
-  Router::new()
-    .route("/lookups", post(lookup::lookup))
+pub(crate) fn router(lookup_jobs_enabled: bool) -> Router<AppState> {
+  let router = Router::new().route("/lookups", post(lookup::lookup));
+  let router = if lookup_jobs_enabled {
+    router.route("/lookup-jobs/:job_id", get(lookup_job::poll))
+  } else {
+    router
+  };
+
+  router
     .fallback(not_found)
     .method_not_allowed_fallback(method_not_allowed)
 }

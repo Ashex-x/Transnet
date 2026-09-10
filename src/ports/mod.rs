@@ -12,6 +12,8 @@ pub mod durable_job;
 pub mod idempotency;
 /// Structured learning-model interface.
 pub mod learning_model;
+/// Private lookup-job lifecycle and polling interface.
+pub mod lookup_job;
 /// Opaque, application-generated public identifier interface.
 pub mod public_id;
 /// Generic record persistence interface.

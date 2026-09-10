@@ -20,7 +20,10 @@ pub mod provider;
 pub mod types;
 
 pub use adapters::learning_model::OpenAiLearningModel;
-pub use api::{app_router, app_router_with_http_config, AlwaysReady, AppState, Readiness};
+pub use api::{
+  app_router, app_router_with_http_config, AlwaysReady, AppState, AuthenticatedLookupJobOwner,
+  Readiness,
+};
 pub use config::{AppConfig, HttpConfig, HttpConfigError, ProviderConfig, TranslationConfig};
 pub use provider::{TranslationError, TranslationService};
 pub use types::{TranslateRequest, TranslateResponse};
