@@ -162,7 +162,7 @@ impl TranslationProvider {
     let response = self
       .client
       .post(endpoint)
-      .bearer_auth(&self.config.api_key)
+      .bearer_auth(self.config.api_key.bearer_token())
       .json(body)
       .send()
       .await

@@ -19,7 +19,7 @@ fn service() -> TranslationService {
   let provider = ProviderConfig {
     base_url: "http://127.0.0.1:1/v1".to_string(),
     model: "unused".to_string(),
-    api_key: "unused".to_string(),
+    api_key: "unused".into(),
   };
   TranslationService::new(
     TranslationConfig {

@@ -10,7 +10,10 @@ use std::{
 
 use axum::{
   extract::State,
-  http::{header::RETRY_AFTER, HeaderValue, StatusCode},
+  http::{
+    header::{AUTHORIZATION, RETRY_AFTER},
+    HeaderMap, HeaderValue, StatusCode,
+  },
   response::{IntoResponse, Response},
   routing::post,
   Json, Router,
@@ -30,6 +33,7 @@ struct MockState {
   failures: usize,
   empty_response: bool,
   bodies: Arc<Mutex<Vec<Value>>>,
+  authorization_values: Arc<Mutex<Vec<Option<String>>>>,
 }
 
 #[derive(Clone)]
@@ -95,8 +99,18 @@ impl Visit for FieldVisitor {
   }
 }
 
-async fn completion(State(state): State<MockState>, Json(body): Json<Value>) -> Response {
+async fn completion(
+  State(state): State<MockState>,
+  headers: HeaderMap,
+  Json(body): Json<Value>,
+) -> Response {
   state.bodies.lock().unwrap().push(body);
+  state.authorization_values.lock().unwrap().push(
+    headers
+      .get(AUTHORIZATION)
+      .and_then(|value| value.to_str().ok())
+      .map(str::to_owned),
+  );
   let call = state.calls.fetch_add(1, Ordering::SeqCst);
   if call < state.failures {
     return StatusCode::BAD_GATEWAY.into_response();
@@ -150,6 +164,7 @@ async fn mock_provider(failures: usize, empty_response: bool) -> (String, MockSt
     failures,
     empty_response,
     bodies: Arc::new(Mutex::new(Vec::new())),
+    authorization_values: Arc::new(Mutex::new(Vec::new())),
   };
   let app = Router::new()
     .route("/v1/chat/completions", post(completion))
@@ -193,7 +208,7 @@ fn provider(base_url: String, model: &str) -> ProviderConfig {
   ProviderConfig {
     base_url,
     model: model.to_string(),
-    api_key: "test-key".to_string(),
+    api_key: "test-key".into(),
   }
 }
 
@@ -203,6 +218,35 @@ fn request(text: String) -> TranslateRequest {
     source_lang: "en".to_string(),
     target_lang: "zh-CN".to_string(),
   }
+}
+
+#[tokio::test]
+async fn sends_the_configured_bearer_credential() {
+  let (url, state) = mock_provider(0, false).await;
+  let service = TranslationService::new(
+    TranslationConfig {
+      long_text_chars: 4_000,
+      timeout_seconds: 2,
+      max_retries: 0,
+      retry_delay_ms: 0,
+    },
+    provider(url.clone(), "Gemma4"),
+    provider(url, "TranslateGemma"),
+  )
+  .unwrap();
+
+  assert_eq!(
+    service
+      .translate(request("hello".to_string()))
+      .await
+      .unwrap()
+      .translation,
+    "translated"
+  );
+  assert_eq!(
+    *state.authorization_values.lock().unwrap(),
+    vec![Some("Bearer test-key".to_string())]
+  );
 }
 
 fn policy(
@@ -484,13 +528,13 @@ async fn provider_telemetry_excludes_payloads_credentials_and_identity_data() {
     ProviderConfig {
       base_url: url.clone(),
       model: "model-secret-is-not-a-telemetry-field".to_string(),
-      api_key: "CREDENTIAL_SECRET".to_string(),
+      api_key: "CREDENTIAL_SECRET".into(),
     },
     policy(0, Duration::ZERO, 8, 5),
     ProviderConfig {
       base_url: url,
       model: "other-model".to_string(),
-      api_key: "CREDENTIAL_SECRET".to_string(),
+      api_key: "CREDENTIAL_SECRET".into(),
     },
     policy(0, Duration::ZERO, 8, 5),
   )

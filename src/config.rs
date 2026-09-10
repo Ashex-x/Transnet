@@ -1,6 +1,6 @@
 //! Runtime configuration for the server, HTTP boundary, model providers, and resilience policy.
 
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
 use axum::http::{HeaderValue, Uri};
 use serde::Deserialize;
@@ -220,8 +220,46 @@ pub struct ProviderConfig {
   pub base_url: String,
   /// Model identifier sent in requests.
   pub model: String,
-  /// Bearer credential sent to the provider.
-  pub api_key: String,
+  /// Redacted bearer credential sent only to the provider.
+  pub api_key: ProviderApiKey,
+}
+
+/// A bearer credential retained exclusively for outbound provider authentication.
+///
+/// This type deliberately does not implement `Display` or `Serialize`. Its `Debug` output is
+/// always redacted, including when it is nested in [`ProviderConfig`] or [`AppConfig`].
+#[derive(Clone, Deserialize)]
+#[serde(transparent)]
+pub struct ProviderApiKey(String);
+
+impl ProviderApiKey {
+  /// Creates a provider credential for programmatic configuration.
+  pub fn new(value: impl Into<String>) -> Self {
+    Self(value.into())
+  }
+
+  /// Returns the credential only for crate-local outbound bearer authentication.
+  pub(crate) fn bearer_token(&self) -> &str {
+    &self.0
+  }
+}
+
+impl From<String> for ProviderApiKey {
+  fn from(value: String) -> Self {
+    Self::new(value)
+  }
+}
+
+impl From<&str> for ProviderApiKey {
+  fn from(value: &str) -> Self {
+    Self::new(value)
+  }
+}
+
+impl fmt::Debug for ProviderApiKey {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter.write_str("ProviderApiKey([REDACTED])")
+  }
 }
 
 #[cfg(test)]
@@ -278,5 +316,46 @@ mod tests {
       config.resolve(&translation),
       Err(ProviderPolicyError::ZeroConcurrency)
     );
+  }
+
+  #[test]
+  fn provider_api_keys_deserialize_without_debug_exposure() {
+    let config: AppConfig = toml::from_str(
+      r#"
+[server]
+host = "127.0.0.1"
+port = 3000
+log_level = "info"
+log_format = "compact"
+
+[translation]
+long_text_chars = 4000
+timeout_seconds = 2
+max_retries = 0
+retry_delay_ms = 0
+
+[gemma4]
+base_url = "http://127.0.0.1:18011/v1"
+model = "Gemma4"
+api_key = "GEMMA4_CREDENTIAL_SECRET"
+
+[translate_gemma]
+base_url = "http://127.0.0.1:18007/v1"
+model = "TranslateGemma"
+api_key = "TRANSLATE_GEMMA_CREDENTIAL_SECRET"
+"#,
+    )
+    .unwrap();
+
+    let app_debug = format!("{config:?}");
+    let provider_debug = format!("{:?}", config.gemma4);
+    for credential in [
+      "GEMMA4_CREDENTIAL_SECRET",
+      "TRANSLATE_GEMMA_CREDENTIAL_SECRET",
+    ] {
+      assert!(!app_debug.contains(credential));
+      assert!(!provider_debug.contains(credential));
+    }
+    assert!(app_debug.contains("ProviderApiKey([REDACTED])"));
   }
 }

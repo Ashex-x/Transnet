@@ -29,7 +29,7 @@ pub use api::{
 };
 pub use application::canonical_lookup::{CanonicalLookupError, CanonicalLookupService};
 pub use config::{
-  AppConfig, HttpConfig, HttpConfigError, ProviderConfig, ProviderResilienceConfig,
+  AppConfig, HttpConfig, HttpConfigError, ProviderApiKey, ProviderConfig, ProviderResilienceConfig,
   ProviderResilienceConfigs, TranslationConfig,
 };
 pub use provider::{TranslationError, TranslationProviderMetrics, TranslationService};

@@ -84,7 +84,7 @@ async fn model(responses: Vec<String>) -> (OpenAiLearningModel, MockState) {
   let provider = ProviderConfig {
     base_url: format!("http://{address}/v1"),
     model: "Gemma4".to_string(),
-    api_key: "test".to_string(),
+    api_key: "test".into(),
   };
   (
     OpenAiLearningModel::new(&settings, provider).unwrap(),
@@ -129,7 +129,7 @@ async fn status_model(
       ProviderConfig {
         base_url: format!("http://{address}/v1"),
         model: "Gemma4".to_string(),
-        api_key: "test".to_string(),
+        api_key: "test".into(),
       },
       policy,
     )
@@ -156,7 +156,7 @@ async fn blocking_model(policy: ProviderPolicy) -> (OpenAiLearningModel, Blockin
       ProviderConfig {
         base_url: format!("http://{address}/v1"),
         model: "Gemma4".to_string(),
-        api_key: "test".to_string(),
+        api_key: "test".into(),
       },
       policy,
     )
