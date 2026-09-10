@@ -30,6 +30,18 @@ pub enum CanonicalLookupError {
   Snapshot(#[from] CanonicalLookupSnapshotCacheError),
 }
 
+impl CanonicalLookupError {
+  /// Returns whether retrying the lookup can recover a transient canonical dependency failure.
+  ///
+  /// Integrity, cache-contract, and configuration failures remain safely typed but are not
+  /// retryable because a caller cannot repair them by repeating the same request.
+  pub fn is_retryable(&self) -> bool {
+    match self {
+      Self::Snapshot(error) => error.is_retryable(),
+    }
+  }
+}
+
 /// Coordinates public snapshot retrieval and canonical-card assembly.
 ///
 /// The service accepts an explicit cache eligibility declaration so callers must classify private
@@ -71,5 +83,36 @@ impl CanonicalLookupService {
       request.retrieval(),
       outcome,
     ))
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::{
+    application::retrieval::CanonicalRetrievalError,
+    domain::canonical_lookup_cache::CanonicalLookupCacheValidationError,
+    ports::canonical_repository::CanonicalRepositoryError,
+  };
+
+  #[test]
+  fn only_transient_canonical_repository_unavailability_is_retryable() {
+    let unavailable = CanonicalLookupError::Snapshot(CanonicalLookupSnapshotCacheError::Retrieval(
+      CanonicalRetrievalError::Repository(CanonicalRepositoryError::Unavailable),
+    ));
+    let inconsistent =
+      CanonicalLookupError::Snapshot(CanonicalLookupSnapshotCacheError::Retrieval(
+        CanonicalRetrievalError::Repository(CanonicalRepositoryError::InconsistentData),
+      ));
+    let contract = CanonicalLookupError::Snapshot(CanonicalLookupSnapshotCacheError::Contract(
+      CanonicalLookupCacheValidationError::CandidateLimitExceeded,
+    ));
+    let invalid_configuration =
+      CanonicalLookupError::Snapshot(CanonicalLookupSnapshotCacheError::ZeroTtl);
+
+    assert!(unavailable.is_retryable());
+    assert!(!inconsistent.is_retryable());
+    assert!(!contract.is_retryable());
+    assert!(!invalid_configuration.is_retryable());
   }
 }

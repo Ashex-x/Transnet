@@ -80,6 +80,22 @@ pub enum CanonicalLookupSnapshotCacheError {
   ZeroTtl,
 }
 
+impl CanonicalLookupSnapshotCacheError {
+  /// Returns whether retrying later can reasonably recover this failure without intervention.
+  ///
+  /// Only a transient authoritative-repository outage is retryable. Repository integrity failures,
+  /// public snapshot contract failures, and invalid cache configuration require a data or
+  /// configuration correction rather than another identical lookup request.
+  pub fn is_retryable(&self) -> bool {
+    matches!(
+      self,
+      Self::Retrieval(CanonicalRetrievalError::Repository(
+        crate::ports::canonical_repository::CanonicalRepositoryError::Unavailable
+      ))
+    )
+  }
+}
+
 /// Caches rebuildable public canonical-card snapshots while refusing private lookup influences.
 ///
 /// Cache reads and writes are strictly best effort. A miss or cache-adapter unavailability invokes

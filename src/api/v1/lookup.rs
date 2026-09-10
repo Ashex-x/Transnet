@@ -14,7 +14,6 @@ use crate::{
     request_id::RequestId,
     AppState,
   },
-  application::canonical_lookup::CanonicalLookupError,
   domain::{
     canonical::{
       EvidenceConfidence, EvidenceKind, EvidenceUse, FormKind, LanguageTag, LexicalPartOfSpeech,
@@ -383,13 +382,13 @@ pub(crate) async fn lookup(
           let response = build_canonical_response(&request, card);
           problem::no_store((StatusCode::OK, Json(response)).into_response())
         }
-        Err(CanonicalLookupError::Snapshot(_)) => problem::response(
+        Err(error) => problem::response(
           StatusCode::SERVICE_UNAVAILABLE,
           "canonical_lookup_unavailable",
           "Canonical lookup unavailable",
           "The canonical lookup service could not produce an evidence-backed result.",
           &request_id,
-          true,
+          error.is_retryable(),
           Vec::new(),
         ),
       };

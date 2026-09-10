@@ -174,6 +174,26 @@ fn in_memory_canonical_service(adapter: InMemoryRetrievalAdapter) -> Arc<Canonic
   canonical_service(adapter, cache, clock)
 }
 
+fn canonical_service_for_repository(
+  repository: Arc<dyn CanonicalRepository>,
+) -> Arc<CanonicalLookupService> {
+  let retrieval = Arc::new(CanonicalRetrievalService::new(
+    repository,
+    Arc::new(UnavailableVector),
+  ));
+  let fixed_clock = clock();
+  let cache: Arc<dyn Cache<CanonicalLookupSnapshotKey, CanonicalLookupSnapshot>> =
+    Arc::new(InMemoryCache::new(fixed_clock.clone()));
+  let snapshots = CanonicalLookupSnapshotCacheService::new(
+    retrieval,
+    cache,
+    fixed_clock,
+    Duration::from_secs(30),
+  )
+  .unwrap();
+  Arc::new(CanonicalLookupService::new(Arc::new(snapshots)))
+}
+
 async fn json(response: axum::response::Response) -> Value {
   serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
 }
@@ -375,21 +395,9 @@ async fn model_fallback_reports_the_existing_problem_when_no_model_is_injected()
 
 #[tokio::test]
 async fn canonical_failures_use_a_redacted_rfc_problem() {
-  let retrieval = Arc::new(CanonicalRetrievalService::new(
-    Arc::new(UnavailableRepository),
-    Arc::new(UnavailableVector),
-  ));
-  let fixed_clock = clock();
-  let cache: Arc<dyn Cache<CanonicalLookupSnapshotKey, CanonicalLookupSnapshot>> =
-    Arc::new(InMemoryCache::new(fixed_clock.clone()));
-  let snapshots = CanonicalLookupSnapshotCacheService::new(
-    retrieval,
-    cache,
-    fixed_clock,
-    Duration::from_secs(30),
-  )
-  .unwrap();
-  let canonical = Arc::new(CanonicalLookupService::new(Arc::new(snapshots)));
+  let canonical = canonical_service_for_repository(Arc::new(FailingRepository(
+    CanonicalRepositoryError::Unavailable,
+  )));
   let response = app_router(AppState::new(translation_service()).with_canonical_lookup(canonical))
     .oneshot(
       Request::post("/v1/lookups")
@@ -412,6 +420,64 @@ async fn canonical_failures_use_a_redacted_rfc_problem() {
   assert_eq!(body["code"], "canonical_lookup_unavailable");
   assert_eq!(body["request_id"], "canonical-42");
   assert_eq!(body["retryable"], true);
+  assert!(!serde_json::to_string(&body)
+    .unwrap()
+    .contains("private-looking-query"));
+}
+
+#[tokio::test]
+async fn inconsistent_canonical_content_uses_a_nonretryable_problem() {
+  let canonical = canonical_service_for_repository(Arc::new(FailingRepository(
+    CanonicalRepositoryError::InconsistentData,
+  )));
+  let response = app_router(AppState::new(translation_service()).with_canonical_lookup(canonical))
+    .oneshot(
+      Request::post("/v1/lookups")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+          r#"{"query":"private-looking-query","source_language":"en","history_mode":"incognito"}"#,
+        ))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+  assert_eq!(
+    response.headers()[header::CONTENT_TYPE],
+    "application/problem+json"
+  );
+  let body = json(response).await;
+  assert_eq!(body["code"], "canonical_lookup_unavailable");
+  assert_eq!(body["retryable"], false);
+  assert!(!serde_json::to_string(&body)
+    .unwrap()
+    .contains("private-looking-query"));
+}
+
+#[tokio::test]
+async fn invalid_canonical_cache_contract_uses_a_nonretryable_problem() {
+  let canonical = canonical_service_for_repository(Arc::new(InvalidContentRepository));
+  let response = app_router(AppState::new(translation_service()).with_canonical_lookup(canonical))
+    .oneshot(
+      Request::post("/v1/lookups")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+          r#"{"query":"private-looking-query","source_language":"en","history_mode":"incognito"}"#,
+        ))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+  assert_eq!(
+    response.headers()[header::CONTENT_TYPE],
+    "application/problem+json"
+  );
+  let body = json(response).await;
+  assert_eq!(body["code"], "canonical_lookup_unavailable");
+  assert_eq!(body["retryable"], false);
   assert!(!serde_json::to_string(&body)
     .unwrap()
     .contains("private-looking-query"));
@@ -442,19 +508,45 @@ impl Cache<CanonicalLookupSnapshotKey, CanonicalLookupSnapshot> for ForbiddenCac
   }
 }
 
-struct UnavailableRepository;
+#[derive(Clone)]
+struct FailingRepository(CanonicalRepositoryError);
 
 #[async_trait]
-impl CanonicalRepository for UnavailableRepository {
+impl CanonicalRepository for FailingRepository {
   async fn active_content_version(&self) -> Result<ActiveContentVersion, CanonicalRepositoryError> {
-    Err(CanonicalRepositoryError::Unavailable)
+    Err(self.0.clone())
   }
 
   async fn search_lexical(
     &self,
     _request: &transnet::domain::retrieval::LexicalSearchRequest,
   ) -> Result<Vec<transnet::domain::retrieval::RepositoryMatch>, CanonicalRepositoryError> {
-    Err(CanonicalRepositoryError::Unavailable)
+    Err(self.0.clone())
+  }
+
+  async fn load_candidates(
+    &self,
+    _request: &transnet::domain::retrieval::CandidateLoadRequest,
+  ) -> Result<Vec<CanonicalCandidate>, CanonicalRepositoryError> {
+    Err(self.0.clone())
+  }
+}
+
+struct InvalidContentRepository;
+
+#[async_trait]
+impl CanonicalRepository for InvalidContentRepository {
+  async fn active_content_version(&self) -> Result<ActiveContentVersion, CanonicalRepositoryError> {
+    let mut invalid = content();
+    invalid.schema_version = " ".to_string();
+    Ok(invalid)
+  }
+
+  async fn search_lexical(
+    &self,
+    _request: &transnet::domain::retrieval::LexicalSearchRequest,
+  ) -> Result<Vec<transnet::domain::retrieval::RepositoryMatch>, CanonicalRepositoryError> {
+    Err(CanonicalRepositoryError::InconsistentData)
   }
 
   async fn load_candidates(
