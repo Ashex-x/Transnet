@@ -2,7 +2,7 @@
 
 ## Status
 
-This plan tracks the proposed delivery of the English-learning platform on `feat/basic-core`. Documentation is complete enough to begin architectural decisions; learning-platform implementation has not started.
+This plan tracks delivery of the English-learning platform on `feat/basic-core`. The first model-only structured translation slice is implemented; canonical retrieval, persistence, graph, feedback, and practice remain future work.
 
 Checkbox meanings:
 
@@ -19,6 +19,7 @@ Deliver a multilingual-to-English learning backend that returns evidence-backed 
 - [x] Rust HTTP service builds and tests.
 - [x] `GET /health` reports process health.
 - [x] `POST /translate` validates input and routes to the configured local model provider.
+- [x] `POST /v1/lookups` returns a validated, model-generated English learning card without pretending generated content is canonical evidence.
 - [x] Current translation API and configuration are documented.
 - [x] Target learning architecture is documented in [system design](transnet.md).
 - [x] Proposed learner behavior is documented in [learning experience](product/learning-experience.md).
@@ -66,10 +67,10 @@ flowchart TD
 ### Repository and process boundary
 
 - [ ] Keep one Cargo package and split runtime entry points into API and worker binaries.
-- [ ] Introduce HTTP-only, application, domain, port, and adapter module boundaries.
-- [ ] Keep provider DTOs, database rows, domain types, and public API DTOs separate.
+- [x] Introduce HTTP-only, application, domain, port, and adapter module boundaries for the lookup slice.
+- [x] Keep provider DTOs, domain types, and public API DTOs separate in the lookup slice.
 - [ ] Add dependency-injected clock, repositories, retriever, model client, and durable queue ports.
-- [ ] Keep existing `/translate` behavior and integration tests unchanged.
+- [x] Keep existing `/translate` behavior and integration tests unchanged.
 
 ### Configuration and observability
 
@@ -122,18 +123,18 @@ flowchart TD
 - [ ] Implement release and metadata filters on every vector query.
 - [ ] Implement deterministic candidate fusion, reranking, and deduplication.
 - [ ] Implement vector reconciliation and blue-green collection build.
-- [ ] Implement JSON-Schema-constrained model output and one bounded repair attempt.
+- [x] Implement JSON-Schema-constrained model output and one bounded repair attempt.
 - [ ] Add deterministic retrieval-only fallback.
 
 ### Phase 1C: Lookup API
 
-- [ ] Implement `POST /v1/lookups` validation and language resolution.
+- [x] Implement model-only `POST /v1/lookups` validation and language resolution; canonical resolution remains pending.
 - [ ] Return exact query analysis, parts of speech, forms, senses, and section coverage.
 - [ ] Add progressive disclosure and cursor pagination for uncommon senses.
 - [ ] Add assertion-level provenance and generated-content labels.
 - [ ] Support explicit spelling suggestions and configured romanization.
 - [ ] Support optional context reranking without hiding plausible alternatives.
-- [ ] Keep context responses private and out of shared snapshots.
+- [x] Mark model-only context responses `no-store`; shared snapshots are not implemented.
 - [ ] Implement durable synchronous/async lookup transition before the soft deadline.
 - [ ] Implement owner or capability authorization for lookup jobs.
 - [ ] Implement canonical card snapshots with version-complete cache keys.

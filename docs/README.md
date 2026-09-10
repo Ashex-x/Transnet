@@ -8,8 +8,8 @@
 
 ## Reference
 
-- [Implemented HTTP API](reference/transnet-api.md): current public routes and JSON shapes.
-- [Proposed learning HTTP API](reference/learning-api.md): target `/v1` contract, graph payloads, feedback, practice, and privacy routes.
+- [Implemented HTTP API](reference/transnet-api.md): current direct translation and model-only learning lookup routes.
+- [Learning HTTP API](reference/learning-api.md): implemented `/v1/lookups` boundary and proposed evidence-backed, graph, feedback, practice, and privacy contracts.
 - [Proposed MySQL schema](reference/mysql-schema.md): table catalog, DDL, encryption, retention, and transactional invariants.
 
 ## Guides

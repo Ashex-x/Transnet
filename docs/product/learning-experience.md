@@ -2,7 +2,7 @@
 
 ## Status
 
-This document defines the proposed learner-facing behavior for Transnet basic core. It is not implemented at the branch point. [System design](../transnet.md) owns architecture; [learning API](../reference/learning-api.md) owns HTTP contracts.
+This document defines the target learner-facing behavior for Transnet basic core. A model-only structured lookup now implements the initial card fields, but canonical evidence, persistence, graph exploration, feedback, and practice remain proposed. [System design](../transnet.md) owns architecture; [learning API](../reference/learning-api.md) owns HTTP contracts.
 
 ## Audience and language behavior
 

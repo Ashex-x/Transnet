@@ -2,7 +2,7 @@
 
 ## Document status
 
-This document owns the system design and architecture for Transnet. The [current implementation](#current-implementation) describes behavior at the `feat/basic-core` branch point. Sections marked as target architecture are proposed and are not yet implemented.
+This document owns the system design and architecture for Transnet. The [current implementation](#current-implementation) describes behavior on `feat/basic-core`. Sections marked as target architecture remain proposed and are not yet implemented.
 
 Detailed contracts and procedures live in focused documents:
 
@@ -58,7 +58,7 @@ MySQL is the source of truth for lexical assertions, relationship versions, user
 
 ## Current implementation
 
-At the branch point, Transnet is one Rust package and one HTTP process. It validates text-translation requests, selects one of two local OpenAI-compatible model servers by Unicode character count, and returns the translated string.
+Transnet is one Rust package and one HTTP process. It preserves the direct text translator and implements the first model-backed structured English-learning lookup slice.
 
 ```mermaid
 flowchart LR
@@ -74,7 +74,25 @@ Gemma 4 receives standard system and user chat messages. TranslateGemma receives
 
 Each provider call uses the configured timeout. Transport errors, non-success statuses, malformed envelopes, and empty responses are retried according to `max_retries`; exhausted attempts become HTTP 503 without exposing provider bodies.
 
-The implemented public routes are `GET /health` and `POST /translate`. There is no authentication, persistence, vector index, learning card, graph, history, feedback, or practice system. The health route reports process availability and does not probe providers.
+```mermaid
+flowchart LR
+  learner["POST /v1/lookups"] --> http["HTTP DTO validation"]
+  http --> domain["Normalized translation input"]
+  domain --> app["Lookup application service"]
+  app --> port["Learning model port"]
+  port --> adapter["OpenAI-compatible adapter"]
+  adapter --> schema["Strict JSON Schema output"]
+  schema --> validate["Parse and validate nested learning fields"]
+  validate --> response["Generated learning card"]
+  schema -->|"invalid once"| repair["One bounded repair request"]
+  repair --> validate
+```
+
+The structured lookup normalizes query and context text to Unicode NFC, accepts an explicit BCP-47 source language or `auto`, supports `en-US` and `en-GB`, and optionally adapts explanations to a CEFR level. Its model contract separates English meanings by part of speech and returns definitions, localized glosses, pronunciations, forms, usage notes, examples, etymology, and typed related-word suggestions.
+
+This slice has no canonical lexical store or retrieval index. It therefore marks every learning assertion as generated, returns null canonical IDs, exposes empty evidence lists, sets `evidence_backed` to false, and prevents generated relations from appearing to be graph facts. Responses are synchronous, anonymous, and `no-store`. History, persistence, retrieval, canonical sense resolution, and graph feedback remain target work.
+
+The implemented public routes are `GET /health`, `POST /translate`, and `POST /v1/lookups`. There is no authentication, persistence, vector index, canonical lexical content, graph, history, feedback, or practice system. The health route reports process availability and does not probe providers.
 
 Related implemented contracts: [API](reference/transnet-api.md), [configuration](guides/configuration.md), and [development](guides/development.md).
 

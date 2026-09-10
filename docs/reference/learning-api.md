@@ -1,8 +1,10 @@
-# Learning HTTP API proposal
+# Learning HTTP API
 
 ## Status and compatibility
 
-This document defines the proposed `/v1` learning API and is not implemented at the branch point. The implemented `GET /health` and `POST /translate` contract remains in [Transnet HTTP API](transnet-api.md).
+`POST /v1/lookups` has an implemented model-only basic-core slice. All other endpoints in this document remain proposed. The implemented `GET /health` and `POST /translate` contracts remain in [Transnet HTTP API](transnet-api.md).
+
+The implemented lookup does not yet have canonical lexical content, retrieval, persistence, or authentication. It returns synchronous anonymous results with `Cache-Control: no-store`; identifies every generated assertion; uses null canonical sense and relation IDs; exposes no evidence IDs; and reports `evidence_backed: false`. The richer evidence-backed shape below is the target contract that will replace these provisional gaps without inventing canonical data.
 
 The learning API uses JSON, opaque public IDs, UTC RFC 3339 timestamps, OpenAPI, and versioned JSON Schemas. Removing fields or changing enum meaning requires a new API version.
 
@@ -44,7 +46,7 @@ Content responses identify the applicable schema, lexicon release, vector collec
 | `GET /v1/auth/callback` | OIDC state | Complete OIDC and issue a service session |
 | `POST /v1/auth/refresh` | Session cookie | Rotate the refresh token |
 | `POST /v1/auth/logout` | Required | Revoke current or all sessions |
-| `POST /v1/lookups` | Optional | Create or retrieve a learning card |
+| `POST /v1/lookups` | Optional | Implemented model-only learning card; evidence-backed retrieval remains proposed |
 | `GET /v1/lookup-jobs/{job_id}` | Owner or capability | Poll asynchronous generation |
 | `GET /v1/senses/{sense_id}` | Optional | Read a current sense card |
 | `GET /v1/graph` | Optional | Read a bounded graph for a typed root |

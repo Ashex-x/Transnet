@@ -1,6 +1,6 @@
 # Transnet
 
-Transnet is a small Rust HTTP service for text translation. Gemma 4 handles text up to 4,000 Unicode characters; longer text is sent intact to TranslateGemma.
+Transnet is a Rust HTTP service for translation and English learning. It preserves direct text translation and provides a first structured, model-generated learning lookup while the canonical RAG platform is built.
 
 ```mermaid
 flowchart LR
@@ -24,6 +24,9 @@ curl http://127.0.0.1:35792/health
 curl --request POST http://127.0.0.1:35792/translate \
   --header 'content-type: application/json' \
   --data '{"text":"Hello","source_lang":"en","target_lang":"zh-CN"}'
+curl --request POST http://127.0.0.1:35792/v1/lookups \
+  --header 'content-type: application/json' \
+  --data '{"query":"caliente","source_language":"es","target_language":"en","explanation_language":"en"}'
 ```
 
 See the [design](docs/transnet.md), [API contract](docs/reference/transnet-api.md), and [development guide](docs/guides/development.md).
