@@ -18,6 +18,8 @@ pub mod learner;
 pub mod lookup_card;
 /// Closed, redacted metric names and categorical event dimensions.
 pub mod observability;
+/// Scheduler-neutral frozen exercises, private claims, attempts, and mastery counters.
+pub mod practice;
 /// Deterministic hybrid-retrieval values and candidate fusion.
 pub mod retrieval;
 /// Structured multilingual-to-English translation.

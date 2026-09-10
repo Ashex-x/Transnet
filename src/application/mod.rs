@@ -18,5 +18,7 @@ pub mod learner_state;
 pub mod lookup;
 /// Private lookup-job lifecycle and deadline orchestration.
 pub mod lookup_job;
+/// Scheduler-neutral private practice-state orchestration.
+pub mod practice_state;
 /// Canonical hybrid retrieval and lexical-only fallback.
 pub mod retrieval;
