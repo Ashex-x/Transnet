@@ -1,16 +1,17 @@
 //! Deterministic in-memory canonical graph repository for tests and local development.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 
 use crate::{
   domain::graph::{
-    GraphContentVersion, GraphFilter, GraphNode, GraphNodeKey, GraphNodeKind, SemanticScale,
-    StoredGraphRelation,
+    compare_graph_edge_ordering_keys, compare_graph_edges, GraphContentVersion, GraphFilter,
+    GraphNode, GraphNodeKey, GraphNodeKind, SemanticScale, StoredGraphRelation,
   },
   ports::graph_repository::{
-    GraphAdjacency, GraphAdjacencyRequest, GraphRepository, GraphRepositoryError,
+    GraphAdjacency, GraphAdjacencyRequest, GraphNeighborPage, GraphNeighborPageRequest,
+    GraphRepository, GraphRepositoryError,
   },
 };
 
@@ -117,6 +118,38 @@ impl GraphRepository for InMemoryGraphRepository {
 
     Ok(GraphAdjacency { relations, scales })
   }
+
+  async fn neighbor_page(
+    &self,
+    request: &GraphNeighborPageRequest,
+  ) -> Result<GraphNeighborPage, GraphRepositoryError> {
+    if request.content != self.content || request.edge_limit == 0 {
+      return Err(GraphRepositoryError::InconsistentData);
+    }
+
+    let mut edges = self
+      .relations
+      .iter()
+      .filter_map(|relation| relation.project_from(&request.node))
+      .chain(
+        self
+          .scales
+          .iter()
+          .flat_map(|scale| scale.project_from(&request.node)),
+      )
+      .filter(|edge| request.filter.allows(edge.relation_type))
+      .collect::<Vec<_>>();
+    edges.sort_by(compare_graph_edges);
+    let mut seen = BTreeSet::new();
+    edges.retain(|edge| seen.insert(edge.id.clone()));
+    if let Some(after) = &request.after {
+      edges.retain(|edge| compare_graph_edge_ordering_keys(&edge.ordering_key(), after).is_gt());
+    }
+
+    let has_more = edges.len() > request.edge_limit;
+    edges.truncate(request.edge_limit);
+    Ok(GraphNeighborPage { edges, has_more })
+  }
 }
 
 fn relation_filter_allows(
@@ -149,7 +182,7 @@ mod tests {
         GraphScore, GraphScoreComponents, RelationVersion,
       },
     },
-    ports::graph_repository::GraphRepository,
+    ports::graph_repository::{GraphNeighborPageRequest, GraphRepository},
   };
 
   fn id(value: &str) -> CanonicalId {
@@ -208,5 +241,24 @@ mod tests {
 
     assert_eq!(adjacency.relations.len(), 2);
     assert_eq!(adjacency.relations[0].edge_id.as_str(), "edge-a");
+  }
+
+  #[tokio::test]
+  async fn neighbor_page_requires_the_exact_content_version_tuple() {
+    let repository = InMemoryGraphRepository::new(content());
+    let mut stale_content = content();
+    stale_content.community_aggregate_version = "community-v2".to_string();
+
+    let result = repository
+      .neighbor_page(&GraphNeighborPageRequest {
+        content: stale_content,
+        node: key("a"),
+        filter: GraphFilter::default(),
+        after: None,
+        edge_limit: 1,
+      })
+      .await;
+
+    assert_eq!(result, Err(GraphRepositoryError::InconsistentData));
   }
 }

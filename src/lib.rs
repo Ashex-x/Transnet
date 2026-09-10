@@ -24,7 +24,8 @@ pub mod types;
 pub use adapters::learning_model::OpenAiLearningModel;
 pub use api::{
   app_router, app_router_with_http_config, AlwaysReady, AppState, AuthenticatedLookupJobOwner,
-  Readiness,
+  GraphCursorProtectionKey, GraphCursorProtectionKeyError, Readiness,
+  MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES,
 };
 pub use application::canonical_lookup::{CanonicalLookupError, CanonicalLookupService};
 pub use config::{

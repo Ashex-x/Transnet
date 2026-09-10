@@ -4,7 +4,7 @@ Requests and responses use JSON. No implemented route requires authentication.
 
 ## Request correlation and browser access
 
-Every response, including CORS preflights, route misses, and payload-limit failures, contains `X-Request-Id`. A caller may supply one safe value to correlate an upstream request; safe values are 1 through 128 ASCII letters, digits, hyphens, underscores, or periods. Unsafe, repeated, or absent values are replaced with a generated ULID. The service logs only the request ID, HTTP method, path without a query string, outcome, and latency; it does not log request bodies, credentials, or provider responses.
+Every response, including CORS preflights, route misses, and payload-limit failures, contains `X-Request-Id`. A caller may supply one safe value to correlate an upstream request; safe values are 1 through 128 ASCII letters, digits, hyphens, underscores, or periods. Unsafe, repeated, or absent values are replaced with a generated ULID. The service logs only the request ID, HTTP method, matched route template, outcome, and latency; it does not log request bodies, credentials, or provider responses.
 
 Cross-origin access is disabled unless `[http].allowed_origins` contains the caller's exact origin. Configured origins may use `GET`, `POST`, and `OPTIONS`, send `Content-Type` and `X-Request-Id`, and read `X-Request-Id`. The service never accepts a wildcard origin, including for credentialed requests.
 
