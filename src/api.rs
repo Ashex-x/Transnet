@@ -208,7 +208,8 @@ impl AppState {
   /// because the closed event catalog has no model-availability category. Recording is dispatched
   /// without awaiting the recorder: at most 16 records run concurrently and events are dropped
   /// when that bound is saturated. This keeps telemetry best-effort and response-neutral. Canonical
-  /// lookup, translation, health, and job routes do not emit through this dependency.
+  /// lookups short-circuit before this model-only telemetry; translation, health, and job routes do
+  /// not emit through this dependency.
   pub fn with_metrics_recorder(mut self, recorder: Arc<dyn MetricsRecorder>) -> Self {
     self.metrics = Some(Arc::new(LookupMetricsDispatcher::new(recorder)));
     self

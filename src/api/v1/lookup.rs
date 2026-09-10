@@ -14,6 +14,7 @@ use crate::{
     request_id::RequestId,
     AppState,
   },
+  domain::observability::{LookupStage, MetricEvent, MetricOutcome, ModelValidationOutcome},
   domain::{
     canonical::{
       EvidenceConfidence, EvidenceKind, EvidenceUse, FormKind, LanguageTag, LexicalPartOfSpeech,
@@ -33,7 +34,6 @@ use crate::{
       TranslationInput, TranslationValidationError, UsageNoteKind,
     },
   },
-  domain::observability::{LookupStage, MetricEvent, MetricOutcome, ModelValidationOutcome},
   ports::learning_model::LearningModelError,
 };
 
