@@ -14,6 +14,8 @@ pub mod graph;
 pub mod learner;
 /// Bounded canonical lookup-card presentation values with assertion-level provenance.
 pub mod lookup_card;
+/// Closed, redacted metric names and categorical event dimensions.
+pub mod observability;
 /// Deterministic hybrid-retrieval values and candidate fusion.
 pub mod retrieval;
 /// Structured multilingual-to-English translation.

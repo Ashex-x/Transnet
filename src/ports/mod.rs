@@ -22,6 +22,8 @@ pub mod learner_state;
 pub mod learning_model;
 /// Private lookup-job lifecycle and polling interface.
 pub mod lookup_job;
+/// Closed, redacted backend metric-event recording interface.
+pub mod metrics;
 /// Opaque, application-generated public identifier interface.
 pub mod public_id;
 /// Generic record persistence interface.

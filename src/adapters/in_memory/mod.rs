@@ -8,6 +8,7 @@ mod idempotency;
 mod jobs;
 mod learner_state;
 mod lookup_jobs;
+mod metrics;
 mod repository;
 mod retriever;
 
@@ -19,5 +20,6 @@ pub use idempotency::InMemoryIdempotencyStore;
 pub use jobs::InMemoryDurableJobQueue;
 pub use learner_state::InMemoryLearnerStateStore;
 pub use lookup_jobs::InMemoryLookupJobStore;
+pub use metrics::InMemoryMetricsRecorder;
 pub use repository::InMemoryRepository;
 pub use retriever::InMemoryRetriever;
