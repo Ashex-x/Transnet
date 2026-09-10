@@ -10,8 +10,10 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::{
+  application::observability::ClosedMetricsDispatcher,
   domain::{
     learner::{AccessibilityPreferences, LearnerId},
+    observability::{MetricEvent, MetricOutcome, PracticeOperation},
     practice::{
       FrozenPracticeExercise, PracticeAttemptResolution, PracticeClaimOutcome,
       PracticeIdempotencyKey, PracticeItemSlot, PracticeMasteryState, PracticePrompt,
@@ -304,6 +306,7 @@ pub struct PracticeStateService {
   store: Arc<dyn PracticeStateStore>,
   clock: Arc<dyn Clock>,
   ids: Arc<dyn PublicIdGenerator>,
+  metrics: Option<Arc<ClosedMetricsDispatcher>>,
 }
 
 impl PracticeStateService {
@@ -313,7 +316,25 @@ impl PracticeStateService {
     clock: Arc<dyn Clock>,
     ids: Arc<dyn PublicIdGenerator>,
   ) -> Self {
-    Self { store, clock, ids }
+    Self {
+      store,
+      clock,
+      ids,
+      metrics: None,
+    }
+  }
+
+  /// Adds bounded, response-neutral delivery for closed claim and submission metrics.
+  ///
+  /// The service has exact catalog categories only for item claims and attempt submissions, so it
+  /// intentionally emits nothing for session creation, exercise freezing, or mastery reads.
+  /// Metrics contain no learner, exercise, target, response-time, answer, evaluator, or
+  /// idempotency data. Replayed accepted mutations remain successful; owner-safe missing,
+  /// exhausted-session, and terminal state outcomes are rejected transitions rather than
+  /// successful updates.
+  pub fn with_metrics_dispatcher(mut self, dispatcher: Arc<ClosedMetricsDispatcher>) -> Self {
+    self.metrics = Some(dispatcher);
+    self
   }
 
   /// Creates one bounded private practice session for `owner`.
@@ -394,6 +415,16 @@ impl PracticeStateService {
     owner: LearnerId,
     request: ClaimPracticeItem,
   ) -> Result<PracticeClaimSubmission, PracticeStateServiceError> {
+    let result = self.claim_or_return_inner(owner, request).await;
+    self.record_claim_outcome(&result);
+    result
+  }
+
+  async fn claim_or_return_inner(
+    &self,
+    owner: LearnerId,
+    request: ClaimPracticeItem,
+  ) -> Result<PracticeClaimSubmission, PracticeStateServiceError> {
     let write = PracticeClaimWrite::new(
       owner,
       request.session_id().clone(),
@@ -422,6 +453,16 @@ impl PracticeStateService {
   /// Returns an error when an attempt ID cannot be generated, the private store cannot apply the
   /// atomic submit-once transition, or the owner reuses an idempotency key for another request.
   pub async fn submit_once(
+    &self,
+    owner: LearnerId,
+    request: SubmitPracticeAttempt,
+  ) -> Result<PracticeSubmission, PracticeStateServiceError> {
+    let result = self.submit_once_inner(owner, request).await;
+    self.record_submission_outcome(&result);
+    result
+  }
+
+  async fn submit_once_inner(
     &self,
     owner: LearnerId,
     request: SubmitPracticeAttempt,
@@ -479,6 +520,67 @@ impl PracticeStateService {
   ) -> Result<Option<PracticeMasteryState>, PracticeStateServiceError> {
     Ok(self.store.mastery(owner, target).await?)
   }
+
+  fn record_claim_outcome(
+    &self,
+    result: &Result<PracticeClaimSubmission, PracticeStateServiceError>,
+  ) {
+    let Some(metrics) = &self.metrics else {
+      return;
+    };
+    let outcome = match result {
+      Ok(
+        PracticeClaimSubmission::Recorded(receipt) | PracticeClaimSubmission::Replayed(receipt),
+      ) if matches!(receipt.outcome(), PracticeClaimOutcome::NoItemAvailable) => {
+        MetricOutcome::Rejected
+      }
+      Ok(PracticeClaimSubmission::Recorded(_) | PracticeClaimSubmission::Replayed(_)) => {
+        MetricOutcome::Succeeded
+      }
+      Ok(PracticeClaimSubmission::MissingSession)
+      | Err(PracticeStateServiceError::IdempotencyConflict) => MetricOutcome::Rejected,
+      Err(
+        PracticeStateServiceError::Store(_)
+        | PracticeStateServiceError::IdGeneration(_)
+        | PracticeStateServiceError::Validation(_)
+        | PracticeStateServiceError::SessionIdConflict,
+      ) => MetricOutcome::Failed,
+    };
+    metrics.dispatch(MetricEvent::PracticeOperation {
+      operation: PracticeOperation::ItemClaim,
+      outcome,
+    });
+  }
+
+  fn record_submission_outcome(
+    &self,
+    result: &Result<PracticeSubmission, PracticeStateServiceError>,
+  ) {
+    let Some(metrics) = &self.metrics else {
+      return;
+    };
+    let outcome = match result {
+      Ok(PracticeSubmission::Recorded(_) | PracticeSubmission::Replayed(_)) => {
+        MetricOutcome::Succeeded
+      }
+      Ok(
+        PracticeSubmission::MissingExercise
+        | PracticeSubmission::NotOutstanding
+        | PracticeSubmission::AlreadySubmitted,
+      )
+      | Err(PracticeStateServiceError::IdempotencyConflict) => MetricOutcome::Rejected,
+      Err(
+        PracticeStateServiceError::Store(_)
+        | PracticeStateServiceError::IdGeneration(_)
+        | PracticeStateServiceError::Validation(_)
+        | PracticeStateServiceError::SessionIdConflict,
+      ) => MetricOutcome::Failed,
+    };
+    metrics.dispatch(MetricEvent::PracticeOperation {
+      operation: PracticeOperation::AttemptSubmission,
+      outcome,
+    });
+  }
 }
 
 /// Failure returned by scheduler-neutral private practice-state orchestration.
@@ -509,18 +611,20 @@ mod tests {
     time::{Duration, SystemTime},
   };
 
-  use tokio::join;
+  use tokio::{join, time::timeout};
   use ulid::Ulid;
 
   use super::*;
   use crate::{
     adapters::{
-      clock::FixedClock, in_memory::InMemoryPracticeStateStore,
+      clock::FixedClock,
+      in_memory::{InMemoryMetricsRecorder, InMemoryPracticeStateStore},
       public_id::SequencePublicIdGenerator,
     },
     domain::{
       canonical::{CanonicalId, LanguageTag, SenseId},
       learner::EnglishLevel,
+      observability::{MetricEvent, MetricOutcome, PracticeOperation},
       practice::{
         MasteryTransition, NeedsReviewReason, PracticeExerciseKind, PracticeSkill, PracticeVersion,
         ResolvedPracticeAttempt, ResolvedPracticeOutcome,
@@ -580,6 +684,30 @@ mod tests {
       )),
       Arc::new(SequencePublicIdGenerator::new(ids)),
     )
+  }
+
+  async fn recorded_events(
+    recorder: &InMemoryMetricsRecorder,
+    expected_count: usize,
+  ) -> Vec<MetricEvent> {
+    timeout(Duration::from_secs(1), async {
+      loop {
+        let events = recorder.events().await;
+        if events.len() >= expected_count {
+          return events;
+        }
+        tokio::task::yield_now().await;
+      }
+    })
+    .await
+    .expect("practice metrics recorder receives the expected closed events")
+  }
+
+  async fn settled_events(recorder: &InMemoryMetricsRecorder) -> Vec<MetricEvent> {
+    for _ in 0..4 {
+      tokio::task::yield_now().await;
+    }
+    recorder.events().await
   }
 
   #[tokio::test]
@@ -785,5 +913,164 @@ mod tests {
       .unwrap();
     assert_eq!(mastery.submitted_attempts(), 1);
     assert_eq!(mastery.mastery_advancements(), 1);
+  }
+
+  #[tokio::test]
+  async fn records_closed_claim_and_attempt_outcomes_without_private_state() {
+    let recorder = InMemoryMetricsRecorder::new();
+    let service = service([
+      public_id(100),
+      public_id(101),
+      public_id(102),
+      public_id(103),
+    ])
+    .with_metrics_dispatcher(Arc::new(ClosedMetricsDispatcher::new(Arc::new(
+      recorder.clone(),
+    ))));
+    let private_owner = owner("learner-private-8172");
+    let session = service
+      .create_session(
+        private_owner.clone(),
+        CreatePracticeSession::new(session_limit(1)),
+      )
+      .await
+      .unwrap();
+    let FreezePracticeExerciseOutcome::Frozen(exercise) = service
+      .freeze_exercise(
+        &private_owner,
+        freeze(session.id().clone(), 1, "sense-private"),
+      )
+      .await
+      .unwrap()
+    else {
+      panic!("the exercise should freeze");
+    };
+    assert!(recorder.events().await.is_empty());
+
+    service
+      .claim_or_return(
+        private_owner.clone(),
+        ClaimPracticeItem::new(
+          session.id().clone(),
+          PracticeIdempotencyKey::new([1; 32]),
+          PracticeRequestFingerprint::new([2; 32]),
+        ),
+      )
+      .await
+      .unwrap();
+    service
+      .submit_once(
+        private_owner.clone(),
+        SubmitPracticeAttempt::new(
+          exercise.id().clone(),
+          PracticeIdempotencyKey::new([3; 32]),
+          PracticeRequestFingerprint::new([4; 32]),
+          PracticeAttemptResolution::NeedsReview(NeedsReviewReason::EvaluatorUncertain),
+          Some(ResponseTimeInput::new(Duration::from_secs(900)).unwrap()),
+          AccessibilityPreferences::new(false, false, true),
+        ),
+      )
+      .await
+      .unwrap();
+    assert_eq!(
+      service
+        .submit_once(
+          private_owner.clone(),
+          SubmitPracticeAttempt::new(
+            exercise.id().clone(),
+            PracticeIdempotencyKey::new([5; 32]),
+            PracticeRequestFingerprint::new([6; 32]),
+            PracticeAttemptResolution::NeedsReview(NeedsReviewReason::EvaluatorUncertain),
+            None,
+            AccessibilityPreferences::default(),
+          ),
+        )
+        .await
+        .unwrap(),
+      PracticeSubmission::AlreadySubmitted
+    );
+
+    let _ = recorded_events(&recorder, 3).await;
+    let events = settled_events(&recorder).await;
+    assert_eq!(
+      events,
+      vec![
+        MetricEvent::PracticeOperation {
+          operation: PracticeOperation::ItemClaim,
+          outcome: MetricOutcome::Succeeded,
+        },
+        MetricEvent::PracticeOperation {
+          operation: PracticeOperation::AttemptSubmission,
+          outcome: MetricOutcome::Succeeded,
+        },
+        MetricEvent::PracticeOperation {
+          operation: PracticeOperation::AttemptSubmission,
+          outcome: MetricOutcome::Rejected,
+        },
+      ]
+    );
+    let rendered = format!("{events:?}");
+    assert!(!rendered.contains("learner-private-8172"));
+    assert!(!rendered.contains("sense-private"));
+    for event in events {
+      for label in event.attributes().labels() {
+        assert!(matches!(label.key(), "operation" | "outcome"));
+        assert!(matches!(
+          label.value(),
+          "item_claim" | "attempt_submission" | "succeeded" | "rejected"
+        ));
+      }
+    }
+  }
+
+  #[tokio::test]
+  async fn exhausted_claims_and_their_replays_are_rejected_not_successful() {
+    let recorder = InMemoryMetricsRecorder::new();
+    let service = service([public_id(200)]).with_metrics_dispatcher(Arc::new(
+      ClosedMetricsDispatcher::new(Arc::new(recorder.clone())),
+    ));
+    let private_owner = owner("learner-private-exhausted-8172");
+    let session = service
+      .create_session(
+        private_owner.clone(),
+        CreatePracticeSession::new(session_limit(1)),
+      )
+      .await
+      .unwrap();
+    let request = ClaimPracticeItem::new(
+      session.id().clone(),
+      PracticeIdempotencyKey::new([7; 32]),
+      PracticeRequestFingerprint::new([8; 32]),
+    );
+
+    let first = service
+      .claim_or_return(private_owner.clone(), request.clone())
+      .await
+      .unwrap();
+    let replay = service
+      .claim_or_return(private_owner, request)
+      .await
+      .unwrap();
+    assert!(matches!(
+      first.outcome(),
+      Some(PracticeClaimOutcome::NoItemAvailable)
+    ));
+    assert!(replay.is_replayed());
+    assert_eq!(replay.outcome(), first.outcome());
+
+    let _ = recorded_events(&recorder, 2).await;
+    assert_eq!(
+      settled_events(&recorder).await,
+      vec![
+        MetricEvent::PracticeOperation {
+          operation: PracticeOperation::ItemClaim,
+          outcome: MetricOutcome::Rejected,
+        },
+        MetricEvent::PracticeOperation {
+          operation: PracticeOperation::ItemClaim,
+          outcome: MetricOutcome::Rejected,
+        },
+      ]
+    );
   }
 }

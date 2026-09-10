@@ -10,11 +10,15 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::{
-  domain::feedback::{
-    FeedbackIdempotencyKey, FeedbackRequestFingerprint, GraphFeedback, GraphFeedbackEvent,
-    GraphFeedbackTarget, PersonalGraphFeedback,
+  application::observability::ClosedMetricsDispatcher,
+  domain::{
+    feedback::{
+      FeedbackIdempotencyKey, FeedbackRequestFingerprint, GraphFeedback, GraphFeedbackEvent,
+      GraphFeedbackTarget, PersonalGraphFeedback,
+    },
+    learner::LearnerId,
+    observability::{FeedbackOperation, MetricEvent, MetricOutcome},
   },
-  domain::learner::LearnerId,
   ports::{
     clock::Clock,
     graph_feedback::{
@@ -153,6 +157,7 @@ pub struct GraphFeedbackService {
   store: Arc<dyn GraphFeedbackStore>,
   clock: Arc<dyn Clock>,
   ids: Arc<dyn PublicIdGenerator>,
+  metrics: Option<Arc<ClosedMetricsDispatcher>>,
 }
 
 impl GraphFeedbackService {
@@ -169,7 +174,19 @@ impl GraphFeedbackService {
       store,
       clock,
       ids,
+      metrics: None,
     }
+  }
+
+  /// Adds bounded, response-neutral delivery for closed private-feedback operation metrics.
+  ///
+  /// Metrics contain only the fixed operation and outcome labels; they never carry an owner,
+  /// target, relation version, idempotency material, or feedback value. Replayed submissions are
+  /// successful idempotent operations. Missing historical projections are successful owner-safe
+  /// reads, while target, capability, version, and idempotency conflicts are rejected.
+  pub fn with_metrics_dispatcher(mut self, dispatcher: Arc<ClosedMetricsDispatcher>) -> Self {
+    self.metrics = Some(dispatcher);
+    self
   }
 
   /// Validates and records one private usefulness or accuracy action.
@@ -184,6 +201,15 @@ impl GraphFeedbackService {
   /// Returns an error for an unknown or superseded relation, an unsupported capability, a
   /// conflicting idempotency key, or an unavailable dependency.
   pub async fn submit(
+    &self,
+    command: SubmitGraphFeedback,
+  ) -> Result<GraphFeedbackSubmission, GraphFeedbackError> {
+    let result = self.submit_inner(command).await;
+    self.record_submission_outcome(&result);
+    result
+  }
+
+  async fn submit_inner(
     &self,
     command: SubmitGraphFeedback,
   ) -> Result<GraphFeedbackSubmission, GraphFeedbackError> {
@@ -252,7 +278,63 @@ impl GraphFeedbackService {
     owner: &LearnerId,
     target: &GraphFeedbackTarget,
   ) -> Result<Option<PersonalGraphFeedback>, GraphFeedbackError> {
+    let result = self.current_inner(owner, target).await;
+    self.record_projection_read_outcome(&result);
+    result
+  }
+
+  async fn current_inner(
+    &self,
+    owner: &LearnerId,
+    target: &GraphFeedbackTarget,
+  ) -> Result<Option<PersonalGraphFeedback>, GraphFeedbackError> {
     Ok(self.store.current(owner, target).await?)
+  }
+
+  fn record_submission_outcome(
+    &self,
+    result: &Result<GraphFeedbackSubmission, GraphFeedbackError>,
+  ) {
+    let Some(metrics) = &self.metrics else {
+      return;
+    };
+    let outcome = match result {
+      Ok(GraphFeedbackSubmission::Recorded(_) | GraphFeedbackSubmission::Replayed(_)) => {
+        MetricOutcome::Succeeded
+      }
+      Err(
+        GraphFeedbackError::TargetNotFound
+        | GraphFeedbackError::RelationVersionUnavailable
+        | GraphFeedbackError::CapabilityUnavailable
+        | GraphFeedbackError::IdempotencyConflict,
+      ) => MetricOutcome::Rejected,
+      Err(
+        GraphFeedbackError::Catalog(_)
+        | GraphFeedbackError::Store(_)
+        | GraphFeedbackError::EventIdGeneration(_),
+      ) => MetricOutcome::Failed,
+    };
+    metrics.dispatch(MetricEvent::FeedbackOperation {
+      operation: FeedbackOperation::Submission,
+      outcome,
+    });
+  }
+
+  fn record_projection_read_outcome(
+    &self,
+    result: &Result<Option<PersonalGraphFeedback>, GraphFeedbackError>,
+  ) {
+    let Some(metrics) = &self.metrics else {
+      return;
+    };
+    metrics.dispatch(MetricEvent::FeedbackOperation {
+      operation: FeedbackOperation::ProjectionRead,
+      outcome: if result.is_ok() {
+        MetricOutcome::Succeeded
+      } else {
+        MetricOutcome::Failed
+      },
+    });
   }
 }
 
@@ -264,19 +346,23 @@ mod tests {
     time::{Duration, SystemTime},
   };
 
+  use tokio::time::timeout;
   use ulid::Ulid;
 
   use super::*;
   use crate::{
     adapters::{
       clock::FixedClock,
-      in_memory::{InMemoryGraphFeedbackCatalog, InMemoryGraphFeedbackStore},
+      in_memory::{
+        InMemoryGraphFeedbackCatalog, InMemoryGraphFeedbackStore, InMemoryMetricsRecorder,
+      },
       public_id::SequencePublicIdGenerator,
     },
     domain::{
       canonical::CanonicalId,
       feedback::{AccuracyFeedback, PersonalAccuracy, PersonalUsefulness, UsefulnessFeedback},
       graph::{GraphEdgeId, GraphFeedbackCapability, GraphNodeKey, GraphNodeKind, RelationVersion},
+      observability::{FeedbackOperation, MetricEvent, MetricOutcome},
     },
     ports::graph_feedback::GraphFeedbackEdge,
   };
@@ -338,6 +424,30 @@ mod tests {
       Arc::new(FixedClock::new(now)),
       Arc::new(SequencePublicIdGenerator::new(ids)),
     )
+  }
+
+  async fn recorded_events(
+    recorder: &InMemoryMetricsRecorder,
+    expected_count: usize,
+  ) -> Vec<MetricEvent> {
+    timeout(Duration::from_secs(1), async {
+      loop {
+        let events = recorder.events().await;
+        if events.len() >= expected_count {
+          return events;
+        }
+        tokio::task::yield_now().await;
+      }
+    })
+    .await
+    .expect("feedback metrics recorder receives the expected closed events")
+  }
+
+  async fn settled_events(recorder: &InMemoryMetricsRecorder) -> Vec<MetricEvent> {
+    for _ in 0..4 {
+      tokio::task::yield_now().await;
+    }
+    recorder.events().await
   }
 
   #[tokio::test]
@@ -473,5 +583,78 @@ mod tests {
         .version,
       1
     );
+  }
+
+  #[tokio::test]
+  async fn records_only_closed_feedback_outcomes_without_private_identifiers() {
+    let recorder = InMemoryMetricsRecorder::new();
+    let feedback = service(
+      InMemoryGraphFeedbackCatalog::new().with_edge(GraphFeedbackEdge::new(
+        target(2),
+        BTreeSet::from([GraphFeedbackCapability::Usefulness]),
+      )),
+      InMemoryGraphFeedbackStore::new(),
+      [id(100)],
+    )
+    .with_metrics_dispatcher(Arc::new(ClosedMetricsDispatcher::new(Arc::new(
+      recorder.clone(),
+    ))));
+    let private_owner = owner("learner-private-8172");
+
+    feedback
+      .submit(command(
+        private_owner.clone(),
+        1,
+        2,
+        target(2),
+        GraphFeedback::Usefulness(UsefulnessFeedback::More),
+      ))
+      .await
+      .unwrap();
+    feedback.current(&private_owner, &target(2)).await.unwrap();
+    assert_eq!(
+      feedback
+        .submit(command(
+          private_owner.clone(),
+          3,
+          4,
+          target(1),
+          GraphFeedback::Usefulness(UsefulnessFeedback::Less),
+        ))
+        .await,
+      Err(GraphFeedbackError::RelationVersionUnavailable)
+    );
+
+    let _ = recorded_events(&recorder, 3).await;
+    let events = settled_events(&recorder).await;
+    assert_eq!(
+      events,
+      vec![
+        MetricEvent::FeedbackOperation {
+          operation: FeedbackOperation::Submission,
+          outcome: MetricOutcome::Succeeded,
+        },
+        MetricEvent::FeedbackOperation {
+          operation: FeedbackOperation::ProjectionRead,
+          outcome: MetricOutcome::Succeeded,
+        },
+        MetricEvent::FeedbackOperation {
+          operation: FeedbackOperation::Submission,
+          outcome: MetricOutcome::Rejected,
+        },
+      ]
+    );
+    let rendered = format!("{events:?}");
+    assert!(!rendered.contains("learner-private-8172"));
+    assert!(!rendered.contains("edge-1"));
+    for event in events {
+      for label in event.attributes().labels() {
+        assert!(matches!(label.key(), "operation" | "outcome"));
+        assert!(matches!(
+          label.value(),
+          "submission" | "projection_read" | "succeeded" | "rejected"
+        ));
+      }
+    }
   }
 }
