@@ -28,7 +28,13 @@ use crate::{
     request_id::RequestId,
     AppState,
   },
-  application::graph::GraphReadError,
+  application::{
+    graph::GraphReadError,
+    graph_topology_cache::{
+      GraphTopologySnapshotCacheError, GraphTopologySnapshotCacheResult,
+      GraphTopologySnapshotValidationError,
+    },
+  },
   domain::{
     canonical::{CanonicalId, EvidenceConfidence, LexicalPartOfSpeech},
     graph::{
@@ -66,6 +72,17 @@ pub(super) async fn read(
     Ok(request) => request,
     Err(error) => return invalid_graph_request(error, &request_id),
   };
+  if let Some(cache) = state.graph_topology_snapshot_cache_service() {
+    return graph_response(
+      cache
+        .read(request)
+        .await
+        .map(GraphTopologySnapshotCacheResult::into_result)
+        .map_err(graph_topology_cache_error),
+      &state,
+      &request_id,
+    );
+  }
   let Some(service) = state.graph_service() else {
     return graph_unavailable(&request_id, true);
   };
@@ -146,6 +163,18 @@ fn graph_response(
         "graph read dependency returned inconsistent data"
       );
       graph_unavailable(request_id, false)
+    }
+  }
+}
+
+fn graph_topology_cache_error(error: GraphTopologySnapshotCacheError) -> GraphReadError {
+  match error {
+    GraphTopologySnapshotCacheError::Graph(error) => error,
+    GraphTopologySnapshotCacheError::Contract(GraphTopologySnapshotValidationError::Request(
+      error,
+    )) => GraphReadError::Validation(error),
+    GraphTopologySnapshotCacheError::Contract(_) | GraphTopologySnapshotCacheError::ZeroTtl => {
+      GraphReadError::Repository(GraphRepositoryError::InconsistentData)
     }
   }
 }

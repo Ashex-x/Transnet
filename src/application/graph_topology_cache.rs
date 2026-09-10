@@ -300,6 +300,13 @@ impl GraphTopologySnapshotCacheResult {
       Self::Hit(result) | Self::Miss(result) | Self::Unavailable(result) => result,
     }
   }
+
+  /// Consumes this outcome and returns its public graph topology.
+  pub fn into_result(self) -> GraphReadResult {
+    match self {
+      Self::Hit(result) | Self::Miss(result) | Self::Unavailable(result) => result,
+    }
+  }
 }
 
 /// Failure that prevents authoritative graph reads from safely producing a cacheable snapshot.
@@ -415,6 +422,15 @@ impl GraphTopologySnapshotCacheService {
         Ok(GraphTopologySnapshotCacheResult::Unavailable(result))
       }
     }
+  }
+
+  /// Returns the exact graph service used for cache misses and uncached rebuilds.
+  ///
+  /// This is crate-visible so the HTTP composition root can direct neighbor pages through the
+  /// same canonical graph dependency without accepting a second, potentially mismatched graph
+  /// service from callers.
+  pub(crate) fn graph_service(&self) -> &Arc<GraphService> {
+    &self.graph
   }
 
   fn expires_at(&self) -> Option<UtcTimestamp> {

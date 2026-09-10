@@ -25,6 +25,7 @@ use crate::{
     canonical_lookup::CanonicalLookupService,
     canonical_sense_details::{ActiveCanonicalSenseDetailsService, CanonicalSenseDetailsService},
     graph::GraphService,
+    graph_topology_cache::GraphTopologySnapshotCacheService,
     lookup::LookupService,
     lookup_job::LookupJobService,
   },
@@ -48,6 +49,33 @@ mod v1;
 pub use readiness::{AlwaysReady, Readiness};
 
 use request_id::RequestId;
+
+/// One internally coherent graph-route dependency arrangement.
+///
+/// A cached topology service owns the graph service used to rebuild public snapshots. Keeping the
+/// two variants mutually exclusive makes it impossible for [`AppState`] to route full topology
+/// reads through one graph service while direct neighbor pages use another.
+#[derive(Clone)]
+enum GraphRouteService {
+  Direct(Arc<GraphService>),
+  TopologyCached(Arc<GraphTopologySnapshotCacheService>),
+}
+
+impl GraphRouteService {
+  fn graph_service(&self) -> &Arc<GraphService> {
+    match self {
+      Self::Direct(service) => service,
+      Self::TopologyCached(service) => service.graph_service(),
+    }
+  }
+
+  fn topology_cache_service(&self) -> Option<&Arc<GraphTopologySnapshotCacheService>> {
+    match self {
+      Self::Direct(_) => None,
+      Self::TopologyCached(service) => Some(service),
+    }
+  }
+}
 
 /// Minimum number of secret bytes accepted for graph-cursor confidentiality and integrity.
 pub const MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES: usize = 32;
@@ -139,7 +167,7 @@ pub struct AppState {
   canonical_lookup: Option<Arc<CanonicalLookupService>>,
   canonical_sense_details: Option<Arc<ActiveCanonicalSenseDetailsService>>,
   lookup_jobs: Option<Arc<LookupJobService>>,
-  graph: Option<Arc<GraphService>>,
+  graph: Option<GraphRouteService>,
   graph_cursor_protection_key: GraphCursorProtectionKey,
   metrics: Option<Arc<LookupMetricsDispatcher>>,
   readiness: Arc<dyn Readiness>,
@@ -206,12 +234,30 @@ impl AppState {
     self
   }
 
-  /// Adds the canonical graph service used by the conditional graph-read routes.
+  /// Adds an uncached canonical graph service used by the conditional graph-read routes.
   ///
-  /// Without this injected dependency, graph routes are intentionally not registered so the
-  /// default model-only runtime cannot imply that canonical graph content is available.
+  /// This replaces any previously installed topology-cache arrangement. Without this dependency
+  /// or [`Self::with_graph_topology_snapshot_cache`], graph routes are intentionally not
+  /// registered so the default model-only runtime cannot imply that canonical graph content is
+  /// available.
   pub fn with_graph_service(mut self, service: Arc<GraphService>) -> Self {
-    self.graph = Some(service);
+    self.graph = Some(GraphRouteService::Direct(service));
+    self
+  }
+
+  /// Adds one coherent public graph-topology cache arrangement for conditional graph routes.
+  ///
+  /// Full `GET /v1/graph` reads use this public server-side cache service exclusively. Its cache
+  /// misses and cache outages rebuild through the graph service it owns, while direct neighbor
+  /// pages use that same graph service without accessing the topology cache. This replaces any
+  /// prior direct graph injection, so callers cannot pair a cache service with a different graph
+  /// service in one [`AppState`]. Without either graph injection, graph routes remain absent from
+  /// the default model-only runtime.
+  pub fn with_graph_topology_snapshot_cache(
+    mut self,
+    service: Arc<GraphTopologySnapshotCacheService>,
+  ) -> Self {
+    self.graph = Some(GraphRouteService::TopologyCached(service));
     self
   }
 
@@ -259,7 +305,16 @@ impl AppState {
   }
 
   pub(crate) fn graph_service(&self) -> Option<&Arc<GraphService>> {
-    self.graph.as_ref()
+    self.graph.as_ref().map(GraphRouteService::graph_service)
+  }
+
+  pub(crate) fn graph_topology_snapshot_cache_service(
+    &self,
+  ) -> Option<&Arc<GraphTopologySnapshotCacheService>> {
+    self
+      .graph
+      .as_ref()
+      .and_then(GraphRouteService::topology_cache_service)
   }
 
   pub(crate) fn graph_cursor_protection_key(&self) -> &[u8] {
