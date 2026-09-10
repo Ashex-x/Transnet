@@ -28,6 +28,8 @@ pub mod learning_model;
 pub mod lookup_job;
 /// Closed, redacted backend metric-event recording interface.
 pub mod metrics;
+/// Atomic private scheduler-neutral practice-state persistence interface.
+pub mod practice_state;
 /// Opaque, application-generated public identifier interface.
 pub mod public_id;
 /// Generic record persistence interface.

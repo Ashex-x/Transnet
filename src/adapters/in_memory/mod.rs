@@ -11,6 +11,7 @@ mod jobs;
 mod learner_state;
 mod lookup_jobs;
 mod metrics;
+mod practice_state;
 mod repository;
 mod retriever;
 
@@ -25,5 +26,6 @@ pub use jobs::InMemoryDurableJobQueue;
 pub use learner_state::InMemoryLearnerStateStore;
 pub use lookup_jobs::InMemoryLookupJobStore;
 pub use metrics::InMemoryMetricsRecorder;
+pub use practice_state::InMemoryPracticeStateStore;
 pub use repository::InMemoryRepository;
 pub use retriever::InMemoryRetriever;
