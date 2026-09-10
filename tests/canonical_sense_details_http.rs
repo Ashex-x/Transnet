@@ -144,7 +144,7 @@ fn assertion(
       name: "Test source".to_string(),
       version: "test-v1".to_string(),
       license: "LicenseRef-Test".to_string(),
-      attribution: None,
+      attribution: Some("Copyright 2026 Test Licensor".to_string()),
       permissions: source_permissions,
     },
     EvidenceFragment {
@@ -574,6 +574,39 @@ async fn injected_route_returns_full_typed_aggregate_with_assertion_provenance()
   assert_eq!(body["provenance"]["release_id"], "release-1");
   assert_eq!(body["provenance"]["evidence_use"], "api_redistribution");
   assert_eq!(body["provenance"]["evidence_backed"], true);
+}
+
+#[tokio::test]
+async fn public_evidence_provenance_preserves_source_attribution() {
+  let repository: Arc<dyn CanonicalSenseDetailsRepository> = Arc::new(
+    InMemoryCanonicalSenseDetailsRepository::new().with_details(minimal_details(
+      "release-1",
+      "sense-run",
+      CanonicalStatus::Active,
+      true,
+      true,
+    )),
+  );
+  let response = app(
+    Arc::new(FixedActiveContentReader(Ok(Some(active_content(
+      "release-1",
+    ))))),
+    repository,
+  )
+  .oneshot(
+    Request::get("/v1/senses/sense-run")
+      .body(Body::empty())
+      .unwrap(),
+  )
+  .await
+  .unwrap();
+
+  assert_eq!(response.status(), StatusCode::OK);
+  assert_eq!(
+    json(response).await["localized_glosses"][0]["assertion"]["evidence"][0]["provenance"]
+      ["attribution"],
+    "Copyright 2026 Test Licensor"
+  );
 }
 
 #[tokio::test]

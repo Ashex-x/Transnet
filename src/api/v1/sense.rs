@@ -521,6 +521,7 @@ impl From<&crate::domain::canonical_content::CanonicalEvidenceLineage> for Factu
       text: fragment.text.clone(),
       provenance: FactualEvidenceProvenanceResponse {
         source_id: value.source().id.to_string(),
+        attribution: value.source().attribution.clone(),
         source_reference: fragment.source_reference.clone(),
         release_id: fragment.release_id.to_string(),
         language: fragment.language.to_string(),
@@ -534,6 +535,7 @@ impl From<&crate::domain::canonical_content::CanonicalEvidenceLineage> for Factu
 #[derive(Debug, Serialize)]
 struct FactualEvidenceProvenanceResponse {
   source_id: String,
+  attribution: Option<String>,
   source_reference: String,
   release_id: String,
   language: String,
