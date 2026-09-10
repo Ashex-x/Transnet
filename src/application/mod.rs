@@ -1,5 +1,7 @@
 //! Application use cases.
 
+/// Typed bounded canonical graph reads and neighbor expansion.
+pub mod graph;
 /// Structured lookup orchestration.
 pub mod lookup;
 /// Private lookup-job lifecycle and deadline orchestration.

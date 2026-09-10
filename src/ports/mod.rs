@@ -8,6 +8,8 @@ pub mod canonical_repository;
 pub mod clock;
 /// Leased durable-work interface for API and worker coordination.
 pub mod durable_job;
+/// Read-only canonical graph topology interface.
+pub mod graph_repository;
 /// Scoped idempotency reservation and response-storage interface.
 pub mod idempotency;
 /// Structured learning-model interface.
