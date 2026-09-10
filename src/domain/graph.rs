@@ -797,7 +797,10 @@ pub struct GraphCursor {
   pub content: GraphContentVersion,
   /// Exact normalized relation filter against which the ordering was issued.
   pub filter: GraphFilter,
-  /// Last edge returned on the preceding page.
+  /// Last ordering key safely processed on the preceding page.
+  ///
+  /// This can refer to an omitted incomplete edge so a later complete edge is never blocked or
+  /// skipped by pagination.
   pub after: GraphEdgeOrderingKey,
 }
 

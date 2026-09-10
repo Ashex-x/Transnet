@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use crate::domain::graph::{
-  GraphContentVersion, GraphFilter, GraphNode, GraphNodeKey, SemanticScale, StoredGraphRelation,
+  GraphContentVersion, GraphEdge, GraphEdgeOrderingKey, GraphFilter, GraphNode, GraphNodeKey,
+  SemanticScale, StoredGraphRelation,
 };
 
 /// Typed failure from the canonical graph store.
@@ -40,6 +41,38 @@ pub struct GraphAdjacency {
   pub scales: Vec<SemanticScale>,
 }
 
+/// Bounded request for one storage-ordered page of public direct-neighbor projections.
+///
+/// This is deliberately separate from [`GraphAdjacencyRequest`]. A repository that reaches a
+/// raw-record cap cannot safely resume a rank-ordered public edge stream unless it applies the
+/// public ordering key before limiting source records.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphNeighborPageRequest {
+  /// Exact graph content version selected before the page begins.
+  pub content: GraphContentVersion,
+  /// Typed node whose direct projections are requested.
+  pub node: GraphNodeKey,
+  /// Relation filter that storage may apply before ordering candidates.
+  pub filter: GraphFilter,
+  /// Last public ordering key accepted by the previous page, when resuming.
+  pub after: Option<GraphEdgeOrderingKey>,
+  /// Hard upper bound on projected edge candidates returned by this page.
+  pub edge_limit: usize,
+}
+
+/// One deterministic page of direct-neighbor candidates from the canonical graph store.
+///
+/// The application validates endpoint completion before exposing any edge. `has_more` is true
+/// only when a later public ordering key exists, including when the adapter needed to advance
+/// beyond a raw canonical-record cap.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GraphNeighborPage {
+  /// Strictly ordered projected candidates after the request cursor.
+  pub edges: Vec<GraphEdge>,
+  /// Whether another candidate exists after every edge in `edges`.
+  pub has_more: bool,
+}
+
 /// Reads immutable canonical graph records without exposing storage or query details.
 ///
 /// Implementations must pin every record to `GraphAdjacencyRequest::content.release_id`, apply
@@ -66,4 +99,17 @@ pub trait GraphRepository: Send + Sync {
     &self,
     request: &GraphAdjacencyRequest,
   ) -> Result<GraphAdjacency, GraphRepositoryError>;
+
+  /// Returns one globally ordered direct-neighbor candidate page.
+  ///
+  /// Implementations must apply `after` using the public graph-edge ordering before any raw
+  /// source-record cap, return at most `edge_limit` strictly ordered candidates, and set
+  /// `has_more` only when a later candidate exists. The default safely reports an unavailable
+  /// dependency so existing adapters cannot accidentally provide unsafe cursor continuation.
+  async fn neighbor_page(
+    &self,
+    _request: &GraphNeighborPageRequest,
+  ) -> Result<GraphNeighborPage, GraphRepositoryError> {
+    Err(GraphRepositoryError::Unavailable)
+  }
 }

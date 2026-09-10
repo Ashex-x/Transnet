@@ -1,16 +1,17 @@
 //! Deterministic in-memory canonical graph repository for tests and local development.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 
 use crate::{
   domain::graph::{
-    GraphContentVersion, GraphFilter, GraphNode, GraphNodeKey, GraphNodeKind, SemanticScale,
-    StoredGraphRelation,
+    compare_graph_edge_ordering_keys, compare_graph_edges, GraphContentVersion, GraphFilter,
+    GraphNode, GraphNodeKey, GraphNodeKind, SemanticScale, StoredGraphRelation,
   },
   ports::graph_repository::{
-    GraphAdjacency, GraphAdjacencyRequest, GraphRepository, GraphRepositoryError,
+    GraphAdjacency, GraphAdjacencyRequest, GraphNeighborPage, GraphNeighborPageRequest,
+    GraphRepository, GraphRepositoryError,
   },
 };
 
@@ -116,6 +117,38 @@ impl GraphRepository for InMemoryGraphRepository {
     scales.truncate(remaining);
 
     Ok(GraphAdjacency { relations, scales })
+  }
+
+  async fn neighbor_page(
+    &self,
+    request: &GraphNeighborPageRequest,
+  ) -> Result<GraphNeighborPage, GraphRepositoryError> {
+    if request.content != self.content || request.edge_limit == 0 {
+      return Err(GraphRepositoryError::InconsistentData);
+    }
+
+    let mut edges = self
+      .relations
+      .iter()
+      .filter_map(|relation| relation.project_from(&request.node))
+      .chain(
+        self
+          .scales
+          .iter()
+          .flat_map(|scale| scale.project_from(&request.node)),
+      )
+      .filter(|edge| request.filter.allows(edge.relation_type))
+      .collect::<Vec<_>>();
+    edges.sort_by(compare_graph_edges);
+    let mut seen = BTreeSet::new();
+    edges.retain(|edge| seen.insert(edge.id.clone()));
+    if let Some(after) = &request.after {
+      edges.retain(|edge| compare_graph_edge_ordering_keys(&edge.ordering_key(), after).is_gt());
+    }
+
+    let has_more = edges.len() > request.edge_limit;
+    edges.truncate(request.edge_limit);
+    Ok(GraphNeighborPage { edges, has_more })
   }
 }
 

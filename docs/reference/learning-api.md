@@ -178,6 +178,8 @@ Supported `relation_types` values are `synonym`, `near_synonym`, `translation_eq
 
 `GET /v1/graph/nodes/{node_kind}/{node_id}/neighbors` expands only one typed node; its path parameters use the same kind and identifier constraints as `root_kind` and `root_id`. Its `node_limit` is 2 through 75 so every page can contain the root plus at least one adjacent endpoint; `edge_limit` and `relation_types` use the same limits as the full graph read. It accepts an opaque `cursor` of at most 4,096 UTF-8 bytes from the prior neighbor response. The cursor is integrity-protected and bound to the typed root, active graph content version, exact normalized relation filter, and prior ordering key; it must be treated as an opaque string. A cursor for another root, a stale content version, a changed relation filter, or a modified cursor returns `422 invalid_graph_request`.
 
+A graph-serving host that needs pagination across process restarts or replicas must inject one shared, high-entropy secret of at least 32 bytes with `AppState::with_graph_cursor_signing_key(GraphCursorSigningKey::new(...))`. Without that explicit injection, `AppState::new` uses a redacted process-local ephemeral key, so cursors intentionally remain valid only within that process lifetime. Every `truncated: true` neighbor response has a `next_cursor` that advances after the last safely processed ordering key; when an endpoint is no longer eligible, following that cursor can yield an empty terminal page rather than exposing an incomplete edge.
+
 ```json
 {
   "schema_version": "1.0",

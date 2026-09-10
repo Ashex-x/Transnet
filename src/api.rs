@@ -1,6 +1,6 @@
 //! HTTP boundary, platform middleware, and versioned API routing.
 
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use axum::{
   extract::{rejection::JsonRejection, DefaultBodyLimit, MatchedPath, Request, State},
@@ -10,6 +10,7 @@ use axum::{
   routing::{get, post},
   Json, Router,
 };
+use thiserror::Error;
 use tower_http::{
   cors::{AllowCredentials, AllowOrigin, CorsLayer},
   limit::RequestBodyLimitLayer,
@@ -40,6 +41,59 @@ pub use readiness::{AlwaysReady, Readiness};
 
 use request_id::RequestId;
 
+/// Minimum number of secret bytes accepted for graph-cursor integrity protection.
+pub const MIN_GRAPH_CURSOR_SIGNING_KEY_BYTES: usize = 32;
+
+/// Validated secret used to integrity-protect opaque graph neighbor cursors.
+///
+/// This type deliberately redacts its contents in `Debug` output. Hosts serving graph pagination
+/// across restarts or multiple replicas must inject the same high-entropy value through
+/// [`AppState::with_graph_cursor_signing_key`].
+#[derive(Clone)]
+pub struct GraphCursorSigningKey(Arc<[u8]>);
+
+impl GraphCursorSigningKey {
+  /// Creates a graph-cursor signing key from at least 32 bytes of high-entropy secret material.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when `secret` is shorter than the minimum signing-key length.
+  pub fn new(secret: impl AsRef<[u8]>) -> Result<Self, GraphCursorSigningKeyError> {
+    let secret = secret.as_ref();
+    if secret.len() < MIN_GRAPH_CURSOR_SIGNING_KEY_BYTES {
+      return Err(GraphCursorSigningKeyError::TooShort);
+    }
+    Ok(Self(Arc::from(secret)))
+  }
+
+  fn ephemeral() -> Self {
+    let mut secret = Vec::with_capacity(MIN_GRAPH_CURSOR_SIGNING_KEY_BYTES);
+    secret.extend(ulid::Ulid::new().to_bytes());
+    secret.extend(ulid::Ulid::new().to_bytes());
+    Self(Arc::from(secret))
+  }
+
+  pub(crate) fn as_bytes(&self) -> &[u8] {
+    &self.0
+  }
+}
+
+impl fmt::Debug for GraphCursorSigningKey {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter.write_str("GraphCursorSigningKey(REDACTED)")
+  }
+}
+
+/// Validation failure for graph-cursor signing-key material.
+#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
+pub enum GraphCursorSigningKeyError {
+  /// The supplied key cannot safely provide the required integrity protection.
+  #[error(
+    "graph cursor signing key must contain at least {MIN_GRAPH_CURSOR_SIGNING_KEY_BYTES} bytes"
+  )]
+  TooShort,
+}
+
 /// Shared dependencies used by request handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -48,12 +102,16 @@ pub struct AppState {
   canonical_lookup: Option<Arc<CanonicalLookupService>>,
   lookup_jobs: Option<Arc<LookupJobService>>,
   graph: Option<Arc<GraphService>>,
-  graph_cursor_key: Arc<[u8]>,
+  graph_cursor_signing_key: GraphCursorSigningKey,
   readiness: Arc<dyn Readiness>,
 }
 
 impl AppState {
   /// Creates application state for a translation service.
+  ///
+  /// Graph pagination starts with an ephemeral process-local signing key. A graph-serving host
+  /// must replace it with [`Self::with_graph_cursor_signing_key`] when cursors must survive a
+  /// restart or move between replicas.
   pub fn new(service: TranslationService) -> Self {
     Self {
       service: Arc::new(service),
@@ -61,7 +119,7 @@ impl AppState {
       canonical_lookup: None,
       lookup_jobs: None,
       graph: None,
-      graph_cursor_key: Arc::from(ulid::Ulid::new().to_string().into_bytes()),
+      graph_cursor_signing_key: GraphCursorSigningKey::ephemeral(),
       readiness: Arc::new(AlwaysReady),
     }
   }
@@ -99,6 +157,15 @@ impl AppState {
     self
   }
 
+  /// Replaces the process-local graph-cursor key with stable secret material supplied by the host.
+  ///
+  /// Every graph-serving replica and replacement process must use the same high-entropy key when
+  /// clients need to resume opaque neighbor cursors across a restart or load-balanced request.
+  pub fn with_graph_cursor_signing_key(mut self, key: GraphCursorSigningKey) -> Self {
+    self.graph_cursor_signing_key = key;
+    self
+  }
+
   /// Adds the dependency probe used by `GET /readyz`.
   pub fn with_readiness(mut self, readiness: Arc<dyn Readiness>) -> Self {
     self.readiness = readiness;
@@ -118,7 +185,7 @@ impl AppState {
   }
 
   pub(crate) fn graph_cursor_key(&self) -> &[u8] {
-    &self.graph_cursor_key
+    self.graph_cursor_signing_key.as_bytes()
   }
 
   fn has_lookup_job_service(&self) -> bool {
@@ -325,7 +392,20 @@ mod tests {
   };
   use tower::ServiceExt;
 
-  use super::trace_route;
+  use super::{trace_route, GraphCursorSigningKey, GraphCursorSigningKeyError};
+
+  #[test]
+  fn graph_cursor_signing_keys_require_length_and_redact_debug_output() {
+    let secret = b"signing-key-must-not-appear-in-debug";
+    let key = GraphCursorSigningKey::new(secret).unwrap();
+
+    assert_eq!(format!("{key:?}"), "GraphCursorSigningKey(REDACTED)");
+    assert!(GraphCursorSigningKey::new([0_u8; 31]).is_err());
+    assert!(matches!(
+      GraphCursorSigningKey::new([0_u8; 31]),
+      Err(GraphCursorSigningKeyError::TooShort)
+    ));
+  }
 
   #[test]
   fn trace_route_never_falls_back_to_a_raw_unmatched_path() {

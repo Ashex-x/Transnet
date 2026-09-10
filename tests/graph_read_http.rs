@@ -25,7 +25,7 @@ use transnet::{
   ports::graph_repository::{
     GraphAdjacency, GraphAdjacencyRequest, GraphRepository, GraphRepositoryError,
   },
-  AppState, ProviderConfig, TranslationConfig, TranslationService,
+  AppState, GraphCursorSigningKey, ProviderConfig, TranslationConfig, TranslationService,
 };
 
 fn service() -> TranslationService {
@@ -123,6 +123,14 @@ fn graph_service() -> Arc<GraphService> {
 
 fn graph_app() -> Router {
   app_router(AppState::new(service()).with_graph_service(graph_service()))
+}
+
+fn graph_app_with_cursor_key(key: GraphCursorSigningKey) -> Router {
+  app_router(
+    AppState::new(service())
+      .with_graph_service(graph_service())
+      .with_graph_cursor_signing_key(key),
+  )
 }
 
 #[derive(Debug)]
@@ -327,6 +335,57 @@ async fn neighbor_pages_use_signed_opaque_cursors_and_reject_tampering() {
   assert_eq!(body["code"], "invalid_graph_request");
   assert_eq!(body["errors"][0]["field"], "cursor");
   assert!(!body.to_string().contains(&tampered));
+}
+
+#[tokio::test]
+async fn neighbor_cursor_survives_a_graph_replica_when_the_signing_key_is_shared() {
+  let shared_key = GraphCursorSigningKey::new([7_u8; 32]).unwrap();
+  let first_replica = graph_app_with_cursor_key(shared_key.clone());
+  let second_replica = graph_app_with_cursor_key(shared_key);
+  let different_replica =
+    graph_app_with_cursor_key(GraphCursorSigningKey::new([8_u8; 32]).unwrap());
+  let first = first_replica
+    .oneshot(
+      Request::get("/v1/graph/nodes/sense/hot/neighbors?node_limit=2&edge_limit=1")
+        .body(Body::empty())
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+  assert_eq!(first.status(), StatusCode::OK);
+  let cursor = json(first).await["next_cursor"]
+    .as_str()
+    .unwrap()
+    .to_string();
+
+  let resumed = second_replica
+    .oneshot(
+      Request::get(format!(
+        "/v1/graph/nodes/sense/hot/neighbors?node_limit=2&edge_limit=1&cursor={cursor}"
+      ))
+      .body(Body::empty())
+      .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(resumed.status(), StatusCode::OK);
+  assert_eq!(json(resumed).await["edges"][0]["id"], "edge-mid");
+
+  let rejected = different_replica
+    .oneshot(
+      Request::get(format!(
+        "/v1/graph/nodes/sense/hot/neighbors?node_limit=2&edge_limit=1&cursor={cursor}"
+      ))
+      .body(Body::empty())
+      .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+  let rejected = json(rejected).await;
+  assert_eq!(rejected["errors"][0]["field"], "cursor");
+  assert!(!rejected.to_string().contains(&cursor));
 }
 
 #[tokio::test]
