@@ -1,5 +1,7 @@
 //! Interfaces between application logic and external systems.
 
+/// Narrow reader for the active immutable canonical-content tuple.
+pub mod active_content_reader;
 /// Shared cache interface for rebuildable application results.
 pub mod cache;
 /// Canonical lexical repository interface.

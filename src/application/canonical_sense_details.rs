@@ -8,10 +8,16 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::{
-  domain::canonical_content::CanonicalSenseDetails,
-  ports::canonical_sense_details_repository::{
-    CanonicalSenseDetailsReadRequest, CanonicalSenseDetailsRepository,
-    CanonicalSenseDetailsRepositoryError,
+  domain::{
+    canonical::{ActiveContentVersion, EvidenceUse, SenseId},
+    canonical_content::CanonicalSenseDetails,
+  },
+  ports::{
+    active_content_reader::{ActiveContentReader, ActiveContentReaderError},
+    canonical_sense_details_repository::{
+      CanonicalSenseDetailsReadRequest, CanonicalSenseDetailsRepository,
+      CanonicalSenseDetailsRepositoryError,
+    },
   },
 };
 
@@ -21,6 +27,16 @@ pub enum CanonicalSenseDetailsReadError {
   /// The canonical detail repository could not satisfy the pinned read contract.
   #[error(transparent)]
   Repository(#[from] CanonicalSenseDetailsRepositoryError),
+}
+
+impl CanonicalSenseDetailsReadError {
+  /// Returns whether repeating a pinned detail read can recover the reported failure.
+  pub const fn is_retryable(&self) -> bool {
+    matches!(
+      self,
+      Self::Repository(CanonicalSenseDetailsRepositoryError::Unavailable)
+    )
+  }
 }
 
 /// Loads one complete, bounded canonical detail aggregate through an explicit read port.
@@ -73,6 +89,108 @@ impl CanonicalSenseDetailsService {
     }
 
     Ok(Some(details))
+  }
+}
+
+/// A bounded canonical-detail aggregate paired with the one active tuple that selected it.
+///
+/// The returned `content` is the exact active tuple read before the detail request. It is not
+/// refreshed after the detail repository completes, so callers can describe one coherent release
+/// boundary without selecting a later active release.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveCanonicalSenseDetails {
+  content: ActiveContentVersion,
+  details: CanonicalSenseDetails,
+}
+
+impl ActiveCanonicalSenseDetails {
+  /// Returns the immutable active-content tuple that pinned this detail read.
+  pub fn content(&self) -> &ActiveContentVersion {
+    &self.content
+  }
+
+  /// Returns the complete, permission-filtered canonical detail aggregate.
+  pub fn details(&self) -> &CanonicalSenseDetails {
+    &self.details
+  }
+}
+
+/// Failure while resolving active canonical content and loading one public detail aggregate.
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum ActiveCanonicalSenseDetailsError {
+  /// The authoritative active-content pointer could not safely select a release.
+  #[error(transparent)]
+  ActiveContent(#[from] ActiveContentReaderError),
+  /// The release-pinned detail repository could not satisfy its public-read contract.
+  #[error(transparent)]
+  Details(#[from] CanonicalSenseDetailsReadError),
+}
+
+impl ActiveCanonicalSenseDetailsError {
+  /// Returns whether retrying the whole active-content detail read can recover the failure.
+  ///
+  /// Inconsistent pointer, target, and permission data are intentionally nonretryable. Only a
+  /// typed dependency unavailability is retryable.
+  pub const fn is_retryable(&self) -> bool {
+    match self {
+      Self::ActiveContent(error) => matches!(error, ActiveContentReaderError::Unavailable),
+      Self::Details(error) => error.is_retryable(),
+    }
+  }
+}
+
+/// Pins the current active release once before loading one public canonical detail aggregate.
+///
+/// This composition is deliberately separate from canonical lexical retrieval: a detail read
+/// neither searches lexical content nor chooses a vector collection. It asks the narrow
+/// [`ActiveContentReader`] for a safe active tuple exactly once, then requests
+/// [`EvidenceUse::ApiRedistribution`] from the dedicated details service for that tuple's exact
+/// release.
+#[derive(Clone)]
+pub struct ActiveCanonicalSenseDetailsService {
+  active_content: Arc<dyn ActiveContentReader>,
+  details: Arc<CanonicalSenseDetailsService>,
+}
+
+impl ActiveCanonicalSenseDetailsService {
+  /// Creates an active-release-pinned canonical-details composition.
+  pub fn new(
+    active_content: Arc<dyn ActiveContentReader>,
+    details: Arc<CanonicalSenseDetailsService>,
+  ) -> Self {
+    Self {
+      active_content,
+      details,
+    }
+  }
+
+  /// Reads one complete active canonical sense-details aggregate for public redistribution.
+  ///
+  /// `Ok(None)` intentionally conflates no active release, an absent detail aggregate, inactive
+  /// content, and permission-filtered content. This prevents callers from disclosing why a
+  /// canonical sense cannot be served.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when the active-content reader or the release-pinned detail repository is
+  /// unavailable or contradicts its safety contract.
+  pub async fn read(
+    &self,
+    sense_id: SenseId,
+  ) -> Result<Option<ActiveCanonicalSenseDetails>, ActiveCanonicalSenseDetailsError> {
+    let Some(content) = self.active_content.active_content_version().await? else {
+      return Ok(None);
+    };
+    let details = self
+      .details
+      .read(CanonicalSenseDetailsReadRequest::new(
+        content.release_id.clone(),
+        sense_id,
+        EvidenceUse::ApiRedistribution,
+      ))
+      .await?;
+
+    Ok(details.map(|details| ActiveCanonicalSenseDetails { content, details }))
   }
 }
 

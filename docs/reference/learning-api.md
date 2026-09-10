@@ -2,7 +2,7 @@
 
 ## Status and compatibility
 
-`POST /v1/lookups` has an implemented model-only default path and an optional canonical path when a host injects its explicit application dependency. `GET /v1/lookup-jobs/{job_id}` and the graph-read routes are likewise implemented only when their dependencies are injected; the default process does not inject them, so those conditional routes are absent. All other endpoints in this document remain proposed. The implemented `GET /health`, `GET /livez`, `GET /readyz`, and `POST /translate` contracts remain in [Transnet HTTP API](transnet-api.md).
+`POST /v1/lookups` has an implemented model-only default path and an optional canonical path when a host injects its explicit application dependency. `GET /v1/lookup-jobs/{job_id}`, `GET /v1/senses/{sense_id}`, and the graph-read routes are likewise implemented only when their dependencies are injected; the default process does not inject them, so those conditional routes are absent. All other endpoints in this document remain proposed. The implemented `GET /health`, `GET /livez`, `GET /readyz`, and `POST /translate` contracts remain in [Transnet HTTP API](transnet-api.md).
 
 The default model-only lookup returns synchronous anonymous results with `Cache-Control: no-store`; identifies every generated assertion; uses null canonical sense and relation IDs; exposes no evidence IDs; and reports `evidence_backed: false`. With an injected `CanonicalLookupService`, an explicit source language and no context select the synchronous, release-pinned evidence-backed path; automatic language and context-bearing requests remain on the model path. The crate has reusable canonical retrieval, card, cache, release, graph, learner, feedback, view, worker, and job foundations with in-memory adapters, but they do not supply production persistence, licensed content, authentication, or default optional-dependency wiring.
 
@@ -50,7 +50,7 @@ Content responses identify the applicable schema, lexicon release, vector collec
 | `POST /v1/auth/logout` | Required | Revoke current or all sessions |
 | `POST /v1/lookups` | Optional | Model-only default; release-pinned canonical card when its service is injected and the request is eligible |
 | `GET /v1/lookup-jobs/{job_id}` | Owner or capability | Conditional polling foundation for an already-created job; not registered by default |
-| `GET /v1/senses/{sense_id}` | Optional | Read a current sense card |
+| `GET /v1/senses/{sense_id}` | None | Implemented only with a narrow active-content reader and canonical-detail service; read one public active-release-pinned detail aggregate |
 | `GET /v1/graph` | None | Implemented when a graph service is injected; read a bounded graph for a typed root |
 | `GET /v1/graph/nodes/{node_kind}/{node_id}/neighbors` | None | Implemented when a graph service is injected; expand one typed graph node |
 | `POST /v1/graph-edges/{edge_id}/feedback` | Required | Append usefulness or accuracy feedback |
@@ -171,6 +171,14 @@ Coverage values are `available`, `partial`, `unavailable`, `disputed`, `not_requ
 When the conditional route is configured, the current handler returns `202` while an injected store reports a pending or running job, `200` with its completed envelope or stored redacted failure, and `410` after expiry. It accepts either a trusted owner extension supplied by future authentication middleware or an anonymous `Lookup-Capability` header. It does not create jobs, schedule work, or establish storage atomicity.
 
 The durable job, ownership, encryption, and retention behavior described by the target contract remains proposed. A future implementation must persist a job before returning `202`, protect raw query and context payloads, and erase them at completion or expiry.
+
+## Canonical sense details
+
+`GET /v1/senses/{sense_id}` is registered only when `AppState::with_canonical_sense_details` receives both a narrow `ActiveContentReader` and a `CanonicalSenseDetailsService`; the default executable does not register the route, and the default OpenAPI document deliberately omits it. The route is a public canonical read with `Cache-Control: no-store`, no cache, no authentication, no generator invocation, and no partial-detail projection.
+
+`sense_id` is a nonblank opaque canonical identifier of at most 256 Unicode scalar values. The handler selects the active immutable content tuple exactly once, then asks the detail service for that tuple's exact release with `EvidenceUse::ApiRedistribution`. A positive response contains the bounded typed collections for localized glosses, pronunciations, usage labels, grammar patterns, collocations, examples, learner pitfalls, etymologies, and sense history, plus the pinned release ID. Every factual assertion carries its own permitted evidence and source provenance. Per-evidence provenance carries required source attribution when present; its origin is labeled only `licensed_source` or `reviewed_generated`, and it never exposes generator or review identifiers.
+
+No active release, an absent aggregate, inactive content, and permission-filtered source or asset lineage all return the same `404 canonical_sense_not_found` response. The route never returns a partially filtered aggregate. A malformed path returns `400 invalid_sense_request`; a blank or overlong identifier returns `422 invalid_sense_request` without echoing the input. A typed unavailable active-content or detail dependency returns retryable `503 canonical_sense_details_unavailable`; inconsistent pointer, target, or repository data returns the same redacted `503` with `retryable: false`.
 
 ## Graph reads
 
