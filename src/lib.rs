@@ -26,6 +26,7 @@ pub use api::{
   app_router, app_router_with_http_config, AlwaysReady, AppState, AuthenticatedLookupJobOwner,
   Readiness,
 };
+pub use application::canonical_lookup::{CanonicalLookupError, CanonicalLookupService};
 pub use config::{
   AppConfig, HttpConfig, HttpConfigError, ProviderConfig, ProviderResilienceConfig,
   ProviderResilienceConfigs, TranslationConfig,

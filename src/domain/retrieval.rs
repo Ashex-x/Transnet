@@ -16,6 +16,18 @@ pub const MAX_RETRIEVAL_LIMIT: usize = 50;
 /// Largest valid score represented in basis points.
 pub const MAX_SCORE_BASIS_POINTS: u16 = 10_000;
 
+/// Retrieval path used to create a deterministic canonical candidate list.
+///
+/// This is a domain outcome rather than an infrastructure health signal. A lexical-only result
+/// remains valid canonical output, while callers may surface its vector degradation distinctly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RetrievalPath {
+  /// Pinned vector retrieval completed; eligible vector signals were fused with lexical signals.
+  Hybrid,
+  /// The derived vector dependency failed, so canonical lexical retrieval continued alone.
+  LexicalFallback,
+}
+
 /// Validation failure for a retrieval request or score.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum RetrievalValidationError {

@@ -43,6 +43,27 @@ impl CanonicalLookupSnapshotCacheResult {
       Self::Bypass { snapshot, .. } => Some(snapshot),
     }
   }
+
+  /// Returns the retrieval path that produced the returned snapshot.
+  ///
+  /// A shared-cache hit is always hybrid: lexical-only rebuilds are deliberately not stored, and
+  /// incompatible preloaded lexical-only entries are discarded before they can become a hit.
+  pub fn retrieval_path(&self) -> RetrievalPath {
+    match self {
+      Self::Hit(snapshot) | Self::Miss(snapshot) | Self::Unavailable(snapshot) => {
+        snapshot.retrieval_path()
+      }
+      Self::Bypass { snapshot, .. } => snapshot.retrieval_path(),
+    }
+  }
+
+  /// Consumes the outcome and returns its public canonical snapshot.
+  pub fn into_snapshot(self) -> CanonicalLookupSnapshot {
+    match self {
+      Self::Hit(snapshot) | Self::Miss(snapshot) | Self::Unavailable(snapshot) => snapshot,
+      Self::Bypass { snapshot, .. } => snapshot,
+    }
+  }
 }
 
 /// Failure that prevents public canonical retrieval from safely producing a snapshot.
@@ -117,13 +138,16 @@ impl CanonicalLookupSnapshotCacheService {
     let content = self.retrieval.active_content_version().await?;
     let key = CanonicalLookupSnapshotKey::new(request, content)?;
     if let CanonicalLookupCacheEligibility::Bypass(reason) = eligibility {
-      let (snapshot, _) = self.rebuild_snapshot(request, &key).await?;
+      let snapshot = self.rebuild_snapshot(request, &key).await?;
       tracing::debug!(?reason, "bypassed shared canonical lookup snapshot cache");
       return Ok(CanonicalLookupSnapshotCacheResult::Bypass { reason, snapshot });
     }
 
     let cache_usable = match self.cache.get(&key).await {
-      Ok(Some(entry)) if entry.value().matches_key(&key) => {
+      Ok(Some(entry))
+        if entry.value().matches_key(&key)
+          && entry.value().retrieval_path() == RetrievalPath::Hybrid =>
+      {
         tracing::debug!("served public canonical lookup snapshot cache hit");
         return Ok(CanonicalLookupSnapshotCacheResult::Hit(entry.into_value()));
       }
@@ -135,12 +159,12 @@ impl CanonicalLookupSnapshotCacheService {
       Err(_) => false,
     };
 
-    let (snapshot, retrieval_path) = self.rebuild_snapshot(request, &key).await?;
+    let snapshot = self.rebuild_snapshot(request, &key).await?;
     if !cache_usable {
       tracing::warn!("public canonical lookup snapshot cache unavailable; served rebuilt snapshot");
       return Ok(CanonicalLookupSnapshotCacheResult::Unavailable(snapshot));
     }
-    if retrieval_path == RetrievalPath::LexicalFallback {
+    if snapshot.retrieval_path() == RetrievalPath::LexicalFallback {
       tracing::debug!("kept lexical-only canonical lookup fallback out of shared cache");
       return Ok(CanonicalLookupSnapshotCacheResult::Miss(snapshot));
     }
@@ -169,13 +193,16 @@ impl CanonicalLookupSnapshotCacheService {
     &self,
     request: &PublicCanonicalLookupRequest,
     key: &CanonicalLookupSnapshotKey,
-  ) -> Result<(CanonicalLookupSnapshot, RetrievalPath), CanonicalLookupSnapshotCacheError> {
+  ) -> Result<CanonicalLookupSnapshot, CanonicalLookupSnapshotCacheError> {
     let outcome = self
       .retrieval
       .retrieve_with_content(request.retrieval().clone(), key.content().clone())
       .await?;
-    let snapshot = CanonicalLookupSnapshot::new(key, outcome.candidates)?;
-    Ok((snapshot, outcome.path))
+    Ok(CanonicalLookupSnapshot::new(
+      key,
+      outcome.candidates,
+      outcome.path,
+    )?)
   }
 
   fn expires_at(&self) -> Option<UtcTimestamp> {
@@ -371,6 +398,9 @@ mod tests {
       .await
       .unwrap();
 
+    assert_eq!(first.retrieval_path(), RetrievalPath::Hybrid);
+    assert_eq!(second.retrieval_path(), RetrievalPath::Hybrid);
+    assert_eq!(third.retrieval_path(), RetrievalPath::Hybrid);
     assert!(matches!(first, CanonicalLookupSnapshotCacheResult::Miss(_)));
     assert!(matches!(second, CanonicalLookupSnapshotCacheResult::Hit(_)));
     assert!(matches!(third, CanonicalLookupSnapshotCacheResult::Miss(_)));
@@ -391,6 +421,7 @@ mod tests {
       .await
       .unwrap();
 
+    assert_eq!(result.retrieval_path(), RetrievalPath::Hybrid);
     assert!(matches!(
       result,
       CanonicalLookupSnapshotCacheResult::Unavailable(snapshot) if snapshot.candidates().len() == 1
@@ -419,6 +450,8 @@ mod tests {
       .await
       .unwrap();
 
+    assert_eq!(first.retrieval_path(), RetrievalPath::LexicalFallback);
+    assert_eq!(second.retrieval_path(), RetrievalPath::LexicalFallback);
     assert!(matches!(first, CanonicalLookupSnapshotCacheResult::Miss(_)));
     assert!(matches!(
       second,
@@ -472,6 +505,7 @@ mod tests {
 
     for (eligibility, reason) in bypasses {
       let result = service.lookup(&request(), eligibility).await.unwrap();
+      assert_eq!(result.retrieval_path(), RetrievalPath::Hybrid);
       assert!(matches!(
         result,
         CanonicalLookupSnapshotCacheResult::Bypass { reason: actual_reason, snapshot }
@@ -492,6 +526,7 @@ mod tests {
         rank: 1,
         fusion_score: 0,
       }],
+      RetrievalPath::Hybrid,
     )
     .unwrap();
     let clock = clock();
@@ -517,7 +552,54 @@ mod tests {
       .await
       .unwrap();
 
+    assert_eq!(result.retrieval_path(), RetrievalPath::Hybrid);
     assert_eq!(result, CanonicalLookupSnapshotCacheResult::Hit(snapshot));
+  }
+
+  #[tokio::test]
+  async fn lexical_preloaded_snapshot_is_rebuilt_before_it_can_be_a_hit() {
+    let request = request();
+    let key = CanonicalLookupSnapshotKey::new(&request, content()).unwrap();
+    let lexical_snapshot = CanonicalLookupSnapshot::new(
+      &key,
+      vec![RankedCandidate {
+        candidate: candidate(),
+        features: CandidateFeatures::default(),
+        rank: 1,
+        fusion_score: 0,
+      }],
+      RetrievalPath::LexicalFallback,
+    )
+    .unwrap();
+    let clock = clock();
+    let cache = Arc::new(InMemoryCache::new(clock.clone()));
+    cache
+      .put(key, lexical_snapshot, clock.now() + Duration::from_secs(30))
+      .await
+      .unwrap();
+    let cache: Arc<dyn Cache<CanonicalLookupSnapshotKey, CanonicalLookupSnapshot>> = cache;
+    let service = CanonicalLookupSnapshotCacheService::new(
+      retrieval_service(
+        InMemoryRetrievalAdapter::new(content())
+          .with_candidate(candidate())
+          .with_vector_match(matching_vector()),
+      ),
+      cache,
+      clock,
+      Duration::from_secs(30),
+    )
+    .unwrap();
+
+    let result = service
+      .lookup(&request, CanonicalLookupCacheEligibility::public())
+      .await
+      .unwrap();
+
+    assert_eq!(result.retrieval_path(), RetrievalPath::Hybrid);
+    assert!(matches!(
+      result,
+      CanonicalLookupSnapshotCacheResult::Miss(_)
+    ));
   }
 
   struct UnavailableCache;
