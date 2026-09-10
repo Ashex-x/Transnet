@@ -48,7 +48,7 @@ pub struct GraphAdjacency {
 /// public ordering key before limiting source records.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GraphNeighborPageRequest {
-  /// Exact graph content version selected before the page begins.
+  /// Exact active graph content tuple selected before the page begins.
   pub content: GraphContentVersion,
   /// Typed node whose direct projections are requested.
   pub node: GraphNodeKey,
@@ -75,10 +75,11 @@ pub struct GraphNeighborPage {
 
 /// Reads immutable canonical graph records without exposing storage or query details.
 ///
-/// Implementations must pin every record to `GraphAdjacencyRequest::content.release_id`, apply
-/// release and publication eligibility filters, and return no more than `record_limit` canonical
-/// records. The application service repeats relation validation and endpoint completion checks
-/// before building a public graph result.
+/// Implementations must pin every record to the exact `GraphAdjacencyRequest::content` tuple
+/// (release, ranking, and community-aggregate versions), apply release and public-publication
+/// eligibility filters, and return no more than `record_limit` canonical records. The application
+/// service repeats relation validation and endpoint completion checks before building a public
+/// graph result.
 #[async_trait]
 pub trait GraphRepository: Send + Sync {
   /// Resolves the active graph release, ranker, and aggregate versions for a new read.
@@ -102,7 +103,9 @@ pub trait GraphRepository: Send + Sync {
 
   /// Returns one globally ordered direct-neighbor candidate page.
   ///
-  /// Implementations must apply `after` using the public graph-edge ordering before any raw
+  /// Implementations must pin candidates to the exact active request content tuple (release,
+  /// ranking, and community-aggregate versions), apply public-publication eligibility before
+  /// ordering or capping, apply `after` using the public graph-edge ordering before any raw
   /// source-record cap, return at most `edge_limit` strictly ordered candidates, and set
   /// `has_more` only when a later candidate exists. The default safely reports an unavailable
   /// dependency so existing adapters cannot accidentally provide unsafe cursor continuation.

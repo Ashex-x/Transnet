@@ -182,7 +182,7 @@ mod tests {
         GraphScore, GraphScoreComponents, RelationVersion,
       },
     },
-    ports::graph_repository::GraphRepository,
+    ports::graph_repository::{GraphNeighborPageRequest, GraphRepository},
   };
 
   fn id(value: &str) -> CanonicalId {
@@ -241,5 +241,24 @@ mod tests {
 
     assert_eq!(adjacency.relations.len(), 2);
     assert_eq!(adjacency.relations[0].edge_id.as_str(), "edge-a");
+  }
+
+  #[tokio::test]
+  async fn neighbor_page_requires_the_exact_content_version_tuple() {
+    let repository = InMemoryGraphRepository::new(content());
+    let mut stale_content = content();
+    stale_content.community_aggregate_version = "community-v2".to_string();
+
+    let result = repository
+      .neighbor_page(&GraphNeighborPageRequest {
+        content: stale_content,
+        node: key("a"),
+        filter: GraphFilter::default(),
+        after: None,
+        edge_limit: 1,
+      })
+      .await;
+
+    assert_eq!(result, Err(GraphRepositoryError::InconsistentData));
   }
 }

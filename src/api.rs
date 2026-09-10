@@ -10,6 +10,7 @@ use axum::{
   routing::{get, post},
   Json, Router,
 };
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tower_http::{
   cors::{AllowCredentials, AllowOrigin, CorsLayer},
@@ -41,36 +42,37 @@ pub use readiness::{AlwaysReady, Readiness};
 
 use request_id::RequestId;
 
-/// Minimum number of secret bytes accepted for graph-cursor integrity protection.
-pub const MIN_GRAPH_CURSOR_SIGNING_KEY_BYTES: usize = 32;
+/// Minimum number of secret bytes accepted for graph-cursor confidentiality and integrity.
+pub const MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES: usize = 32;
 
-/// Validated secret used to integrity-protect opaque graph neighbor cursors.
+/// Validated secret used to protect opaque graph neighbor cursors.
 ///
-/// This type deliberately redacts its contents in `Debug` output. Hosts serving graph pagination
-/// across restarts or multiple replicas must inject the same high-entropy value through
-/// [`AppState::with_graph_cursor_signing_key`].
+/// This type deliberately redacts its contents in `Debug` output. Its normalized key material is
+/// used for both confidentiality and integrity. Hosts serving graph pagination across restarts or
+/// multiple replicas must inject the same high-entropy value through
+/// [`AppState::with_graph_cursor_protection_key`].
 #[derive(Clone)]
-pub struct GraphCursorSigningKey(Arc<[u8]>);
+pub struct GraphCursorProtectionKey(Arc<[u8]>);
 
-impl GraphCursorSigningKey {
-  /// Creates a graph-cursor signing key from at least 32 bytes of high-entropy secret material.
+impl GraphCursorProtectionKey {
+  /// Creates a graph-cursor protection key from at least 32 bytes of high-entropy secret material.
   ///
   /// # Errors
   ///
-  /// Returns an error when `secret` is shorter than the minimum signing-key length.
-  pub fn new(secret: impl AsRef<[u8]>) -> Result<Self, GraphCursorSigningKeyError> {
+  /// Returns an error when `secret` is shorter than the minimum protection-key length.
+  pub fn new(secret: impl AsRef<[u8]>) -> Result<Self, GraphCursorProtectionKeyError> {
     let secret = secret.as_ref();
-    if secret.len() < MIN_GRAPH_CURSOR_SIGNING_KEY_BYTES {
-      return Err(GraphCursorSigningKeyError::TooShort);
+    if secret.len() < MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES {
+      return Err(GraphCursorProtectionKeyError::TooShort);
     }
-    Ok(Self(Arc::from(secret)))
+    Ok(Self(Arc::from(Sha256::digest(secret).to_vec())))
   }
 
   fn ephemeral() -> Self {
-    let mut secret = Vec::with_capacity(MIN_GRAPH_CURSOR_SIGNING_KEY_BYTES);
+    let mut secret = Vec::with_capacity(MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES);
     secret.extend(ulid::Ulid::new().to_bytes());
     secret.extend(ulid::Ulid::new().to_bytes());
-    Self(Arc::from(secret))
+    Self(Arc::from(Sha256::digest(secret).to_vec()))
   }
 
   pub(crate) fn as_bytes(&self) -> &[u8] {
@@ -78,18 +80,18 @@ impl GraphCursorSigningKey {
   }
 }
 
-impl fmt::Debug for GraphCursorSigningKey {
+impl fmt::Debug for GraphCursorProtectionKey {
   fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-    formatter.write_str("GraphCursorSigningKey(REDACTED)")
+    formatter.write_str("GraphCursorProtectionKey(REDACTED)")
   }
 }
 
-/// Validation failure for graph-cursor signing-key material.
+/// Validation failure for graph-cursor protection-key material.
 #[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
-pub enum GraphCursorSigningKeyError {
-  /// The supplied key cannot safely provide the required integrity protection.
+pub enum GraphCursorProtectionKeyError {
+  /// The supplied key cannot safely provide the required cursor protection.
   #[error(
-    "graph cursor signing key must contain at least {MIN_GRAPH_CURSOR_SIGNING_KEY_BYTES} bytes"
+    "graph cursor protection key must contain at least {MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES} bytes"
   )]
   TooShort,
 }
@@ -102,15 +104,15 @@ pub struct AppState {
   canonical_lookup: Option<Arc<CanonicalLookupService>>,
   lookup_jobs: Option<Arc<LookupJobService>>,
   graph: Option<Arc<GraphService>>,
-  graph_cursor_signing_key: GraphCursorSigningKey,
+  graph_cursor_protection_key: GraphCursorProtectionKey,
   readiness: Arc<dyn Readiness>,
 }
 
 impl AppState {
   /// Creates application state for a translation service.
   ///
-  /// Graph pagination starts with an ephemeral process-local signing key. A graph-serving host
-  /// must replace it with [`Self::with_graph_cursor_signing_key`] when cursors must survive a
+  /// Graph pagination starts with an ephemeral process-local protection key. A graph-serving host
+  /// must replace it with [`Self::with_graph_cursor_protection_key`] when cursors must survive a
   /// restart or move between replicas.
   pub fn new(service: TranslationService) -> Self {
     Self {
@@ -119,7 +121,7 @@ impl AppState {
       canonical_lookup: None,
       lookup_jobs: None,
       graph: None,
-      graph_cursor_signing_key: GraphCursorSigningKey::ephemeral(),
+      graph_cursor_protection_key: GraphCursorProtectionKey::ephemeral(),
       readiness: Arc::new(AlwaysReady),
     }
   }
@@ -157,12 +159,12 @@ impl AppState {
     self
   }
 
-  /// Replaces the process-local graph-cursor key with stable secret material supplied by the host.
+  /// Replaces the process-local graph-cursor protection key with stable secret material.
   ///
   /// Every graph-serving replica and replacement process must use the same high-entropy key when
   /// clients need to resume opaque neighbor cursors across a restart or load-balanced request.
-  pub fn with_graph_cursor_signing_key(mut self, key: GraphCursorSigningKey) -> Self {
-    self.graph_cursor_signing_key = key;
+  pub fn with_graph_cursor_protection_key(mut self, key: GraphCursorProtectionKey) -> Self {
+    self.graph_cursor_protection_key = key;
     self
   }
 
@@ -184,8 +186,8 @@ impl AppState {
     self.graph.as_ref()
   }
 
-  pub(crate) fn graph_cursor_key(&self) -> &[u8] {
-    self.graph_cursor_signing_key.as_bytes()
+  pub(crate) fn graph_cursor_protection_key(&self) -> &[u8] {
+    self.graph_cursor_protection_key.as_bytes()
   }
 
   fn has_lookup_job_service(&self) -> bool {
@@ -392,18 +394,18 @@ mod tests {
   };
   use tower::ServiceExt;
 
-  use super::{trace_route, GraphCursorSigningKey, GraphCursorSigningKeyError};
+  use super::{trace_route, GraphCursorProtectionKey, GraphCursorProtectionKeyError};
 
   #[test]
-  fn graph_cursor_signing_keys_require_length_and_redact_debug_output() {
-    let secret = b"signing-key-must-not-appear-in-debug";
-    let key = GraphCursorSigningKey::new(secret).unwrap();
+  fn graph_cursor_protection_keys_require_length_and_redact_debug_output() {
+    let secret = b"protection-key-must-not-appear-in-debug";
+    let key = GraphCursorProtectionKey::new(secret).unwrap();
 
-    assert_eq!(format!("{key:?}"), "GraphCursorSigningKey(REDACTED)");
-    assert!(GraphCursorSigningKey::new([0_u8; 31]).is_err());
+    assert_eq!(format!("{key:?}"), "GraphCursorProtectionKey(REDACTED)");
+    assert!(GraphCursorProtectionKey::new([0_u8; 31]).is_err());
     assert!(matches!(
-      GraphCursorSigningKey::new([0_u8; 31]),
-      Err(GraphCursorSigningKeyError::TooShort)
+      GraphCursorProtectionKey::new([0_u8; 31]),
+      Err(GraphCursorProtectionKeyError::TooShort)
     ));
   }
 

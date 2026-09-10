@@ -335,6 +335,7 @@ fn validate_neighbor_page(
   }
 
   let mut previous = after.cloned();
+  let mut edge_ids = BTreeSet::new();
   for edge in &page.edges {
     let ordering_key = edge.ordering_key();
     if edge.source != *root
@@ -342,6 +343,7 @@ fn validate_neighbor_page(
       || !filter.allows(edge.relation_type)
       || edge.ranking.ranking_version != content.ranking_version
       || edge.evidence.evidence_ids.is_empty()
+      || !edge_ids.insert(edge.id.clone())
       || !edge_origin_is_consistent(edge, content)
       || previous
         .as_ref()
@@ -356,8 +358,17 @@ fn validate_neighbor_page(
 
 fn edge_origin_is_consistent(edge: &GraphEdge, content: &GraphContentVersion) -> bool {
   match &edge.origin {
-    GraphEdgeOrigin::Canonical | GraphEdgeOrigin::InverseProjection => {
-      edge.relation_version.is_some() && edge.directed == !edge.relation_type.is_symmetric()
+    GraphEdgeOrigin::Canonical => {
+      edge.relation_version.is_some()
+        && !edge.relation_type.is_scale_projection()
+        && edge.directed == !edge.relation_type.is_symmetric()
+        && (!edge.relation_type.is_symmetric() || edge.source < edge.target)
+    }
+    GraphEdgeOrigin::InverseProjection => {
+      edge.relation_version.is_some()
+        && !edge.relation_type.is_scale_projection()
+        && edge.directed == !edge.relation_type.is_symmetric()
+        && (!edge.relation_type.is_symmetric() || edge.source > edge.target)
     }
     GraphEdgeOrigin::ScaleAdjacency { scale_id } => {
       if edge.relation_version.is_some() || !edge.feedback_capabilities.is_empty() || !edge.directed
@@ -509,6 +520,13 @@ mod tests {
     .unwrap()
   }
 
+  fn page_nodes(values: &[&str]) -> BTreeMap<GraphNodeKey, GraphNode> {
+    values
+      .iter()
+      .map(|value| (key(value), node(value)))
+      .collect()
+  }
+
   fn scale_node(value: &str) -> GraphNode {
     GraphNode::new(scale_key(value), value, None, None, None, true).unwrap()
   }
@@ -536,6 +554,73 @@ mod tests {
     nodes: BTreeMap<GraphNodeKey, GraphNode>,
     first: GraphEdge,
     second: GraphEdge,
+  }
+
+  struct FixedNeighborPageRepository {
+    content: GraphContentVersion,
+    root: GraphNodeKey,
+    nodes: BTreeMap<GraphNodeKey, GraphNode>,
+    edges: Vec<GraphEdge>,
+  }
+
+  #[async_trait]
+  impl GraphRepository for FixedNeighborPageRepository {
+    async fn active_graph_content(&self) -> Result<GraphContentVersion, GraphRepositoryError> {
+      Ok(self.content.clone())
+    }
+
+    async fn load_nodes(
+      &self,
+      _content: &GraphContentVersion,
+      keys: &[GraphNodeKey],
+    ) -> Result<Vec<GraphNode>, GraphRepositoryError> {
+      Ok(
+        keys
+          .iter()
+          .filter_map(|key| self.nodes.get(key).cloned())
+          .collect(),
+      )
+    }
+
+    async fn adjacency(
+      &self,
+      _request: &GraphAdjacencyRequest,
+    ) -> Result<GraphAdjacency, GraphRepositoryError> {
+      Ok(GraphAdjacency::default())
+    }
+
+    async fn neighbor_page(
+      &self,
+      request: &GraphNeighborPageRequest,
+    ) -> Result<GraphNeighborPage, GraphRepositoryError> {
+      if request.content != self.content || request.node != self.root {
+        return Err(GraphRepositoryError::InconsistentData);
+      }
+      if request.after.is_some() {
+        return Ok(GraphNeighborPage::default());
+      }
+      Ok(GraphNeighborPage {
+        edges: self.edges.clone(),
+        has_more: false,
+      })
+    }
+  }
+
+  async fn fixed_neighbor_page_error(
+    root: GraphNodeKey,
+    nodes: BTreeMap<GraphNodeKey, GraphNode>,
+    edges: Vec<GraphEdge>,
+  ) -> GraphReadError {
+    let service = GraphService::new(Arc::new(FixedNeighborPageRepository {
+      content: content(),
+      root: root.clone(),
+      nodes,
+      edges,
+    }));
+    service
+      .neighbors(GraphNeighborRequest::new(root, 75, 200, GraphFilter::default(), None).unwrap())
+      .await
+      .unwrap_err()
   }
 
   #[async_trait]
@@ -701,6 +786,99 @@ mod tests {
     assert_eq!(second.edges[0].id.as_str(), "edge-a");
     assert_eq!(third.edges[0].id.as_str(), "edge-b");
     assert!(third.next_cursor.is_none());
+  }
+
+  #[tokio::test]
+  async fn direct_neighbor_page_rejects_stored_scale_projection_types() {
+    let mut canonical = relation("root", "target", "edge-canonical", 9_000)
+      .project_from(&key("root"))
+      .unwrap();
+    canonical.relation_type = GraphRelationType::LowerDegree;
+    assert_eq!(
+      fixed_neighbor_page_error(
+        key("root"),
+        page_nodes(&["root", "target"]),
+        vec![canonical],
+      )
+      .await,
+      GraphReadError::Repository(GraphRepositoryError::InconsistentData)
+    );
+
+    let mut inverse = relation("source", "root", "edge-inverse", 9_000)
+      .project_from(&key("root"))
+      .unwrap();
+    inverse.relation_type = GraphRelationType::HigherDegree;
+    assert_eq!(
+      fixed_neighbor_page_error(key("root"), page_nodes(&["root", "source"]), vec![inverse],).await,
+      GraphReadError::Repository(GraphRepositoryError::InconsistentData)
+    );
+  }
+
+  #[tokio::test]
+  async fn direct_neighbor_page_rejects_an_invalid_stored_direction() {
+    let mut edge = relation("root", "target", "edge-direction", 9_000)
+      .project_from(&key("root"))
+      .unwrap();
+    edge.directed = false;
+
+    assert_eq!(
+      fixed_neighbor_page_error(key("root"), page_nodes(&["root", "target"]), vec![edge],).await,
+      GraphReadError::Repository(GraphRepositoryError::InconsistentData)
+    );
+  }
+
+  #[tokio::test]
+  async fn direct_neighbor_page_rejects_unordered_symmetric_projections() {
+    let mut canonical = relation("z-root", "a-target", "edge-canonical", 9_000)
+      .project_from(&key("z-root"))
+      .unwrap();
+    canonical.relation_type = GraphRelationType::Synonym;
+    canonical.directed = false;
+    assert_eq!(
+      fixed_neighbor_page_error(
+        key("z-root"),
+        page_nodes(&["z-root", "a-target"]),
+        vec![canonical],
+      )
+      .await,
+      GraphReadError::Repository(GraphRepositoryError::InconsistentData)
+    );
+
+    let mut inverse = relation("z-source", "a-root", "edge-inverse", 9_000)
+      .project_from(&key("a-root"))
+      .unwrap();
+    inverse.relation_type = GraphRelationType::Synonym;
+    inverse.directed = false;
+    assert_eq!(
+      fixed_neighbor_page_error(
+        key("a-root"),
+        page_nodes(&["a-root", "z-source"]),
+        vec![inverse],
+      )
+      .await,
+      GraphReadError::Repository(GraphRepositoryError::InconsistentData)
+    );
+  }
+
+  #[tokio::test]
+  async fn direct_neighbor_page_rejects_duplicate_edge_ids() {
+    let first = relation("root", "first", "edge-duplicate", 9_000)
+      .project_from(&key("root"))
+      .unwrap();
+    let mut second = relation("root", "second", "edge-distinct", 8_000)
+      .project_from(&key("root"))
+      .unwrap();
+    second.id = first.id.clone();
+
+    assert_eq!(
+      fixed_neighbor_page_error(
+        key("root"),
+        page_nodes(&["root", "first", "second"]),
+        vec![first, second],
+      )
+      .await,
+      GraphReadError::Repository(GraphRepositoryError::InconsistentData)
+    );
   }
 
   #[tokio::test]

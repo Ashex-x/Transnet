@@ -16,9 +16,11 @@ use axum::{
   Json,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use hmac::{Hmac, Mac};
+use chacha20poly1305::{
+  aead::{Aead, KeyInit, Payload},
+  XChaCha20Poly1305, XNonce,
+};
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
 
 use crate::{
   api::{
@@ -44,10 +46,11 @@ const MAX_GRAPH_ID_LENGTH: usize = 256;
 const MAX_GRAPH_RELATION_TYPES_LENGTH: usize = 512;
 const MAX_GRAPH_RELATION_TYPE_COUNT: usize = 21;
 const MAX_GRAPH_CURSOR_LENGTH: usize = 4_096;
-const GRAPH_CURSOR_PREFIX: &str = "g1";
-const GRAPH_CURSOR_VERSION: u8 = 1;
-
-type CursorMac = Hmac<Sha256>;
+const GRAPH_CURSOR_PREFIX: &str = "g2";
+const GRAPH_CURSOR_VERSION: u8 = 2;
+const GRAPH_CURSOR_NONCE_BYTES: usize = 24;
+const GRAPH_CURSOR_AUTH_TAG_BYTES: usize = 16;
+const GRAPH_CURSOR_AAD: &[u8] = b"transnet.graph.neighbor-cursor.g2";
 
 /// Reads a bounded graph from one typed root when a graph service has been injected.
 pub(super) async fn read(
@@ -85,7 +88,7 @@ pub(super) async fn neighbors(
     Ok(query) => query,
     Err(_) => return malformed_query_problem(&request_id),
   };
-  let cursor_codec = GraphCursorCodec::new(state.graph_cursor_key());
+  let cursor_codec = GraphCursorCodec::new(state.graph_cursor_protection_key());
   let request = match graph_neighbor_request(path, query, &cursor_codec) {
     Ok(request) => request,
     Err(error) => return invalid_graph_request(error, &request_id),
@@ -104,7 +107,10 @@ fn graph_response(
 ) -> Response {
   match result {
     Ok(result) => {
-      match GraphResponse::from_result(result, GraphCursorCodec::new(state.graph_cursor_key())) {
+      match GraphResponse::from_result(
+        result,
+        GraphCursorCodec::new(state.graph_cursor_protection_key()),
+      ) {
         Ok(response) => problem::no_store((StatusCode::OK, Json(response)).into_response()),
         Err(_) => {
           tracing::warn!(
@@ -784,11 +790,23 @@ impl<'a> GraphCursorCodec<'a> {
   fn encode(&self, cursor: &GraphCursor) -> Result<String, GraphCursorCodecError> {
     let payload = serde_json::to_vec(&GraphCursorPayload::from(cursor))
       .map_err(|_| GraphCursorCodecError::Encoding)?;
-    let signature = self.sign(&payload)?;
+    let cipher =
+      XChaCha20Poly1305::new_from_slice(self.key).map_err(|_| GraphCursorCodecError::Encoding)?;
+    let mut nonce = [0_u8; GRAPH_CURSOR_NONCE_BYTES];
+    getrandom::fill(&mut nonce).map_err(|_| GraphCursorCodecError::Encoding)?;
+    let ciphertext = cipher
+      .encrypt(
+        XNonce::from_slice(&nonce),
+        Payload {
+          msg: &payload,
+          aad: GRAPH_CURSOR_AAD,
+        },
+      )
+      .map_err(|_| GraphCursorCodecError::Encoding)?;
     let cursor = format!(
       "{GRAPH_CURSOR_PREFIX}.{}.{}",
-      URL_SAFE_NO_PAD.encode(payload),
-      URL_SAFE_NO_PAD.encode(signature),
+      URL_SAFE_NO_PAD.encode(nonce),
+      URL_SAFE_NO_PAD.encode(ciphertext),
     );
     if cursor.len() > MAX_GRAPH_CURSOR_LENGTH {
       return Err(GraphCursorCodecError::Encoding);
@@ -801,7 +819,7 @@ impl<'a> GraphCursorCodec<'a> {
       return Err(GraphCursorCodecError::Malformed);
     }
     let mut parts = value.split('.');
-    let (Some(prefix), Some(payload), Some(signature), None) =
+    let (Some(prefix), Some(nonce), Some(ciphertext), None) =
       (parts.next(), parts.next(), parts.next(), parts.next())
     else {
       return Err(GraphCursorCodecError::Malformed);
@@ -809,32 +827,32 @@ impl<'a> GraphCursorCodec<'a> {
     if prefix != GRAPH_CURSOR_PREFIX {
       return Err(GraphCursorCodecError::Malformed);
     }
-    let payload = URL_SAFE_NO_PAD
-      .decode(payload)
+    let nonce = URL_SAFE_NO_PAD
+      .decode(nonce)
       .map_err(|_| GraphCursorCodecError::Malformed)?;
-    let signature = URL_SAFE_NO_PAD
-      .decode(signature)
+    if nonce.len() != GRAPH_CURSOR_NONCE_BYTES {
+      return Err(GraphCursorCodecError::Malformed);
+    }
+    let ciphertext = URL_SAFE_NO_PAD
+      .decode(ciphertext)
       .map_err(|_| GraphCursorCodecError::Malformed)?;
-    self.verify(&payload, &signature)?;
+    if ciphertext.len() < GRAPH_CURSOR_AUTH_TAG_BYTES {
+      return Err(GraphCursorCodecError::Malformed);
+    }
+    let cipher =
+      XChaCha20Poly1305::new_from_slice(self.key).map_err(|_| GraphCursorCodecError::Malformed)?;
+    let payload = cipher
+      .decrypt(
+        XNonce::from_slice(&nonce),
+        Payload {
+          msg: &ciphertext,
+          aad: GRAPH_CURSOR_AAD,
+        },
+      )
+      .map_err(|_| GraphCursorCodecError::Malformed)?;
     let payload = serde_json::from_slice::<GraphCursorPayload>(&payload)
       .map_err(|_| GraphCursorCodecError::Malformed)?;
     payload.into_cursor()
-  }
-
-  fn sign(&self, payload: &[u8]) -> Result<Vec<u8>, GraphCursorCodecError> {
-    let mut mac =
-      CursorMac::new_from_slice(self.key).map_err(|_| GraphCursorCodecError::Encoding)?;
-    mac.update(payload);
-    Ok(mac.finalize().into_bytes().to_vec())
-  }
-
-  fn verify(&self, payload: &[u8], signature: &[u8]) -> Result<(), GraphCursorCodecError> {
-    let mut mac =
-      CursorMac::new_from_slice(self.key).map_err(|_| GraphCursorCodecError::Malformed)?;
-    mac.update(payload);
-    mac
-      .verify_slice(signature)
-      .map_err(|_| GraphCursorCodecError::Malformed)
   }
 }
 

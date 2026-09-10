@@ -8,6 +8,7 @@ use axum::{
   http::{header, Request, StatusCode},
   Router,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde_json::Value;
 use tower::ServiceExt;
 use transnet::{
@@ -25,7 +26,7 @@ use transnet::{
   ports::graph_repository::{
     GraphAdjacency, GraphAdjacencyRequest, GraphRepository, GraphRepositoryError,
   },
-  AppState, GraphCursorSigningKey, ProviderConfig, TranslationConfig, TranslationService,
+  AppState, GraphCursorProtectionKey, ProviderConfig, TranslationConfig, TranslationService,
 };
 
 fn service() -> TranslationService {
@@ -125,11 +126,29 @@ fn graph_app() -> Router {
   app_router(AppState::new(service()).with_graph_service(graph_service()))
 }
 
-fn graph_app_with_cursor_key(key: GraphCursorSigningKey) -> Router {
+fn graph_app_with_cursor_key(key: GraphCursorProtectionKey) -> Router {
   app_router(
     AppState::new(service())
       .with_graph_service(graph_service())
-      .with_graph_cursor_signing_key(key),
+      .with_graph_cursor_protection_key(key),
+  )
+}
+
+fn missing_endpoint_graph_service() -> Arc<GraphService> {
+  let repository = InMemoryGraphRepository::new(content())
+    .with_node(node("hot", "hot"))
+    .with_relation(relation("edge-withheld", "withheld-target", 9_900));
+  Arc::new(GraphService::new(Arc::new(repository)))
+}
+
+fn graph_app_with_service_and_cursor_key(
+  graph: Arc<GraphService>,
+  key: GraphCursorProtectionKey,
+) -> Router {
+  app_router(
+    AppState::new(service())
+      .with_graph_service(graph)
+      .with_graph_cursor_protection_key(key),
   )
 }
 
@@ -282,7 +301,7 @@ async fn graph_read_exposes_inverse_projection_without_rewriting_canonical_ident
 }
 
 #[tokio::test]
-async fn neighbor_pages_use_signed_opaque_cursors_and_reject_tampering() {
+async fn neighbor_pages_use_confidential_integrity_protected_cursors_and_reject_tampering() {
   let router = graph_app();
   let first = router
     .clone()
@@ -300,9 +319,25 @@ async fn neighbor_pages_use_signed_opaque_cursors_and_reject_tampering() {
   assert_eq!(first["relation_list"][0]["edge_id"], "edge-high");
   assert_eq!(first["truncated"], true);
   let cursor = first["next_cursor"].as_str().unwrap().to_string();
-  assert!(cursor.starts_with("g1."));
+  assert!(cursor.starts_with("g2."));
   assert!(!cursor.contains("edge-high"));
   assert!(!cursor.contains("release-2026-09"));
+
+  let repeated_first = router
+    .clone()
+    .oneshot(
+      Request::get("/v1/graph/nodes/sense/hot/neighbors?node_limit=2")
+        .body(Body::empty())
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(repeated_first.status(), StatusCode::OK);
+  let repeated_cursor = json(repeated_first).await["next_cursor"]
+    .as_str()
+    .unwrap()
+    .to_string();
+  assert_ne!(cursor, repeated_cursor);
 
   let second = router
     .clone()
@@ -338,12 +373,12 @@ async fn neighbor_pages_use_signed_opaque_cursors_and_reject_tampering() {
 }
 
 #[tokio::test]
-async fn neighbor_cursor_survives_a_graph_replica_when_the_signing_key_is_shared() {
-  let shared_key = GraphCursorSigningKey::new([7_u8; 32]).unwrap();
+async fn neighbor_cursor_survives_a_graph_replica_when_the_protection_key_is_shared() {
+  let shared_key = GraphCursorProtectionKey::new([7_u8; 32]).unwrap();
   let first_replica = graph_app_with_cursor_key(shared_key.clone());
   let second_replica = graph_app_with_cursor_key(shared_key);
   let different_replica =
-    graph_app_with_cursor_key(GraphCursorSigningKey::new([8_u8; 32]).unwrap());
+    graph_app_with_cursor_key(GraphCursorProtectionKey::new([8_u8; 32]).unwrap());
   let first = first_replica
     .oneshot(
       Request::get("/v1/graph/nodes/sense/hot/neighbors?node_limit=2&edge_limit=1")
@@ -386,6 +421,56 @@ async fn neighbor_cursor_survives_a_graph_replica_when_the_signing_key_is_shared
   let rejected = json(rejected).await;
   assert_eq!(rejected["errors"][0]["field"], "cursor");
   assert!(!rejected.to_string().contains(&cursor));
+}
+
+#[tokio::test]
+async fn neighbor_cursor_hides_withheld_endpoint_identifiers_and_resumes_across_replicas() {
+  let graph = missing_endpoint_graph_service();
+  let shared_key = GraphCursorProtectionKey::new([9_u8; 32]).unwrap();
+  let first_replica = graph_app_with_service_and_cursor_key(graph.clone(), shared_key.clone());
+  let second_replica = graph_app_with_service_and_cursor_key(graph, shared_key);
+  let first = first_replica
+    .oneshot(
+      Request::get("/v1/graph/nodes/sense/hot/neighbors?node_limit=2&edge_limit=1")
+        .body(Body::empty())
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+  assert_eq!(first.status(), StatusCode::OK);
+  let first = json(first).await;
+  assert!(first["edges"].as_array().unwrap().is_empty());
+  assert!(first["truncated"].as_bool().unwrap());
+  assert!(!first.to_string().contains("withheld-target"));
+  assert!(!first.to_string().contains("edge-withheld"));
+  let cursor = first["next_cursor"].as_str().unwrap().to_string();
+  let mut parts = cursor.split('.');
+  assert_eq!(parts.next(), Some("g2"));
+  let nonce = URL_SAFE_NO_PAD.decode(parts.next().unwrap()).unwrap();
+  let ciphertext = URL_SAFE_NO_PAD.decode(parts.next().unwrap()).unwrap();
+  assert!(parts.next().is_none());
+  for encoded_part in [&nonce[..], &ciphertext[..]] {
+    let exposed = String::from_utf8_lossy(encoded_part);
+    assert!(!exposed.contains("withheld-target"));
+    assert!(!exposed.contains("edge-withheld"));
+  }
+  assert!(serde_json::from_slice::<Value>(&ciphertext).is_err());
+
+  let terminal = second_replica
+    .oneshot(
+      Request::get(format!(
+        "/v1/graph/nodes/sense/hot/neighbors?node_limit=2&edge_limit=1&cursor={cursor}"
+      ))
+      .body(Body::empty())
+      .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(terminal.status(), StatusCode::OK);
+  let terminal = json(terminal).await;
+  assert!(terminal["edges"].as_array().unwrap().is_empty());
+  assert!(terminal["next_cursor"].is_null());
 }
 
 #[tokio::test]
