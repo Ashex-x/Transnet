@@ -12,8 +12,8 @@ use axum::{
 use serde_json::{json, Value};
 use tower::ServiceExt;
 use transnet::{
-  app_router, app_router_with_http_config, AppState, HttpConfig, OpenAiLearningModel,
-  ProviderConfig, Readiness, TranslationConfig, TranslationService,
+  app_router, app_router_with_http_config, types::is_language_code, AppState, HttpConfig,
+  OpenAiLearningModel, ProviderConfig, Readiness, TranslationConfig, TranslationService,
 };
 
 const OPENAPI: &str = include_str!("../docs/reference/transnet-openapi.json");
@@ -109,6 +109,17 @@ fn safe_request_id(value: &str) -> bool {
       .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
+fn source_language_branch_matches(branch: &Value, value: &str) -> bool {
+  if branch.get("const").is_some() {
+    return branch["const"] == value;
+  }
+
+  let all_of = branch["allOf"].as_array().unwrap();
+  assert_eq!(all_of.len(), 2);
+  assert_eq!(all_of[0]["$ref"], "#/components/schemas/Bcp47LanguageTag");
+  is_language_code(value) && all_of[1]["not"]["const"] != value
+}
+
 #[derive(Debug)]
 struct FixedReadiness(bool);
 
@@ -186,6 +197,38 @@ fn openapi_is_parseable_and_describes_only_default_runtime_routes() {
     "503",
     "Cache-Control"
   ));
+}
+
+#[test]
+fn source_language_schema_accepts_auto_once_and_rejects_invalid_language_tags() {
+  let spec = openapi();
+  let source_language =
+    &spec["components"]["schemas"]["LookupRequest"]["properties"]["source_language"];
+  let alternatives = source_language["oneOf"].as_array().unwrap();
+
+  assert_eq!(alternatives.len(), 2);
+  assert_eq!(alternatives[0]["const"], "auto");
+  assert_eq!(
+    spec["components"]["schemas"]["Bcp47LanguageTag"]["pattern"],
+    "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$"
+  );
+  for value in ["auto", "es", "zh-CN"] {
+    let matches = alternatives
+      .iter()
+      .filter(|branch| source_language_branch_matches(branch, value))
+      .count();
+    assert_eq!(
+      matches, 1,
+      "expected `{value}` to match exactly one alternative"
+    );
+  }
+  for value in ["e", "auto-", "zh_CN"] {
+    let matches = alternatives
+      .iter()
+      .filter(|branch| source_language_branch_matches(branch, value))
+      .count();
+    assert_eq!(matches, 0, "expected `{value}` not to match the schema");
+  }
 }
 
 #[tokio::test]

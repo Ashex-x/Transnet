@@ -553,7 +553,16 @@
                 "const": "auto"
               },
               {
-                "$ref": "#/components/schemas/Bcp47LanguageTag"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Bcp47LanguageTag"
+                  },
+                  {
+                    "not": {
+                      "const": "auto"
+                    }
+                  }
+                ]
               }
             ],
             "default": "auto",
