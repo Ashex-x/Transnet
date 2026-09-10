@@ -44,6 +44,7 @@ use crate::{
       GraphRelationType, GraphScope, GraphScore, GraphValidationError, RelationVersion,
       DEFAULT_GRAPH_DEPTH, DEFAULT_GRAPH_EDGE_LIMIT, DEFAULT_GRAPH_NODE_LIMIT,
     },
+    observability::{GraphOperation, MetricEvent, MetricOutcome},
   },
   ports::graph_repository::GraphRepositoryError,
 };
@@ -66,11 +67,17 @@ pub(super) async fn read(
 ) -> Response {
   let Query(query) = match query {
     Ok(query) => query,
-    Err(_) => return malformed_query_problem(&request_id),
+    Err(_) => {
+      record_rejected_request(&state, GraphOperation::Traversal);
+      return malformed_query_problem(&request_id);
+    }
   };
   let request = match graph_read_request(query) {
     Ok(request) => request,
-    Err(error) => return invalid_graph_request(error, &request_id),
+    Err(error) => {
+      record_rejected_request(&state, GraphOperation::Traversal);
+      return invalid_graph_request(error, &request_id);
+    }
   };
   if let Some(cache) = state.graph_topology_snapshot_cache_service() {
     return graph_response(
@@ -99,22 +106,38 @@ pub(super) async fn neighbors(
 ) -> Response {
   let Path(path) = match path {
     Ok(path) => path,
-    Err(_) => return malformed_path_problem(&request_id),
+    Err(_) => {
+      record_rejected_request(&state, GraphOperation::NeighborExpansion);
+      return malformed_path_problem(&request_id);
+    }
   };
   let Query(query) = match query {
     Ok(query) => query,
-    Err(_) => return malformed_query_problem(&request_id),
+    Err(_) => {
+      record_rejected_request(&state, GraphOperation::NeighborExpansion);
+      return malformed_query_problem(&request_id);
+    }
   };
   let cursor_codec = GraphCursorCodec::new(state.graph_cursor_protection_key());
   let request = match graph_neighbor_request(path, query, &cursor_codec) {
     Ok(request) => request,
-    Err(error) => return invalid_graph_request(error, &request_id),
+    Err(error) => {
+      record_rejected_request(&state, GraphOperation::NeighborExpansion);
+      return invalid_graph_request(error, &request_id);
+    }
   };
   let Some(service) = state.graph_service() else {
     return graph_unavailable(&request_id, true);
   };
 
   graph_response(service.neighbors(request).await, &state, &request_id)
+}
+
+fn record_rejected_request(state: &AppState, operation: GraphOperation) {
+  state.dispatch_metric(MetricEvent::GraphOperation {
+    operation,
+    outcome: MetricOutcome::Rejected,
+  });
 }
 
 fn graph_response(

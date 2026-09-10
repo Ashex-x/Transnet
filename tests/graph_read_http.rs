@@ -207,6 +207,13 @@ async fn recorded_events(
   .expect("graph metrics recorder receives the expected closed events")
 }
 
+async fn settled_events(recorder: &InMemoryMetricsRecorder) -> Vec<MetricEvent> {
+  for _ in 0..4 {
+    tokio::task::yield_now().await;
+  }
+  recorder.events().await
+}
+
 #[tokio::test]
 async fn graph_routes_are_absent_without_an_injected_graph_service() {
   let response = app_router(AppState::new(service()))
@@ -358,6 +365,106 @@ async fn graph_reads_record_closed_full_and_neighbor_outcomes_without_identifier
       ));
     }
   }
+}
+
+#[tokio::test]
+async fn graph_handler_validation_rejections_record_static_operation_metrics() {
+  let recorder = InMemoryMetricsRecorder::new();
+  let router = graph_app_with_metrics(&recorder);
+
+  for (uri, status, operation) in [
+    (
+      "/v1/graph?root_kind=sense&root_id=hot&unexpected=value",
+      StatusCode::BAD_REQUEST,
+      GraphOperation::Traversal,
+    ),
+    (
+      "/v1/graph?root_kind=sense&root_id=hot&node_limit=76",
+      StatusCode::UNPROCESSABLE_ENTITY,
+      GraphOperation::Traversal,
+    ),
+    (
+      "/v1/graph/nodes/sense/hot/neighbors?unexpected=value",
+      StatusCode::BAD_REQUEST,
+      GraphOperation::NeighborExpansion,
+    ),
+    (
+      "/v1/graph/nodes/sense/hot/neighbors?node_limit=1",
+      StatusCode::UNPROCESSABLE_ENTITY,
+      GraphOperation::NeighborExpansion,
+    ),
+    (
+      "/v1/graph/nodes/%FF/hot/neighbors",
+      StatusCode::BAD_REQUEST,
+      GraphOperation::NeighborExpansion,
+    ),
+  ] {
+    recorder.clear().await;
+
+    let response = router
+      .clone()
+      .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+      .await
+      .unwrap();
+
+    assert_eq!(response.status(), status, "uri: {uri}");
+    let _ = recorded_events(&recorder, 1).await;
+    assert_eq!(
+      settled_events(&recorder).await,
+      vec![MetricEvent::GraphOperation {
+        operation,
+        outcome: MetricOutcome::Rejected,
+      }],
+      "uri: {uri}"
+    );
+  }
+}
+
+#[tokio::test]
+async fn graph_service_validation_records_one_rejection_without_handler_duplication() {
+  let recorder = InMemoryMetricsRecorder::new();
+  let router = graph_app_with_metrics(&recorder);
+  let first = router
+    .clone()
+    .oneshot(
+      Request::get(
+        "/v1/graph/nodes/sense/hot/neighbors?node_limit=2&edge_limit=1&relation_types=hypernym",
+      )
+      .body(Body::empty())
+      .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(first.status(), StatusCode::OK);
+  let cursor = json(first).await["next_cursor"]
+    .as_str()
+    .unwrap()
+    .to_string();
+  let _ = recorded_events(&recorder, 1).await;
+  assert_eq!(settled_events(&recorder).await.len(), 1);
+
+  recorder.clear().await;
+
+  let response = router
+    .oneshot(
+      Request::get(format!(
+        "/v1/graph/nodes/sense/hot/neighbors?node_limit=2&edge_limit=1&relation_types=hyponym&cursor={cursor}"
+      ))
+      .body(Body::empty())
+      .unwrap(),
+    )
+  .await
+  .unwrap();
+
+  assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+  let _ = recorded_events(&recorder, 1).await;
+  assert_eq!(
+    settled_events(&recorder).await,
+    vec![MetricEvent::GraphOperation {
+      operation: GraphOperation::NeighborExpansion,
+      outcome: MetricOutcome::Rejected,
+    }]
+  );
 }
 
 #[tokio::test]

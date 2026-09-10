@@ -11,18 +11,28 @@ use thiserror::Error;
 use crate::{
   application::{
     canonical_lookup_cache::{
-      CanonicalLookupSnapshotCacheError, CanonicalLookupSnapshotCacheService,
+      CanonicalLookupSnapshotCacheError, CanonicalLookupSnapshotCacheResult,
+      CanonicalLookupSnapshotCacheService,
     },
     canonical_lookup_card::CanonicalLookupCardMapper,
     observability::ClosedMetricsDispatcher,
-    retrieval::RetrievalOutcome,
+    retrieval::{RetrievalOutcome, RetrievalPath},
   },
   domain::{
     canonical_lookup_cache::{CanonicalLookupCacheEligibility, PublicCanonicalLookupRequest},
-    lookup_card::{CanonicalLookupCard, CanonicalLookupCardCoverageState},
+    lookup_card::CanonicalLookupCard,
     observability::{LookupStage, MetricEvent, MetricOutcome},
   },
 };
+
+/// Internal composition result that retains how a canonical snapshot was obtained.
+///
+/// Cache-result provenance is needed only for closed metric attribution. It never crosses the
+/// application boundary or changes the public canonical card contract.
+struct CanonicalLookupComposition {
+  card: CanonicalLookupCard,
+  snapshot_result: CanonicalLookupSnapshotCacheResult,
+}
 
 /// Failure while obtaining a deterministic evidence-backed canonical lookup card.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -89,31 +99,36 @@ impl CanonicalLookupService {
   ) -> Result<CanonicalLookupCard, CanonicalLookupError> {
     let result = self.lookup_inner(request, eligibility).await;
     self.record_lookup_outcome(&result);
-    result
+    result.map(|composition| composition.card)
   }
 
   async fn lookup_inner(
     &self,
     request: PublicCanonicalLookupRequest,
     eligibility: CanonicalLookupCacheEligibility,
-  ) -> Result<CanonicalLookupCard, CanonicalLookupError> {
-    let snapshot = self
-      .snapshots
-      .lookup(&request, eligibility)
-      .await?
-      .into_snapshot();
+  ) -> Result<CanonicalLookupComposition, CanonicalLookupError> {
+    let snapshot_result = self.snapshots.lookup(&request, eligibility).await?;
+    let snapshot = match &snapshot_result {
+      CanonicalLookupSnapshotCacheResult::Hit(snapshot)
+      | CanonicalLookupSnapshotCacheResult::Miss(snapshot)
+      | CanonicalLookupSnapshotCacheResult::Unavailable(snapshot)
+      | CanonicalLookupSnapshotCacheResult::Bypass { snapshot, .. } => snapshot,
+    };
     let outcome = RetrievalOutcome {
       content: snapshot.content().clone(),
       path: snapshot.retrieval_path(),
       candidates: snapshot.candidates().to_vec(),
     };
-    Ok(CanonicalLookupCardMapper::assemble(
-      request.retrieval(),
-      outcome,
-    ))
+    Ok(CanonicalLookupComposition {
+      card: CanonicalLookupCardMapper::assemble(request.retrieval(), outcome),
+      snapshot_result,
+    })
   }
 
-  fn record_lookup_outcome(&self, result: &Result<CanonicalLookupCard, CanonicalLookupError>) {
+  fn record_lookup_outcome(
+    &self,
+    result: &Result<CanonicalLookupComposition, CanonicalLookupError>,
+  ) {
     let Some(metrics) = &self.metrics else {
       return;
     };
@@ -123,20 +138,23 @@ impl CanonicalLookupService {
       outcome: MetricOutcome::Succeeded,
     });
     match result {
-      Ok(card) => {
+      Ok(composition) => {
         metrics.dispatch(MetricEvent::LookupStage {
           stage: LookupStage::ContentResolution,
           outcome: MetricOutcome::Succeeded,
         });
-        metrics.dispatch(MetricEvent::LookupStage {
-          stage: LookupStage::CandidateRetrieval,
-          outcome: match card.coverage.retrieval.state {
-            CanonicalLookupCardCoverageState::VectorDegraded => MetricOutcome::Degraded,
-            CanonicalLookupCardCoverageState::Available
-            | CanonicalLookupCardCoverageState::Missing
-            | CanonicalLookupCardCoverageState::Filtered => MetricOutcome::Succeeded,
-          },
-        });
+        if !matches!(
+          &composition.snapshot_result,
+          CanonicalLookupSnapshotCacheResult::Hit(_)
+        ) {
+          metrics.dispatch(MetricEvent::LookupStage {
+            stage: LookupStage::CandidateRetrieval,
+            outcome: match composition.snapshot_result.retrieval_path() {
+              RetrievalPath::Hybrid => MetricOutcome::Succeeded,
+              RetrievalPath::LexicalFallback => MetricOutcome::Degraded,
+            },
+          });
+        }
         metrics.dispatch(MetricEvent::LookupStage {
           stage: LookupStage::ResponseAssembly,
           outcome: MetricOutcome::Succeeded,
@@ -164,12 +182,79 @@ impl CanonicalLookupService {
 
 #[cfg(test)]
 mod tests {
+  use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+  };
+
   use super::*;
   use crate::{
-    application::retrieval::CanonicalRetrievalError,
-    domain::canonical_lookup_cache::CanonicalLookupCacheValidationError,
-    ports::canonical_repository::CanonicalRepositoryError,
+    adapters::{
+      clock::FixedClock,
+      in_memory::{InMemoryCache, InMemoryMetricsRecorder},
+      in_memory_retrieval::InMemoryRetrievalAdapter,
+    },
+    application::retrieval::{CanonicalRetrievalError, CanonicalRetrievalService},
+    domain::{
+      canonical::{ActiveContentVersion, CanonicalId, LanguageTag},
+      canonical_lookup_cache::{
+        CanonicalCardPolicyVersions, CanonicalLookupCacheValidationError, CanonicalLookupSnapshot,
+        CanonicalLookupSnapshotKey,
+      },
+    },
+    ports::{
+      cache::Cache,
+      canonical_repository::{CanonicalRepository, CanonicalRepositoryError},
+      vector_retriever::VectorRetriever,
+    },
   };
+
+  fn id(value: &str) -> CanonicalId {
+    CanonicalId::new(value).unwrap()
+  }
+
+  fn content() -> ActiveContentVersion {
+    ActiveContentVersion {
+      release_id: id("release-1"),
+      vector_collection_id: id("vectors-1"),
+      schema_version: "canonical-v1".to_string(),
+      ranking_version: "rank-v1".to_string(),
+    }
+  }
+
+  fn request() -> PublicCanonicalLookupRequest {
+    PublicCanonicalLookupRequest::new(
+      "hot",
+      LanguageTag::parse("en").unwrap(),
+      4,
+      CanonicalCardPolicyVersions::new("retrieval-v1", "presentation-v1").unwrap(),
+    )
+    .unwrap()
+  }
+
+  async fn recorded_events(
+    recorder: &InMemoryMetricsRecorder,
+    expected_count: usize,
+  ) -> Vec<MetricEvent> {
+    tokio::time::timeout(Duration::from_secs(1), async {
+      loop {
+        let events = recorder.events().await;
+        if events.len() >= expected_count {
+          return events;
+        }
+        tokio::task::yield_now().await;
+      }
+    })
+    .await
+    .expect("metrics recorder should receive the expected closed events")
+  }
+
+  async fn settled_events(recorder: &InMemoryMetricsRecorder) -> Vec<MetricEvent> {
+    for _ in 0..4 {
+      tokio::task::yield_now().await;
+    }
+    recorder.events().await
+  }
 
   #[test]
   fn only_transient_canonical_repository_unavailability_is_retryable() {
@@ -195,5 +280,58 @@ mod tests {
     assert!(!inconsistent.is_retryable());
     assert!(!contract.is_retryable());
     assert!(!invalid_configuration.is_retryable());
+  }
+
+  #[tokio::test]
+  async fn shared_snapshot_cache_hits_omit_candidate_retrieval_metrics() {
+    let clock = Arc::new(FixedClock::new(
+      SystemTime::UNIX_EPOCH + Duration::from_secs(1_000),
+    ));
+    let adapter = Arc::new(InMemoryRetrievalAdapter::new(content()));
+    let repository: Arc<dyn CanonicalRepository> = adapter.clone();
+    let vectors: Arc<dyn VectorRetriever> = adapter;
+    let retrieval = Arc::new(CanonicalRetrievalService::new(repository, vectors));
+    let cache: Arc<dyn Cache<CanonicalLookupSnapshotKey, CanonicalLookupSnapshot>> =
+      Arc::new(InMemoryCache::new(clock.clone()));
+    let snapshots = Arc::new(
+      CanonicalLookupSnapshotCacheService::new(retrieval, cache, clock, Duration::from_secs(30))
+        .unwrap(),
+    );
+    let recorder = InMemoryMetricsRecorder::new();
+    let service = CanonicalLookupService::new(snapshots).with_metrics_dispatcher(Arc::new(
+      ClosedMetricsDispatcher::new(Arc::new(recorder.clone())),
+    ));
+
+    service
+      .lookup(request(), CanonicalLookupCacheEligibility::public())
+      .await
+      .unwrap();
+    let _ = recorded_events(&recorder, 4).await;
+    assert_eq!(settled_events(&recorder).await.len(), 4);
+
+    recorder.clear().await;
+
+    service
+      .lookup(request(), CanonicalLookupCacheEligibility::public())
+      .await
+      .unwrap();
+    let _ = recorded_events(&recorder, 3).await;
+    assert_eq!(
+      settled_events(&recorder).await,
+      vec![
+        MetricEvent::LookupStage {
+          stage: LookupStage::RequestValidation,
+          outcome: MetricOutcome::Succeeded,
+        },
+        MetricEvent::LookupStage {
+          stage: LookupStage::ContentResolution,
+          outcome: MetricOutcome::Succeeded,
+        },
+        MetricEvent::LookupStage {
+          stage: LookupStage::ResponseAssembly,
+          outcome: MetricOutcome::Succeeded,
+        },
+      ]
+    );
   }
 }
