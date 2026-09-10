@@ -342,8 +342,7 @@ pub(crate) async fn lookup(
         &state,
         LookupStage::RequestValidation,
         MetricOutcome::Rejected,
-      )
-      .await;
+      );
       return problem::payload_too_large(&request_id);
     }
     Err(_) => {
@@ -351,8 +350,7 @@ pub(crate) async fn lookup(
         &state,
         LookupStage::RequestValidation,
         MetricOutcome::Rejected,
-      )
-      .await;
+      );
       return problem::response(
         StatusCode::BAD_REQUEST,
         "invalid_json",
@@ -370,8 +368,7 @@ pub(crate) async fn lookup(
       &state,
       LookupStage::RequestValidation,
       MetricOutcome::Rejected,
-    )
-    .await;
+    );
     return validation_problem(
       TranslationValidationError {
         field: "target_language",
@@ -395,8 +392,7 @@ pub(crate) async fn lookup(
         &state,
         LookupStage::RequestValidation,
         MetricOutcome::Rejected,
-      )
-      .await;
+      );
       return validation_problem(error, &request_id);
     }
   };
@@ -426,8 +422,7 @@ pub(crate) async fn lookup(
     &state,
     LookupStage::RequestValidation,
     MetricOutcome::Succeeded,
-  )
-  .await;
+  );
 
   let Some(service) = &state.lookup else {
     return problem::response(
@@ -448,8 +443,7 @@ pub(crate) async fn lookup(
         &state,
         LookupStage::ResponseAssembly,
         MetricOutcome::Succeeded,
-      )
-      .await;
+      );
       problem::no_store((StatusCode::OK, Json(response)).into_response())
     }
     Err(LearningModelError::Unavailable) => problem::response(
@@ -467,8 +461,7 @@ pub(crate) async fn lookup(
         MetricEvent::ModelValidation {
           outcome: ModelValidationOutcome::Rejected,
         },
-      )
-      .await;
+      );
       problem::response(
         StatusCode::BAD_GATEWAY,
         "invalid_model_output",
@@ -482,14 +475,12 @@ pub(crate) async fn lookup(
   }
 }
 
-async fn record_lookup_stage(state: &AppState, stage: LookupStage, outcome: MetricOutcome) {
-  record_lookup_event(state, MetricEvent::LookupStage { stage, outcome }).await;
+fn record_lookup_stage(state: &AppState, stage: LookupStage, outcome: MetricOutcome) {
+  record_lookup_event(state, MetricEvent::LookupStage { stage, outcome });
 }
 
-async fn record_lookup_event(state: &AppState, event: MetricEvent) {
-  if let Some(recorder) = state.metrics_recorder().cloned() {
-    recorder.record(event).await;
-  }
+fn record_lookup_event(state: &AppState, event: MetricEvent) {
+  state.dispatch_lookup_metric(event);
 }
 
 fn build_response(

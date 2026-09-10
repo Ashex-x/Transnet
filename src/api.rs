@@ -12,6 +12,7 @@ use axum::{
 };
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+use tokio::sync::Semaphore;
 use tower_http::{
   cors::{AllowCredentials, AllowOrigin, CorsLayer},
   limit::RequestBodyLimitLayer,
@@ -25,6 +26,7 @@ use crate::{
     lookup_job::LookupJobService,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
+  domain::observability::MetricEvent,
   ports::{
     learning_model::LearningModel,
     lookup_job::{LookupJobOwner, LookupJobStore},
@@ -97,6 +99,34 @@ pub enum GraphCursorProtectionKeyError {
   TooShort,
 }
 
+const MAX_IN_FLIGHT_LOOKUP_METRIC_RECORDS: usize = 16;
+
+#[derive(Clone)]
+struct LookupMetricsDispatcher {
+  recorder: Arc<dyn MetricsRecorder>,
+  permits: Arc<Semaphore>,
+}
+
+impl LookupMetricsDispatcher {
+  fn new(recorder: Arc<dyn MetricsRecorder>) -> Self {
+    Self {
+      recorder,
+      permits: Arc::new(Semaphore::new(MAX_IN_FLIGHT_LOOKUP_METRIC_RECORDS)),
+    }
+  }
+
+  fn dispatch(&self, event: MetricEvent) {
+    let Ok(permit) = self.permits.clone().try_acquire_owned() else {
+      return;
+    };
+    let recorder = self.recorder.clone();
+    tokio::spawn(async move {
+      recorder.record(event).await;
+      drop(permit);
+    });
+  }
+}
+
 /// Shared dependencies used by request handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -106,7 +136,7 @@ pub struct AppState {
   lookup_jobs: Option<Arc<LookupJobService>>,
   graph: Option<Arc<GraphService>>,
   graph_cursor_protection_key: GraphCursorProtectionKey,
-  metrics: Option<Arc<dyn MetricsRecorder>>,
+  metrics: Option<Arc<LookupMetricsDispatcher>>,
   readiness: Arc<dyn Readiness>,
 }
 
@@ -175,11 +205,12 @@ impl AppState {
   ///
   /// The recorder reports request validation, rejected structured model output, and completed
   /// response assembly. Provider availability remains covered by the provider-resilience metrics,
-  /// because the closed event catalog has no model-availability category. The recorder is optional
-  /// and its error-free port cannot alter the HTTP response. Canonical lookup, translation, health,
-  /// and job routes do not emit through this dependency.
+  /// because the closed event catalog has no model-availability category. Recording is dispatched
+  /// without awaiting the recorder: at most 16 records run concurrently and events are dropped
+  /// when that bound is saturated. This keeps telemetry best-effort and response-neutral. Canonical
+  /// lookup, translation, health, and job routes do not emit through this dependency.
   pub fn with_metrics_recorder(mut self, recorder: Arc<dyn MetricsRecorder>) -> Self {
-    self.metrics = Some(recorder);
+    self.metrics = Some(Arc::new(LookupMetricsDispatcher::new(recorder)));
     self
   }
 
@@ -205,8 +236,10 @@ impl AppState {
     self.graph_cursor_protection_key.as_bytes()
   }
 
-  pub(crate) fn metrics_recorder(&self) -> Option<&Arc<dyn MetricsRecorder>> {
-    self.metrics.as_ref()
+  pub(crate) fn dispatch_lookup_metric(&self, event: MetricEvent) {
+    if let Some(metrics) = &self.metrics {
+      metrics.dispatch(event);
+    }
   }
 
   fn has_lookup_job_service(&self) -> bool {
