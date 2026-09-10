@@ -207,7 +207,7 @@ async fn injected_canonical_lookup_returns_separated_evidence_backed_fields() {
       Request::post("/v1/lookups")
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
-          r#"{"query":"  HOTTER  ","source_language":"EN","history_mode":"incognito"}"#,
+          r#"{"query":"  HOTTER  ","source_language":"EN","history_mode":"incognito","include":["relations","word_history"]}"#,
         ))
         .unwrap(),
     )
@@ -244,6 +244,14 @@ async fn injected_canonical_lookup_returns_separated_evidence_backed_fields() {
   assert_eq!(body["provenance"]["retrieval_path"], "hybrid");
   assert_eq!(body["provenance"]["evidence_backed"], true);
   assert_eq!(body["provenance"]["generation_contract"], "not_generated");
+  assert!(body["warnings"].as_array().is_some_and(|warnings| {
+    warnings.iter().any(|warning| {
+      warning.as_str()
+        == Some(
+          "Relations and word history are not included by the current canonical lookup foundation.",
+        )
+    })
+  }));
 }
 
 #[tokio::test]

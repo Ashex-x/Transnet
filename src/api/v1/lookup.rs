@@ -448,14 +448,6 @@ fn build_response(
   if matches!(request.history_mode, HistoryMode::Save) {
     warnings.push("History is not stored by the current anonymous basic-core slice.".to_string());
   }
-  if request.include.as_ref().is_some_and(|sections| {
-    sections.contains(&IncludeSection::Relations) || sections.contains(&IncludeSection::WordHistory)
-  }) {
-    warnings.push(
-      "Relations and word history are not included by the current canonical lookup foundation."
-        .to_string(),
-    );
-  }
   if request
     .include
     .as_ref()
@@ -616,6 +608,14 @@ fn canonical_warnings(request: &LookupRequest) -> Vec<String> {
   ];
   if matches!(request.history_mode, HistoryMode::Save) {
     warnings.push("History is not stored by the current anonymous basic-core slice.".to_string());
+  }
+  if request.include.as_ref().is_some_and(|sections| {
+    sections.contains(&IncludeSection::Relations) || sections.contains(&IncludeSection::WordHistory)
+  }) {
+    warnings.push(
+      "Relations and word history are not included by the current canonical lookup foundation."
+        .to_string(),
+    );
   }
   if request
     .include

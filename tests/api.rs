@@ -231,6 +231,14 @@ async fn lookup_returns_generated_learning_card_without_canonical_ids() {
     false
   );
   assert_eq!(body["provenance"]["evidence_backed"], false);
+  assert!(body["warnings"].as_array().is_some_and(|warnings| {
+    warnings.iter().all(|warning| {
+      warning.as_str()
+        != Some(
+          "Relations and word history are not included by the current canonical lookup foundation.",
+        )
+    })
+  }));
 }
 
 #[tokio::test]
