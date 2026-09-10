@@ -91,8 +91,7 @@ impl TranslationService {
           warn!(
             attempt,
             model = %provider.model,
-            endpoint = %endpoint,
-            error = %error,
+            error_kind = provider_error_kind(&error),
             "translation attempt failed"
           );
           if attempt < self.translation.max_retries {
@@ -129,6 +128,23 @@ impl TranslationService {
       .filter(|content| !content.is_empty())
       .ok_or_else(|| anyhow::anyhow!("provider returned no translation"))?;
     Ok(content)
+  }
+}
+
+fn provider_error_kind(error: &anyhow::Error) -> &'static str {
+  let Some(error) = error.downcast_ref::<reqwest::Error>() else {
+    return "response";
+  };
+  if error.is_timeout() {
+    "timeout"
+  } else if error.is_connect() {
+    "connect"
+  } else if error.is_status() {
+    "status"
+  } else if error.is_decode() {
+    "decode"
+  } else {
+    "transport"
   }
 }
 

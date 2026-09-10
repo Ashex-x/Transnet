@@ -92,7 +92,7 @@ The structured lookup normalizes query and context text to Unicode NFC, accepts 
 
 This slice has no canonical lexical store or retrieval index. It therefore marks every learning assertion as generated, returns null canonical IDs, exposes empty evidence lists, sets `evidence_backed` to false, and prevents generated relations from appearing to be graph facts. Responses are synchronous, anonymous, and `no-store`. History, persistence, retrieval, canonical sense resolution, and graph feedback remain target work.
 
-The implemented public routes are `GET /health`, `POST /translate`, and `POST /v1/lookups`. There is no authentication, persistence, vector index, canonical lexical content, graph, history, feedback, or practice system. The health route reports process availability and does not probe providers.
+The implemented public routes are `GET /health`, `GET /livez`, `GET /readyz`, `POST /translate`, and `POST /v1/lookups`. There is no authentication, persistence, vector index, canonical lexical content, graph, history, feedback, or practice system. Liveness reports process availability without probing providers; readiness delegates to an injected dependency probe and is always ready in the current model-only runtime. The HTTP boundary applies a configured request-size limit, safe request IDs, redacted structured request tracing, and exact-origin CORS when configured.
 
 Related implemented contracts: [API](reference/transnet-api.md), [configuration](guides/configuration.md), and [development](guides/development.md).
 
@@ -405,7 +405,7 @@ The fallback order is validated cache, canonical retrieval, permitted stale cont
 
 Deadlines propagate end to end. Provider clients use bounded concurrency, bulkheads, circuit breakers, and retries only for safe transient timeouts, `429`, or selected `5xx` responses while honoring `Retry-After`.
 
-`/livez` reports process liveness. `/readyz` checks configuration, migration compatibility, MySQL, and dependencies declared mandatory for the deployed mode. A deployment may remain ready in retrieval-only mode during an optional model outage.
+`/livez` reports process liveness. The current model-only runtime injects an always-ready `/readyz` probe. In the target deployment, `/readyz` will check configuration, migration compatibility, MySQL, and dependencies declared mandatory for the deployed mode; a deployment may remain ready in retrieval-only mode during an optional model outage.
 
 ## Security and privacy
 

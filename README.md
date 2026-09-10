@@ -21,6 +21,8 @@ Verify the service:
 
 ```bash
 curl http://127.0.0.1:35792/health
+curl http://127.0.0.1:35792/livez
+curl http://127.0.0.1:35792/readyz
 curl --request POST http://127.0.0.1:35792/translate \
   --header 'content-type: application/json' \
   --data '{"text":"Hello","source_lang":"en","target_lang":"zh-CN"}'

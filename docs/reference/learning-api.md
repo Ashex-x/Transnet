@@ -2,7 +2,7 @@
 
 ## Status and compatibility
 
-`POST /v1/lookups` has an implemented model-only basic-core slice. All other endpoints in this document remain proposed. The implemented `GET /health` and `POST /translate` contracts remain in [Transnet HTTP API](transnet-api.md).
+`POST /v1/lookups` has an implemented model-only basic-core slice. All other endpoints in this document remain proposed. The implemented `GET /health`, `GET /livez`, `GET /readyz`, and `POST /translate` contracts remain in [Transnet HTTP API](transnet-api.md).
 
 The implemented lookup does not yet have canonical lexical content, retrieval, persistence, or authentication. It returns synchronous anonymous results with `Cache-Control: no-store`; identifies every generated assertion; uses null canonical sense and relation IDs; exposes no evidence IDs; and reports `evidence_backed: false`. The richer evidence-backed shape below is the target contract that will replace these provisional gaps without inventing canonical data.
 
@@ -41,7 +41,7 @@ Content responses identify the applicable schema, lexicon release, vector collec
 | Method and path | Authentication | Purpose |
 | --- | --- | --- |
 | `GET /livez` | None | Process liveness |
-| `GET /readyz` | None or internal | Required dependency and migration readiness |
+| `GET /readyz` | None | Implemented injected dependency readiness probe |
 | `GET /v1/auth/authorize` | None | Start OIDC authorization |
 | `GET /v1/auth/callback` | OIDC state | Complete OIDC and issue a service session |
 | `POST /v1/auth/refresh` | Session cookie | Rotate the refresh token |

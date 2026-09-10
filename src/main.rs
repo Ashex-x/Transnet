@@ -3,7 +3,9 @@
 use std::{fs, path::Path, sync::Arc};
 
 use anyhow::{Context, Result};
-use transnet::{app_router, AppConfig, AppState, OpenAiLearningModel, TranslationService};
+use transnet::{
+  app_router_with_http_config, AppConfig, AppState, OpenAiLearningModel, TranslationService,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -23,13 +25,15 @@ async fn main() -> Result<()> {
     .with_context(|| format!("failed to bind to {address}"))?;
 
   tracing::info!(address = %address, "starting transnet");
-  axum::serve(
-    listener,
-    app_router(AppState::new(service).with_learning_model(Arc::new(learning_model))),
+  let router = app_router_with_http_config(
+    AppState::new(service).with_learning_model(Arc::new(learning_model)),
+    &config.http,
   )
-  .with_graceful_shutdown(shutdown_signal())
-  .await
-  .context("transnet server failed")?;
+  .context("invalid HTTP configuration")?;
+  axum::serve(listener, router)
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .context("transnet server failed")?;
   Ok(())
 }
 

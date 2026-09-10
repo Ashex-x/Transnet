@@ -80,11 +80,23 @@ impl OpenAiLearningModel {
                 return Ok(content);
               }
             }
-            Err(error) => warn!(attempt, error = %error, "invalid learning model envelope"),
+            Err(_) => warn!(
+              attempt,
+              model = %self.provider.model,
+              "invalid learning model envelope"
+            ),
           },
-          Err(error) => warn!(attempt, error = %error, "learning model request failed"),
+          Err(_) => warn!(
+            attempt,
+            model = %self.provider.model,
+            "learning model request failed"
+          ),
         },
-        Err(error) => warn!(attempt, error = %error, "learning model transport failed"),
+        Err(_) => warn!(
+          attempt,
+          model = %self.provider.model,
+          "learning model transport failed"
+        ),
       }
 
       if attempt < self.max_retries {

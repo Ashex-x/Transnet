@@ -1,16 +1,19 @@
 //! `POST /v1/lookups` transport contract.
 
 use axum::{
-  extract::{rejection::JsonRejection, State},
-  http::{header, HeaderValue, StatusCode},
+  extract::{rejection::JsonRejection, Extension, State},
+  http::StatusCode,
   response::{IntoResponse, Response},
   Json,
 };
 use serde::{Deserialize, Serialize};
-use ulid::Ulid;
 
 use crate::{
-  api::AppState,
+  api::{
+    problem::{self, FieldError},
+    request_id::RequestId,
+    AppState,
+  },
   domain::translation::{
     CefrLevel, Confidence, EnglishDialect, EnglishEntry, PartOfSpeech, RelationKind,
     TranslationInput, TranslationValidationError, UsageNoteKind,
@@ -199,39 +202,23 @@ struct LookupProvenance {
   evidence_backed: bool,
 }
 
-#[derive(Debug, Serialize)]
-struct ProblemResponse {
-  #[serde(rename = "type")]
-  problem_type: &'static str,
-  title: &'static str,
-  status: u16,
-  code: &'static str,
-  detail: String,
-  request_id: String,
-  retryable: bool,
-  errors: Vec<FieldError>,
-}
-
-#[derive(Debug, Serialize)]
-struct FieldError {
-  field: &'static str,
-  message: String,
-}
-
 pub(crate) async fn lookup(
   State(state): State<AppState>,
+  Extension(request_id): Extension<RequestId>,
   payload: Result<Json<LookupRequest>, JsonRejection>,
 ) -> Response {
-  let request_id = Ulid::new().to_string();
   let Json(request) = match payload {
     Ok(request) => request,
+    Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+      return problem::payload_too_large(&request_id)
+    }
     Err(_) => {
-      return problem(
+      return problem::response(
         StatusCode::BAD_REQUEST,
         "invalid_json",
         "Invalid JSON request",
         "The request body is not valid lookup JSON.",
-        request_id,
+        &request_id,
         false,
         Vec::new(),
       )
@@ -244,7 +231,7 @@ pub(crate) async fn lookup(
         field: "target_language",
         message: "must be `en` in basic core".to_string(),
       },
-      request_id,
+      &request_id,
     );
   }
 
@@ -257,16 +244,16 @@ pub(crate) async fn lookup(
     request.learner_level.map(Into::into),
   ) {
     Ok(input) => input,
-    Err(error) => return validation_problem(error, request_id),
+    Err(error) => return validation_problem(error, &request_id),
   };
 
   let Some(service) = &state.lookup else {
-    return problem(
+    return problem::response(
       StatusCode::SERVICE_UNAVAILABLE,
       "learning_model_unavailable",
       "Learning model unavailable",
       "The structured learning model is not configured.",
-      request_id,
+      &request_id,
       true,
       Vec::new(),
     );
@@ -275,26 +262,23 @@ pub(crate) async fn lookup(
   match service.lookup(&input).await {
     Ok(result) => {
       let response = build_response(request, input, result);
-      with_common_headers(
-        (StatusCode::OK, Json(response)).into_response(),
-        &request_id,
-      )
+      problem::no_store((StatusCode::OK, Json(response)).into_response())
     }
-    Err(LearningModelError::Unavailable) => problem(
+    Err(LearningModelError::Unavailable) => problem::response(
       StatusCode::SERVICE_UNAVAILABLE,
       "learning_model_unavailable",
       "Learning model unavailable",
       "The learning model did not return a result.",
-      request_id,
+      &request_id,
       true,
       Vec::new(),
     ),
-    Err(LearningModelError::InvalidOutput) => problem(
+    Err(LearningModelError::InvalidOutput) => problem::response(
       StatusCode::BAD_GATEWAY,
       "invalid_model_output",
       "Invalid model output",
       "The learning model could not satisfy the structured output contract.",
-      request_id,
+      &request_id,
       true,
       Vec::new(),
     ),
@@ -549,60 +533,16 @@ fn relation_kind(value: RelationKind) -> &'static str {
   }
 }
 
-fn validation_problem(error: TranslationValidationError, request_id: String) -> Response {
-  problem(
+fn validation_problem(error: TranslationValidationError, request_id: &RequestId) -> Response {
+  problem::response(
     StatusCode::UNPROCESSABLE_ENTITY,
     "validation_error",
     "Invalid lookup request",
     "One or more lookup fields are invalid.",
     request_id,
     false,
-    vec![FieldError {
-      field: error.field,
-      message: error.message,
-    }],
+    vec![FieldError::new(error.field, error.message)],
   )
-}
-
-fn problem(
-  status: StatusCode,
-  code: &'static str,
-  title: &'static str,
-  detail: impl Into<String>,
-  request_id: String,
-  retryable: bool,
-  errors: Vec<FieldError>,
-) -> Response {
-  let response = (
-    status,
-    Json(ProblemResponse {
-      problem_type: "about:blank",
-      title,
-      status: status.as_u16(),
-      code,
-      detail: detail.into(),
-      request_id: request_id.clone(),
-      retryable,
-      errors,
-    }),
-  )
-    .into_response();
-  let mut response = with_common_headers(response, &request_id);
-  response.headers_mut().insert(
-    header::CONTENT_TYPE,
-    HeaderValue::from_static("application/problem+json"),
-  );
-  response
-}
-
-fn with_common_headers(mut response: Response, request_id: &str) -> Response {
-  response
-    .headers_mut()
-    .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-  if let Ok(value) = HeaderValue::from_str(request_id) {
-    response.headers_mut().insert("x-request-id", value);
-  }
-  response
 }
 
 fn default_source_language() -> String {

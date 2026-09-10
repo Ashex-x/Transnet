@@ -27,6 +27,6 @@ The default listener is `127.0.0.1:35792`. See the [root README](../../README.md
 
 Run the binary under a process supervisor and collect standard output. The process handles Ctrl-C and Unix termination for graceful shutdown.
 
-Transnet has no authentication, TLS, CORS policy, or request-size limit. Keep it on a trusted interface or place it behind a policy-enforcing edge before public exposure.
+Transnet has no authentication or TLS termination. Run it behind an authenticated TLS edge before public exposure. Request bodies are bounded, request IDs are propagated, and CORS is disabled unless exact browser origins are configured in `[http]`; see the [configuration guide](configuration.md).
 
 Related: [configuration](configuration.md), [design](../transnet.md), and [API contract](../reference/transnet-api.md).
