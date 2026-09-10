@@ -10,6 +10,8 @@ pub mod canonical_lookup_card;
 pub mod canonical_sense_details;
 /// Content-release staging, validation, publication, rollback, and source quarantine.
 pub mod content_release;
+/// One-claim durable-worker dispatch without a scheduler or runtime loop.
+pub mod durable_worker;
 /// Private graph-feedback validation and projection orchestration.
 pub mod feedback;
 /// Typed bounded canonical graph reads and neighbor expansion.
