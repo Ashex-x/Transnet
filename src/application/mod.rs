@@ -10,6 +10,8 @@ pub mod content_release;
 pub mod feedback;
 /// Typed bounded canonical graph reads and neighbor expansion.
 pub mod graph;
+/// Public bounded graph-topology snapshot caching with version-pinned cache keys.
+pub mod graph_topology_cache;
 /// Private saved graph-layout view orchestration.
 pub mod graph_view;
 /// Private learner state and privacy-plan orchestration.
