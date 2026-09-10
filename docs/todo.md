@@ -53,9 +53,9 @@ flowchart TD
   content --> lookup["Phase 1C: evidence-backed lookup"]
   retrieval --> lookup
   lookup --> accounts["Phase 2: accounts and learner data"]
-  lookup --> graph["Phase 3A: typed graph reads"]
+  lookup --> graph_reads["Phase 3A: typed graph reads"]
   accounts --> feedback["Phase 3B: feedback and saved layouts"]
-  graph --> feedback
+  graph_reads --> feedback
   accounts --> practice["Phase 4: practice and mastery"]
   lookup --> practice
   feedback --> quality["Phase 5: quality, scale, and language expansion"]

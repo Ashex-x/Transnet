@@ -150,13 +150,13 @@ flowchart TB
   client["WebUI or API client"] --> api["Rust API process"]
   api --> auth["Authentication and policy"]
   api --> lookup["Lookup application service"]
-  api --> graph["Graph application service"]
+  api --> graph_service["Graph application service"]
   api --> practice["Practice application service"]
   lookup --> mysql["MySQL canonical and user data"]
-  graph --> mysql
+  graph_service --> mysql
   practice --> mysql
   lookup --> vectors["Versioned vector collections"]
-  graph --> vectors
+  graph_service --> vectors
   lookup --> models["LLM and embedding ports"]
   practice --> models
   lookup --> cache["Public cache and private overlays"]
