@@ -315,7 +315,11 @@ fn build_response(
   if matches!(request.history_mode, HistoryMode::Save) {
     warnings.push("History is not stored by the current anonymous basic-core slice.".to_string());
   }
-  if requested(&request, IncludeSection::PracticePreview) {
+  if request
+    .include
+    .as_ref()
+    .is_some_and(|sections| sections.contains(&IncludeSection::PracticePreview))
+  {
     warnings.push("Practice preview is not implemented yet.".to_string());
   }
 
