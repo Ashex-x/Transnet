@@ -10,6 +10,8 @@ pub mod content_release;
 pub mod feedback;
 /// Typed, evidence-backed graph topology and traversal limits.
 pub mod graph;
+/// Private saved graph-layout views and bounded presentation-only coordinates.
+pub mod graph_view;
 /// Private learner-owned profile, history, vocabulary, and privacy-plan values.
 pub mod learner;
 /// Bounded canonical lookup-card presentation values with assertion-level provenance.

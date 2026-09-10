@@ -14,6 +14,8 @@ pub mod durable_job;
 pub mod graph_feedback;
 /// Read-only canonical graph topology interface.
 pub mod graph_repository;
+/// Private saved graph-layout view persistence interface.
+pub mod graph_view;
 /// Scoped idempotency reservation and response-storage interface.
 pub mod idempotency;
 /// Private learner-profile, history, saved-vocabulary, and inventory interfaces.

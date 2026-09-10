@@ -10,6 +10,8 @@ pub mod content_release;
 pub mod feedback;
 /// Typed bounded canonical graph reads and neighbor expansion.
 pub mod graph;
+/// Private saved graph-layout view orchestration.
+pub mod graph_view;
 /// Private learner state and privacy-plan orchestration.
 pub mod learner_state;
 /// Structured lookup orchestration.
