@@ -31,6 +31,7 @@ use transnet::{
       WordForm,
     },
     canonical_lookup_cache::{CanonicalLookupSnapshot, CanonicalLookupSnapshotKey},
+    observability::{LookupStage, MetricEvent, MetricOutcome, ModelValidationOutcome},
     retrieval::{CanonicalCandidate, RetrievalScore, VectorMatch, VectorPurpose, VectorTarget},
     translation::{Confidence, TranslationInput, TranslationResult},
   },
@@ -198,6 +199,23 @@ async fn json(response: axum::response::Response) -> Value {
   serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
 }
 
+async fn recorded_events(
+  recorder: &InMemoryMetricsRecorder,
+  expected_count: usize,
+) -> Vec<MetricEvent> {
+  tokio::time::timeout(Duration::from_secs(1), async {
+    loop {
+      let events = recorder.events().await;
+      if events.len() >= expected_count {
+        return events;
+      }
+      tokio::task::yield_now().await;
+    }
+  })
+  .await
+  .expect("canonical metrics recorder receives the expected closed events")
+}
+
 struct StubModel;
 
 #[async_trait]
@@ -275,11 +293,83 @@ async fn injected_canonical_lookup_returns_separated_evidence_backed_fields() {
 }
 
 #[tokio::test]
-async fn canonical_lookup_short_circuits_before_model_only_metrics() {
+async fn canonical_lookup_records_closed_stages_without_model_validation() {
   let canonical = in_memory_canonical_service(
     InMemoryRetrievalAdapter::new(content())
       .with_candidate(candidate())
       .with_vector_match(matching_vector()),
+  );
+  let recorder = InMemoryMetricsRecorder::new();
+  let response = app_router(
+    AppState::new(translation_service())
+      .with_canonical_lookup(canonical)
+      .with_metrics_recorder(Arc::new(recorder.clone())),
+  )
+  .oneshot(
+    Request::post("/v1/lookups")
+      .header(header::CONTENT_TYPE, "application/json")
+      .body(Body::from(
+        r#"{"query":"canonical-query-secret-8172","source_language":"en","history_mode":"incognito"}"#,
+      ))
+      .unwrap(),
+  )
+  .await
+  .unwrap();
+
+  assert_eq!(response.status(), StatusCode::OK);
+  let events = recorded_events(&recorder, 4).await;
+  assert_eq!(
+    events,
+    vec![
+      MetricEvent::LookupStage {
+        stage: LookupStage::RequestValidation,
+        outcome: MetricOutcome::Succeeded,
+      },
+      MetricEvent::LookupStage {
+        stage: LookupStage::ContentResolution,
+        outcome: MetricOutcome::Succeeded,
+      },
+      MetricEvent::LookupStage {
+        stage: LookupStage::CandidateRetrieval,
+        outcome: MetricOutcome::Succeeded,
+      },
+      MetricEvent::LookupStage {
+        stage: LookupStage::ResponseAssembly,
+        outcome: MetricOutcome::Succeeded,
+      },
+    ]
+  );
+  assert!(!events.iter().any(|event| matches!(
+    event,
+    MetricEvent::ModelValidation {
+      outcome: ModelValidationOutcome::Accepted
+        | ModelValidationOutcome::Repaired
+        | ModelValidationOutcome::Rejected,
+    }
+  )));
+  let rendered = format!("{events:?}");
+  assert!(!rendered.contains("canonical-query-secret-8172"));
+  for event in events {
+    for label in event.attributes().labels() {
+      assert!(matches!(label.key(), "stage" | "outcome"));
+      assert!(matches!(
+        label.value(),
+        "request_validation"
+          | "content_resolution"
+          | "candidate_retrieval"
+          | "response_assembly"
+          | "succeeded"
+      ));
+    }
+  }
+}
+
+#[tokio::test]
+async fn canonical_lookup_marks_lexical_fallback_as_vector_degraded() {
+  let canonical = in_memory_canonical_service(
+    InMemoryRetrievalAdapter::new(content())
+      .with_candidate(candidate())
+      .with_vector_availability(InMemoryVectorAvailability::Unavailable),
   );
   let recorder = InMemoryMetricsRecorder::new();
   let response = app_router(
@@ -299,34 +389,31 @@ async fn canonical_lookup_short_circuits_before_model_only_metrics() {
   .unwrap();
 
   assert_eq!(response.status(), StatusCode::OK);
-  tokio::task::yield_now().await;
-  assert!(recorder.events().await.is_empty());
-}
-
-#[tokio::test]
-async fn canonical_lookup_marks_lexical_fallback_as_vector_degraded() {
-  let canonical = in_memory_canonical_service(
-    InMemoryRetrievalAdapter::new(content())
-      .with_candidate(candidate())
-      .with_vector_availability(InMemoryVectorAvailability::Unavailable),
-  );
-  let response = app_router(AppState::new(translation_service()).with_canonical_lookup(canonical))
-    .oneshot(
-      Request::post("/v1/lookups")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-          r#"{"query":"hotter","source_language":"en","history_mode":"incognito"}"#,
-        ))
-        .unwrap(),
-    )
-    .await
-    .unwrap();
-
-  assert_eq!(response.status(), StatusCode::OK);
   let body = json(response).await;
   assert_eq!(body["matches"].as_array().map(Vec::len), Some(1));
   assert_eq!(body["coverage"]["retrieval"]["state"], "vector_degraded");
   assert_eq!(body["provenance"]["retrieval_path"], "lexical_fallback");
+  assert_eq!(
+    recorded_events(&recorder, 4).await,
+    vec![
+      MetricEvent::LookupStage {
+        stage: LookupStage::RequestValidation,
+        outcome: MetricOutcome::Succeeded,
+      },
+      MetricEvent::LookupStage {
+        stage: LookupStage::ContentResolution,
+        outcome: MetricOutcome::Succeeded,
+      },
+      MetricEvent::LookupStage {
+        stage: LookupStage::CandidateRetrieval,
+        outcome: MetricOutcome::Degraded,
+      },
+      MetricEvent::LookupStage {
+        stage: LookupStage::ResponseAssembly,
+        outcome: MetricOutcome::Succeeded,
+      },
+    ]
+  );
 }
 
 #[tokio::test]
@@ -427,18 +514,23 @@ async fn canonical_failures_use_a_redacted_rfc_problem() {
   let canonical = canonical_service_for_repository(Arc::new(FailingRepository(
     CanonicalRepositoryError::Unavailable,
   )));
-  let response = app_router(AppState::new(translation_service()).with_canonical_lookup(canonical))
-    .oneshot(
-      Request::post("/v1/lookups")
-        .header(header::CONTENT_TYPE, "application/json")
-        .header("x-request-id", "canonical-42")
-        .body(Body::from(
-          r#"{"query":"private-looking-query","source_language":"en","history_mode":"incognito"}"#,
-        ))
-        .unwrap(),
-    )
-    .await
-    .unwrap();
+  let recorder = InMemoryMetricsRecorder::new();
+  let response = app_router(
+    AppState::new(translation_service())
+      .with_canonical_lookup(canonical)
+      .with_metrics_recorder(Arc::new(recorder.clone())),
+  )
+  .oneshot(
+    Request::post("/v1/lookups")
+      .header(header::CONTENT_TYPE, "application/json")
+      .header("x-request-id", "canonical-42")
+      .body(Body::from(
+        r#"{"query":"private-looking-query","source_language":"en","history_mode":"incognito"}"#,
+      ))
+      .unwrap(),
+  )
+  .await
+  .unwrap();
 
   assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
   assert_eq!(
@@ -452,6 +544,19 @@ async fn canonical_failures_use_a_redacted_rfc_problem() {
   assert!(!serde_json::to_string(&body)
     .unwrap()
     .contains("private-looking-query"));
+  assert_eq!(
+    recorded_events(&recorder, 2).await,
+    vec![
+      MetricEvent::LookupStage {
+        stage: LookupStage::RequestValidation,
+        outcome: MetricOutcome::Succeeded,
+      },
+      MetricEvent::LookupStage {
+        stage: LookupStage::ContentResolution,
+        outcome: MetricOutcome::Failed,
+      },
+    ]
+  );
 }
 
 #[tokio::test]
@@ -487,17 +592,22 @@ async fn inconsistent_canonical_content_uses_a_nonretryable_problem() {
 #[tokio::test]
 async fn invalid_canonical_cache_contract_uses_a_nonretryable_problem() {
   let canonical = canonical_service_for_repository(Arc::new(InvalidContentRepository));
-  let response = app_router(AppState::new(translation_service()).with_canonical_lookup(canonical))
-    .oneshot(
-      Request::post("/v1/lookups")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-          r#"{"query":"private-looking-query","source_language":"en","history_mode":"incognito"}"#,
-        ))
-        .unwrap(),
-    )
-    .await
-    .unwrap();
+  let recorder = InMemoryMetricsRecorder::new();
+  let response = app_router(
+    AppState::new(translation_service())
+      .with_canonical_lookup(canonical)
+      .with_metrics_recorder(Arc::new(recorder.clone())),
+  )
+  .oneshot(
+    Request::post("/v1/lookups")
+      .header(header::CONTENT_TYPE, "application/json")
+      .body(Body::from(
+        r#"{"query":"private-looking-query","source_language":"en","history_mode":"incognito"}"#,
+      ))
+      .unwrap(),
+  )
+  .await
+  .unwrap();
 
   assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
   assert_eq!(
@@ -510,6 +620,13 @@ async fn invalid_canonical_cache_contract_uses_a_nonretryable_problem() {
   assert!(!serde_json::to_string(&body)
     .unwrap()
     .contains("private-looking-query"));
+  assert_eq!(
+    recorded_events(&recorder, 1).await,
+    vec![MetricEvent::LookupStage {
+      stage: LookupStage::RequestValidation,
+      outcome: MetricOutcome::Succeeded,
+    }]
+  );
 }
 
 struct ForbiddenCache;

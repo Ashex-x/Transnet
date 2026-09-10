@@ -12,7 +12,6 @@ use axum::{
 };
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use tokio::sync::Semaphore;
 use tower_http::{
   cors::{AllowCredentials, AllowOrigin, CorsLayer},
   limit::RequestBodyLimitLayer,
@@ -28,6 +27,7 @@ use crate::{
     graph_topology_cache::GraphTopologySnapshotCacheService,
     lookup::LookupService,
     lookup_job::LookupJobService,
+    observability::ClosedMetricsDispatcher,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
   domain::observability::MetricEvent,
@@ -75,8 +75,18 @@ impl GraphRouteService {
       Self::TopologyCached(service) => Some(service),
     }
   }
-}
 
+  fn with_metrics_dispatcher(self, dispatcher: Arc<ClosedMetricsDispatcher>) -> Self {
+    match self {
+      Self::Direct(service) => Self::Direct(Arc::new(
+        (*service).clone().with_metrics_dispatcher(dispatcher),
+      )),
+      Self::TopologyCached(service) => Self::TopologyCached(Arc::new(
+        (*service).clone().with_metrics_dispatcher(dispatcher),
+      )),
+    }
+  }
+}
 /// Minimum number of secret bytes accepted for graph-cursor confidentiality and integrity.
 pub const MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES: usize = 32;
 
@@ -131,34 +141,6 @@ pub enum GraphCursorProtectionKeyError {
   TooShort,
 }
 
-const MAX_IN_FLIGHT_LOOKUP_METRIC_RECORDS: usize = 16;
-
-#[derive(Clone)]
-struct LookupMetricsDispatcher {
-  recorder: Arc<dyn MetricsRecorder>,
-  permits: Arc<Semaphore>,
-}
-
-impl LookupMetricsDispatcher {
-  fn new(recorder: Arc<dyn MetricsRecorder>) -> Self {
-    Self {
-      recorder,
-      permits: Arc::new(Semaphore::new(MAX_IN_FLIGHT_LOOKUP_METRIC_RECORDS)),
-    }
-  }
-
-  fn dispatch(&self, event: MetricEvent) {
-    let Ok(permit) = self.permits.clone().try_acquire_owned() else {
-      return;
-    };
-    let recorder = self.recorder.clone();
-    tokio::spawn(async move {
-      recorder.record(event).await;
-      drop(permit);
-    });
-  }
-}
-
 /// Shared dependencies used by request handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -169,7 +151,7 @@ pub struct AppState {
   lookup_jobs: Option<Arc<LookupJobService>>,
   graph: Option<GraphRouteService>,
   graph_cursor_protection_key: GraphCursorProtectionKey,
-  metrics: Option<Arc<LookupMetricsDispatcher>>,
+  metrics: Option<Arc<ClosedMetricsDispatcher>>,
   readiness: Arc<dyn Readiness>,
 }
 
@@ -204,7 +186,14 @@ impl AppState {
   /// Requests with automatic language detection or nonblank context intentionally remain on the
   /// injected learning-model path because this foundation does not perform language analysis or
   /// private contextual policy.
-  pub fn with_canonical_lookup(mut self, lookup: Arc<CanonicalLookupService>) -> Self {
+  pub fn with_canonical_lookup(mut self, mut lookup: Arc<CanonicalLookupService>) -> Self {
+    if let Some(dispatcher) = &self.metrics {
+      lookup = Arc::new(
+        (*lookup)
+          .clone()
+          .with_metrics_dispatcher(dispatcher.clone()),
+      );
+    }
     self.canonical_lookup = Some(lookup);
     self
   }
@@ -234,29 +223,64 @@ impl AppState {
     self
   }
 
+  /// Adds a closed, best-effort metric recorder to the available observed backend dependencies.
+  ///
+  /// The recorder accepts only the closed metric catalog. Its bounded dispatcher is never awaited:
+  /// saturated or runtime-less delivery drops telemetry rather than delaying or changing a response.
+  /// Canonical lookup and graph services already attached to this state are cloned with this
+  /// dispatcher, as are services attached later through their respective builders. Translation,
+  /// health, readiness, and lookup-job routes do not invent events that the catalog cannot express.
+  pub fn with_metrics_recorder(self, recorder: Arc<dyn MetricsRecorder>) -> Self {
+    self.with_metrics_dispatcher(Arc::new(ClosedMetricsDispatcher::new(recorder)))
+  }
+
+  /// Adds a prebuilt bounded dispatcher to the available observed backend dependencies.
+  ///
+  /// The dispatcher is attached to canonical lookup and graph services regardless of builder order.
+  /// It carries only closed static metric values and cannot delay a request path.
+  pub fn with_metrics_dispatcher(mut self, dispatcher: Arc<ClosedMetricsDispatcher>) -> Self {
+    self.metrics = Some(dispatcher.clone());
+    if let Some(canonical_lookup) = self.canonical_lookup.clone() {
+      self.canonical_lookup = Some(Arc::new(
+        (*canonical_lookup)
+          .clone()
+          .with_metrics_dispatcher(dispatcher.clone()),
+      ));
+    }
+    if let Some(graph) = self.graph.clone() {
+      self.graph = Some(graph.with_metrics_dispatcher(dispatcher));
+    }
+    self
+  }
+
   /// Adds an uncached canonical graph service used by the conditional graph-read routes.
   ///
-  /// This replaces any previously installed topology-cache arrangement. Without this dependency
-  /// or [`Self::with_graph_topology_snapshot_cache`], graph routes are intentionally not
-  /// registered so the default model-only runtime cannot imply that canonical graph content is
-  /// available.
-  pub fn with_graph_service(mut self, service: Arc<GraphService>) -> Self {
+  /// Without this injected dependency, graph routes are intentionally not registered so the
+  /// default model-only runtime cannot imply that canonical graph content is available.
+  pub fn with_graph_service(mut self, mut service: Arc<GraphService>) -> Self {
+    if let Some(dispatcher) = &self.metrics {
+      service = Arc::new(
+        (*service)
+          .clone()
+          .with_metrics_dispatcher(dispatcher.clone()),
+      );
+    }
     self.graph = Some(GraphRouteService::Direct(service));
     self
   }
 
   /// Adds one coherent public graph-topology cache arrangement for conditional graph routes.
-  ///
-  /// Full `GET /v1/graph` reads use this public server-side cache service exclusively. Its cache
-  /// misses and cache outages rebuild through the graph service it owns, while direct neighbor
-  /// pages use that same graph service without accessing the topology cache. This replaces any
-  /// prior direct graph injection, so callers cannot pair a cache service with a different graph
-  /// service in one [`AppState`]. Without either graph injection, graph routes remain absent from
-  /// the default model-only runtime.
   pub fn with_graph_topology_snapshot_cache(
     mut self,
-    service: Arc<GraphTopologySnapshotCacheService>,
+    mut service: Arc<GraphTopologySnapshotCacheService>,
   ) -> Self {
+    if let Some(dispatcher) = &self.metrics {
+      service = Arc::new(
+        (*service)
+          .clone()
+          .with_metrics_dispatcher(dispatcher.clone()),
+      );
+    }
     self.graph = Some(GraphRouteService::TopologyCached(service));
     self
   }
@@ -267,20 +291,6 @@ impl AppState {
   /// clients need to resume opaque neighbor cursors across a restart or load-balanced request.
   pub fn with_graph_cursor_protection_key(mut self, key: GraphCursorProtectionKey) -> Self {
     self.graph_cursor_protection_key = key;
-    self
-  }
-
-  /// Adds a closed, best-effort metric recorder for model-only lookup outcomes.
-  ///
-  /// The recorder reports request validation, rejected structured model output, and completed
-  /// response assembly. Provider availability remains covered by the provider-resilience metrics,
-  /// because the closed event catalog has no model-availability category. Recording is dispatched
-  /// without awaiting the recorder: at most 16 records run concurrently and events are dropped
-  /// when that bound is saturated. This keeps telemetry best-effort and response-neutral. Canonical
-  /// lookups short-circuit before this model-only telemetry; translation, health, and job routes do
-  /// not emit through this dependency.
-  pub fn with_metrics_recorder(mut self, recorder: Arc<dyn MetricsRecorder>) -> Self {
-    self.metrics = Some(Arc::new(LookupMetricsDispatcher::new(recorder)));
     self
   }
 
@@ -304,6 +314,12 @@ impl AppState {
     self.canonical_sense_details.as_ref()
   }
 
+  pub(crate) fn dispatch_metric(&self, event: MetricEvent) {
+    if let Some(metrics) = &self.metrics {
+      metrics.dispatch(event);
+    }
+  }
+
   pub(crate) fn graph_service(&self) -> Option<&Arc<GraphService>> {
     self.graph.as_ref().map(GraphRouteService::graph_service)
   }
@@ -319,12 +335,6 @@ impl AppState {
 
   pub(crate) fn graph_cursor_protection_key(&self) -> &[u8] {
     self.graph_cursor_protection_key.as_bytes()
-  }
-
-  pub(crate) fn dispatch_lookup_metric(&self, event: MetricEvent) {
-    if let Some(metrics) = &self.metrics {
-      metrics.dispatch(event);
-    }
   }
 
   fn has_lookup_job_service(&self) -> bool {

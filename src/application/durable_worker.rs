@@ -13,13 +13,21 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use async_trait::async_trait;
 use thiserror::Error;
 
-use crate::ports::durable_job::{
-  ClaimedJob, DurableJobQueue, JobFailure, JobFailureCode, JobFailureOutcome, JobKind,
-  JobQueueError, WorkerId,
+use crate::{
+  application::observability::ClosedMetricsDispatcher,
+  domain::observability::{JobKind as MetricJobKind, JobLifecycleOutcome, MetricEvent},
+  ports::durable_job::{
+    ClaimedJob, DurableJobQueue, JobFailure, JobFailureCode, JobFailureOutcome, JobKind,
+    JobQueueError, WorkerId,
+  },
 };
 
 /// Stable redacted failure category used when no handler is registered for a claimed job kind.
 pub const UNSUPPORTED_JOB_KIND_FAILURE_CODE: &str = "unsupported_job_kind";
+
+const LOOKUP_GENERATE_JOB_KIND: &str = "lookup.generate";
+const CONTENT_RELEASE_JOB_KIND: &str = "content.release";
+const VECTOR_RECONCILIATION_JOB_KIND: &str = "vector.reconciliation";
 
 /// Executes one family of opaque durable jobs.
 ///
@@ -102,6 +110,7 @@ pub struct DurableWorker {
   lease_duration: Duration,
   handlers: BTreeMap<JobKind, Arc<dyn DurableJobHandler>>,
   unsupported_job_kind: JobFailureCode,
+  metrics: Option<Arc<ClosedMetricsDispatcher>>,
 }
 
 impl DurableWorker {
@@ -137,7 +146,20 @@ impl DurableWorker {
       lease_duration,
       handlers: registered,
       unsupported_job_kind,
+      metrics: None,
     })
+  }
+
+  /// Adds bounded, response-neutral delivery for known durable-job lifecycle transitions.
+  ///
+  /// Only the explicit `lookup.generate`, `content.release`, and `vector.reconciliation` worker
+  /// families map to the closed job-kind catalog. Other valid durable-job kinds are deliberately
+  /// omitted rather than becoming dynamic metric labels. The worker records only transitions it
+  /// actually performs: lease acquisition, successful completion, and a failure accepted by the
+  /// queue. It never invents an enqueue event.
+  pub fn with_metrics_dispatcher(mut self, dispatcher: Arc<ClosedMetricsDispatcher>) -> Self {
+    self.metrics = Some(dispatcher);
+    self
   }
 
   /// Claims and processes at most one currently eligible durable job.
@@ -160,6 +182,7 @@ impl DurableWorker {
       return Ok(DurableWorkerRunOutcome::Idle);
     };
     let kind = job.kind().clone();
+    self.record_lifecycle(&kind, JobLifecycleOutcome::Leased);
 
     let result = match self.handlers.get(&kind) {
       Some(handler) => handler.handle(&job).await,
@@ -174,6 +197,7 @@ impl DurableWorker {
           .complete(&job)
           .await
           .map_err(DurableWorkerRunError::Complete)?;
+        self.record_lifecycle(&kind, JobLifecycleOutcome::Completed);
         Ok(DurableWorkerRunOutcome::Completed { kind })
       }
       Err(failure) => {
@@ -182,9 +206,26 @@ impl DurableWorker {
           .fail(&job, failure)
           .await
           .map_err(DurableWorkerRunError::Fail)?;
+        self.record_lifecycle(&kind, JobLifecycleOutcome::Failed);
         Ok(DurableWorkerRunOutcome::Failed { kind, outcome })
       }
     }
+  }
+
+  fn record_lifecycle(&self, kind: &JobKind, outcome: JobLifecycleOutcome) {
+    let (Some(metrics), Some(job)) = (&self.metrics, metric_job_kind(kind)) else {
+      return;
+    };
+    metrics.dispatch(MetricEvent::JobLifecycle { job, outcome });
+  }
+}
+
+fn metric_job_kind(kind: &JobKind) -> Option<MetricJobKind> {
+  match kind.as_str() {
+    LOOKUP_GENERATE_JOB_KIND => Some(MetricJobKind::Lookup),
+    CONTENT_RELEASE_JOB_KIND => Some(MetricJobKind::ContentRelease),
+    VECTOR_RECONCILIATION_JOB_KIND => Some(MetricJobKind::VectorReconciliation),
+    _ => None,
   }
 }
 
@@ -197,12 +238,15 @@ mod tests {
   };
 
   use async_trait::async_trait;
+  use tokio::time::timeout;
   use ulid::Ulid;
 
   use super::*;
   use crate::{
     adapters::{
-      clock::FixedClock, in_memory::InMemoryDurableJobQueue, public_id::SequencePublicIdGenerator,
+      clock::FixedClock,
+      in_memory::{InMemoryDurableJobQueue, InMemoryMetricsRecorder},
+      public_id::SequencePublicIdGenerator,
     },
     ports::{
       clock::UtcTimestamp,
@@ -275,6 +319,33 @@ mod tests {
     async fn handle(&self, _job: &ClaimedJob) -> Result<(), JobFailure> {
       let _ = self.clock.advance(LEASE_DURATION);
       self.result.clone()
+    }
+  }
+
+  #[derive(Clone)]
+  struct MetricGateHandler {
+    kind: JobKind,
+    recorder: InMemoryMetricsRecorder,
+  }
+
+  #[async_trait]
+  impl DurableJobHandler for MetricGateHandler {
+    fn kind(&self) -> &JobKind {
+      &self.kind
+    }
+
+    async fn handle(&self, _job: &ClaimedJob) -> Result<(), JobFailure> {
+      timeout(Duration::from_secs(1), async {
+        loop {
+          if !self.recorder.events().await.is_empty() {
+            return;
+          }
+          tokio::task::yield_now().await;
+        }
+      })
+      .await
+      .expect("the lease metric should be dispatched before a handler completes");
+      Ok(())
     }
   }
 
@@ -364,6 +435,23 @@ mod tests {
     .unwrap()
   }
 
+  async fn recorded_events(
+    recorder: &InMemoryMetricsRecorder,
+    expected_count: usize,
+  ) -> Vec<MetricEvent> {
+    timeout(Duration::from_secs(1), async {
+      loop {
+        let events = recorder.events().await;
+        if events.len() >= expected_count {
+          return events;
+        }
+        tokio::task::yield_now().await;
+      }
+    })
+    .await
+    .expect("durable worker metrics recorder receives the expected closed events")
+  }
+
   #[tokio::test]
   async fn returns_idle_when_no_eligible_job_exists() {
     let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
@@ -416,6 +504,99 @@ mod tests {
     assert!(calls[0].debug.contains("payload_bytes"));
     assert!(!calls[0].debug.contains("raw-secret-payload"));
     assert!(!format!("{outcome:?}").contains("raw-secret-payload"));
+  }
+
+  #[tokio::test]
+  async fn reports_only_static_known_job_lifecycle_transitions_without_payloads() {
+    let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_500);
+    let clock = Arc::new(FixedClock::new(now));
+    let queue = Arc::new(queue(
+      clock.clone(),
+      [public_id(1), public_id(2), public_id(3), public_id(4)],
+    ));
+    queue
+      .enqueue(submission(
+        LOOKUP_GENERATE_JOB_KIND,
+        b"durable-payload-secret-8172",
+        1,
+        now,
+        1,
+      ))
+      .await
+      .unwrap();
+    queue
+      .enqueue(submission(
+        "unknown.private-family",
+        b"other-secret",
+        1,
+        now,
+        1,
+      ))
+      .await
+      .unwrap();
+    let recorder = InMemoryMetricsRecorder::new();
+    let handler: Arc<dyn DurableJobHandler> = Arc::new(MetricGateHandler {
+      kind: JobKind::new(LOOKUP_GENERATE_JOB_KIND).unwrap(),
+      recorder: recorder.clone(),
+    });
+    let worker = worker(queue, [handler]).with_metrics_dispatcher(Arc::new(
+      ClosedMetricsDispatcher::new(Arc::new(recorder.clone())),
+    ));
+
+    assert!(matches!(
+      worker.run_once().await,
+      Ok(DurableWorkerRunOutcome::Completed { .. })
+    ));
+    let events = recorded_events(&recorder, 2).await;
+    assert_eq!(
+      events,
+      vec![
+        MetricEvent::JobLifecycle {
+          job: MetricJobKind::Lookup,
+          outcome: JobLifecycleOutcome::Leased,
+        },
+        MetricEvent::JobLifecycle {
+          job: MetricJobKind::Lookup,
+          outcome: JobLifecycleOutcome::Completed,
+        },
+      ]
+    );
+    let rendered = format!("{events:?}");
+    assert!(!rendered.contains("durable-payload-secret-8172"));
+    assert!(!rendered.contains("other-secret"));
+    for event in &events {
+      for label in event.attributes().labels() {
+        assert!(matches!(label.key(), "job" | "outcome"));
+        assert!(matches!(label.value(), "lookup" | "leased" | "completed"));
+      }
+    }
+
+    assert!(matches!(
+      worker.run_once().await,
+      Ok(DurableWorkerRunOutcome::Failed { .. })
+    ));
+    tokio::task::yield_now().await;
+    assert_eq!(recorder.events().await, events);
+  }
+
+  #[test]
+  fn maps_only_explicit_durable_job_families_to_closed_metric_labels() {
+    assert_eq!(
+      metric_job_kind(&JobKind::new(LOOKUP_GENERATE_JOB_KIND).unwrap()),
+      Some(MetricJobKind::Lookup)
+    );
+    assert_eq!(
+      metric_job_kind(&JobKind::new(CONTENT_RELEASE_JOB_KIND).unwrap()),
+      Some(MetricJobKind::ContentRelease)
+    );
+    assert_eq!(
+      metric_job_kind(&JobKind::new(VECTOR_RECONCILIATION_JOB_KIND).unwrap()),
+      Some(MetricJobKind::VectorReconciliation)
+    );
+    assert_eq!(
+      metric_job_kind(&JobKind::new("unknown.private-family").unwrap()),
+      None
+    );
   }
 
   #[tokio::test]

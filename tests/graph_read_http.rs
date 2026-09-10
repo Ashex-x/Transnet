@@ -1,6 +1,6 @@
 //! HTTP contract coverage for bounded public graph reads and opaque neighbor cursors.
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{collections::BTreeSet, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use axum::{
@@ -12,7 +12,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde_json::Value;
 use tower::ServiceExt;
 use transnet::{
-  adapters::in_memory::InMemoryGraphRepository,
+  adapters::in_memory::{InMemoryGraphRepository, InMemoryMetricsRecorder},
   app_router,
   application::graph::GraphService,
   domain::{
@@ -22,6 +22,7 @@ use transnet::{
       GraphNodeKey, GraphNodeKind, GraphRanking, GraphRelationType, GraphScope, GraphScore,
       GraphScoreComponents, RelationVersion, StoredGraphRelation,
     },
+    observability::{GraphOperation, MetricEvent, MetricOutcome},
   },
   ports::graph_repository::{
     GraphAdjacency, GraphAdjacencyRequest, GraphRepository, GraphRepositoryError,
@@ -126,6 +127,14 @@ fn graph_app() -> Router {
   app_router(AppState::new(service()).with_graph_service(graph_service()))
 }
 
+fn graph_app_with_metrics(recorder: &InMemoryMetricsRecorder) -> Router {
+  app_router(
+    AppState::new(service())
+      .with_metrics_recorder(Arc::new(recorder.clone()))
+      .with_graph_service(graph_service()),
+  )
+}
+
 fn graph_app_with_cursor_key(key: GraphCursorProtectionKey) -> Router {
   app_router(
     AppState::new(service())
@@ -179,6 +188,30 @@ impl GraphRepository for UnavailableGraphRepository {
 
 async fn json(response: axum::response::Response) -> Value {
   serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+}
+
+async fn recorded_events(
+  recorder: &InMemoryMetricsRecorder,
+  expected_count: usize,
+) -> Vec<MetricEvent> {
+  tokio::time::timeout(Duration::from_secs(1), async {
+    loop {
+      let events = recorder.events().await;
+      if events.len() >= expected_count {
+        return events;
+      }
+      tokio::task::yield_now().await;
+    }
+  })
+  .await
+  .expect("graph metrics recorder receives the expected closed events")
+}
+
+async fn settled_events(recorder: &InMemoryMetricsRecorder) -> Vec<MetricEvent> {
+  for _ in 0..4 {
+    tokio::task::yield_now().await;
+  }
+  recorder.events().await
 }
 
 #[tokio::test]
@@ -267,6 +300,171 @@ async fn graph_read_returns_typed_evidence_backed_topology_and_accessible_relati
   assert_eq!(body["relation_list"][0]["relation_type"], "hypernym");
   assert_eq!(body["truncated"], false);
   assert!(body["next_cursor"].is_null());
+}
+
+#[tokio::test]
+async fn graph_reads_record_closed_full_and_neighbor_outcomes_without_identifier_labels() {
+  let recorder = InMemoryMetricsRecorder::new();
+  let router = graph_app_with_metrics(&recorder);
+  let request_id = "graph-request-id-secret-8172";
+
+  let full = router
+    .clone()
+    .oneshot(
+      Request::get(
+        "/v1/graph?root_kind=sense&root_id=hot&depth=1&node_limit=4&edge_limit=3&relation_types=hypernym",
+      )
+      .header("x-request-id", request_id)
+      .body(Body::empty())
+      .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(full.status(), StatusCode::OK);
+  assert_eq!(
+    recorded_events(&recorder, 1).await,
+    vec![MetricEvent::GraphOperation {
+      operation: GraphOperation::Traversal,
+      outcome: MetricOutcome::Succeeded,
+    }]
+  );
+
+  let neighbors = router
+    .oneshot(
+      Request::get("/v1/graph/nodes/sense/hot/neighbors?node_limit=2&edge_limit=1")
+        .header("x-request-id", request_id)
+        .body(Body::empty())
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(neighbors.status(), StatusCode::OK);
+  let events = recorded_events(&recorder, 2).await;
+  assert_eq!(
+    events,
+    vec![
+      MetricEvent::GraphOperation {
+        operation: GraphOperation::Traversal,
+        outcome: MetricOutcome::Succeeded,
+      },
+      MetricEvent::GraphOperation {
+        operation: GraphOperation::NeighborExpansion,
+        outcome: MetricOutcome::Degraded,
+      },
+    ]
+  );
+  let rendered = format!("{events:?}");
+  assert!(!rendered.contains(request_id));
+  assert!(!rendered.contains("hot"));
+  for event in events {
+    for label in event.attributes().labels() {
+      assert!(matches!(label.key(), "operation" | "outcome"));
+      assert!(matches!(
+        label.value(),
+        "traversal" | "neighbor_expansion" | "succeeded" | "degraded"
+      ));
+    }
+  }
+}
+
+#[tokio::test]
+async fn graph_handler_validation_rejections_record_static_operation_metrics() {
+  let recorder = InMemoryMetricsRecorder::new();
+  let router = graph_app_with_metrics(&recorder);
+
+  for (uri, status, operation) in [
+    (
+      "/v1/graph?root_kind=sense&root_id=hot&unexpected=value",
+      StatusCode::BAD_REQUEST,
+      GraphOperation::Traversal,
+    ),
+    (
+      "/v1/graph?root_kind=sense&root_id=hot&node_limit=76",
+      StatusCode::UNPROCESSABLE_ENTITY,
+      GraphOperation::Traversal,
+    ),
+    (
+      "/v1/graph/nodes/sense/hot/neighbors?unexpected=value",
+      StatusCode::BAD_REQUEST,
+      GraphOperation::NeighborExpansion,
+    ),
+    (
+      "/v1/graph/nodes/sense/hot/neighbors?node_limit=1",
+      StatusCode::UNPROCESSABLE_ENTITY,
+      GraphOperation::NeighborExpansion,
+    ),
+    (
+      "/v1/graph/nodes/%FF/hot/neighbors",
+      StatusCode::BAD_REQUEST,
+      GraphOperation::NeighborExpansion,
+    ),
+  ] {
+    recorder.clear().await;
+
+    let response = router
+      .clone()
+      .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+      .await
+      .unwrap();
+
+    assert_eq!(response.status(), status, "uri: {uri}");
+    let _ = recorded_events(&recorder, 1).await;
+    assert_eq!(
+      settled_events(&recorder).await,
+      vec![MetricEvent::GraphOperation {
+        operation,
+        outcome: MetricOutcome::Rejected,
+      }],
+      "uri: {uri}"
+    );
+  }
+}
+
+#[tokio::test]
+async fn graph_service_validation_records_one_rejection_without_handler_duplication() {
+  let recorder = InMemoryMetricsRecorder::new();
+  let router = graph_app_with_metrics(&recorder);
+  let first = router
+    .clone()
+    .oneshot(
+      Request::get(
+        "/v1/graph/nodes/sense/hot/neighbors?node_limit=2&edge_limit=1&relation_types=hypernym",
+      )
+      .body(Body::empty())
+      .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(first.status(), StatusCode::OK);
+  let cursor = json(first).await["next_cursor"]
+    .as_str()
+    .unwrap()
+    .to_string();
+  let _ = recorded_events(&recorder, 1).await;
+  assert_eq!(settled_events(&recorder).await.len(), 1);
+
+  recorder.clear().await;
+
+  let response = router
+    .oneshot(
+      Request::get(format!(
+        "/v1/graph/nodes/sense/hot/neighbors?node_limit=2&edge_limit=1&relation_types=hyponym&cursor={cursor}"
+      ))
+      .body(Body::empty())
+      .unwrap(),
+    )
+  .await
+  .unwrap();
+
+  assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+  let _ = recorded_events(&recorder, 1).await;
+  assert_eq!(
+    settled_events(&recorder).await,
+    vec![MetricEvent::GraphOperation {
+      operation: GraphOperation::NeighborExpansion,
+      outcome: MetricOutcome::Rejected,
+    }]
+  );
 }
 
 #[tokio::test]
@@ -554,18 +752,32 @@ async fn graph_validation_uses_redacted_v1_problem_details() {
 async fn graph_repository_failure_uses_a_redacted_retryable_problem() {
   let graph = Arc::new(GraphService::new(Arc::new(UnavailableGraphRepository)));
   let raw_id = "unavailable-root";
-  let response = app_router(AppState::new(service()).with_graph_service(graph))
-    .oneshot(
-      Request::get(format!("/v1/graph?root_kind=sense&root_id={raw_id}"))
-        .body(Body::empty())
-        .unwrap(),
-    )
-    .await
-    .unwrap();
+  let recorder = InMemoryMetricsRecorder::new();
+  let response = app_router(
+    AppState::new(service())
+      .with_graph_service(graph)
+      .with_metrics_recorder(Arc::new(recorder.clone())),
+  )
+  .oneshot(
+    Request::get(format!("/v1/graph?root_kind=sense&root_id={raw_id}"))
+      .body(Body::empty())
+      .unwrap(),
+  )
+  .await
+  .unwrap();
 
   assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
   let body = json(response).await;
   assert_eq!(body["code"], "graph_unavailable");
   assert_eq!(body["retryable"], true);
   assert!(!body.to_string().contains(raw_id));
+  let events = recorded_events(&recorder, 1).await;
+  assert_eq!(
+    events,
+    vec![MetricEvent::GraphOperation {
+      operation: GraphOperation::Traversal,
+      outcome: MetricOutcome::Failed,
+    }]
+  );
+  assert!(!format!("{events:?}").contains(raw_id));
 }
