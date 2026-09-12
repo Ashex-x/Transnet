@@ -3,7 +3,7 @@
   "info": {
     "title": "Transnet HTTP API",
     "version": "0.1.0",
-    "description": "Complete no-authentication contract between trusted Island-port and Transnet. Stateful operations use X-Learner-Id; no cookies, sessions, OIDC, or bearer authentication are accepted."
+    "description": "Machine-readable contract for the currently implemented and feature-gated compatibility HTTP surface. It is not the target product contract: docs/transnet.md owns product semantics, and docs/interfaces/port.md distinguishes current from proposed routes. Legacy history, saved-sense, graph-view, preference, privacy, and practice schemas must not be used to infer the target bookmark-driven design."
   },
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
   "servers": [
@@ -279,7 +279,7 @@
           "learning"
         ],
         "operationId": "lookupLearningCard",
-        "summary": "Return a synchronous model-generated English-learning card.",
+        "summary": "Return the current structured lexical-lookup result.",
         "description": "The default process wires a model-backed learning lookup. It does not expose canonical lexical content, retrieval, persistence, caller identity, or a Web UI through this operation. Every returned assertion is generated, canonical identifiers are null, evidence lists are empty, and the response is never shared from an HTTP cache.",
         "parameters": [
           {
@@ -298,7 +298,7 @@
         },
         "responses": {
           "200": {
-            "description": "A synchronous model-generated learning card. Cache-Control is always no-store.",
+            "description": "A current structured lexical-lookup result, not the target learner-owned card created by bookmarking. Cache-Control is always no-store.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"

@@ -1,5 +1,9 @@
 # Transnet English-learning agent design
 
+中文：[Transnet 英语学习代理设计](../docs_cn/transnet_cn.md)
+
+Status: target product design. The repository runtime implements only a subset; interface and guide status notes identify current and proposed behavior.
+
 Transnet is a self-directed English-learning agent for adult learners from CEFR A1 through C2. It combines translation, vocabulary development, spelling, grammar, writing, cultural communication, listening, pronunciation, and continuous review in one adaptive learning experience.
 
 English is the target language. The learner may choose another supported language for explanations, select an English dialect, and control how much first-language support appears. These presentation preferences do not become learning-strategy evidence.

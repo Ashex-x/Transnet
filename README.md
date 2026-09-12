@@ -1,6 +1,6 @@
 # Transnet
 
-Transnet is Island-port's pure loopback compute service for translation and English-learning generation. Island-port owns the public API, identity, permissions, user data, privacy, encryption, persistence, MySQL, Qdrant, and all stateful product behavior.
+Transnet is a self-directed English-learning agent for translation, lexical exploration, bookmark-driven practice, writing, communication, listening, and pronunciation. The checked-in executable currently provides the loopback translation and structured-lookup subset; the [system design](docs/transnet.md) defines the target product.
 
 ```mermaid
 flowchart LR
@@ -60,7 +60,7 @@ curl --request POST http://127.0.0.1:35792/v1/lookups \
   --data '{"query":"caliente","source_language":"es","target_language":"en","explanation_language":"en"}'
 ```
 
-The current executable has no TLS termination and enforces a loopback bind. Keep it behind Island-port; never provide it with database, identity, session, encryption, or persistence configuration. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
+The current executable has no TLS termination and enforces a loopback bind. Keep this implementation behind Island-port. MySQL learning cards, bounded history, Qdrant knowledge nodes and edges, review scheduling, writing, and speech remain target capabilities until their status is advanced in the interface and guide documents. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
 
 See the [design](docs/transnet.md), [Island-port interface](docs/interfaces/port.md), [MySQL adapter](docs/interfaces/mysql.md), [Qdrant adapter](docs/interfaces/qdrant.md), and [configuration reference](docs/guides/configuration.md).
 

@@ -2,233 +2,86 @@
 
 中文：[Qdrant 适配器接口](../../docs_cn/interfaces/qdrant_cn.md)
 
-Qdrant is a rebuildable derived index. MySQL owns canonical truth and the active compatible `(release, collection, schema, ranker)` tuple. JSON examples show typed adapter requests.
+This contract defines the shared translation-wiki knowledge graph stored as versioned Qdrant node and edge collections. Qdrant is rebuildable and contains no learner-owned content.
 
-## Collections and points
+Status: target contract; the current executable does not compose this adapter.
 
-```json
-{
-  "operation": "collection.create",
-  "request_id": "01JREQUEST",
-  "input": {
-    "collection": "transnet_sense_01JRELEASE_e5_v3",
-    "release_id": "01JRELEASE",
-    "purpose": "sense",
-    "vector": {
-      "size": 1024,
-      "distance": "Cosine",
-      "model": "embed-v5",
-      "normalized": true
-    },
-    "payload_indexes": [
-      "release_id",
-      "entity_kind",
-      "content_language",
-      "purpose",
-      "status",
-      "source_ids"
-    ]
-  }
-}
-```
+## Release and collection contract
+
+Each logical knowledge release contains one immutable `knowledge_nodes` collection and one immutable `knowledge_edges` collection. Both collections pin the release ID, embedding models, vector dimensions, sparse configuration, payload schema, and content hashes. They activate and roll back as one unit.
+
+Point IDs are deterministic. Nodes are built before edges. Publication rejects missing endpoints, cross-release references, invalid direction, duplicate typed edges, missing evidence, incompatible senses, unsupported language or domain claims, and mismatched embedding metadata.
+
+Private learner identities, bookmarks, history, queries, passages, writing, answers, conversations, explanations, recordings, mastery, and preferences never enter Qdrant.
+
+## Knowledge nodes
+
+A node represents one independently explainable lexical sense, phrase, concept, entity, phenomenon, idiom, metaphor, speech act, cultural practice, grammar pattern, collocation, or misconception.
 
 ```json
 {
-  "operation": "points.upsert",
-  "request_id": "01JREQUEST",
-  "input": {
-    "collection": "transnet_sense_01JRELEASE_e5_v3",
-    "wait": true,
-    "points": [
-      {
-        "id": "7d9d7530-9258-5bc1-a826-37f3ec7d08c1",
-        "vector": [
-          0.125,
-          -0.25,
-          0.5
-        ],
-        "payload": {
-          "record_id": "sense:01JHOT:definition:en",
-          "entity_id": "01JHOT",
-          "entity_kind": "sense",
-          "purpose": "canonical_definition",
-          "content_language": "en",
-          "release_id": "01JRELEASE",
-          "content_hash": "sha256:BASE64",
-          "embedding_model": "embed-v5",
-          "status": "active",
-          "source_ids": [
-            "dictionary-1"
-          ]
-        }
-      }
-    ]
-  }
+  "node_id": "node_01J...",
+  "node_type": "lexical_sense",
+  "canonical_label": "sweltering",
+  "aliases": ["oppressively hot"],
+  "translations": ["酷热的"],
+  "description": "uncomfortably hot, especially because of weather",
+  "language": "en",
+  "domains": ["weather"],
+  "evidence_ids": ["evidence_01J..."],
+  "confidence": 0.98,
+  "verification_state": "verified",
+  "release_id": "knowledge-2026-09"
 }
 ```
 
-Physical collections are immutable per release and embedding configuration. Point IDs are deterministic. Private learner text, identities, feedback, answers, notes, and unfiltered source documents never enter Qdrant.
+Each node has a named dense cross-lingual semantic vector and sparse lexical vector. Payload indexes cover release, state, type, language, dialect, region, period, and domain.
 
-## Search
+## Knowledge edges
+
+An edge is both a typed connection and a searchable explanation of why two nodes relate.
 
 ```json
 {
-  "operation": "vector.search",
-  "request_id": "01JREQUEST",
-  "content_version": {
-    "release_id": "01JRELEASE",
-    "collection": "transnet_sense_01JRELEASE_e5_v3",
-    "schema_version": "1",
-    "ranking_version": "lookup-v1"
-  },
-  "input": {
-    "purpose": "canonical_definition",
-    "content_language": "es",
-    "query_vector": [
-      0.125,
-      -0.25,
-      0.5
-    ],
-    "filter": {
-      "must": [
-        {
-          "key": "release_id",
-          "match": {
-            "value": "01JRELEASE"
-          }
-        },
-        {
-          "key": "status",
-          "match": {
-            "value": "active"
-          }
-        }
-      ],
-      "must_not": [
-        {
-          "key": "source_ids",
-          "match": {
-            "any": [
-              "quarantined-source"
-            ]
-          }
-        }
-      ]
-    },
-    "limit": 30,
-    "with_payload": [
-      "record_id",
-      "entity_id",
-      "entity_kind",
-      "content_hash",
-      "source_ids"
-    ]
-  }
+  "edge_id": "edge_01J...",
+  "source_node_id": "node_01J...",
+  "target_node_id": "node_01K...",
+  "relation_type": "intensity_neighbor",
+  "direction": "outgoing",
+  "explanation": "scorching expresses a stronger degree of heat",
+  "restrictions": {"dimension": "temperature", "register": "general"},
+  "evidence_ids": ["evidence_01K..."],
+  "confidence": 0.96,
+  "verification_state": "verified",
+  "release_id": "knowledge-2026-09"
 }
 ```
 
-```json
-{
-  "result": "ok",
-  "value": {
-    "matches": [
-      {
-        "record_id": "sense:01JHOT:definition:en",
-        "entity_id": "01JHOT",
-        "score": 0.8731,
-        "content_hash": "sha256:BASE64",
-        "source_ids": [
-          "dictionary-1"
-        ]
-      }
-    ],
-    "collection": "transnet_sense_01JRELEASE_e5_v3"
-  }
-}
-```
+Supported families are naming, lexical, conceptual, contrast, cultural, and exploratory. Exact relation types follow the [system design](../transnet.md). Intensity or gradient relations name their dimension and are not encoded as hypernym or hyponym edges.
 
-Limits are 1–100 and eligibility filters apply before limiting. Scores are ranking features, comparable only inside one model and collection. The adapter rejects mismatched releases, dimensions, filters, payloads, and hashes. MySQL hydrates and permission-checks all candidate IDs.
+Each edge has a dense vector for the complete source–relation–target explanation and a sparse lexical representation. Payload indexes cover both endpoints, relation type, verification state, release, language, region, period, and domain.
+
+## Retrieval
+
+`search_nodes` and `search_edges` combine named dense and sparse retrieval with exact aliases, translations, transliterations, abbreviations, formulas, and domain terms. Eligibility filters apply before limiting. Scores are comparable only inside the same model and release.
+
+`neighbors` retrieves verified incoming and outgoing edges through endpoint filters, then fetches the opposite nodes by ID. The adapter checks release compatibility and endpoint presence but does not infer ontology semantics or factual multi-hop paths.
+
+The caller deduplicates and reranks a bounded candidate set by exactness, evidence, domain relevance, relationship diversity, and ephemeral learner strategy. It must display verified and exploratory results separately. Vector similarity alone never establishes translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
+
+Expansion follows one learner-selected node at a time. Arbitrary-depth traversal, shortest paths, centrality, and mutable graph transactions are outside this contract.
 
 ## Reconciliation and lifecycle
 
-```json
-{
-  "operation": "collection.reconcile",
-  "request_id": "01JREQUEST",
-  "input": {
-    "collection": "transnet_sense_01JRELEASE_e5_v3",
-    "release_id": "01JRELEASE",
-    "expected": {
-      "record_count": 245120,
-      "identity_manifest_hash": "sha256:BASE64",
-      "content_manifest_hash": "sha256:BASE64"
-    },
-    "checks": [
-      "missing_identity",
-      "unexpected_identity",
-      "content_hash",
-      "release_id",
-      "status",
-      "vector_size"
-    ]
-  }
-}
-```
+Builds compare node and edge counts, endpoint coverage, content hashes, embedding versions, and release metadata with a signed or otherwise authenticated manifest. A partial or mismatched pair never activates.
 
-```json
-{
-  "result": "ok",
-  "value": {
-    "record_count": 245120,
-    "missing": 0,
-    "unexpected": 0,
-    "hash_mismatches": 0,
-    "ready": true
-  }
-}
-```
+Quarantine blocks ineligible material before deletion. Correction creates a new immutable release. Rollback selects an unchanged retained node-and-edge pair. Exploratory neighbors remain derived and cannot become verified edges without an evidence-backed publishing decision.
 
-Builds create a new collection, upsert deterministic points, reconcile every identity and hash, then record readiness in MySQL. Publication changes only the MySQL active tuple. Aliases are operational conveniences, never read authority. Rollback selects an unchanged retained collection.
+Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`. Logs omit credentials, vectors, source text, learner content, and raw Qdrant bodies.
 
-```json
-{
-  "operation": "points.delete",
-  "request_id": "01JREQUEST",
-  "input": {
-    "collection": "transnet_sense_01JRELEASE_e5_v3",
-    "wait": true,
-    "filter": {
-      "must": [
-        {
-          "key": "release_id",
-          "match": {
-            "value": "01JRELEASE"
-          }
-        },
-        {
-          "key": "source_ids",
-          "match": {
-            "any": [
-              "dictionary-1"
-            ]
-          }
-        }
-      ]
-    }
-  }
-}
-```
+## Related documents
 
-```json
-{
-  "operation": "collection.delete",
-  "request_id": "01JREQUEST",
-  "input": {
-    "collection": "transnet_sense_01JRELEASE_e5_v3",
-    "expected_release_id": "01JRELEASE",
-    "reason": "retention_expired"
-  }
-}
-```
-
-Quarantine first blocks the source in MySQL, then deletes matching points and reconciles. Collection deletion requires no active or retained rollback reference. Closed results are `ok`, `missing`, `version_mismatch`, `invalid_payload`, `unavailable`, or `timeout`; logs omit credentials, vectors, source text, and Qdrant bodies.
+- [System design](../transnet.md)
+- [MySQL interface](mysql.md)
+- [Content publishing](../guides/content-publishing.md)
+- [Quality assurance](../guides/quality-assurance.md)

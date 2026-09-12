@@ -2,200 +2,79 @@
 
 中文：[质量保证](../../docs_cn/guides/quality-assurance_cn.md)
 
-This guide covers the Island-port product around Transnet, including MySQL, Qdrant, privacy, persistence, feedback, practice, and worker behavior. The current Transnet executable implements only the applicable HTTP, provider-resilience, schema-validation, and redaction subset.
+This guide defines evaluation, release gates, and monitoring for the [Transnet design](../transnet.md). It is intended for content, model, application, privacy, and release owners.
 
-## Status
+Status: proposed; the complete harness and datasets are not implemented.
 
-This guide defines the proposed evaluation and release process for Transnet learning features. The evaluation harness and datasets are not implemented at the branch point.
+## Versioned evaluation artifacts
 
-Quality is measured per enabled source language, English dialect, learner level, content category, and retrieval path. A global average cannot hide a weak language or safety-critical slice.
+Every result identifies application, schema, prompt, model role, evaluator, rubric, normalization, MySQL card release, Qdrant node and edge releases, ranker, pronunciation analyzer, and scheduler versions as applicable. Datasets use licensed or consented content and contain no production credentials or unintended learner data.
 
-## Evaluation artifacts
+Splits cover CEFR A1–C2, enabled source languages, English dialects, domains, registers, regional and historical scope, ambiguous forms, idioms, technical terminology, cultural situations, noisy audio, and accessibility settings. Regression sets remain isolated from prompt and content development.
 
-Version and retain:
+## Intent and translation evaluation
 
-- Multilingual lookup benchmark.
-- Lexical relation benchmark.
-- Learning-card human-review rubric.
-- Practice-item benchmark and grading fixtures.
-- Prompt-injection and sensitive-content suite.
-- API contract and failure-mode fixtures.
-- Load and dependency-failure profiles.
-- Published lexicon, Qdrant collection, prompt, model, ranker, rubric, evaluator, and scheduler versions.
+Measure lexical-unit versus sentence-or-passage routing, including ambiguous short fragments. A routing error must choose the least intrusive useful experience and must never create learning state.
 
-Test data must be licensed for evaluation and must not contain private production queries unless a separate consent and de-identification process permits them.
+Translation evaluation covers meaning, completeness, tone, register, structure, names, terminology, numbers, negation, idioms, and dialect. Normal text must return only translation; tips are penalized unless they address a material ambiguity, idiom, register choice, or cultural context, and every response is checked for the two-tip limit.
 
-## Multilingual lookup set
+## Basic-card and retrieval evaluation
 
-Each enabled language includes balanced cases for:
+Measure exact sense resolution, language detection, morphology, spelling suggestions, alias, transliteration, sparse technical-term recall, dense cross-lingual recall, reranking, evidence eligibility, and degraded MySQL-only behavior.
 
-- High-frequency and long-tail words.
-- Regular and irregular inflections.
-- Multiple parts of speech.
-- Polysemy and homographs.
-- Idioms, phrasal verbs, and short expressions.
-- False friends and learner transfer errors.
-- Supported romanization and transliteration.
-- Misspellings that should and should not be corrected.
-- Ambiguous language detection and code switching.
-- Context-dependent sense choice.
-- Dialect, register, slang, dated, technical, and regional usage.
-- Sensitive, taboo, hateful, sexual, and violent vocabulary used in legitimate educational contexts.
-- Low-source-coverage and intentionally unsupported cases.
+Relationship tests report precision by type and scope. They verify endpoint existence, release compatibility, direction, sense, evidence, region, period, domain, and confidence. Adversarial cases ensure intensity is not taxonomy and embedding proximity is not promoted to translation, synonymy, hierarchy, causation, shared mechanism, or cultural fact.
 
-Bilingual reviewers judge source analysis and English equivalence. English teachers judge explanation clarity, learner level, examples, contrasts, and practice usefulness.
+Bounded exploration tests expand one selected node at a time, separate verified and exploratory results, and reject plausible but unsupported multi-hop narratives.
 
-## Lookup metrics
+## Learning-card and practice evaluation
 
-- Language detection accuracy and explicit-abstention quality.
-- Lemma, phrase, morphology, and part-of-speech coverage.
-- Top-1 and top-k source-sense retrieval.
-- Top-1 and top-k English-equivalent retrieval.
-- Translation adequacy, naturalness, and context fit.
-- Unsupported-claim and hallucination rate.
-- Assertion-level citation correctness and source permission.
-- Definition simplification meaning preservation.
-- Usage, grammar, collocation, register, dialect, CEFR, frequency, pronunciation, etymology, and history correctness.
-- Spelling-suggestion precision and harmful silent-correction count.
-- Latency, cache hit, fallback, token, and cost distribution.
+Only explicit bookmark tests may create a durable card. Lookup, translation, graph expansion, writing, conversation, and speech tests assert that no target appears implicitly. Refresh tests require immutable traceable revisions, compatible state migration, and regeneration after source correction or withdrawal.
 
-## Relationship metrics
+Practice datasets cover recognition, recall, spelling, morphology, collocation, grammar, composition, writing, register, cultural pragmatics, listening, and pronunciation independently. A correct result in one dimension must not update another. Exercises are checked for answerability, leakage, accepted variants, hint progression, focused retry, and later transfer in unseen contexts.
 
-Review endpoints, sense pairing, type, direction, scope, and evidence independently.
+Free production evaluation measures task fulfillment, meaning preservation, grammar, lexical precision, naturalness, organization, tone, and cultural suitability. Valid dialect and style variation must survive. Feedback is penalized for erasing voice, inventing a uniquely correct rewrite, or giving more than two unrelated high-priority corrections.
 
-Include difficult cases:
+## Scheduling and strategy evaluation
 
-- Near-synonyms that are not interchangeable.
-- Antonyms that embed near each other.
-- Hypernym/hyponym direction.
-- Meronym/holonym direction.
-- Modern derivation versus historical etymology.
-- Collocations with asymmetric grammatical roles.
-- Context-qualified degree scales.
-- Homographs whose unrelated senses must remain disconnected.
-- Associations that must not be promoted to stronger relation types.
+Replay tests pin FSRS-style scheduler parameters and verify difficulty, stability, retrievability, due ordering, hint effects, accessibility handling, and rollback. Uncertain evaluation cannot reduce mastery. New bookmarks cannot crowd out fragile due cards, and an unbookmarked neighbor cannot enter the queue automatically.
 
-Measure default-graph type-and-sense accuracy, candidate-retrieval recall, edge-scope completeness, ranking relevance, truncation quality, and feedback calibration.
+Strategy tests use only current bookmarks and eligible compact history. They verify the 200-event and 30-day bounds, bookmark weighting, time decay, low-confidence neutral fallback, and immediate effect of history clearing. Presentation preferences must not change inferred level, domain, weakness, or priority.
 
-## Learning-card rubric
+## Speech evaluation
 
-Reviewers score each sense independently for:
+Reference-speech tests cover intelligibility, dialect match, generated-voice labeling, streaming behavior, syllables, stress, rhythm, reductions, linking, and natural slowed output.
 
-1. Correct lemma, part of speech, and sense.
-2. Plain-English definition appropriate to the requested level.
-3. Accurate localized gloss in the explanation language.
-4. Natural and sense-matched examples.
-5. Correct grammar patterns and collocations.
-6. Useful contrast with near-synonyms and confusables.
-7. Source-qualified usage and dialect guidance.
-8. Correct coverage state for missing, disputed, filtered, or degraded sections.
-9. Complete assertion-level provenance.
-10. Neutral and educational treatment of sensitive content.
+Pronunciation sets vary microphones, noise, clipping, silence, accents, speech rates, target phrases, and non-target speech. Feedback must trace to acoustic and alignment evidence, select at most two intelligibility targets, and return uncertainty rather than a score when evidence is inadequate.
 
-A generated field fails if it introduces a factual detail absent from evidence, cites an invalid fragment, imitates restricted source text, or hides material uncertainty.
+## Cultural safety, grounding, and injection
 
-## Practice evaluation
+Cultural scenarios vary relationship, hierarchy, distance, setting, medium, dialect, and region. Evaluation rejects stereotypes, universal group claims, unsupported etiquette, and unsafe confidence while rewarding scoped alternatives and acknowledged variation.
 
-Every objective item must have:
+Treat learner text, retrieved documents, evidence, and model output as untrusted data. Injection suites attempt to replace system instructions, exfiltrate credentials, bypass release filters, fabricate evidence, store incidental content, and alter rubrics or mastery without authority.
 
-- One defensible intended answer or explicit accepted-answer set.
-- Plausible but incorrect distractors.
-- No answer leakage in prompt, ordering, formatting, or metadata.
-- A frozen focus sense and every secondary target.
-- Correct prompt language, English dialect, and level.
-- A clear target skill.
-- A concise evidence-backed correction.
-- Safe and non-demeaning content.
+## Privacy and accessibility
 
-Measure answerability, answer-key completeness, distractor quality, sense alignment, skill alignment, level fit, evaluator calibration, hint behavior, and duplicate-submission safety.
+Privacy tests prove that raw queries, passages, writing, answers, conversations, explanations, and recordings do not enter strategy history or Qdrant. They cover bookmark removal, history clearing, account export and deletion, recording defaults, logs, traces, caches, backups, idempotency, and cross-learner isolation.
 
-Scheduling simulations cover time zones, daylight-saving changes, clock skew, concurrent submissions, retries, scheduler migration, pauses, sense splits, and account deletion.
+Accessibility tests cover keyboard-only graph exploration, list and tree parity, screen readers, reduced motion, non-color-only meaning, captions and text alternatives, audio controls, input time independence, and disabled response-time scheduling signals.
 
-Product evaluation measures delayed recall and correct use in unseen contexts after 7 and 30 days. Multiple-choice accuracy alone is not a success measure.
+## Reliability and release gates
 
-## Security and privacy suite
+Inject MySQL, Qdrant node, Qdrant edge, model, TTS, speech-recognition, alignment, and scheduler failures; invalid structured output; rate limits; stale releases; and partial publication. Expected behavior includes one bounded schema repair, deterministic fallback, explicit uncertainty, no partial release activation, no unsupported relationship generation, and no duplicate attempt or bookmark mutation.
 
-Test:
+A release passes only when:
 
-- Cross-account reads and writes return the same `404` as absent private resources.
-- Island-port credential lifecycle, expiry, and account deletion.
-- CSRF, credentialed CORS, origin validation, and cookie configuration.
-- SQL, JSON, Unicode, prompt, retrieved-content, and output-rendering injection.
-- Raw query, context, answer, note, comment, token, and identity leakage into logs or traces.
-- Shared cache separation for contexts, mature-content settings, and personal overlays.
-- Capability entropy, hashing, expiry, replay, and absence from URLs.
-- History opt-out, incognito lookup, expiration, clear all, export, and deletion.
-- Source removal from cards, vectors, caches, exports, and generated manifests.
+- translation and intent thresholds pass for every enabled language and dialect;
+- card, retrieval, relationship, evidence, degraded-mode, and release-reconciliation thresholds pass;
+- bookmark-only durability, independent mastery, scheduling, feedback, transfer, writing, cultural, speech, privacy, accessibility, and injection suites pass;
+- regression deltas are explained and approved by named owners; and
+- the application, content trio, prompts, rubrics, models, analyzers, and scheduler can be rolled back independently where their contracts allow.
 
-## Reliability suite
-
-Inject failures for MySQL, vector retrieval, cache, model timeout, invalid model JSON, rate limits, stale content, worker delay, outbox replay, and partial graph expansion.
-
-Expected fallbacks: an unavailable LLM returns a deterministic card or typed retryable error; unavailable vectors preserve exact, morphology, phrase, and full-text lookup; unavailable MySQL fails authoritative reads and writes closed and never substitutes vector payloads for canonical or private state; unavailable cache leaves canonical services running under bounded concurrency; invalid model output receives one repair attempt before a partial or deterministic fallback; delayed feedback workers preserve the personal projection and expose aggregate age; an uncertain grader returns `needs_review` with no mastery penalty; an oversized graph returns ranked truncation and an expansion cursor; MySQL/Qdrant drift triggers active-version filtering, alerting, reconciliation, and rebuild.
-
-Verify deadline propagation, retry classification, circuit breaking, request coalescing, job leases, dead-job replay, and no duplicate billable or state-changing work.
-
-## API contract suite
-
-- Every example validates against the published JSON Schema.
-- OpenAPI changes are checked for backward incompatibility.
-- Unknown enum handling follows the documented client policy.
-- Cursor, ETag, `If-Match`, idempotency, capability, and `Retry-After` behavior is deterministic.
-- Context responses are private and not stored in shared snapshots.
-- Async jobs return the same final learning-card schema as synchronous lookups.
-- Graph edge endpoints are present in the node list.
-- Feedback-enabled edges have a relation version; derived edges do not accept feedback.
-
-## Initial release gates
-
-- All public examples and contract fixtures pass schema validation.
-- Every enabled language reaches at least 90% top-1 intended English-equivalent accuracy on the balanced reviewed set.
-- Every enabled language reaches at least 97% top-3 intended-equivalent recall.
-- Critical mistranslation remains below 1% in every reported language and sensitive-content slice.
-- Confident language resolution or explicit ambiguity is correct in at least 98% of the per-language benchmark.
-- False high-confidence language selection remains below 1%.
-- Every displayed etymology, usage, pronunciation, CEFR, and frequency assertion has permitted provenance.
-- A reviewed default-graph sample reaches at least 90% correct relation type and sense pairing before community influence is enabled.
-- A reviewed practice sample is at least 95% clearly answerable and contains no answer leakage.
-- No attempt advances mastery more than once under retries or concurrency.
-- Feedback is idempotent, reversible, and pinned to an edge version.
-- Island-port permission, privacy, source-removal, degraded-dependency, load, and injection suites pass.
-- Application, prompt, content release, ranker, scheduler, and Qdrant collection rollback is tested.
-
-These are initial product gates, not permanent ceilings. Each language can adopt stricter thresholds as the benchmark grows. Threshold changes are reviewed and versioned rather than adjusted after seeing a failing release.
-
-## Production monitoring
-
-Monitor:
-
-- Request outcomes and stage latency by route and language pair.
-- Retrieval path, candidate count, ambiguity, abstention, and coverage.
-- Model schema validity, rejected unsupported assertions, repair, fallback, tokens, and cost.
-- Graph size, truncation, relation distribution, feedback rate, and aggregate lag.
-- Practice completion, correctness by skill, hints, lapses, and scheduler version.
-- Source freshness, outbox age, dead jobs, Qdrant synchronization, and reconciliation mismatch.
-- Island-port rate-limit and abuse outcomes without learner content.
-
-Production data identifies regressions but does not automatically become training or evaluation data. Sampling private learner content requires separate consent, minimization, access controls, and retention.
-
-## Release report
-
-Every published content, prompt, model, ranker, evaluator, or scheduler release records:
-
-- Changed inputs and versions.
-- Benchmark and human-review results by slice.
-- Known limitations and unsupported coverage.
-- Privacy, license, and safety sign-off.
-- Capacity and cost impact.
-- Migration and rollback procedure.
-- Monitoring thresholds and owners.
+Production monitoring records aggregate outcomes and stage latency, routing mix, retrieval path, coverage, schema validity, uncertainty, graph truncation, review due health, pronunciation assessability, release drift, and bounded dependency failures. Logs and metrics contain no learner content or raw provider bodies. Production data never becomes training data automatically.
 
 ## Related documents
 
 - [System design](../transnet.md)
 - [Learning experience](../product/learning-experience.md)
-- [Island-port interface](../interfaces/port.md)
-- [MySQL interface](../interfaces/mysql.md)
-- [Qdrant interface](../interfaces/qdrant.md)
 - [Content publishing](content-publishing.md)
-- [Overall plan](../todo.md)
+- [Island-port interface](../interfaces/port.md)

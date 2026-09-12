@@ -2,190 +2,93 @@
 
 中文：[英语学习体验](../../docs_cn/product/learning-experience_cn.md)
 
-## Status
+This document translates the [system design](../transnet.md) into learner-facing behavior. The system design owns product semantics; the [Island-port interface](../interfaces/port.md) owns transport details.
 
-This document describes learner-facing behavior coordinated by Island-port and Transnet. [System design](../transnet.md) owns the boundary, and the [Island-port interface](../interfaces/port.md) owns the service contract.
+Status: target product behavior. The current runtime implements translation and a structured lexical-lookup subset.
 
 ## Audience and language behavior
 
-Transnet is designed for people learning English from a supported source language. The learner chooses an explanation language, preferred English dialect, and approximate CEFR level. The explanation language can differ from the language of the current query.
+Transnet supports adult English learners from CEFR A1 through C2. English is always the target language. The learner may choose an explanation language, English dialect, and amount of first-language support, but those presentation settings are not evidence of level, interests, or mastery.
 
-Basic-core behavior:
+A word, term, idiom, phrasal verb, or established lexical phrase opens a translation-wiki page. A clause, sentence, or passage returns a translation first. A short ambiguous fragment receives the simpler translation response unless the router confidently recognizes a lexical unit.
 
-- A non-English word returns matching source-language senses and natural English equivalents.
-- An English word enters learner-dictionary mode instead of pretending to translate English to English.
-- An inflected form resolves to its lemma while preserving the queried form, such as `went` to `go`.
-- A supported idiom, phrasal verb, or short expression resolves as one lexical unit.
-- An optional context sentence reranks senses but does not remove other plausible senses.
-- A misspelling produces explicit ranked suggestions and never silently replaces the learner's text.
-- A configured romanization system can resolve to the original script while showing both forms.
-- Low-confidence language detection returns alternatives or asks the learner to choose.
-- Sensitive vocabulary receives a neutral explanation and visible usage warning appropriate to the learner's settings.
-
-The first release enables only languages with approved lexical sources, morphology support, and native-speaker evaluation. Adding a language is a content and quality release, not merely enabling a language code.
+Inflected forms resolve to their lemma while preserving the queried form. Homographs, parts of speech, and senses remain distinct. Misspellings produce explicit suggestions, low-confidence language detection exposes alternatives, and sensitive vocabulary receives neutral, scoped usage guidance.
 
 ## Core journeys
 
-### Look up and understand
+### Translate a sentence or passage
 
-1. The learner submits a word or short expression and optionally provides a source language and context sentence.
-2. Transnet resolves the language, form, lexeme, part of speech, and possible senses.
-3. The result keeps homographs and senses separate and ranks them by context and learner relevance.
-4. The learner receives an evidence-backed English learning card with explicit coverage and provenance.
-5. Island-port may save a selected sense or retain the lookup in private history after the compute call.
+1. The learner submits text and optional language, dialect, and register preferences.
+2. The agent preserves meaning, tone, register, and paragraph structure in natural target-language wording.
+3. The response contains only the translation unless an ambiguity, idiom, consequential register choice, or cultural context merits a tip.
+4. At most two one-sentence tips appear; detailed lexical teaching requires a separate request.
 
-### Explore related language
+### Look up and explore a lexical unit
 
-1. The learner opens a sense in the graph or accessible list view.
-2. The client requests a bounded neighborhood filtered by relationship, level, language, or part of speech.
-3. The learner can expand nodes and drag a 3D layout without changing semantic data.
-4. The learner can rate an edge as more or less personally useful or report a factual issue.
-5. Personal ranking updates immediately; eligible factual reports contribute asynchronously to community review.
+1. The agent resolves the query to a canonical MySQL basic card and selected sense.
+2. It follows the card's Qdrant root ID and retrieves a bounded set of eligible nodes and typed edges.
+3. The translation-wiki page presents the concise card first, followed only by well-supported sections relevant to that sense.
+4. Verified relationships remain separate from embedding-only exploratory associations.
+5. Selecting a related node expands one bounded neighborhood; the agent does not present a similarity chain as a factual path.
 
-### Practice and review
+### Bookmark and learn
 
-1. The learner starts an adaptive session or accepts a practice suggestion after a lookup.
-2. The scheduler selects due senses and weak skills rather than only recent spellings.
-3. The learner submits one answer to a frozen exercise instance.
-4. The server evaluates the answer and updates mastery exactly once.
-5. The explanation links back to the selected sense and underlying evidence.
+1. The learner explicitly bookmarks a selected word or phrase sense.
+2. The system creates a complete frozen learning-card revision linked to the source basic card and knowledge release.
+3. Current bookmarks and at most 200 compact events from the previous 30 days supply the only personal strategy evidence.
+4. The scheduler selects due bookmarked cards and relevant transfer tasks by independently demonstrated skills.
+5. The learner attempts one bounded activity, receives at most two high-value corrections, retries when useful, and later transfers the skill to a new context.
+6. Removing the bookmark stops future scheduling; clearing history immediately removes its strategic influence.
+
+## Translation-wiki page
+
+The basic card supplies the canonical form, sense, part of speech, concise translations and definitions, pronunciation and morphology summaries, CEFR difficulty, domain tags, knowledge-node roots, and release metadata. The page may add relevant taxonomy, intensity scales, valency, collocations, fixed phrases, nuance, connotation, register, morphology, idioms, cultural context, and technical knowledge from Qdrant.
+
+Sections are ordered by usefulness and omitted when empty or weakly supported. Near-synonyms include a contrast. Intensity scales are not represented as taxonomic parents. Register and cultural claims state their applicable dialect, region, period, domain, or social context.
+
+The page distinguishes sourced knowledge, generated teaching material, and uncertain inference. It never promotes vector proximity to translation, synonymy, hierarchy, causation, or shared mechanism.
 
 ## Learning card
 
-Every result is grouped by lexical entry and then by sense. “Show all” means all supported analyses within response limits; uncommon senses use progressive disclosure and cursor pagination.
+A learning card exists only after a bookmark. It is a private practice artifact rather than a copy of the full translation-wiki page. Each immutable revision freezes the front, back, example, pronunciation cue, hints, practice prompts, selected targets, inferred generation context, source release, generator, prompt, rubric, and evaluator versions.
 
-| Section | Learner-facing content |
-| --- | --- |
-| Query analysis | Original and normalized form, language, script, lemma, morphology, confidence, and spelling suggestions |
-| Headword | English lemma, syllables, pronunciation, licensed audio, spelling variants, and dialect |
-| Parts of speech | Every supported part of speech ordered by relevance and source-qualified frequency |
-| Forms | Plural, tense, participle, comparative, superlative, irregular forms, and derivational family links |
-| Senses | Plain-English definition, localized gloss, domain, CEFR estimate, frequency band, and confidence |
-| Usage | Formality, register, dialect, connotation, politeness, sensitivity, countability, transitivity, and position |
-| Grammar | Complement frames, prepositions, articles, clause patterns, and other construction requirements |
-| Collocations | Strong word combinations with grammatical roles, construction, restrictions, and examples |
-| Examples | Short natural examples appropriate to the learner's level, with localized explanations when useful |
-| Pitfalls | False friends, confusable words, unnatural literal translations, and common learner errors |
-| Word history | Sourced etymology and semantic development, including uncertainty and date ranges |
-| Learner history | Private lookups, selected sense, save state, and practice summary when enabled |
-| Relations | Synonyms, near-synonyms, antonyms, broader/narrower terms, word families, confusables, associations, and scales |
-| Practice | Suggested skills and current mastery for the selected sense |
-| Provenance | Assertion-level evidence, source permissions, content release, and generation versions |
+Learning state attaches to the selected sense or phrase and tracks only applicable dimensions, including recognition, recall, spelling, morphology, collocation, grammar, sentence composition, writing, register, cultural pragmatics, listening, and pronunciation. Success in one dimension never advances another without evidence.
 
-Each section reports one of these coverage states:
+A new knowledge release does not silently rewrite a learner card. Refreshing creates a traceable revision while preserving compatible review state. A corrected, quarantined, or withdrawn source requires regeneration before the next review.
 
-- `available`: requested and adequately supported.
-- `partial`: requested but only partly supported.
-- `unavailable`: requested but no suitable evidence exists.
-- `disputed`: reputable sources conflict.
-- `not_requested`: omitted by the request.
-- `blocked_by_policy`: omitted because display is not permitted.
-- `temporarily_unavailable`: a dependency failed and a fallback could not provide the section.
+## Practice and feedback
 
-Generated examples, simplified explanations, and mnemonics are visibly marked. Missing fields are never invented to make a card look complete.
+Practice moves from recognition toward independent production. Activities include meaning and sense selection, English recall, spelling repair, dictation, morphology, collocation, grammar patterns, sentence construction, writing, register choice, cultural communication, listening, and pronunciation.
 
-## Sense and part-of-speech behavior
+Every generated activity retains its target, prompt, accepted evidence or rubric, allowed variants, difficulty, hints, and relevant versions. Deterministic checks own exact answers. Open writing and communication use explicit multidimensional rubrics. Pronunciation feedback requires acoustic and alignment evidence rather than transcript text alone.
 
-Learning state and semantic relationships attach to a sense, not merely a spelling. Adjective `hot`, adverb `hotly`, and noun `heat` are separate lexemes connected by lexical relations. `Hot` meaning “high temperature” and `hot` meaning “currently popular” are separate senses with different examples and graph edges.
+Free production returns `correct`, `needs_revision`, or `needs_review`. Only a sufficiently confident, evidence-backed result changes mastery. Feedback preserves the learner's intended meaning and voice, distinguishes correctness from naturalness, and does not reject valid dialect or stylistic variation.
 
-A card orders common and context-relevant senses first. Rare, dated, technical, regional, and offensive senses remain discoverable when evidence and policy permit them, but do not overwhelm the initial view.
+## Scheduling and transfer
 
-## Usage guidance
+The scheduler uses a versioned FSRS-style model of difficulty, stability, and retrievability. Objective correctness and hint use are primary signals. Response time has only bounded learner-relative influence and may be disabled for accessibility. Uncertain evaluation does not reduce mastery.
 
-Usage guidance is descriptive rather than prescriptive. Every register, dialect, frequency, CEFR, pronunciation, or “common mistake” claim names its source scope and version.
+Daily practice combines due bookmarks, unresolved compact misconceptions, and transfer tasks derived from directly relevant knowledge edges. Related nodes are not automatically turned into study targets. Later prompts change wording, content, or social setting so the learner demonstrates transfer instead of memorizing an example.
 
-A near-synonym must include a contrast explaining when the words are not interchangeable. A dialect variant is not labeled incorrect merely because it differs from the configured target dialect. Sensitive words are explained faithfully without demeaning examples.
+## Personalization and privacy
 
-For beginners, cards show a localized gloss and short plain-English definition. For advanced learners, English-first definitions, nuance, contrast, collocation, and register become more prominent. The learner can always reveal or hide first-language scaffolding.
+Learning strategy is reconstructed from current bookmarks and bounded recent history. It may infer approximate level, domain relevance, weak skills, and review priority with explicit uncertainty. Bookmarks outweigh browsing history, and historical influence decays. Sparse or contradictory evidence produces a neutral general-English strategy.
 
-## Relationship exploration
+Explanation language, dialect, and scaffolding preferences control presentation only. Incidental words, writing, conversations, raw answers, passages, and recordings never become durable strategy inputs or study targets. Qdrant contains no private learner data.
 
-The graph presents these families:
+Compact history contains canonical IDs, selected sense, action, timestamp, and minimal review outcome, hint count, or misconception category. Raw queries, writing, answers, conversations, generated explanations, and recordings are excluded. Recordings are not retained by default; only the minimum derived result needed for review may remain.
 
-- Semantic equivalence: `synonym`, `near_synonym`, and `translation_equivalent`.
-- Opposition: `antonym`.
-- Hierarchy: broader `hypernym` and narrower `hyponym`.
-- Whole and part: `holonym` and `meronym`.
-- Learning difficulty: `confusable_with`.
-- Topic: `associated_with`, clearly weaker than a lexical claim.
-- Lexical family: `inflection_of`, `derivationally_related_to`, and `etymologically_derived_from`.
-- Construction: collocation projections backed by structured grammatical records.
-- Degree: ordered scale members projected as lower/higher neighbors.
+The learner can inspect, pause, reprioritize, refresh, or remove every learning card and can clear short history. The interface must make these controls understandable and must not use learner data for training without a separate informed choice.
 
-Temperature words such as `cool < warm < hot < scorching` belong to a named, context-qualified scale. They are not a parent-child hierarchy. The server stores one ordered scale and projects adjacent edges for display.
+## Accessibility and cultural safety
 
-The 3D graph is optional. A list or tree view exposes the same relations with keyboard navigation, reduced-motion support, text labels, and meaning that does not depend on color.
+Graph exploration has an equivalent keyboard-accessible list or tree presentation, reduced-motion support, text labels, and meaning that does not depend on color or spatial distance. Audio provides selectable playback speed without mechanically stretching speech, visible generated-voice labeling, and text alternatives.
 
-Dragging a node changes only client layout. An explicit save action may store private coordinates and camera state for the same root, filters, content release, and layout algorithm version. Spatial distance and coordinates are presentation hints, not lexical evidence.
-
-## Relationship feedback
-
-The UI separates personal usefulness from factual accuracy:
-
-- Usefulness accepts `more`, `less`, or `reset` and affects only the learner's ranking.
-- Accuracy accepts `accurate`, `wrong_sense`, `wrong_type`, `too_broad`, `missing_restriction`, `unsupported`, `unsure`, or `reset`.
-- `unsure` is an abstention, not a negative vote.
-
-A feedback-enabled graph edge exposes its canonical relation version. A newer relation version does not inherit an old judgment silently. Derived scale edges and visual-only edges are not directly voteable.
-
-Community aggregation uses eligible current accuracy reports, capped trust weights, shrinkage toward neutral, a minimum number of distinct voters, abuse detection, and reversible moderator decisions. Feedback never directly changes source evidence, relation type, embeddings, or canonical status.
-
-## Practice skills
-
-| Skill | Example | Basic-core priority |
-| --- | --- | --- |
-| Meaning recognition | Choose the English sense for a localized cue in context | First |
-| Sense discrimination | Select which sense fits an unseen sentence | First |
-| English recall | Produce the English lemma from a localized meaning | First |
-| Spelling and form | Produce an inflection or recognize an irregular form | First |
-| Collocation | Fill the dependent word in a natural construction | First |
-| Grammar pattern | Supply a preposition, article, count form, or complement | First |
-| Register choice | Choose language suitable for the social context | Later |
-| Contrast | Distinguish a near-synonym or confusable word | Later |
-| Free production | Write a sentence satisfying a sense and usage restriction | Later |
-| Listening/pronunciation | Recognize or produce a dialect-aware form | Later |
-
-Mastery is tracked per `(learner, sense, skill)`. Recognition does not imply recall, correct inflection, natural collocation, or appropriate register.
-
-## Exercise behavior
-
-- Prefer curated items and deterministic templates over generation.
-- Generate reusable candidates asynchronously from selected evidence.
-- Require one intended answer or an explicit accepted-answer set.
-- Reject ambiguous distractors and answer leakage.
-- Freeze focus sense, secondary targets, prompt language, dialect, level, content release, generator, model, prompt, normalization, rubric, and evaluator assumptions.
-- Hide answers until submission and accept harmless capitalization or punctuation differences.
-- Use correctness and hints as the primary scheduling signals.
-- Give response time only a capped learner-relative influence, and allow accessibility settings to disable it.
-- Do not reduce mastery when free-form evaluation is uncertain.
-- Explain the correct sense, grammar, collocation, or usage distinction after submission.
-- Test transfer with unseen contexts instead of memorization of one example.
-
-Raw answers are retained only for a short correction or dispute window and are then redacted while scores, misconception categories, and scheduler effects remain.
-
-## Personalization
-
-Personalization uses the minimum useful inputs: explanation language, known languages, English level, target dialect, active goal, optional interests, accessibility settings, recent sense choices, and skill mastery. Age is not collected unless an age-specific product and compliance design are approved.
-
-Recommendations balance due review, prerequisite vocabulary, useful graph neighbors, and learner goals. Each recommendation gives a short reason such as “due for recall” or “helps distinguish two words you confused.” Personal dislike cannot hide a necessary correction, and community popularity cannot crowd out core or low-resource-language vocabulary.
-
-Turning personalization off returns the common evidence-based order without deleting learning history. Personalized decisions record a version so behavior can be evaluated and reproduced.
-
-## History and privacy controls
-
-Word history and learner history are distinct. Word history is public sourced lexical content; learner history is private user-owned data.
-
-History is disabled until the learner makes an informed choice. Island-port manages retention, incognito lookup, deletion, export, and account workflows. Context sentences are not retained as history.
-
-An incognito lookup has no lookup-history ID. If a client requests saved history while history is disabled, the lookup still succeeds incognito and reports `history_not_saved`.
-
-Private queries, context, answers, notes, and comments never appear in logs or shared vector indexes. Learner data is not used for model training without a separate informed opt-in.
+Cultural coaching describes likely interpretation in a stated relationship, setting, medium, and region. It offers alternatives with different warmth or formality and presents variation and uncertainty instead of universal claims about a group.
 
 ## Success measures
 
-The primary product outcome is delayed recall and correct use of a sense in unseen context, not lookup count or time spent in the application.
-
-Supporting measures include successful sense selection, useful card coverage, graph-to-practice conversion, answerability, mastery improvement by skill, seven-day and thirty-day retention, and quality parity across enabled languages and English dialects.
+The primary outcome is delayed recall and natural use in an unfamiliar context. Supporting measures include successful sense resolution, useful knowledge coverage, bookmark-to-practice conversion, answerability, transfer by skill, seven-day and thirty-day retention, pronunciation assessability, and quality parity across enabled languages and English dialects.
 
 ## Related documents
 

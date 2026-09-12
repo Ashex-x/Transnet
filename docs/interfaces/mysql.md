@@ -2,265 +2,88 @@
 
 中文：[MySQL 适配器接口](../../docs_cn/interfaces/mysql_cn.md)
 
-This is the typed MySQL 8 adapter contract. JSON examples represent logical adapter values, not a network protocol or stored JSON schema. SQL rows remain private.
+This contract defines logical MySQL 8 operations for canonical basic cards, private bookmarked learning cards, bounded history, and scheduling state. JSON examples describe typed adapter values, not a network protocol or stored JSON schema.
+
+Status: target contract; the current executable does not compose this adapter.
 
 ## Common contract
 
-Every operation is bounded, uses UTC timestamps, and returns a closed result. Learner operations receive the opaque `X-Learner-Id` value; public canonical operations omit it. Hashes and encrypted values are produced before persistence and are redacted from diagnostics.
+Every operation carries a request ID, deadline, and expected schema version. Reads pin a content or learning-card revision when consistency matters. Mutations require an idempotency key and optimistic revision where a concurrent learner action is possible.
+
+Success returns `ok` with the requested value. Closed outcomes are `not_found`, `conflict`, `invalid`, `version_mismatch`, `unavailable`, and `timeout`. Adapter errors never expose SQL, credentials, learner content, ciphertext, or provider bodies.
+
+## Basic cards
+
+`resolve_basic_card` accepts a normalized form, source language, optional context hints, English dialect, and active release. It returns ranked sense-specific cards and explicit spelling or language alternatives when resolution is uncertain.
 
 ```json
 {
-  "operation": "saved_sense.upsert",
-  "request_id": "01JREQUEST",
-  "learner_id": "learner_01",
-  "content_version": {
-    "release_id": "01JRELEASE",
-    "schema_version": "1",
-    "ranking_version": "lookup-v1",
-    "collection_version": "sense-v3"
-  },
-  "idempotency": {
-    "key_digest": "sha256:BASE64",
-    "request_fingerprint": "sha256:BASE64",
-    "expires_at": "2026-09-13T10:00:00Z"
-  },
-  "occurred_at": "2026-09-12T10:00:00Z",
-  "input": {}
+  "card_id": "card_01J...",
+  "sense_id": "sense_01J...",
+  "canonical_form": "sweltering",
+  "language": "en",
+  "part_of_speech": "adjective",
+  "translations": ["酷热的"],
+  "definitions": ["uncomfortably hot"],
+  "knowledge_root_ids": ["node_01J..."],
+  "cefr": "B2",
+  "domains": ["weather"],
+  "content_release": "knowledge-2026-09"
 }
 ```
 
-Results are `ok`, `missing`, `conflict`, `in_progress`, `replayed`, `expired`, `lease_lost`, or `unavailable`, with a safe operation-specific value.
+Cards are concise and independently useful when Qdrant is unavailable. Detailed graph relationships, exploratory associations, long cultural notes, and private state do not belong in a basic card.
+
+Publication operations stage, validate, activate, quarantine, and withdraw immutable card revisions. Activation references the compatible Qdrant node and edge releases. A release cannot activate until every referenced knowledge root exists and passes eligibility checks.
+
+## Bookmarks and learning cards
+
+`create_bookmark` accepts a learner ID, selected basic-card and sense IDs, a frozen generated card body, target skills, inferred generation context, knowledge release, generator, prompt, rubric, evaluator, and scheduler versions. The operation atomically creates the bookmark and first `LearningCard` revision.
+
+Only an explicit bookmark may create durable learning state. A lookup, graph expansion, translation, writing sample, conversation, or pronunciation recording must not create a learning card implicitly.
 
 ```json
 {
-  "result": "ok",
-  "value": {
-    "revision": 4
-  }
+  "bookmark_id": "bookmark_01J...",
+  "learning_card_id": "learning_card_01J...",
+  "revision": 1,
+  "source_card_id": "card_01J...",
+  "selected_sense_id": "sense_01J...",
+  "targets": ["recall", "collocation", "listening"],
+  "state": "active",
+  "due_at": "2026-09-13T02:00:00.000000Z"
 }
 ```
 
-## Canonical content and graph
+`refresh_learning_card` creates a new frozen revision and carries forward only compatible review state. Source correction, quarantine, or withdrawal marks dependent cards for regeneration. It never silently rewrites a learner-owned revision.
 
-| Family | Operations |
-| --- | --- |
-| Active content | `content.active` |
-| Lexical lookup | `lexical.search`, `candidate.load`, `sense_details.load` |
-| Graph | `graph.nodes`, `graph.adjacency`, `graph.neighbor_page` |
-| Releases | `release.stage`, `release.read`, `release.record_gate`, `release.begin_vector_build`, `release.reconcile_vector_build`, `release.publish`, `release.rollback`, `source.quarantine` |
+`pause_bookmark`, `reprioritize_bookmark`, and `remove_bookmark` use optimistic revisions. Removal excludes the card from future scheduling while retaining only data required by the declared deletion and audit policy.
 
-```json
-{
-  "operation": "lexical.search",
-  "request_id": "01JREQUEST",
-  "content_version": {
-    "release_id": "01JRELEASE",
-    "schema_version": "1",
-    "ranking_version": "lookup-v1",
-    "collection_version": "sense-v3"
-  },
-  "input": {
-    "query": "caliente",
-    "normalized_query": "caliente",
-    "source_language": "es",
-    "signals": [
-      "exact_form",
-      "phrase",
-      "lemma",
-      "morphology",
-      "full_text"
-    ],
-    "evidence_use": "api_redistribution",
-    "limit": 100
-  }
-}
-```
+## History and strategy snapshot
 
-```json
-{
-  "operation": "release.stage",
-  "request_id": "01JREQUEST",
-  "occurred_at": "2026-09-12T10:00:00Z",
-  "input": {
-    "release_id": "01JRELEASE",
-    "schema_version": "1",
-    "ranking_version": "lookup-v1",
-    "collection_version": "sense-v3",
-    "source_manifest_hash": "sha256:BASE64",
-    "sources": [
-      {
-        "source_id": "dictionary-1",
-        "version": "2026-09",
-        "permissions": [
-          "display",
-          "embed",
-          "api_redistribution"
-        ]
-      }
-    ],
-    "required_gates": [
-      "schema",
-      "license",
-      "quality",
-      "vector_reconciliation"
-    ]
-  }
-}
-```
+`append_history_event` accepts only a canonical card or knowledge-node ID, selected sense, action, timestamp, and optional compact outcome, hint count, or misconception category. The adapter retains at most the newest 200 events from the previous 30 days per learner.
 
-Pinned reads never mix releases. Publication locks the singleton pointer, verifies gates and sources, changes lifecycle state, retains the predecessor, and writes an outbox event in one transaction. Quarantine blocks affected publication and rollback immediately.
+Raw queries, passages, writing, answers, conversations, explanations, and recordings are rejected from strategy history. `clear_history` removes all history influence immediately.
 
-## Learner state and privacy
+`load_strategy_snapshot` returns current bookmarks plus eligible compact history. It does not return a stored hidden profile. Level, domain, weak-skill, and priority estimates are reconstructed by the agent and are not written back as independent strategy evidence.
 
-| Family | Operations |
-| --- | --- |
-| Profile | `profile.read`, `preferences.replace` |
-| History | `history.append`, `history.read`, `history.page`, `history.delete`, `history.clear` |
-| Saved senses | `saved_sense.upsert`, `saved_sense.read`, `saved_sense.page`, `saved_sense.mutate`, `saved_sense.delete` |
-| Privacy | `privacy.inventory`, `privacy.create`, `privacy.poll`, `privacy.complete`, `privacy.fail`, `privacy.mint_result` |
+## Attempts, mastery, and scheduling
 
-```json
-{
-  "operation": "history.page",
-  "request_id": "01JREQUEST",
-  "learner_id": "learner_01",
-  "occurred_at": "2026-09-12T10:00:00Z",
-  "input": {
-    "before": {
-      "occurred_at": "2026-09-11T10:00:00Z",
-      "id": "01JLOOKUP"
-    },
-    "limit": 50
-  }
-}
-```
+`record_attempt` atomically consumes one frozen exercise attempt, stores its typed result and evaluator confidence, updates only the demonstrated skill dimensions, and advances the versioned FSRS-style schedule when permitted. Replaying the same idempotency key returns the original result.
 
-```json
-{
-  "operation": "saved_sense.upsert",
-  "request_id": "01JREQUEST",
-  "learner_id": "learner_01",
-  "idempotency": {
-    "key_digest": "sha256:BASE64",
-    "request_fingerprint": "sha256:BASE64",
-    "expires_at": "2026-09-13T10:00:00Z"
-  },
-  "occurred_at": "2026-09-12T10:00:00Z",
-  "input": {
-    "entry_id": "01JSAVED",
-    "sense_id": "01JHOT",
-    "state": "learning",
-    "note_ciphertext": "BASE64",
-    "note_nonce": "BASE64",
-    "key_version": 4,
-    "expected_revision": 3
-  }
-}
-```
+An uncertain or `needs_review` evaluation has no negative mastery effect. Recognition never updates recall, spelling, writing, listening, pronunciation, or cultural pragmatics without direct evidence. Objective correctness and hint use are primary scheduling inputs; response time is optional, bounded, and learner-relative.
 
-Ownership and revision checks occur atomically with mutation. Missing and foreign rows are indistinguishable. History has a non-null expiry and never stores context. Privacy deletion durably records progress and is resumable.
+Stored outcomes are compact. Raw free-form answers and recordings are excluded from long-term learning state unless a separate, explicit retention contract is introduced.
 
-## Feedback, views, and practice
+## Storage and privacy rules
 
-| Family | Operations |
-| --- | --- |
-| Feedback | `feedback.idempotency`, `feedback.write`, `feedback.current`, `feedback.aggregate` |
-| Graph views | `graph_view.create`, `graph_view.read`, `graph_view.page`, `graph_view.replace`, `graph_view.delete` |
-| Practice | `practice.session_create`, `session_read`, `exercise_freeze`, `exercise_read`, `claim`, `submission_idempotency`, `submit`, `mastery`, `progress` |
+Use `utf8mb4`, UTC timestamps with microsecond precision, opaque public IDs, indexed ownership foreign keys, and transactional bookmark and attempt mutations. Encrypt private learner fields with unique authenticated-encryption nonces and versioned keys stored outside MySQL.
 
-```json
-{
-  "operation": "feedback.write",
-  "request_id": "01JREQUEST",
-  "learner_id": "learner_01",
-  "idempotency": {
-    "key_digest": "sha256:BASE64",
-    "request_fingerprint": "sha256:BASE64",
-    "expires_at": "2026-09-13T10:00:00Z"
-  },
-  "occurred_at": "2026-09-12T10:00:00Z",
-  "input": {
-    "event_id": "01JFEEDBACK",
-    "edge_id": "01JEDGE",
-    "relation_version": 3,
-    "dimension": "accuracy",
-    "judgment": "missing_restriction",
-    "comment_ciphertext": "BASE64",
-    "comment_nonce": "BASE64",
-    "key_version": 4
-  }
-}
-```
+Learner deletion covers bookmarks, learning-card revisions, mastery, schedules, and history. Canonical cards and release manifests remain shared public content and are not learner-owned.
 
-```json
-{
-  "operation": "practice.submit",
-  "request_id": "01JREQUEST",
-  "learner_id": "learner_01",
-  "idempotency": {
-    "key_digest": "sha256:BASE64",
-    "request_fingerprint": "sha256:BASE64",
-    "expires_at": "2026-09-13T10:00:00Z"
-  },
-  "occurred_at": "2026-09-12T10:00:00Z",
-  "input": {
-    "session_id": "01JSESSION",
-    "exercise_id": "01JEXERCISE",
-    "attempt_id": "01JATTEMPT",
-    "resolution": "correct",
-    "scheduler_rating": "good",
-    "answer_ciphertext": "BASE64",
-    "answer_nonce": "BASE64",
-    "key_version": 4
-  }
-}
-```
+## Related documents
 
-Feedback ledger and projection update together. View replacement checks owner and ETag. Practice claim replays the outstanding item; submission appends one attempt and advances counters and mastery exactly once. `needs_review` never advances mastery.
-
-## Jobs and idempotency
-
-| Family | Operations |
-| --- | --- |
-| Lookup jobs | `lookup_job.create`, `start`, `complete`, `fail`, `poll` |
-| Durable queue | `job.enqueue`, `get`, `claim`, `heartbeat`, `complete`, `fail`, `replay` |
-| Idempotency | `idempotency.begin`, `complete`, `abandon` |
-
-```json
-{
-  "operation": "job.claim",
-  "request_id": "01JREQUEST",
-  "occurred_at": "2026-09-12T10:00:00Z",
-  "input": {
-    "worker_id": "worker-3",
-    "accepted_kinds": [
-      "lookup.generate",
-      "privacy.export"
-    ],
-    "lease_duration_ms": 30000
-  }
-}
-```
-
-```json
-{
-  "result": "ok",
-  "value": {
-    "job_id": "01JJOB",
-    "kind": "lookup.generate",
-    "payload_version": 3,
-    "payload_ciphertext": "BASE64",
-    "attempt": 1,
-    "lease_token": "BASE64",
-    "lease_expires_at": "2026-09-12T10:00:30Z"
-  }
-}
-```
-
-Jobs persist before external work. Claims use row locking, bounded leases, and worker-bound tokens. Failures store closed codes and retry or become dead. Sensitive payloads are encrypted and erased after completion or expiry.
-
-## Storage rules
-
-Canonical tables cover releases, sources, evidence, lexemes, forms, senses, assertions, relations, and scales. Learner tables cover profiles, preferences, history, saved senses, feedback, graph views, practice, and mastery. Operations tables cover snapshots, lookup jobs, durable jobs, idempotency, outbox, and privacy requests.
-
-Use `utf8mb4`, UTC `DATETIME(6)`, opaque ULID public IDs, numeric internal keys, binary collations for machine values, and indexed ownership foreign keys. JSON is limited to versioned opaque snapshots. Ledgers are append-only and projections transactional. Learner text uses unique authenticated-encryption nonces and versioned keys; equality lookup uses versioned HMACs with secrets outside MySQL. Errors never expose SQL, learner content, credentials, capabilities, hashes, or ciphertext.
+- [System design](../transnet.md)
+- [Qdrant interface](qdrant.md)
+- [Island-port interface](port.md)
+- [Content publishing](../guides/content-publishing.md)

@@ -20,6 +20,6 @@ Provider traces contain only the static provider boundary, operation name, attem
 
 The structured `/v1/lookups` slice uses the `[gemma4]` provider and requests strict JSON Schema output. The configured server must support the OpenAI-compatible `response_format.type = "json_schema"` request field and return JSON text in the first assistant message.
 
-MySQL, Qdrant, encryption, shared-cache, telemetry-exporter, and worker-role configuration does not belong to Transnet. Island-port owns those settings and adapters; see the [MySQL](../interfaces/mysql.md), [Qdrant](../interfaces/qdrant.md), and [Rust port](../interfaces/port.md) contracts.
+The current executable has no MySQL, Qdrant, speech, scheduler, or durable learning-state configuration. Those target capabilities require separately versioned settings for releases, retention, model roles, evaluation rubrics, and scheduler parameters; see the [MySQL](../interfaces/mysql.md), [Qdrant](../interfaces/qdrant.md), and [Island-port](../interfaces/port.md) contracts. Never place credentials or learner content in the checked-in file.
 
 Related: [design](../transnet.md), [Island-port interface](../interfaces/port.md), and [development](development.md).
