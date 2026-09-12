@@ -1,5 +1,7 @@
 # Publish lexical content
 
+Island-port owns this persistence workflow through its MySQL and Qdrant adapters. The current Transnet executable has no database, vector collection, import pipeline, or worker composition.
+
 ## Status
 
 This guide defines the proposed ingestion and publication workflow for Transnet learning content. The workflow is not implemented at the branch point.
@@ -29,7 +31,7 @@ flowchart LR
   stage --> normalize["Normalize without losing source distinctions"]
   normalize --> align["Align forms, lexemes, and senses"]
   align --> validate["Validate evidence, integrity, policy, and safety"]
-  validate --> embed["Build versioned vector collection"]
+  validate --> embed["Build versioned Qdrant collection"]
   embed --> evaluate["Run retrieval and teaching evaluations"]
   evaluate --> approve{"Release gates pass?"}
   approve -->|"No"| quarantine["Quarantine and correct"]
@@ -101,9 +103,9 @@ Required content checks:
 - Near-synonyms include a useful contrast.
 - False friends and common errors identify both the mistaken and correct construction.
 
-## 6. Build the vector collection
+## 6. Build the Qdrant collection
 
-Create a new immutable collection version. Use separate records keyed by sense, embedding purpose, content language, embedding model, and collection version.
+Island-port creates a new immutable Qdrant collection version. Use separate records keyed by sense, embedding purpose, content language, embedding model, and collection version.
 
 Recommended records:
 
@@ -126,7 +128,7 @@ The release cannot publish if license, provenance, schema, critical mistranslati
 
 Mark the vector collection ready, then update the singleton MySQL `active_content_version` to the compatible `(lexicon release, collection version, schema version, ranker version)` tuple.
 
-MySQL and the vector engine cannot switch in one transaction. Every request reads the active tuple and queries its exact collection, so the service never combines mismatched versions. A vector alias may be updated later as an operational convenience.
+MySQL and Qdrant cannot switch in one transaction. Every request reads the active tuple and queries its exact physical collection, so the service never combines mismatched versions. A Qdrant alias may be updated later as an operational convenience.
 
 Retain the prior compatible pair for rollback. Cache keys include the active tuple, so publication does not require unsafe wildcard deletion.
 
@@ -160,6 +162,8 @@ Do not roll back to a release that contains content removed for license or criti
 ## Related documents
 
 - [System design](../transnet.md)
-- [MySQL schema](../reference/mysql-schema.md)
+- [MySQL interface](../interfaces/mysql.md)
+- [Qdrant interface](../interfaces/qdrant.md)
+- [Island-port interface](../interfaces/port.md)
 - [Quality assurance](quality-assurance.md)
 - [Overall plan](../todo.md)

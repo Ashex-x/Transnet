@@ -1,32 +1,11 @@
 # Development and operations
 
-## Prerequisites
+The root [README](../../README.md) owns prerequisites, configuration basics, build commands, verification commands, local startup, and curl examples.
 
-Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start OpenAI-compatible Gemma 4 and TranslateGemma servers at the configured endpoints.
+## Operations
 
-## Verify
+Run the release binary under a process supervisor and preserve `logs/release/transnet.log`. The non-blocking logger replaces that file at each process start. The process handles Ctrl-C and Unix termination for graceful shutdown, and records startup, shutdown, request outcomes, provider resilience events, and fatal server errors through `tracing`.
 
-Run from the repository root:
+The current executable has no TLS termination and must remain loopback-only behind Island-port. MySQL and Qdrant wiring belongs to Island-port, not a future Transnet composition. Request bodies are bounded and request IDs are propagated; see the [configuration guide](configuration.md).
 
-```bash
-cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all-targets
-cargo doc --no-deps
-```
-
-## Run locally
-
-```bash
-cargo run
-```
-
-The default listener is `127.0.0.1:35792`. See the [root README](../../README.md) for curl examples.
-
-## Deploy
-
-Run the binary under a process supervisor and collect standard output. The process handles Ctrl-C and Unix termination for graceful shutdown.
-
-Transnet has no authentication or TLS termination. Run it behind an authenticated TLS edge before public exposure. Request bodies are bounded, request IDs are propagated, and CORS is disabled unless exact browser origins are configured in `[http]`; see the [configuration guide](configuration.md).
-
-Related: [configuration](configuration.md), [design](../transnet.md), and [API contract](../reference/transnet-api.md).
+Related: [configuration](configuration.md), [design](../transnet.md), and [Island-port interface](../interfaces/port.md).

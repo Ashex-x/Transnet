@@ -2,7 +2,7 @@
 
 ## Status
 
-This document defines the target learner-facing behavior for Transnet basic core. A model-only structured lookup now implements the initial card fields, but canonical evidence, persistence, graph exploration, feedback, and practice remain proposed. [System design](../transnet.md) owns architecture; [learning API](../reference/learning-api.md) owns HTTP contracts.
+This document describes learner-facing behavior coordinated by Island-port and Transnet. [System design](../transnet.md) owns the boundary, and the [Island-port interface](../interfaces/port.md) owns the service contract.
 
 ## Audience and language behavior
 
@@ -30,7 +30,7 @@ The first release enables only languages with approved lexical sources, morpholo
 2. Transnet resolves the language, form, lexeme, part of speech, and possible senses.
 3. The result keeps homographs and senses separate and ranks them by context and learner relevance.
 4. The learner receives an evidence-backed English learning card with explicit coverage and provenance.
-5. An authenticated learner may save a selected sense or retain the lookup in private history.
+5. Island-port may save a selected sense or retain the lookup in private history after the compute call.
 
 ### Explore related language
 
@@ -173,7 +173,7 @@ Turning personalization off returns the common evidence-based order without dele
 
 Word history and learner history are distinct. Word history is public sourced lexical content; learner history is private user-owned data.
 
-History is disabled until the learner makes an informed choice. An authenticated learner can choose a retention period, use incognito per lookup, delete one event, clear all history, export data, or delete the account. Context sentences are not retained as history.
+History is disabled until the learner makes an informed choice. Island-port manages retention, incognito lookup, deletion, export, and account workflows. Context sentences are not retained as history.
 
 An incognito lookup has no lookup-history ID. If a client requests saved history while history is disabled, the lookup still succeeds incognito and reports `history_not_saved`.
 
@@ -188,7 +188,8 @@ Supporting measures include successful sense selection, useful card coverage, gr
 ## Related documents
 
 - [System design](../transnet.md)
-- [Learning API](../reference/learning-api.md)
-- [MySQL schema](../reference/mysql-schema.md)
+- [Island-port interface](../interfaces/port.md)
+- [MySQL interface](../interfaces/mysql.md)
+- [Qdrant interface](../interfaces/qdrant.md)
 - [Quality assurance](../guides/quality-assurance.md)
 - [Overall plan](../todo.md)

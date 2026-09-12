@@ -131,24 +131,48 @@ impl Readiness for FixedReadiness {
 }
 
 #[test]
-fn openapi_is_parseable_and_describes_only_default_runtime_routes() {
+fn openapi_is_parseable_and_describes_the_complete_no_auth_contract() {
   let spec = openapi();
 
   assert_eq!(spec["openapi"], "3.1.0");
   assert_eq!(spec["info"]["title"], "Transnet HTTP API");
-  assert!(spec["info"]["description"]
-    .as_str()
-    .is_some_and(|description| description.contains("optional application-state injection")));
-  assert!(spec["info"]["description"].as_str().is_some_and(
-    |description| description.contains("no persistence, vector-database, or Web UI claim")
-  ));
+  assert_eq!(spec["security"], json!([]));
+  assert!(spec["components"].get("securitySchemes").is_none());
+  assert_eq!(spec["x-transnet-boundary"]["authentication"], "none");
 
   let paths = spec["paths"].as_object().unwrap();
   let actual_paths = paths.keys().cloned().collect::<BTreeSet<_>>();
-  let expected_paths = ["/health", "/livez", "/readyz", "/translate", "/v1/lookups"]
-    .into_iter()
-    .map(str::to_string)
-    .collect::<BTreeSet<_>>();
+  let expected_paths = [
+    "/health",
+    "/livez",
+    "/readyz",
+    "/translate",
+    "/v1/lookups",
+    "/v1/lookup-jobs/{job_id}",
+    "/v1/senses/{sense_id}",
+    "/v1/graph",
+    "/v1/graph/nodes/{kind}/{id}/neighbors",
+    "/v1/graph-edges/{edge_id}/feedback",
+    "/v1/history",
+    "/v1/history/{lookup_id}",
+    "/v1/saved-senses",
+    "/v1/saved-senses/{sense_id}",
+    "/v1/practice/sessions",
+    "/v1/practice/sessions/{session_id}/next",
+    "/v1/practice/sessions/{session_id}/current",
+    "/v1/practice/sessions/{session_id}/attempts",
+    "/v1/progress",
+    "/v1/graph-views",
+    "/v1/graph-views/{view_id}",
+    "/v1/me",
+    "/v1/me/preferences",
+    "/v1/me/export",
+    "/v1/privacy-requests/{request_id}",
+    "/v1/privacy-requests/{request_id}/result",
+  ]
+  .into_iter()
+  .map(str::to_string)
+  .collect::<BTreeSet<_>>();
   assert_eq!(actual_paths, expected_paths);
   assert!(paths["/health"].get("get").is_some());
   assert!(paths["/livez"].get("get").is_some());
@@ -156,10 +180,6 @@ fn openapi_is_parseable_and_describes_only_default_runtime_routes() {
   assert!(paths["/translate"].get("post").is_some());
   assert!(paths["/v1/lookups"].get("post").is_some());
 
-  assert_eq!(
-    spec["x-transnet-runtime-scope"]["implementedPaths"],
-    json!(["/health", "/livez", "/readyz", "/translate", "/v1/lookups"])
-  );
   assert_eq!(spec["x-transnet-cors"]["default"], "disabled");
   assert_eq!(
     spec["x-transnet-cache-policy"]["description"],

@@ -1,5 +1,7 @@
 # Quality assurance
 
+This guide covers the Island-port product around Transnet, including MySQL, Qdrant, privacy, persistence, feedback, practice, and worker behavior. The current Transnet executable implements only the applicable HTTP, provider-resilience, schema-validation, and redaction subset.
+
 ## Status
 
 This guide defines the proposed evaluation and release process for Transnet learning features. The evaluation harness and datasets are not implemented at the branch point.
@@ -17,7 +19,7 @@ Version and retain:
 - Prompt-injection and sensitive-content suite.
 - API contract and failure-mode fixtures.
 - Load and dependency-failure profiles.
-- Published lexicon, vector, prompt, model, ranker, rubric, evaluator, and scheduler versions.
+- Published lexicon, Qdrant collection, prompt, model, ranker, rubric, evaluator, and scheduler versions.
 
 Test data must be licensed for evaluation and must not contain private production queries unless a separate consent and de-identification process permits them.
 
@@ -114,7 +116,7 @@ Product evaluation measures delayed recall and correct use in unseen contexts af
 Test:
 
 - Cross-account reads and writes return the same `404` as absent private resources.
-- Session rotation, reuse detection, logout, expiry, and account deletion.
+- Island-port credential lifecycle, expiry, and account deletion.
 - CSRF, credentialed CORS, origin validation, and cookie configuration.
 - SQL, JSON, Unicode, prompt, retrieved-content, and output-rendering injection.
 - Raw query, context, answer, note, comment, token, and identity leakage into logs or traces.
@@ -133,13 +135,13 @@ Expected fallbacks:
 | --- | --- |
 | LLM unavailable | Deterministic card or typed retryable error |
 | Vector unavailable | Exact, morphology, phrase, and full-text lookup continue |
-| MySQL unavailable | Readiness fails and authenticated writes fail closed |
+| MySQL unavailable | Authoritative reads and writes fail closed; vector payloads never substitute for canonical or private state |
 | Cache unavailable | Canonical services continue under bounded concurrency |
 | Invalid model output | One repair attempt, then partial or deterministic fallback |
 | Feedback worker delayed | Personal projection remains correct and aggregate age is visible |
 | Uncertain grader | `needs_review` and no mastery penalty |
 | Oversized graph | Ranked truncation and an expansion cursor |
-| Database/vector drift | Active version filtering, alert, reconciliation, and rebuild |
+| MySQL/Qdrant drift | Active version filtering, alert, reconciliation, and rebuild |
 
 Verify deadline propagation, retry classification, circuit breaking, request coalescing, job leases, dead-job replay, and no duplicate billable or state-changing work.
 
@@ -167,8 +169,8 @@ Verify deadline propagation, retry classification, circuit breaking, request coa
 - A reviewed practice sample is at least 95% clearly answerable and contains no answer leakage.
 - No attempt advances mastery more than once under retries or concurrency.
 - Feedback is idempotent, reversible, and pinned to an edge version.
-- Authorization, privacy, source-removal, degraded-dependency, load, and injection suites pass.
-- Application, prompt, content release, ranker, scheduler, and vector collection rollback is tested.
+- Island-port permission, privacy, source-removal, degraded-dependency, load, and injection suites pass.
+- Application, prompt, content release, ranker, scheduler, and Qdrant collection rollback is tested.
 
 These are initial product gates, not permanent ceilings. Each language can adopt stricter thresholds as the benchmark grows. Threshold changes are reviewed and versioned rather than adjusted after seeing a failing release.
 
@@ -181,8 +183,8 @@ Monitor:
 - Model schema validity, rejected unsupported assertions, repair, fallback, tokens, and cost.
 - Graph size, truncation, relation distribution, feedback rate, and aggregate lag.
 - Practice completion, correctness by skill, hints, lapses, and scheduler version.
-- Source freshness, outbox age, dead jobs, vector synchronization, and reconciliation mismatch.
-- Authentication, authorization, rate-limit, and abuse outcomes without learner content.
+- Source freshness, outbox age, dead jobs, Qdrant synchronization, and reconciliation mismatch.
+- Island-port rate-limit and abuse outcomes without learner content.
 
 Production data identifies regressions but does not automatically become training or evaluation data. Sampling private learner content requires separate consent, minimization, access controls, and retention.
 
@@ -202,6 +204,8 @@ Every published content, prompt, model, ranker, evaluator, or scheduler release 
 
 - [System design](../transnet.md)
 - [Learning experience](../product/learning-experience.md)
-- [Learning API](../reference/learning-api.md)
+- [Island-port interface](../interfaces/port.md)
+- [MySQL interface](../interfaces/mysql.md)
+- [Qdrant interface](../interfaces/qdrant.md)
 - [Content publishing](content-publishing.md)
 - [Overall plan](../todo.md)
