@@ -12,6 +12,8 @@ pub mod application;
 pub mod config;
 /// Pure business types and invariants.
 pub mod domain;
+/// Process-wide structured file logging.
+pub mod logger;
 /// Interfaces implemented by external infrastructure.
 pub mod ports;
 /// OpenAI-compatible model clients and routing.
