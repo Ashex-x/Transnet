@@ -58,8 +58,6 @@ pub(crate) struct LookupRequest {
   #[serde(default)]
   detail: Detail,
   include: Option<Vec<IncludeSection>>,
-  #[serde(default)]
-  history_mode: HistoryMode,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -95,14 +93,6 @@ enum IncludeSection {
   Relations,
   WordHistory,
   PracticePreview,
-}
-
-#[derive(Debug, Clone, Copy, Default, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum HistoryMode {
-  Save,
-  #[default]
-  Incognito,
 }
 
 #[derive(Debug, Serialize)]
@@ -399,8 +389,10 @@ pub(crate) async fn lookup(
 
   if let Some(service) = state.canonical_lookup_service() {
     if let Some(canonical_request) = canonical_request(&request, &input) {
-      let eligibility = canonical_cache_eligibility(&request);
-      return match service.lookup(canonical_request, eligibility).await {
+      return match service
+        .lookup(canonical_request, CanonicalLookupCacheEligibility::public())
+        .await
+      {
         Ok(card) => {
           let response = build_canonical_response(&request, card);
           problem::no_store((StatusCode::OK, Json(response)).into_response())
@@ -494,9 +486,6 @@ fn build_response(
   warnings.push(
     "This result is model-generated and is not backed by the canonical lexicon yet.".to_string(),
   );
-  if matches!(request.history_mode, HistoryMode::Save) {
-    warnings.push("History is not stored by the current anonymous basic-core slice.".to_string());
-  }
   if request
     .include
     .as_ref()
@@ -602,13 +591,6 @@ fn canonical_candidate_limit(detail: Detail) -> usize {
   }
 }
 
-fn canonical_cache_eligibility(request: &LookupRequest) -> CanonicalLookupCacheEligibility {
-  match request.history_mode {
-    HistoryMode::Save => CanonicalLookupCacheEligibility::with_history(),
-    HistoryMode::Incognito => CanonicalLookupCacheEligibility::incognito(),
-  }
-}
-
 fn build_canonical_response(
   request: &LookupRequest,
   card: CanonicalLookupCard,
@@ -655,9 +637,6 @@ fn canonical_warnings(request: &LookupRequest) -> Vec<String> {
     "This result contains deterministic canonical lexical content and no generated explanation."
       .to_string(),
   ];
-  if matches!(request.history_mode, HistoryMode::Save) {
-    warnings.push("History is not stored by the current anonymous basic-core slice.".to_string());
-  }
   if request.include.as_ref().is_some_and(|sections| {
     sections.contains(&IncludeSection::Relations) || sections.contains(&IncludeSection::WordHistory)
   }) {
