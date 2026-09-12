@@ -1,0 +1,15 @@
+# Transnet 中文文档
+
+本目录提供 Transnet 核心接口的中文说明。英文文档仍是规范来源；中文内容与英文接口保持同步。
+
+## 接口
+
+- [Island-port 接口](island-port-interface_cn.md)：无认证的完整 HTTP 合同、请求头、错误和 JSON 示例。
+- [MySQL 适配器接口](mysql-interface_cn.md)：持久化操作、事务约束和请求载荷。
+- [Qdrant 适配器接口](qdrant-interface_cn.md)：集合、向量点、检索、校验、发布和清理。
+
+## 规范
+
+- [仓库约定 v1.0.1](conventions-v1.0.1_cn.md)：Rust、文档、验证和 Git 规则。
+
+英文规范文件：[`docs/interfaces/`](../docs/interfaces/)、[`docs/reference/`](../docs/reference/)。

@@ -17,6 +17,8 @@
 ## 仓库与文档
 
 - Rust 位于 `src/`，集成测试位于 `tests/`，配置位于 `config/`，手写文档位于 `docs/`。
+- 英文文档放在 `docs/`；每种本地化语言使用独立的 `docs_<language>/` 目录，例如中文使用 `docs_cn/`。
+- 本地化目录中的每个内部文件都使用语言后缀，例如 `index_cn.md`、`port_cn.md`；其他语言使用对应后缀。
 - 文件名应简短、描述性强且尽量唯一；禁止重复文档。
 - 系统设计位于 `docs/transnet.md`，任务指南位于 `docs/guides/`，人类可读契约位于 `docs/interfaces/`，机器契约位于 `docs/reference/`。
 - 每个契约只有一个权威归属；其他文档只摘要并链接，不复制正文。

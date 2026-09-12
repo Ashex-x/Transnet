@@ -18,6 +18,8 @@ These rules apply to the entire repository. A later versioned conventions file s
 ## Repository and documentation
 
 - Keep Transnet as one Cargo package: Rust in `src/`, integration tests in `tests/`, configuration in `config/`, and hand-written documentation in `docs/`.
+- Keep English documentation in `docs/`; keep each localized language in its own `docs_<language>/` tree, such as `docs_cn/` for Chinese.
+- Use the language suffix on every localized inner filename, such as `index_cn.md` and `port_cn.md`; use the corresponding suffix for other languages.
 - Use brief, descriptive, preferably unique filenames; avoid repeated generic names and duplicate documents.
 - Keep system design in `docs/transnet.md`, task instructions in `docs/guides/`, human contracts in `docs/interfaces/`, machine contracts in `docs/reference/`, and Rust API detail in source comments and rustdoc.
 - Give each contract one authoritative owner; other documents summarize and link instead of copying it.
