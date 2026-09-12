@@ -53,6 +53,8 @@ MySQL 是精简结构化词汇内容和发布状态的权威存储。它不包�
 
 输入规范化属于 Transnet 运行时。适配器只接收有界、排序后的派生形式，绝不接收原始查询、中间变换或上下文。精确规范形式和别名优先于屈折、拼写修正和宽松别名；`C`、`C++`、`C#` 等有意义符号不合并。
 
+本操作与 `get_sense` 返回相同的精简 `BasicCard` 结构，包括规范形式与别名、精简定义与翻译、发音与形态摘要、短规范例句与用法说明、领域与证据元数据、知识根、修订和发布；关系详情留在 Qdrant。
+
 请求：
 
 ```json
@@ -61,7 +63,7 @@ MySQL 是精简结构化词汇内容和发布状态的权威存储。它不包�
   "normalizer_version": "unicode-nfkc-v2",
   "source_language": "en",
   "explanation_language": "zh-CN",
-  "english_dialect": "en-US",
+  "dialect": "en-US",
   "content_release": "knowledge-2026-09",
   "limit": 5
 }
@@ -81,13 +83,18 @@ MySQL 是精简结构化词汇内容和发布状态的权威存储。它不包�
           "card_id": "card_sweltering_en_adj_01",
           "sense_id": "sense_sweltering_hot_01",
           "canonical_form": "sweltering",
+          "aliases": ["oppressively hot"],
           "language": "en",
           "part_of_speech": "adjective",
           "translations": [{"language": "zh-CN", "text": "酷热的"}],
           "definitions": ["uncomfortably hot, especially because of the weather"],
+          "pronunciations": [{"dialect": "en-US", "ipa": "/ˈswɛltərɪŋ/"}],
+          "forms": [{"form": "swelteringly", "label": "adverb"}],
+          "examples": [{"text": "We waited until evening to leave the sweltering house.", "translation": "我们一直等到傍晚才离开闷热难耐的房子。"}],
+          "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
           "knowledge_root_ids": ["node_sweltering_hot_01"],
-          "cefr": "B2",
           "domain_ids": ["domain_weather"],
+          "evidence_ids": ["evidence_dictionary_1042"],
           "revision": 3
         }
       }
@@ -102,7 +109,7 @@ MySQL 是精简结构化词汇内容和发布状态的权威存储。它不包�
 
 ## get_sense
 
-返回一个精简规范词义修订；详细关系留在 Qdrant。
+使用共享 `BasicCard` 结构返回一个精简规范词义修订。
 
 请求：
 
@@ -110,7 +117,7 @@ MySQL 是精简结构化词汇内容和发布状态的权威存储。它不包�
 {
   "sense_id": "sense_sweltering_hot_01",
   "explanation_language": "zh-CN",
-  "english_dialect": "en-US",
+  "dialect": "en-US",
   "content_release": "knowledge-2026-09"
 }
 ```
@@ -124,14 +131,18 @@ MySQL 是精简结构化词汇内容和发布状态的权威存储。它不包�
     "card_id": "card_sweltering_en_adj_01",
     "sense_id": "sense_sweltering_hot_01",
     "canonical_form": "sweltering",
+    "aliases": ["oppressively hot"],
     "language": "en",
     "part_of_speech": "adjective",
     "definitions": ["uncomfortably hot, especially because of the weather"],
     "translations": [{"language": "zh-CN", "text": "酷热的"}],
     "pronunciations": [{"dialect": "en-US", "ipa": "/ˈswɛltərɪŋ/"}],
     "forms": [{"form": "swelteringly", "label": "adverb"}],
+    "examples": [{"text": "We waited until evening to leave the sweltering house.", "translation": "我们一直等到傍晚才离开闷热难耐的房子。"}],
+    "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
     "knowledge_root_ids": ["node_sweltering_hot_01"],
     "domain_ids": ["domain_weather"],
+    "evidence_ids": ["evidence_dictionary_1042"],
     "revision": 3
   },
   "content_release": "knowledge-2026-09"

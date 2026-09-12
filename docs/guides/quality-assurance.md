@@ -16,9 +16,9 @@ Measure lexical-unit versus sentence-or-passage routing, including ambiguous sho
 
 ## Canonical retrieval evaluation
 
-Measure exact sense resolution, language detection, morphology, spelling suggestions, aliases, transliteration, sparse technical-term recall, dense cross-lingual recall, reranking, evidence eligibility, and degraded MySQL-only behavior. When the future writing and speech operations are released, evaluate meaning preservation, cultural scope, generated-voice labeling, acoustic evidence, and uncertainty without retaining source text or audio.
+Measure exact sense and concept resolution, language detection, morphology, spelling suggestions, aliases, transliteration, sparse technical-term recall, dense cross-lingual recall, reranking, evidence eligibility, and degraded MySQL-only behavior. Domain-assessment tests cover `general`, `domain_specific`, `mixed`, and `uncertain`, including familiar words used technically and term-like strings with weak evidence.
 
-Relationship tests verify endpoint existence, release compatibility, direction, sense, evidence, language, region, period, domain, confidence, and verification state. Adversarial cases ensure intensity is not taxonomy and vector proximity is not promoted to translation, synonymy, hierarchy, causation, shared mechanism, or cultural fact. Bounded exploration tests one selected root at a time and separates verified from exploratory results.
+Relationship tests verify endpoint existence, release compatibility, direction, applicable sense and domain, conditions, evidence, language, region, period, confidence, provenance, and verification state. Adversarial cases ensure intensity is not taxonomy and vector proximity is not promoted to translation, synonymy, hierarchy, causation, shared mechanism, or cultural fact. Page-composition tests start from one selected root, omit weak sections, rank groups by purpose, validate every step of a short connection path, and keep verified, inferred, and exploratory results visibly separate.
 
 ## Content, privacy, and injection safety
 
@@ -30,11 +30,11 @@ Treat request text, retrieved documents, evidence, and model output as untrusted
 
 Inject MySQL, Qdrant node, Qdrant edge, and model failures; invalid structured output; rate limits; stale releases; and partial publication. Expected behavior includes bounded schema repair, deterministic fallback, explicit uncertainty, no partial activation, no unsupported relationship generation, and no request-content persistence.
 
-A release passes only when translation, routing, canonical-card, retrieval, relationship, evidence, degraded-mode, non-persistence, activation, rollback, schema-compatibility, and injection suites pass. Production monitoring records only aggregate operational outcomes and contains no request content or raw provider bodies.
+A release passes only when translation, routing, canonical-card, sense and concept resolution, domain assessment, retrieval, relationship semantics, page composition, evidence, degraded-mode, non-persistence, activation, rollback, schema-compatibility, and injection suites pass. Production monitoring records only aggregate operational outcomes and contains no request content or raw provider bodies.
 
 ## Related documents
 
 - [System design](../transnet.md)
-- [Service behavior](../product/learning-experience.md)
+- [Service behavior](../product/service-behavior.md)
 - [Content publishing](content-publishing.md)
 - [Service interface](../interfaces/port.md)

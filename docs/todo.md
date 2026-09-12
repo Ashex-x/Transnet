@@ -1,126 +1,119 @@
-# Transnet service delivery plan
+# Transnet delivery plan
 
-中文：[Transnet 服务交付计划](../docs_cn/todo_cn.md)
+中文：[Transnet 交付计划](../docs_cn/todo_cn.md)
 
-This plan turns the authoritative [Transnet service design](transnet.md) into ordered, verifiable delivery slices. It tracks repository state rather than aspiration: an item is checked only when its code, tests, and applicable contracts are synchronized.
+This plan turns the authoritative [Transnet design](transnet.md) into ordered, verifiable delivery slices. It tracks repository state rather than aspiration: an item is checked only when its code, tests, and applicable contracts agree.
 
-Status: active implementation plan. Translation and model-backed lookup run today; canonical storage, release-pinned retrieval, and the extended stateless operations are not composed by the executable.
+Status: active implementation plan. The checked-in runtime provides loopback translation and model-backed structured lookup. Canonical MySQL/Qdrant grounding, relationship-first page composition, and domain-aware expansion remain target capabilities.
 
 ## Delivery rules
 
-- Preserve the service boundary in every slice: Transnet owns canonical language knowledge and no user or product state.
-- Complete milestones in order. A later milestone may be prototyped, but it is not releasable until the earlier exit criteria pass.
-- Deliver vertical slices through domain types, ports, adapters, runtime composition, HTTP behavior, observability, tests, and documentation rather than declaring an isolated layer complete.
-- Keep runtime availability explicit. Target OpenAPI coverage does not mean that a route is enabled.
-- Update English and Chinese documentation together when a contract, configuration field, or process boundary changes.
+- Keep the product focused on two experiences: translation for connected text and a relationship-centered translation-wiki page for a resolved lexical sense or domain concept.
+- Preserve the stateless boundary. Request text, context, derived vectors, and intermediate analysis exist only for one bounded request and never become canonical or user data.
+- Deliver vertical slices through types, ports, adapters, runtime composition, HTTP behavior, observability, tests, and bilingual documentation.
+- Keep current and target behavior explicit. A target OpenAPI route or schema is not evidence that the checked-in executable enables it.
+- Keep verified, inferred, and exploratory relationships distinct. Only the publication workflow may create or change canonical knowledge.
+- Update English and Chinese documents together when product semantics, contracts, configuration, or release behavior changes.
 
 ## Verified baseline
 
 - [x] Private loopback HTTP process, request bounds, exact-origin CORS, request IDs, health probes, graceful shutdown, and redacted structured tracing.
-- [x] Length-based translation-provider routing with bounded resilience and closed operational metrics.
+- [x] Length-based translation-provider routing with bounded resilience and aggregate operational metrics.
 - [x] Model-backed structured lexical lookup in the default executable.
-- [x] Library foundations and process-local test adapters for canonical lookup, sense detail, content releases, and bounded graph reads; these are dependency-injected and are not production storage composition.
-- [x] Target human contracts and OpenAPI for translation, canonical lookup, sense detail, and bounded graph reads.
-- [ ] Production MySQL and Qdrant adapters, an ingestion pipeline, paired release activation, and full target wire semantics.
+- [x] Library foundations and process-local test adapters for canonical lookup, sense detail, content releases, and bounded graph reads; these are not production storage composition.
+- [x] Target human and machine contracts for translation, lookup, sense detail, and bounded graph reads.
+- [ ] Production MySQL and Qdrant adapters, publication and paired activation, relationship-page composition, and complete target wire semantics.
 
-## Milestone 0: enforce the stateless boundary
+## Milestone 0: enforce the focused stateless boundary
 
-This is the prerequisite for all new storage and API work. Existing product-owned foundations must not become accidental service commitments.
+- [ ] Remove learner profiles, history, saved vocabulary, mastery, scheduling, exercises, practice sessions, coaching, graph layouts, private feedback, writing evaluation, and speech or pronunciation modules from reachable service APIs and reusable public domain types.
+- [ ] Remove asynchronous lookup jobs and durable work paths that can retain queries, context, derived vectors, model output, or provider results; lookup stays within the request lifetime.
+- [ ] Remove transitional user-oriented fields and reject cookies, end-user credentials, user or account identifiers, private-state fields, and unknown fields without echoing their values.
+- [ ] Audit logs, traces, metrics, caches, queues, errors, debug formatting, and provider telemetry for request content, context, intermediate analysis, credentials, and caller identity.
+- [ ] Synchronize code comments, tests, human contracts, and OpenAPI around translation plus relationship-centered lookup only.
 
-- [ ] Remove learner profile, history, saved vocabulary, mastery, scheduling, practice-session, graph-layout, and private-feedback domain, application, port, and adapter code from Transnet.
-- [ ] Remove asynchronous lookup-job and durable-work paths that can retain request queries or provider results; keep lookup execution within the bounded request lifetime.
-- [ ] Remove transitional user-oriented lookup fields and sections, including learner level, word history, and practice preview, from request types, provider schemas, responses, and tests.
-- [ ] Remove graph feedback capabilities and other product-owned metadata from public canonical graph shapes where they are not canonical evidence.
-- [ ] Reject cookies, end-user bearer credentials, user or account identifiers, private-state fields, and unknown fields without echoing their values.
-- [ ] Audit logs, traces, metrics, caches, queues, debug formatting, and errors so request text, context, provider bodies, credentials, caller identity, and audio cannot cross a persistence boundary. Cache only release-pinned canonical data addressed by canonical identifiers.
-- [ ] Delete or rewrite tests and source comments that describe Transnet as the owner of personal state, then synchronize the human and machine contracts.
+Exit criteria: no reachable route or reusable public service API accepts product-owned state or exposes an out-of-scope learning module; no request-derived content can reach a durable port; boundary rejection and non-persistence tests pass.
 
-Exit criteria: no reachable route or reusable public service API accepts product-owned state; no request payload or derived request vector can reach a durable port; boundary rejection and non-persistence tests pass.
+## Milestone 1: freeze translation and intent routing
 
-## Milestone 1: freeze request semantics and routing
-
-- [ ] Implement the shared success and error envelopes, request metadata, strict unknown-field rejection, language-tag validation, and safe status mapping defined by the service interface.
+- [ ] Implement shared success and error envelopes, strict unknown-field rejection, language-tag validation, request metadata, and safe status mapping.
 - [ ] Implement a versioned request-local normalizer with Unicode normalization, language-aware case folding, whitespace and punctuation handling, meaningful-symbol preservation, and bounded derived forms.
-- [ ] Implement typed intent routing: confident lexical units use canonical lookup, while clauses, sentences, passages, and ambiguous short fragments default to translation.
-- [ ] Align POST `/translate` with the target response, including detected language, formatting and register handling, and no more than two material one-sentence tips.
-- [ ] Align lookup, sense, graph, and neighbor request and response schemas with the target contract; remove transitional wire aliases after a documented compatibility decision.
-- [ ] Report route availability and required versus optional dependencies accurately through readiness without exposing infrastructure details.
-- [ ] Pin response metadata to schema, normalizer, model, retrieval configuration, and content-release versions as applicable.
+- [ ] Route a confident word, term, idiom, phrasal verb, or established phrase to lookup; route clauses, sentences, passages, and ambiguous short fragments to translation.
+- [ ] Align `POST /translate` with the target response: preserve meaning, tone, terminology, register, paragraph structure, protected spans, and formatting; return at most two material one-sentence tips and at most one labeled alternative.
+- [ ] Add request-local chunk planning and a disposable terminology ledger for long or difficult text without creating translation memory.
+- [ ] Pin response metadata to the applicable schema, normalizer, model, prompt, and retrieval versions.
 
-Exit criteria: contract tests cover every enabled route and error envelope; routing evaluation covers words, lexical phrases, symbols, sentences, passages, and ambiguous fragments; runtime docs identify the exact enabled subset.
+Exit criteria: contract and routing tests cover lexical units, technical symbols, phrases, ambiguous fragments, sentences, and passages; translation evaluation covers fidelity, naturalness, terminology, structure, register, and tip limits.
 
-## Milestone 2: build the canonical MySQL core
+## Milestone 2: build canonical identity and MySQL basic cards
 
-- [ ] Define migrations and production repository adapters for cards, senses, forms, aliases, definitions, translations, pronunciations, morphology, examples, usage notes, canonical domains, evidence, immutable revisions, and release manifests.
-- [ ] Make stable card, sense, domain, evidence, and revision IDs deterministic under a documented versioned policy; never use normalized query strings as identity.
-- [ ] Implement exact canonical and alias resolution before bounded inflection, spelling-correction, transliteration, or relaxed-alias candidates.
-- [ ] Implement draft staging, collision detection, evidence and license validation, quarantine, correction as a new revision, and immutable retention.
-- [ ] Return a concise release-pinned basic card from MySQL without requiring a model or Qdrant.
-- [ ] Add configuration, readiness probes, migrations, test fixtures, and failure mapping without exposing credentials or storage internals.
+- [ ] Define migrations and production adapters for cards, senses, forms, aliases, definitions, translations, pronunciation, morphology, examples, usage notes, domains, evidence, immutable revisions, and release manifests.
+- [ ] Make card, sense, concept-root, domain, evidence, and revision IDs stable under a documented versioned policy; never use a normalized query string as identity.
+- [ ] Resolve exact canonical forms and aliases before bounded inflection, spelling correction, transliteration, and semantic candidates.
+- [ ] Keep homographs, parts of speech, phrase-level meanings, and field-specific senses separate; preserve compositional versus phrase-level meaning.
+- [ ] Return a concise, release-pinned basic card that remains useful without Qdrant or an LLM.
+- [ ] Implement draft staging, collision and license checks, quarantine, correction by new revision, immutable retention, readiness, fixtures, and safe failure mapping.
 
-Exit criteria: a staged canonical release can be built reproducibly; exact lookup and sense reads work from MySQL alone; migration, collision, evidence, quarantine, and immutability tests pass.
+Exit criteria: exact lookup and sense reads work from MySQL alone; ambiguous forms return ranked candidates or clarification; publication, collision, evidence, quarantine, and immutability tests pass.
 
-## Milestone 3: build the Qdrant projection and safe retrieval
+## Milestone 3: publish the typed relationship model
 
-- [ ] Build deterministic immutable node collections before edge collections from published canonical content only.
-- [ ] Store named cross-lingual dense vectors and sparse lexical vectors with release, language, dialect, region, period, domain, evidence, and verification payloads.
-- [ ] Validate every typed edge for endpoint existence, direction, restrictions, evidence, confidence, verification state, and release compatibility.
-- [ ] Implement exact, sparse, dense, hybrid, endpoint, and reranked retrieval with filters applied before limits.
-- [ ] Implement shallow one-root graph expansion and opaque bounded pagination; keep taxonomy distinct from intensity dimensions and other typed relations.
-- [ ] Keep verified relationships separate from exploratory associations in storage, ranking, response shapes, and evaluation. Similarity must never establish a canonical fact.
-- [ ] Add a production Qdrant adapter, configuration, readiness probes, deterministic rebuild tests, and dependency-failure mapping.
+- [ ] Define extensible node types for lexical senses, phrases, terms, concepts, phenomena, mechanisms, processes, equations, quantities, materials, instruments, methods, technologies, applications, standards, organizations, people, places, grammar patterns, collocations, idioms, metaphors, misconceptions, and domains.
+- [ ] Define relation types and their direction, inverse, symmetry, transitivity, causality, applicable sense and domain, conditions, evidence requirements, confidence, provenance, and verification rules.
+- [ ] Cover lexical naming, translation equivalence, taxonomy, part-whole, named intensity, contrast, syntax, collocation, morphology, suitability, cultural extension, terminology, domain membership, mechanism, causation, dependency, implementation, application, measurement, and standardization.
+- [ ] Build deterministic immutable Qdrant node collections before edge collections, using named cross-lingual dense vectors and sparse lexical vectors from published content only.
+- [ ] Validate endpoint existence, release compatibility, duplicate typed edges, direction, scope, conditions, evidence, confidence, verification state, and embedding metadata.
+- [ ] Reconcile MySQL roots with Qdrant hashes and endpoint coverage, then atomically activate or roll back one compatible release trio.
 
-Exit criteria: Qdrant can be rebuilt from one MySQL release with stable hashes; retrieval is release-pinned and filter-safe; adversarial tests prove that vector proximity is never promoted into a verified relationship.
+Exit criteria: the projection rebuilds reproducibly from one canonical release; every verified relationship is named, scoped, evidence-backed, and release-pinned; partial or incompatible releases cannot activate.
 
-## Milestone 4: activate paired releases and compose the runtime
+## Milestone 4: implement bounded relationship retrieval
 
-- [ ] Reconcile MySQL revisions, Qdrant node and edge hashes, endpoint coverage, embedding metadata, schema compatibility, and an authenticated manifest before activation.
-- [ ] Atomically select one compatible MySQL/Qdrant release pair for new requests while in-flight requests remain pinned to their starting release.
-- [ ] Implement quarantine, failed-publication cleanup, correction, retention, and rollback by selecting an unchanged retained pair.
-- [ ] Compose the production MySQL and Qdrant adapters into the executable and enable canonical lookup, sense, graph, and neighbor routes only when their required dependencies are ready.
-- [ ] Return explicit MySQL-only degraded lookup responses when Qdrant is unavailable; never fill missing relationships with generated claims.
-- [ ] Exercise stale, partial, mismatched, unavailable, and rollback states without partial activation or cross-release reads.
+- [ ] Implement exact, sparse, dense, hybrid, endpoint, and reranked retrieval with release, state, language, dialect, region, period, domain, evidence, and verification filters applied before limits.
+- [ ] Resolve one canonical root before expansion and return only relationships with an explicit useful path back to that root.
+- [ ] Support purpose-ranked direct groups and short evidence-backed paths; require every intermediate step to have a named relationship and independently eligible evidence.
+- [ ] Keep arbitrary-depth traversal, unrestricted neighbor dumps, shortest-path inference, and mutable graph transactions outside the service contract.
+- [ ] Separate verified canonical edges from request-local inferred synthesis and exploratory vector or model proposals in storage, response shapes, ranking, and presentation.
+- [ ] Return an explicit MySQL-only degraded card when Qdrant is unavailable, with no invented replacement relationships.
 
-Exit criteria: a reconciled pair can be published, served, degraded safely, and rolled back without mutation; readiness and response metadata report the active capability and release accurately.
+Exit criteria: retrieval is bounded, release-pinned, filter-safe, and useful for one selected root; adversarial tests prove that similarity never establishes translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
 
-## Milestone 5: ground model-assisted responses and gate the core release
+## Milestone 5: compose relationship-centered translation-wiki pages
 
-- [ ] Split translation, routing, lexical analysis, relationship explanation, and curation into bounded model roles with versioned schemas, prompts, limits, and evaluation criteria.
-- [ ] Build request-local context only from eligible release-pinned canonical records and treat request text, retrieved material, and model output as untrusted data.
-- [ ] Add deterministic structured-output validation, bounded repair, explicit uncertainty, and safe failure when repair is exhausted.
-- [ ] Prevent generated text and similarity scores from becoming canonical content outside the publication workflow.
-- [ ] Build versioned evaluation datasets for routing, translation, lexical resolution, retrieval, evidence, cultural scope, prompt injection, degraded dependencies, and schema compatibility.
-- [ ] Prove request non-persistence across MySQL, Qdrant, caches, logs, traces, metrics, queues, backups, and provider telemetry.
-- [ ] Run formatting, linting, tests, rustdoc, contract checks, publication reconciliation, rollback drills, and bilingual documentation checks as release gates.
+- [ ] Add a bounded domain assessment after sense resolution with `general`, `domain_specific`, `mixed`, or `uncertain`, validated candidate domain IDs, and a concise reason.
+- [ ] Resolve multilingual terms and aliases to shared concepts while preserving preferred term, translated term, alias, region, discipline, and usage status.
+- [ ] Rank and group only useful supported content: meaning, terminology, taxonomy or degree, contrasts, valency, collocations, suitability, morphology, cultural extensions, mechanisms, neighboring phenomena, applications, measurements, standards, and usage conventions.
+- [ ] Use progressive disclosure: begin with the basic card or concept summary, then high-value direct groups, optional named short paths, and a visibly separate exploratory section.
+- [ ] Version the router, resolver, domain assessor, ranker, composer, prompts, schemas, and repair policy; validate structure, scope, evidence labels, concision, and uncertainty deterministically.
+- [ ] Allow request-local generated examples and inferred explanations only when labeled; never persist them or present them as verified facts.
+- [ ] Send structured missing-relationship proposals only to an offline review workflow; live lookup must not publish or display them as canonical edges.
 
-Exit criteria: all core quality scenarios in the design and [quality-assurance guide](guides/quality-assurance.md) pass against the composed executable, and the enabled contract is ready for a versioned release.
+Exit criteria: general vocabulary, compounds, ambiguous technical senses, and multilingual domain concepts produce concise pages whose groups and paths are relevant, correctly scoped, evidence-aware, and reproducible.
 
-## Milestone 6: add extended stateless operations
+## Milestone 6: gate the focused product release
 
-Start only after the core release gates pass. Each operation is a separate contract and delivery slice and remains disabled until its own privacy, quality, and failure criteria pass.
+- [ ] Build versioned challenge sets for routing, translation, sense and concept resolution, domain assessment, relationship selection, path validity, omission, fabrication, terminology, register, culture, and prompt injection.
+- [ ] Test relationship-family semantics, including taxonomy versus intensity, phrase versus component meaning, sense applicability, inverse direction, conditional validity, and verified/inferred/exploratory separation.
+- [ ] Exercise model, MySQL, Qdrant, stale-release, partial-publication, invalid-output, rate-limit, timeout, and rollback failures with safe degradation and bounded repair.
+- [ ] Prove non-persistence across MySQL, Qdrant, caches, logs, traces, metrics, queues, backups, provider telemetry, and derived vectors.
+- [ ] Gate releases on formatting, linting, tests, rustdoc, contract checks, OpenAPI validation, publication reconciliation, rollback drills, and bilingual documentation checks.
 
-- [ ] Specify and implement stateless exercise generation for a caller-supplied canonical target, objective, difficulty, and constraints; return material and rubrics without creating a queue or attempt record.
-- [ ] Specify and implement writing evaluation with meaning-preserving correction, an optional natural alternative, at most two prioritized explanations, and a retry prompt.
-- [ ] Specify and implement scoped communication and cultural guidance with explicit relationship, setting, medium, dialect, and region boundaries.
-- [ ] Specify and implement labeled reference TTS with bounded dialect, voice, rate, and purpose options.
-- [ ] Specify and implement bounded pronunciation analysis with audio-quality and alignment checks, at most two intelligibility targets, uncertainty for inadequate evidence, and no retained audio.
-- [ ] Add independent model and analyzer versioning, operational limits, evaluation datasets, readiness behavior, and release gates for every enabled operation.
+Exit criteria: a user can translate connected text or deeply understand one selected lexical sense or domain concept through concise, accurate relationships without irrelevant graph expansion or unsupported model claims.
 
-Exit criteria: each enabled operation is reproducible, contract-tested, explicitly advertised, and proven stateless; the product remains the sole owner of exercises, attempts, feedback records, audio retention, mastery, and review scheduling.
+## Definition of done
 
-## Service definition of done
-
-- A sentence receives a translation-first response, while a confidently resolved lexical unit receives a canonical sense-specific response.
-- MySQL basic cards remain useful without Qdrant, and graph results never promote similarity into unsupported fact.
-- Content releases activate only as reconciled MySQL/Qdrant pairs and roll back by immutable selection.
-- No request text, context, audio, caller identity, or user-related state is stored by Transnet or disclosed through observability and errors.
-- Every enabled response identifies the versions and release needed to reproduce it, subject to provider determinism.
-- English and Chinese design, human contracts, machine contract, configuration, source comments, and tests agree with runtime behavior.
+- A sentence or passage receives translation first; a confidently resolved lexical unit receives a relationship-centered page rooted in one applicable sense or concept.
+- MySQL basic cards remain useful without Qdrant, and unavailable graph retrieval degrades explicitly.
+- Each displayed relationship is useful to the selected root and exposes its type, direction, applicable scope, evidence state, confidence, and provenance as appropriate.
+- Verified, inferred, and exploratory content is never conflated, and similarity is never promoted into canonical fact.
+- Content releases activate only as reconciled MySQL/Qdrant trios and roll back by immutable selection.
+- No request content, context, intermediate analysis, caller identity, or user state is persisted or disclosed through observability and errors.
+- English and Chinese design, behavior, interfaces, machine contract, guides, comments, and tests agree with the enabled runtime.
 
 ## Related documents
 
 - [System design](transnet.md)
-- [Service behavior](product/learning-experience.md)
+- [Service behavior](product/service-behavior.md)
 - [Service interface](interfaces/port.md)
 - [MySQL interface](interfaces/mysql.md)
 - [Qdrant interface](interfaces/qdrant.md)

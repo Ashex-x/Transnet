@@ -38,7 +38,7 @@ Release manifest example:
 
 ## Knowledge node point
 
-A node represents one independently explainable lexical sense, phrase, concept, entity, phenomenon, idiom, metaphor, speech act, cultural practice, grammar pattern, collocation, misconception, or canonical domain.
+A node represents one independently explainable lexical sense, phrase, multilingual term, concept, entity, phenomenon, mechanism, process, equation, quantity, material, instrument, method, technology, application, standard, organization, person, place, idiom, metaphor, grammar pattern, collocation, misconception, or canonical domain.
 
 ```json
 {
@@ -73,7 +73,7 @@ A node represents one independently explainable lexical sense, phrase, concept, 
 }
 ```
 
-Payload indexes cover release, verification state, node type, sense ID, language, dialect, region, period, and domain ID.
+Payload indexes cover release, publication and verification state, node type, sense ID, language, dialect, region, period, domain ID, and evidence ID.
 
 ## Knowledge edge point
 
@@ -95,6 +95,8 @@ An edge is both a typed connection and a searchable explanation of why two nodes
     "target_node_id": "node_scorching_heat_01",
     "relation_type": "higher_degree",
     "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
+    "applicable_sense_ids": ["sense_sweltering_hot_01"],
+    "conditions": ["temperature describes weather or an environment"],
     "restrictions": {
       "dimension": "temperature_intensity",
       "register": "general"
@@ -102,6 +104,8 @@ An edge is both a typed connection and a searchable explanation of why two nodes
     "language": "en",
     "domain_ids": ["domain_weather"],
     "evidence_ids": ["evidence_dictionary_1042"],
+    "evidence_state": "supported",
+    "provenance": ["source_dictionary_2026_01"],
     "confidence": 0.96,
     "verification_state": "verified",
     "release_id": "knowledge-2026-09"
@@ -109,7 +113,7 @@ An edge is both a typed connection and a searchable explanation of why two nodes
 }
 ```
 
-Supported families are naming, lexical, conceptual, contrast, cultural, domain, and exploratory. Intensity relations name their comparison dimension and are not encoded as hypernym or hyponym edges. Payload indexes cover both endpoints, relation type, verification state, release, language, region, period, and domain ID.
+Supported families cover lexical naming and translation equivalence; taxonomy and part-whole structure; synonymy, antonymy, contrast, and named intensity dimensions; valency, grammar, collocation, and fixed expressions; morphology; suitability by register, dialect, region, period, scene, and domain; cultural extension; and domain mechanism, causation, dependency, implementation, application, measurement, standardization, and terminology. Exploratory associations remain a separate family. A versioned relation-type registry defines direction, inverse, symmetry, transitivity, and causality; neither the UI nor the LLM infers those properties from wording. Payload indexes cover both endpoints, relation type, publication and verification state, release, applicable sense, language, dialect, region, period, domain, and evidence ID.
 
 ## search_nodes
 
@@ -126,10 +130,15 @@ Request:
   },
   "filters": {
     "release_id": "knowledge-2026-09",
+    "publication_states": ["published"],
     "verification_states": ["verified"],
     "node_types": ["lexical_sense", "phrase"],
     "languages": ["en"],
-    "domain_ids": ["domain_weather"]
+    "dialects": ["en-US"],
+    "regions": [],
+    "periods": ["current"],
+    "domain_ids": ["domain_weather"],
+    "eligible_evidence_ids": ["evidence_dictionary_1042"]
   },
   "limit": 20
 }
@@ -176,9 +185,16 @@ Request:
   },
   "filters": {
     "release_id": "knowledge-2026-09",
+    "publication_states": ["published"],
     "relation_types": ["higher_degree", "lower_degree"],
     "verification_states": ["verified"],
-    "domain_ids": ["domain_weather"]
+    "languages": ["en"],
+    "dialects": ["en-US"],
+    "regions": [],
+    "periods": ["current"],
+    "domain_ids": ["domain_weather"],
+    "applicable_sense_ids": ["sense_sweltering_hot_01"],
+    "eligible_evidence_ids": ["evidence_dictionary_1042"]
   },
   "limit": 20
 }
@@ -255,7 +271,7 @@ Response:
 }
 ```
 
-Expansion remains bounded to one selected root at a time. Arbitrary-depth traversal, shortest paths, centrality, and mutable graph transactions are outside this contract.
+Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
 
 ## publish_release_projection
 

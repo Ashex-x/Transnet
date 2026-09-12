@@ -55,6 +55,8 @@ Closed error response:
 
 Normalization belongs to the Transnet runtime. The adapter receives a bounded, ordered set of derived forms; it never receives the raw query, intermediate transformations, or context. Exact canonical and alias forms precede inflection, spelling-correction, and relaxed aliases. Significant symbols remain distinct, so `C`, `C++`, and `C#` cannot collapse into one identity.
 
+Both this operation and `get_sense` return the same compact `BasicCard` shape. It includes the canonical and alias forms, concise definitions and translations, pronunciation and morphology summaries, short canonical examples and usage notes, domain and evidence metadata, knowledge roots, revision, and release. Relationship detail remains in Qdrant.
+
 Request:
 
 ```json
@@ -69,7 +71,7 @@ Request:
   "normalizer_version": "unicode-nfkc-v2",
   "source_language": "en",
   "explanation_language": "zh-CN",
-  "english_dialect": "en-US",
+  "dialect": "en-US",
   "content_release": "knowledge-2026-09",
   "limit": 5
 }
@@ -89,6 +91,7 @@ Response:
           "card_id": "card_sweltering_en_adj_01",
           "sense_id": "sense_sweltering_hot_01",
           "canonical_form": "sweltering",
+          "aliases": ["oppressively hot"],
           "language": "en",
           "part_of_speech": "adjective",
           "translations": [
@@ -98,9 +101,13 @@ Response:
             }
           ],
           "definitions": ["uncomfortably hot, especially because of the weather"],
+          "pronunciations": [{"dialect": "en-US", "ipa": "/ˈswɛltərɪŋ/"}],
+          "forms": [{"form": "swelteringly", "label": "adverb"}],
+          "examples": [{"text": "We waited until evening to leave the sweltering house.", "translation": "我们一直等到傍晚才离开闷热难耐的房子。"}],
+          "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
           "knowledge_root_ids": ["node_sweltering_hot_01"],
-          "cefr": "B2",
           "domain_ids": ["domain_weather"],
+          "evidence_ids": ["evidence_dictionary_1042"],
           "revision": 3
         }
       }
@@ -115,7 +122,7 @@ Uniqueness is enforced by stable form, card, and sense IDs plus published canoni
 
 ## get_sense
 
-Returns one compact canonical sense revision. Detailed relationship data remains in Qdrant.
+Returns one compact canonical sense revision using the shared `BasicCard` shape.
 
 Request:
 
@@ -123,7 +130,7 @@ Request:
 {
   "sense_id": "sense_sweltering_hot_01",
   "explanation_language": "zh-CN",
-  "english_dialect": "en-US",
+  "dialect": "en-US",
   "content_release": "knowledge-2026-09"
 }
 ```
@@ -137,6 +144,7 @@ Response:
     "card_id": "card_sweltering_en_adj_01",
     "sense_id": "sense_sweltering_hot_01",
     "canonical_form": "sweltering",
+    "aliases": ["oppressively hot"],
     "language": "en",
     "part_of_speech": "adjective",
     "definitions": ["uncomfortably hot, especially because of the weather"],
@@ -158,8 +166,16 @@ Response:
         "label": "adverb"
       }
     ],
+    "examples": [
+      {
+        "text": "We waited until evening to leave the sweltering house.",
+        "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
+      }
+    ],
+    "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
     "knowledge_root_ids": ["node_sweltering_hot_01"],
     "domain_ids": ["domain_weather"],
+    "evidence_ids": ["evidence_dictionary_1042"],
     "revision": 3
   },
   "content_release": "knowledge-2026-09"

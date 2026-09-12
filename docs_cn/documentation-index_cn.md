@@ -4,15 +4,15 @@ English: [Transnet documentation](../docs/documentation-index.md)
 
 ## 设计与规划
 
-- [系统设计与架构](transnet_cn.md)：权威的无状态服务行为、规范数据模型、发布、检索和质量场景。
-- [服务行为](product/learning-experience_cn.md)：消费者可见的翻译、词汇查询和图行为。
+- [系统设计与架构](transnet_cn.md)：权威的翻译、关系页面、领域展开、规范数据与质量语义。
+- [服务行为](product/service-behavior_cn.md)：消费者可见的翻译与关系型查询行为。
 - [交付计划](todo_cn.md)：实现阶段和完成标准。
 
 ## 接口
 
 - [Transnet 服务接口](interfaces/port_cn.md)：私有 HTTP 边界和无状态服务操作。
-- [MySQL 适配器](interfaces/mysql_cn.md)：规范词汇内容、领域、证据和发布状态。
-- [Qdrant 适配器](interfaces/qdrant_cn.md)：节点、边、检索、校验和发布。
+- [MySQL 适配器](interfaces/mysql_cn.md)：有类型持久化操作和事务不变量。
+- [Qdrant 适配器](interfaces/qdrant_cn.md)：集合、Point、检索、对账和发布合同。
 
 ## 参考
 
@@ -22,10 +22,10 @@ OpenAPI 镜像目标服务接口；运行时可用性在人工接口合同中明
 
 ## 指南
 
-- [配置](guides/configuration_cn.md)
-- [开发与运维](guides/development_cn.md)
-- [内容发布](guides/content-publishing_cn.md)
-- [质量保证](guides/quality-assurance_cn.md)
+- [配置](guides/configuration_cn.md)：当前监听器、路由、Provider 设置及目标基础设施配置边界。
+- [开发与运维](guides/development_cn.md)：对根 README 的运维补充。
+- [内容发布](guides/content-publishing_cn.md)：拟议的 MySQL/Qdrant 摄取、校验、发布、移除和回滚工作流。
+- [质量保证](guides/quality-assurance_cn.md)：拟议的基准、失败测试、发布门禁和监控。
 
 ## 仓库规则
 

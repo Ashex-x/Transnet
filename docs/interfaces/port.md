@@ -2,13 +2,13 @@
 
 中文：[Transnet 服务接口](../../docs_cn/interfaces/port_cn.md)
 
-This document is the primary interface contract for Transnet. Transnet is a shared, user-agnostic language and knowledge service: it translates text, resolves words and phrases, and reads a bounded canonical knowledge graph. Product applications own accounts, saved items, learning progress, history, recommendations, practice sessions, preferences, exports, and deletion workflows.
+This document is the primary interface contract for Transnet. Transnet is a shared, user-agnostic translation and relationship-knowledge service: it translates connected text and builds a bounded relationship-centered page around one resolved lexical sense or domain concept. Calling products own their users, private state, and presentation workflows.
 
 Status: target service contract. The current runtime implements parts of this surface with transitional wire shapes, and canonical sense and graph reads are feature-gated. The checked-in OpenAPI file mirrors this target contract; runtime availability remains documented here rather than inferred from the machine contract.
 
 ## Service boundary
 
-Transnet accepts no user ID, learner ID, account ID, cookie, end-user bearer token, profile, preference set, saved-item state, mastery state, or personal history. It does not expose `/me`, history, saved-sense, bookmark, progress, practice, graph-layout, feedback, privacy-export, or account-deletion APIs.
+Transnet accepts no user ID, learner ID, account ID, cookie, end-user bearer token, profile, preference set, saved-item state, mastery state, or personal history. Learning profiles, lessons, exercises, mastery, review scheduling, coaching, progress tracking, writing evaluation, speech, and pronunciation are not Transnet modules.
 
 Source text, lookup text, and optional disambiguating context are request payloads, not user records. They may exist in memory only for the bounded request lifetime and must not be written to MySQL, Qdrant, logs, metrics, traces, caches, or durable queues. A caller that needs personalization supplies only request-scoped linguistic options and owns any association between a response and an end user.
 
@@ -123,7 +123,7 @@ Response `200`:
     "capabilities": {
       "translation": "available",
       "canonical_lookup": "available",
-      "knowledge_graph": "available"
+      "relationship_pages": "available"
     }
   },
   "meta": {
@@ -136,7 +136,7 @@ Response `503` uses the standard error envelope with code `not_ready`. It may na
 
 ## POST /translate
 
-Translates bounded text. `source_language` may be `auto`; the remaining options are linguistic instructions for this request only. The operation creates no history or reusable profile.
+Translates bounded text. `source_language` may be `auto`; the remaining options are linguistic instructions for this request only. Dialect, domain, context, audience, purpose, and register affect this response but create no history, translation memory, canonical fact, or reusable profile.
 
 Request:
 
@@ -145,6 +145,10 @@ Request:
   "text": "That plan is still up in the air.",
   "source_language": "en",
   "target_language": "zh-CN",
+  "dialect": "en-US",
+  "domain": "general",
+  "audience": "general",
+  "purpose": "inform",
   "preserve_formatting": true,
   "register": "neutral"
 }
@@ -171,11 +175,11 @@ Response `200`:
 }
 ```
 
-`tips` contains at most two one-sentence items and is omitted when it adds no material value.
+`tips` contains at most two one-sentence items and is omitted when it adds no material value. When context is insufficient, `alternative` may contain one clearly labeled translation and reason; otherwise it is omitted. Protected spans, paragraph structure, and formatting are preserved as requested. Any chunk plan or terminology ledger used for long text is discarded with the request.
 
 ## POST /v1/lookups
 
-Resolves a word or lexical phrase to canonical senses in MySQL and enriches the selected senses with verified and exploratory Qdrant relationships. `context` is used only during this request for disambiguation. `detail` controls response size, not personalization.
+Resolves a word, term, idiom, phrasal verb, or established phrase to one selected canonical lexical sense or domain concept, then composes a concise translation-wiki page around that root. Ambiguity returns ranked candidates or a clarification result. `context`, `domain`, `audience`, `purpose`, `register`, and `dialect` affect sense selection, ranking, and explanation for this request only; they never change canonical identity or relationship facts. `detail` controls response size, not personalization.
 
 Request:
 
@@ -184,10 +188,14 @@ Request:
   "query": "sweltering",
   "source_language": "en",
   "explanation_language": "zh-CN",
-  "english_dialect": "en-US",
+  "dialect": "en-US",
+  "domain": "weather",
   "context": "a sweltering afternoon",
+  "audience": "general",
+  "purpose": "translation",
+  "register": "neutral",
   "detail": "full",
-  "include": ["relationships", "etymology"]
+  "include": ["meaning", "degree", "contrasts", "collocations", "usage"]
 }
 ```
 
@@ -201,42 +209,62 @@ Response `200`:
       "detected_language": "en",
       "match_class": "exact_canonical"
     },
-    "matches": [
-      {
-        "basic_card": {
+    "result_mode": "lookup",
+    "selected_root": {
+      "kind": "sense",
+      "sense_id": "sense_sweltering_hot_01",
+      "node_id": "node_sweltering_hot_01"
+    },
+    "domain_assessment": {
+      "classification": "general",
+      "candidate_domain_ids": ["domain_weather"],
+      "reason": "The selected sense describes uncomfortable atmospheric heat."
+    },
+    "page": {
+      "basic_card": {
           "card_id": "card_sweltering_en_adj_01",
           "sense_id": "sense_sweltering_hot_01",
           "canonical_form": "sweltering",
           "part_of_speech": "adjective",
           "definitions": ["uncomfortably hot, especially because of the weather"],
           "translations": ["酷热的", "闷热难耐的"],
-          "cefr": "B2",
           "domain_ids": ["domain_weather"]
-        },
-        "pronunciations": [
+      },
+      "pronunciations": [
           {
             "dialect": "en-US",
             "ipa": "/ˈswɛltərɪŋ/"
           }
         ],
-        "examples": [
+      "examples": [
           {
             "text": "We waited until evening to leave the sweltering house.",
             "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
           }
         ],
-        "verified_relationships": [
+      "relationship_sections": [
+        {
+          "kind": "degree",
+          "title": "Intensity",
+          "items": [
           {
             "edge_id": "edge_sweltering_scorching_01",
             "relation_type": "higher_degree",
             "target_node_id": "node_scorching_heat_01",
             "target_label": "scorching",
-            "explanation": "Scorching usually expresses a stronger degree of heat."
+            "explanation": "Scorching usually expresses a stronger degree of heat.",
+            "restrictions": {"dimension": "temperature_intensity"},
+            "evidence_state": "verified",
+            "confidence": 0.96,
+            "provenance": ["evidence_dictionary_1042"]
           }
-        ],
-        "exploratory_associations": []
-      }
-    ]
+          ]
+        }
+      ],
+      "connection_paths": [],
+      "exploratory_sections": []
+    },
+    "alternatives": []
   },
   "meta": {
     "request_id": "req_01K4Z8T5BN2P6Q9R1S3V7W0XYZ",
@@ -246,7 +274,7 @@ Response `200`:
 }
 ```
 
-If Qdrant is unavailable but MySQL resolves a basic card, Transnet may return the card with empty relationship arrays and `meta.degraded: true`. It must never replace missing verified edges with model-invented relationships.
+`relationship_sections` are purpose-ranked and omit empty or weakly supported groups. Items use `verified`, `inferred`, or `exploratory` evidence states; inferred and exploratory content is request-local and never silently phrased as canonical fact. Every connection path is short and gives each step a named relationship plus independently eligible evidence. If Qdrant is unavailable but MySQL resolves a basic card, Transnet returns the card with empty relationship and path sections plus `meta.degraded: true`; it never invents replacements.
 
 ## GET /v1/senses/{sense_id}
 
@@ -274,6 +302,7 @@ Response `200`:
     "card_id": "card_sweltering_en_adj_01",
     "sense_id": "sense_sweltering_hot_01",
     "canonical_form": "sweltering",
+    "aliases": ["oppressively hot"],
     "language": "en",
     "part_of_speech": "adjective",
     "definitions": ["uncomfortably hot, especially because of the weather"],
@@ -289,8 +318,16 @@ Response `200`:
         "label": "adverb"
       }
     ],
+    "examples": [
+      {
+        "text": "We waited until evening to leave the sweltering house.",
+        "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
+      }
+    ],
+    "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
     "knowledge_root_ids": ["node_sweltering_hot_01"],
-    "domain_ids": ["domain_weather"]
+    "domain_ids": ["domain_weather"],
+    "evidence_ids": ["evidence_dictionary_1042"]
   },
   "meta": {
     "request_id": "req_01K4Z8V2DE5F7G9H1J3K6M8NPQ",
@@ -301,7 +338,7 @@ Response `200`:
 
 ## GET /v1/graph
 
-Reads a bounded canonical subgraph rooted at one sense, node, or domain. `depth` is limited to the configured shallow maximum; this endpoint is not a general graph-query language.
+Reads a bounded canonical subgraph rooted at one sense, concept node, or domain. `depth` is limited to the configured shallow maximum. Results remain rooted, typed, and scope-filtered; this endpoint is not a general graph-query language or an unrestricted neighbor dump.
 
 Request parameters:
 
@@ -348,6 +385,11 @@ Response `200`:
         "source_node_id": "node_sweltering_hot_01",
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree",
+        "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
+        "restrictions": {"dimension": "temperature_intensity"},
+        "evidence_state": "verified",
+        "confidence": 0.96,
+        "provenance": ["evidence_dictionary_1042"],
         "verification_state": "verified"
       }
     ],
@@ -397,6 +439,10 @@ Response `200`:
           "target_node_id": "node_sweltering_hot_01",
           "relation_type": "higher_degree",
           "explanation": "Sweltering expresses a more uncomfortable degree of heat than hot.",
+          "restrictions": {"dimension": "temperature_intensity"},
+          "evidence_state": "verified",
+          "confidence": 0.96,
+          "provenance": ["evidence_dictionary_1042"],
           "verification_state": "verified"
         },
         "node": {

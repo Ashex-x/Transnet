@@ -1,6 +1,6 @@
 # Publish canonical knowledge content
 
-中文：[发布学习内容](../../docs_cn/guides/content-publishing_cn.md)
+中文：[发布规范知识内容](../../docs_cn/guides/content-publishing_cn.md)
 
 This guide defines the proposed release workflow for MySQL basic cards and paired Qdrant knowledge-node and knowledge-edge collections. It is intended for content engineers and release operators.
 
@@ -28,15 +28,15 @@ flowchart LR
 
 ## Normalize cards and nodes
 
-Normalize Unicode, language and script tags, English lemma and queried forms, parts of speech, senses, translations, transliterations, pronunciation, morphology, CEFR difficulty, domains, dialect, region, period, and evidence scope. Allocate deterministic IDs before embedding.
+Normalize Unicode, language and script tags, language-aware canonical and queried forms, parts of speech, senses, translations, transliterations, pronunciation, morphology, domains, dialect, region, period, and evidence scope. Allocate deterministic IDs before embedding.
 
-Create one concise MySQL `BasicCard` per independently selectable lexical sense. It must remain useful without Qdrant and contains only canonical form, concise translations and definitions, pronunciation and morphology summaries, difficulty, domains, release state, and knowledge-root IDs.
+Create one concise MySQL `BasicCard` per independently selectable lexical sense. It must remain useful without Qdrant and contains canonical and alias forms, concise translations and definitions, pronunciation and morphology summaries, examples, usage notes, domains, evidence metadata, release state, and knowledge-root IDs.
 
-Create Qdrant nodes for independently explainable lexical senses, phrases, concepts, entities, phenomena, idioms, speech acts, cultural practices, grammar patterns, collocations, and misconceptions. Aliases, translations, transliterations, romanizations, and exact technical forms feed the sparse representation; the scoped retrieval description feeds the dense vector.
+Create Qdrant nodes for independently explainable lexical senses, phrases, terms, concepts, entities, phenomena, mechanisms, processes, equations, quantities, materials, instruments, methods, technologies, applications, standards, organizations, people, places, idioms, metaphors, grammar patterns, collocations, misconceptions, and domains. Aliases, translations, transliterations, romanizations, abbreviations, formulas, and exact technical forms feed the sparse representation; the scoped retrieval description feeds the dense vector.
 
 ## Build and validate edges
 
-Build nodes before edges. Each edge names its source and target, relation type and direction, complete relationship explanation, applicable sense, language, dialect, region, period, domain, evidence, confidence, verification state, and release.
+Build nodes before edges. Each edge names its source and target, relation type and direction, complete relationship explanation, applicable sense and domain, conditions, language, dialect, region, period, evidence state, confidence, provenance, verification state, and release. A versioned relation registry defines inverse, symmetric, transitive, and causal properties; publication does not infer them from labels.
 
 Validation rejects orphan endpoints, cross-release references, invalid direction, duplicate typed edges, missing evidence, incompatible senses, and unsupported language or domain claims. Intensity gradients name their dimension and never masquerade as taxonomy. Embedding neighbors remain exploratory and separate from verified edges.
 
@@ -50,7 +50,7 @@ The edge dense vector embeds the complete source–relation–target explanation
 
 Reconcile every MySQL knowledge root with the staged node collection and every edge endpoint with the staged node manifest. Compare card, node, and edge counts, identities, hashes, evidence coverage, embedding versions, and release metadata. Any missing, extra, stale, or incompatible record fails the stage.
 
-Run the [quality-assurance guide](quality-assurance.md) against the exact staged trio. Evaluation covers exact and hybrid resolution, cross-language terminology, sense separation, relationship precision, unsupported-path rejection, degraded MySQL-only cards, cultural scope, and latency bounds.
+Run the [quality-assurance guide](quality-assurance.md) against the exact staged trio. Evaluation covers exact and hybrid sense and concept resolution, cross-language terminology, domain assessment, sense separation, relationship precision, page usefulness, unsupported-path rejection, degraded MySQL-only cards, cultural scope, and latency bounds.
 
 ## Activate and roll back
 

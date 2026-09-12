@@ -4,8 +4,8 @@
 
 ## Design and planning
 
-- [System design and architecture](transnet.md): authoritative stateless service behavior, canonical data model, publication, retrieval, and quality scenarios.
-- [Service behavior](product/learning-experience.md): consumer-visible translation, lexical lookup, and graph behavior.
+- [System design and architecture](transnet.md): authoritative translation, relationship-page, domain-expansion, canonical-data, and quality semantics.
+- [Service behavior](product/service-behavior.md): consumer-visible translation and relationship-centered lookup behavior.
 - [Overall plan](todo.md): delivery phases, dependencies, and exit criteria.
 
 ## Interfaces

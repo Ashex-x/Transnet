@@ -38,7 +38,7 @@ Point ID 必须确定。先构建节点再构建边。发布拒绝缺失端点�
 
 ## 知识节点 point
 
-节点表示一个可独立解释的词义、短语、概念、实体、现象、习语、隐喻、言语行为、文化实践、语法模式、搭配、误解或规范领域。
+节点表示一个可独立解释的词义、短语、多语言术语、概念、实体、现象、机理、过程、方程、物理量、材料、仪器、方法、技术、应用、标准、组织、人物、地点、习语、隐喻、语法模式、搭配、误解或规范领域。
 
 ```json
 {
@@ -65,7 +65,7 @@ Point ID 必须确定。先构建节点再构建边。发布拒绝缺失端点�
 }
 ```
 
-Payload 索引覆盖发布、验证状态、节点类型、词义 ID、语言、方言、地区、时期和领域 ID。
+Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义 ID、语言、方言、地区、时期、领域 ID 和证据 ID。
 
 ## 知识边 point
 
@@ -84,10 +84,14 @@ Payload 索引覆盖发布、验证状态、节点类型、词义 ID、语言、
     "target_node_id": "node_scorching_heat_01",
     "relation_type": "higher_degree",
     "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
+    "applicable_sense_ids": ["sense_sweltering_hot_01"],
+    "conditions": ["temperature describes weather or an environment"],
     "restrictions": {"dimension": "temperature_intensity", "register": "general"},
     "language": "en",
     "domain_ids": ["domain_weather"],
     "evidence_ids": ["evidence_dictionary_1042"],
+    "evidence_state": "supported",
+    "provenance": ["source_dictionary_2026_01"],
     "confidence": 0.96,
     "verification_state": "verified",
     "release_id": "knowledge-2026-09"
@@ -95,7 +99,7 @@ Payload 索引覆盖发布、验证状态、节点类型、词义 ID、语言、
 }
 ```
 
-支持命名、词汇、概念、对比、文化、领域和探索关系族。强度关系必须命名比较维度，不得编码为上位词或下位词。Payload 索引覆盖两端、关系类型、验证状态、发布、语言、地区、时期和领域 ID。
+关系族覆盖词汇命名与翻译等价、分类与整体—部分、同义/反义/对比/明确命名的强度、配价/语法/搭配/固定表达、形态、语域/方言/地区/时期/场景/领域适用性、文化延伸，以及领域机理、因果、依赖、实现、应用、测量、标准化和术语。探索关系保持独立。版本化关系类型注册表定义方向、逆关系、对称性、传递性和因果性；UI 与 LLM 不从措辞猜测。Payload 索引覆盖两端、关系类型、发布与验证状态、发布版本、适用词义、语言、方言、地区、时期、领域和证据 ID。
 
 ## search_nodes
 
@@ -109,10 +113,15 @@ Payload 索引覆盖发布、验证状态、节点类型、词义 ID、语言、
   "sparse_vector": {"indices": [1842, 99104], "values": [1.0, 0.55]},
   "filters": {
     "release_id": "knowledge-2026-09",
+    "publication_states": ["published"],
     "verification_states": ["verified"],
     "node_types": ["lexical_sense", "phrase"],
     "languages": ["en"],
-    "domain_ids": ["domain_weather"]
+    "dialects": ["en-US"],
+    "regions": [],
+    "periods": ["current"],
+    "domain_ids": ["domain_weather"],
+    "eligible_evidence_ids": ["evidence_dictionary_1042"]
   },
   "limit": 20
 }
@@ -156,9 +165,16 @@ Payload 索引覆盖发布、验证状态、节点类型、词义 ID、语言、
   "sparse_vector": {"indices": [77103, 99104], "values": [1.0, 0.6]},
   "filters": {
     "release_id": "knowledge-2026-09",
+    "publication_states": ["published"],
     "relation_types": ["higher_degree", "lower_degree"],
     "verification_states": ["verified"],
-    "domain_ids": ["domain_weather"]
+    "languages": ["en"],
+    "dialects": ["en-US"],
+    "regions": [],
+    "periods": ["current"],
+    "domain_ids": ["domain_weather"],
+    "applicable_sense_ids": ["sense_sweltering_hot_01"],
+    "eligible_evidence_ids": ["evidence_dictionary_1042"]
   },
   "limit": 20
 }
@@ -235,7 +251,7 @@ Payload 索引覆盖发布、验证状态、节点类型、词义 ID、语言、
 }
 ```
 
-扩展始终限制为一次跟随一个选定根。任意深度遍历、最短路径、中心性和可变图事务不属于本合同。
+扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
 
 ## publish_release_projection
 
