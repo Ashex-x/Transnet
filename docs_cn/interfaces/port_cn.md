@@ -1,91 +1,374 @@
-# Island-port 接口
+# Transnet 服务 HTTP 接口
 
-English: [Island-port interface](../../docs/interfaces/port.md)
+English: [Transnet service HTTP interface](../../docs/interfaces/port.md)
 
-本文档定义 Island-port 暴露 Transnet 学习代理的受信内部 HTTP 边界。[系统设计](../transnet_cn.md)对产品语义最权威。
+本文档是 Transnet 的主接口合同。Transnet 是共享、无用户状态的语言与知识服务：翻译文本、解析单词与短语、读取有界的规范知识图。产品应用负责账户、保存项目、学习进度、历史、推荐、练习会话、偏好、导出和删除流程。
 
-状态：当前运行时已有健康、翻译、结构化查询和 feature-gated 规范图读取。下文书签学习、写作、语音和复习路由是拟议内容，在运行时和 OpenAPI 同步实现前不得宣称可用。
+状态：目标服务合同。当前运行时以过渡性线上格式实现了其中一部分，规范词义和图读取受 feature gate 控制。仓库中的 OpenAPI 是精确的运行时快照，在清理期间仍可能包含遗留产品路由；这些路由不属于本合同。
+
+## 服务边界
+
+Transnet 不接受用户 ID、学习者 ID、账户 ID、Cookie、终端用户 Bearer token、画像、偏好集合、保存项目状态、掌握度状态或个人历史。它不提供 `/me`、历史、已保存词义、书签、进度、练习、图布局、反馈、隐私导出或账户删除 API。
+
+源文本、查询文本和可选消歧上下文是请求载荷，不是用户记录。它们只能在有界请求生命周期内存在于内存中，绝不能写入 MySQL、Qdrant、日志、指标、trace、缓存或持久队列。需要个性化的调用方只能传递请求级语言选项，并自行保存响应与终端用户的关联。
+
+Transnet 绑定私有地址且不终止公网 TLS。部署认证识别调用服务而非终端用户。除单机回环部署外，网关或服务网格必须认证调用方。
 
 ## 共享线上规则
 
-Transnet 绑定回环地址，不终止公网 TLS。Island-port 先完成终端用户认证和学习者资源授权。除单机回环外，内部部署也必须认证；Transnet 不接受终端用户 Cookie 或 Bearer token。
+请求和响应均使用 JSON。每个响应返回 `X-Request-Id`。时间为 UTC RFC 3339 微秒精度；ID 为不透明 URL-safe 字符串，客户端不得推断类型或顺序。未知请求字段会被拒绝。
 
-请求与响应默认使用 JSON。每个响应返回 `X-Request-Id`；时间为 UTC RFC 3339 微秒；ID 是不透明 URL-safe 字符串。学习者路由要求 `X-Learner-Id`，变更要求 `Idempotency-Key`。重用键但内容不同返回 `409 idempotency_conflict`。
+成功应用响应使用 `data` 和 `meta`。`meta.request_id` 与响应头一致；规范读取还会返回用于应答的不可变内容发布。
 
-标准成功响应包含 `data` 和 `meta`。错误包含稳定 `code`、安全 `message`、`request_id`、`retryable` 和可选字段详情，不回显学习者内容、凭据、provider body 或存储细节。
+```json
+{
+  "data": {},
+  "meta": {
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
+
+错误使用统一安全 envelope，绝不回显请求文本、上下文、凭据、provider body、向量或存储内部信息。
+
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "The request is invalid.",
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+    "retryable": false,
+    "fields": [
+      {
+        "field": "target_language",
+        "message": "A valid BCP 47 language tag is required."
+      }
+    ]
+  }
+}
+```
+
+常见状态码为：`400` JSON 格式错误或未知字段，`401` 部署认证失败，`404` 未知规范资源，`409` 发布冲突，`413` 请求体过大，`422` 语义输入无效，`429` 有界容量限制，`502` provider 结果无效，`503` 必需依赖不可用，`504` 超时。
+
+下面 GET 示例中的请求 JSON 仅为路径和查询参数的文档表示；GET 请求没有 JSON body。
 
 ## GET /health
 
-认证：内部部署策略。只返回 HTTP 进程健康状态。
+返回进程健康，不探测依赖，也不泄露配置。
+
+请求参数：
+
+```json
+{}
+```
+
+响应 `200`：
+
+```json
+{
+  "data": {"status": "ok"},
+  "meta": {"request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX"}
+}
+```
 
 ## GET /livez
 
-认证：内部部署策略。事件循环响应时返回成功。
+进程事件循环可响应时返回成功。
+
+请求参数：
+
+```json
+{}
+```
+
+响应 `200`：
+
+```json
+{
+  "data": {"status": "ok"},
+  "meta": {"request_id": "req_01K4Z8Q8X2A6B7C4D9E0F3G5HJ"}
+}
+```
 
 ## GET /readyz
 
-认证：内部部署策略。启用路由的必需依赖可用时返回 `200`，可选降级能力放在 metadata。
+仅在已启用路由所需依赖就绪时返回 `200`。可选能力可降级而不使进程变为未就绪。
+
+请求参数：
+
+```json
+{}
+```
+
+响应 `200`：
+
+```json
+{
+  "data": {
+    "status": "ok",
+    "dependencies": {
+      "mysql": "ready",
+      "qdrant": "ready",
+      "translation_provider": "ready"
+    },
+    "capabilities": {
+      "translation": "available",
+      "canonical_lookup": "available",
+      "knowledge_graph": "available"
+    }
+  },
+  "meta": {"request_id": "req_01K4Z8R4CX7E2J6K1M9N3P5Q8S"}
+}
+```
+
+`503` 使用标准错误 envelope，代码为 `not_ready`。它可说明依赖类别，但不得暴露主机、凭据、集合名称或 provider 响应。
 
 ## POST /translate
 
-认证：内部部署策略，无需学习者 ID。请求包含文本、可选源语言、目标语言、方言和语域。响应以翻译为主，仅对关键歧义、习语、语域或文化语境增加最多两条一句提示。它不创建历史、书签或学习状态。
+翻译有界文本。`source_language` 可为 `auto`；其余选项仅是本次请求的语言指令。此操作不会创建历史或可复用画像。
+
+请求：
+
+```json
+{
+  "text": "That plan is still up in the air.",
+  "source_language": "en",
+  "target_language": "zh-CN",
+  "preserve_formatting": true,
+  "register": "neutral"
+}
+```
+
+响应 `200`：
+
+```json
+{
+  "data": {
+    "translation": "那个计划仍然悬而未决。",
+    "detected_source_language": "en",
+    "tips": [
+      {
+        "kind": "idiom",
+        "message": "“up in the air” means undecided rather than physically airborne."
+      }
+    ]
+  },
+  "meta": {
+    "request_id": "req_01K4Z8S1AK6C8D2F0G4H7J9M3N",
+    "model_version": "translate-2026-09"
+  }
+}
+```
+
+`tips` 最多两条，每条一句；没有实质价值时省略。
 
 ## POST /v1/lookups
 
-认证：内部部署策略；`X-Learner-Id` 可选且只能影响临时排序。返回查询分析、精简基础卡、选定词义、翻译维基分区、已验证关系、分开的探索关联、证据与发布。结果不是学习卡，不创建持久目标。Qdrant 故障时可明示降级为 MySQL 基础卡。
+将单词或词汇短语解析为 MySQL 的规范词义，并用 Qdrant 中已验证和探索性关系补充。`context` 仅在本次请求中用于消歧。`detail` 只控制响应大小，不用于个性化。
 
-## GET /v1/knowledge/nodes/{node_id}/neighbors
+请求：
 
-认证：内部部署策略。查询按关系类、方向、语言、领域、发布和有界 limit 过滤。响应钉住节点/边版本并分开已验证与探索结果。
+```json
+{
+  "query": "sweltering",
+  "source_language": "en",
+  "explanation_language": "zh-CN",
+  "english_dialect": "en-US",
+  "context": "a sweltering afternoon",
+  "detail": "full",
+  "include": ["relationships", "etymology"]
+}
+```
 
-## POST /v1/bookmarks
+响应 `200`：
 
-状态：拟议。认证：必须 `X-Learner-Id`。幂等请求指定基础卡、词义和内容发布，原子创建书签和第一个冻结学习卡修订。
+```json
+{
+  "data": {
+    "query_analysis": {
+      "normalized_form": "sweltering",
+      "detected_language": "en",
+      "match_class": "exact_canonical"
+    },
+    "matches": [
+      {
+        "basic_card": {
+          "card_id": "card_sweltering_en_adj_01",
+          "sense_id": "sense_sweltering_hot_01",
+          "canonical_form": "sweltering",
+          "part_of_speech": "adjective",
+          "definitions": ["uncomfortably hot, especially because of the weather"],
+          "translations": ["酷热的", "闷热难耐的"],
+          "cefr": "B2",
+          "domain_ids": ["domain_weather"]
+        },
+        "pronunciations": [{"dialect": "en-US", "ipa": "/ˈswɛltərɪŋ/"}],
+        "examples": [
+          {
+            "text": "We waited until evening to leave the sweltering house.",
+            "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
+          }
+        ],
+        "verified_relationships": [
+          {
+            "edge_id": "edge_sweltering_scorching_01",
+            "relation_type": "higher_degree",
+            "target_node_id": "node_scorching_heat_01",
+            "target_label": "scorching",
+            "explanation": "Scorching usually expresses a stronger degree of heat."
+          }
+        ],
+        "exploratory_associations": []
+      }
+    ]
+  },
+  "meta": {
+    "request_id": "req_01K4Z8T5BN2P6Q9R1S3V7W0XYZ",
+    "content_release": "knowledge-2026-09",
+    "degraded": false
+  }
+}
+```
 
-## PATCH /v1/bookmarks/{bookmark_id}
+若 Qdrant 不可用但 MySQL 已解析基础卡，Transnet 可返回关系数组为空且 `meta.degraded: true` 的卡片。不得以模型编造关系替代缺失的已验证边。
 
-状态：拟议。认证：必须 `X-Learner-Id`。包含预期修订，可暂停、恢复、重排或明确刷新。刷新创建新的可追溯修订。
+## GET /v1/senses/{sense_id}
 
-## DELETE /v1/bookmarks/{bookmark_id}
+读取一个规范词义及其精简 MySQL 卡片。服务不保存访问或已保存项目记录。
 
-状态：拟议。认证：必须 `X-Learner-Id`。幂等停止未来排程，且 `404` 不泄露他人资源。
+请求参数：
 
-## GET /v1/learning-cards
+```json
+{
+  "path": {"sense_id": "sense_sweltering_hot_01"},
+  "query": {"explanation_language": "zh-CN", "release": "knowledge-2026-09"}
+}
+```
 
-状态：拟议。认证：必须 `X-Learner-Id`。分页返回活动、暂停、到期或待再生成卡，包含独立掌握度、时间、版本和优先原因。
+响应 `200`：
 
-## POST /v1/practice/sessions
+```json
+{
+  "data": {
+    "card_id": "card_sweltering_en_adj_01",
+    "sense_id": "sense_sweltering_hot_01",
+    "canonical_form": "sweltering",
+    "language": "en",
+    "part_of_speech": "adjective",
+    "definitions": ["uncomfortably hot, especially because of the weather"],
+    "translations": [{"language": "zh-CN", "text": "酷热的"}],
+    "forms": [{"form": "swelteringly", "label": "adverb"}],
+    "knowledge_root_ids": ["node_sweltering_hot_01"],
+    "domain_ids": ["domain_weather"]
+  },
+  "meta": {
+    "request_id": "req_01K4Z8V2DE5F7G9H1J3K6M8NPQ",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
 
-状态：拟议。认证：必须 `X-Learner-Id`。从到期书签、紧凑误解和直接相关迁移任务创建会话，不自动加入无书签节点。
+## GET /v1/graph
 
-## POST /v1/practice/sessions/{session_id}/attempts
+读取以一个词义、节点或领域为根的有界规范子图。`depth` 受配置的浅层最大值限制；本端点不是通用图查询语言。
 
-状态：拟议。认证：必须 `X-Learner-Id`。幂等提交一次冻结练习，返回 `correct`、`needs_revision` 或 `needs_review`、证据、有界反馈、信心、掌握度影响和下一步。只有高信心证据更新已证明技能。
+请求参数：
 
-## POST /v1/writing/evaluations
+```json
+{
+  "query": {
+    "root_kind": "sense",
+    "root_id": "sense_sweltering_hot_01",
+    "depth": 1,
+    "relation_types": ["lower_degree", "higher_degree", "collocation"],
+    "verification_state": "verified",
+    "node_limit": 20,
+    "edge_limit": 30,
+    "release": "knowledge-2026-09"
+  }
+}
+```
 
-状态：拟议。请求明确受众、目的、媒介、语域、约束和文本。响应保留意图与声音，返回最小修正、可选自然表达、最多两个重点和重试。原始写作不进入策略历史。
+响应 `200`：
 
-## POST /v1/speech/reference
+```json
+{
+  "data": {
+    "root": {"kind": "sense", "id": "sense_sweltering_hot_01", "node_id": "node_sweltering_hot_01"},
+    "nodes": [
+      {"node_id": "node_sweltering_hot_01", "node_type": "lexical_sense", "label": "sweltering"},
+      {"node_id": "node_scorching_heat_01", "node_type": "lexical_sense", "label": "scorching"}
+    ],
+    "edges": [
+      {
+        "edge_id": "edge_sweltering_scorching_01",
+        "source_node_id": "node_sweltering_hot_01",
+        "target_node_id": "node_scorching_heat_01",
+        "relation_type": "higher_degree",
+        "verification_state": "verified"
+      }
+    ],
+    "truncated": false
+  },
+  "meta": {
+    "request_id": "req_01K4Z8W9RS2T4V6X0Y1Z3A5BCD",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
 
-状态：拟议。生成有明确标记的参考语音，支持有界文本、方言、声音、速度和用途。慢速语音保留自然重音和韵律。
+## GET /v1/graph/nodes/{kind}/{id}/neighbors
 
-## POST /v1/pronunciation/evaluations
+分页读取一个规范节点的直接入边和出边。cursor 绑定根、过滤条件和发布，且不得包含请求文本。
 
-状态：拟议。接受有界音频、预期语言和可选目标短语，返回录音质量、对齐信心、最多两个可理解性目标、证据提示和重试。无足够声学证据时返回 `422 unassessable_audio`，不给分。音频默认不保留。
+请求参数：
 
-## GET /v1/history
+```json
+{
+  "path": {"kind": "knowledge_node", "id": "node_sweltering_hot_01"},
+  "query": {
+    "direction": "both",
+    "relation_types": ["lower_degree", "higher_degree"],
+    "verification_state": "verified",
+    "limit": 10,
+    "cursor": null,
+    "release": "knowledge-2026-09"
+  }
+}
+```
 
-状态：拟议。认证：必须 `X-Learner-Id`。返回过去 30 天内最多 200 个紧凑规范事件，不返回原始学习者内容。
+响应 `200`：
 
-## DELETE /v1/history
-
-状态：拟议。认证：必须 `X-Learner-Id`。立即移除历史对策略的影响，不删除书签。
+```json
+{
+  "data": {
+    "root_node_id": "node_sweltering_hot_01",
+    "neighbors": [
+      {
+        "edge": {
+          "edge_id": "edge_hot_sweltering_01",
+          "source_node_id": "node_hot_temperature_01",
+          "target_node_id": "node_sweltering_hot_01",
+          "relation_type": "higher_degree",
+          "explanation": "Sweltering expresses a more uncomfortable degree of heat than hot.",
+          "verification_state": "verified"
+        },
+        "node": {"node_id": "node_hot_temperature_01", "node_type": "lexical_sense", "label": "hot"}
+      }
+    ],
+    "next_cursor": null
+  },
+  "meta": {
+    "request_id": "req_01K4Z8X6FG1H3J5K7M9N2P4QRS",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
 
 ## 相关文档
 
 - [系统设计](../transnet_cn.md)
-- [学习体验](../product/learning-experience_cn.md)
-- [MySQL](mysql_cn.md)
-- [Qdrant](qdrant_cn.md)
-- [当前 OpenAPI 子集](../../docs/reference/transnet-openapi.json)
+- [MySQL 接口](mysql_cn.md)
+- [Qdrant 接口](qdrant_cn.md)
+- [当前 OpenAPI 快照](../../docs/reference/transnet-openapi.json)

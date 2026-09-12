@@ -1,136 +1,423 @@
-# Island-port interface
+# Transnet service HTTP interface
 
-中文：[Island-port 接口](../../docs_cn/interfaces/port_cn.md)
+中文：[Transnet 服务接口](../../docs_cn/interfaces/port_cn.md)
 
-This document defines the trusted internal HTTP boundary through which Island-port exposes the Transnet learning agent. The [system design](../transnet.md) owns product semantics.
+This document is the primary interface contract for Transnet. Transnet is a shared, user-agnostic language and knowledge service: it translates text, resolves words and phrases, and reads a bounded canonical knowledge graph. Product applications own accounts, saved items, learning progress, history, recommendations, practice sessions, preferences, exports, and deletion workflows.
 
-Status: health, translation, structured lookup, and feature-gated canonical graph reads exist in the current runtime. Bookmark-driven learning, writing, speech, and review routes below are proposed and must not be advertised as implemented until added to the OpenAPI document and runtime together.
+Status: target service contract. The current runtime implements parts of this surface with transitional wire shapes, and canonical sense and graph reads are feature-gated. The checked-in OpenAPI file is the exact runtime snapshot and may temporarily include legacy product routes while they are removed; those routes are not part of this contract.
+
+## Service boundary
+
+Transnet accepts no user ID, learner ID, account ID, cookie, end-user bearer token, profile, preference set, saved-item state, mastery state, or personal history. It does not expose `/me`, history, saved-sense, bookmark, progress, practice, graph-layout, feedback, privacy-export, or account-deletion APIs.
+
+Source text, lookup text, and optional disambiguating context are request payloads, not user records. They may exist in memory only for the bounded request lifetime and must not be written to MySQL, Qdrant, logs, metrics, traces, caches, or durable queues. A caller that needs personalization supplies only request-scoped linguistic options and owns any association between a response and an end user.
+
+Transnet binds a private address and does not terminate public TLS. Deployment authentication identifies the calling service, never its end user. Outside a single-host loopback deployment, a gateway or service mesh must authenticate callers.
 
 ## Shared wire rules
 
-Transnet binds a loopback address and does not terminate public TLS. Island-port authenticates the end user and authorizes learner-owned operations before calling it. Internal deployment authentication is required outside a single-host loopback deployment; Transnet never accepts end-user cookies or bearer tokens.
+Requests and responses use JSON. Every response returns `X-Request-Id`. Timestamps are UTC RFC 3339 with microsecond precision. IDs are opaque URL-safe strings; clients must not infer type or order from them. Unknown request fields are rejected.
 
-Requests and responses use JSON unless a speech route explicitly negotiates audio. `X-Request-Id` is returned on every response. Timestamps are UTC RFC 3339 with microsecond precision. IDs are opaque URL-safe strings and clients must not infer type or order from them.
+Successful application responses use `data` and `meta`. `meta.request_id` matches the response header. Canonical reads also return the immutable content release used to answer the request.
 
-Learner-owned routes require `X-Learner-Id`, an opaque authorized identifier of 1–128 URL-safe characters. Mutations require `Idempotency-Key` with 16–128 URL-safe characters. Reuse with different normalized content returns `409 idempotency_conflict`.
+```json
+{
+  "data": {},
+  "meta": {
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
 
-Standard success responses contain `data` and `meta`. Standard errors contain a stable `code`, safe `message`, `request_id`, `retryable`, and optional field details. Errors never echo learner content, credentials, provider bodies, or storage internals.
+Errors use one safe envelope and never echo request text, context, credentials, provider bodies, vectors, or storage internals.
 
 ```json
 {
   "error": {
     "code": "invalid_request",
     "message": "The request is invalid.",
-    "request_id": "req_01J...",
-    "retryable": false
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+    "retryable": false,
+    "fields": [
+      {
+        "field": "target_language",
+        "message": "A valid BCP 47 language tag is required."
+      }
+    ]
   }
 }
 ```
 
-Common statuses are `400` invalid input, `401` failed internal authentication, `403` learner mismatch, `404` unknown eligible resource, `409` idempotency or revision conflict, `413` body too large, `422` unassessable input, `429` bounded capacity, `502` invalid provider result, `503` dependency unavailable, and `504` deadline exceeded.
+Common statuses are `400` malformed JSON or unknown fields, `401` failed deployment authentication, `404` unknown canonical resource, `409` release conflict, `413` body too large, `422` invalid semantic input, `429` bounded capacity, `502` invalid provider result, `503` required dependency unavailable, and `504` deadline exceeded.
+
+For the GET examples below, the request JSON is documentation notation for path and query parameters; GET requests have no JSON body.
 
 ## GET /health
 
-Authentication: internal deployment policy. Returns process health and no dependency or learner details.
+Returns process health without probing dependencies or revealing configuration.
+
+Request parameters:
+
+```json
+{}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "status": "ok"
+  },
+  "meta": {
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX"
+  }
+}
+```
 
 ## GET /livez
 
-Authentication: internal deployment policy. Returns success while the process event loop is responsive.
+Returns success while the process event loop is responsive.
+
+Request parameters:
+
+```json
+{}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "status": "ok"
+  },
+  "meta": {
+    "request_id": "req_01K4Z8Q8X2A6B7C4D9E0F3G5HJ"
+  }
+}
+```
 
 ## GET /readyz
 
-Authentication: internal deployment policy. Returns `200` only when dependencies required by enabled routes are ready; optional degraded capabilities appear in metadata.
+Returns `200` only when dependencies required by enabled routes are ready. Optional capabilities may be degraded without making the process unready.
+
+Request parameters:
+
+```json
+{}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "status": "ok",
+    "dependencies": {
+      "mysql": "ready",
+      "qdrant": "ready",
+      "translation_provider": "ready"
+    },
+    "capabilities": {
+      "translation": "available",
+      "canonical_lookup": "available",
+      "knowledge_graph": "available"
+    }
+  },
+  "meta": {
+    "request_id": "req_01K4Z8R4CX7E2J6K1M9N3P5Q8S"
+  }
+}
+```
+
+Response `503` uses the standard error envelope with code `not_ready`. It may name a dependency class but must not expose a host, credential, collection name, or provider response.
 
 ## POST /translate
 
-Authentication: internal deployment policy; no learner identity is required. The request contains text, optional source language, target language, dialect, and register preferences. Text is bounded by configured body and provider limits.
+Translates bounded text. `source_language` may be `auto`; the remaining options are linguistic instructions for this request only. The operation creates no history or reusable profile.
+
+Request:
 
 ```json
 {
   "text": "That plan is still up in the air.",
-  "source_lang": "en",
-  "target_lang": "zh-CN"
+  "source_language": "en",
+  "target_language": "zh-CN",
+  "preserve_formatting": true,
+  "register": "neutral"
 }
 ```
 
-The response returns the translation as the primary result and zero to two one-sentence tips only for meaningful ambiguity, idiom, consequential register, or cultural context. It does not create history, a bookmark, or learning state.
-
-## POST /v1/lookups
-
-Authentication: internal deployment policy; `X-Learner-Id` is optional and may affect only ephemeral ranking. The request contains a word or lexical phrase, source language, explanation language, English dialect, and optional bounded context.
-
-The response contains query analysis, a concise basic card, selected sense, relevant translation-wiki sections, verified relationships, separate exploratory associations, evidence and release metadata, and bounded expansion links. It is not a learning card and creates no durable target.
-
-When Qdrant is unavailable, a resolved MySQL basic card may return with explicit degraded metadata. The route never invents related knowledge. Ambiguous non-lexical fragments may return a translation-mode result.
-
-## GET /v1/knowledge/nodes/{node_id}/neighbors
-
-Authentication: internal deployment policy. Query parameters select relation families, direction, language, domain, release, and a bounded limit. The response pins node and edge releases and separates verified edges from exploratory associations. A cursor expands one selected node only.
-
-## POST /v1/bookmarks
-
-Status: proposed. Authentication: required `X-Learner-Id`. The idempotent request names a selected basic-card and sense revision. The response returns the bookmark and first frozen learning-card revision.
+Response `200`:
 
 ```json
 {
-  "basic_card_id": "card_01J...",
-  "sense_id": "sense_01J...",
-  "content_release": "knowledge-2026-09"
+  "data": {
+    "translation": "那个计划仍然悬而未决。",
+    "detected_source_language": "en",
+    "tips": [
+      {
+        "kind": "idiom",
+        "message": "“up in the air” means undecided rather than physically airborne."
+      }
+    ]
+  },
+  "meta": {
+    "request_id": "req_01K4Z8S1AK6C8D2F0G4H7J9M3N",
+    "model_version": "translate-2026-09"
+  }
 }
 ```
 
-Errors include `404` for an ineligible card or sense and `409` for a stale release or incompatible existing bookmark.
+`tips` contains at most two one-sentence items and is omitted when it adds no material value.
 
-## PATCH /v1/bookmarks/{bookmark_id}
+## POST /v1/lookups
 
-Status: proposed. Authentication: required `X-Learner-Id`. The request may pause, resume, reprioritize, or explicitly refresh a card and includes the expected revision. Refresh creates a new traceable card revision; it never silently rewrites the current revision.
+Resolves a word or lexical phrase to canonical senses in MySQL and enriches the selected senses with verified and exploratory Qdrant relationships. `context` is used only during this request for disambiguation. `detail` controls response size, not personalization.
 
-## DELETE /v1/bookmarks/{bookmark_id}
+Request:
 
-Status: proposed. Authentication: required `X-Learner-Id`. The idempotent operation stops future scheduling and applies the documented retention policy. `404` does not reveal another learner's resource.
+```json
+{
+  "query": "sweltering",
+  "source_language": "en",
+  "explanation_language": "zh-CN",
+  "english_dialect": "en-US",
+  "context": "a sweltering afternoon",
+  "detail": "full",
+  "include": ["relationships", "etymology"]
+}
+```
 
-## GET /v1/learning-cards
+Response `200`:
 
-Status: proposed. Authentication: required `X-Learner-Id`. Returns paginated active, paused, due, or regeneration-required cards. Each item exposes independent mastery dimensions, due time, source and generation versions, and the reason for its current priority.
+```json
+{
+  "data": {
+    "query_analysis": {
+      "normalized_form": "sweltering",
+      "detected_language": "en",
+      "match_class": "exact_canonical"
+    },
+    "matches": [
+      {
+        "basic_card": {
+          "card_id": "card_sweltering_en_adj_01",
+          "sense_id": "sense_sweltering_hot_01",
+          "canonical_form": "sweltering",
+          "part_of_speech": "adjective",
+          "definitions": ["uncomfortably hot, especially because of the weather"],
+          "translations": ["酷热的", "闷热难耐的"],
+          "cefr": "B2",
+          "domain_ids": ["domain_weather"]
+        },
+        "pronunciations": [
+          {
+            "dialect": "en-US",
+            "ipa": "/ˈswɛltərɪŋ/"
+          }
+        ],
+        "examples": [
+          {
+            "text": "We waited until evening to leave the sweltering house.",
+            "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
+          }
+        ],
+        "verified_relationships": [
+          {
+            "edge_id": "edge_sweltering_scorching_01",
+            "relation_type": "higher_degree",
+            "target_node_id": "node_scorching_heat_01",
+            "target_label": "scorching",
+            "explanation": "Scorching usually expresses a stronger degree of heat."
+          }
+        ],
+        "exploratory_associations": []
+      }
+    ]
+  },
+  "meta": {
+    "request_id": "req_01K4Z8T5BN2P6Q9R1S3V7W0XYZ",
+    "content_release": "knowledge-2026-09",
+    "degraded": false
+  }
+}
+```
 
-## POST /v1/practice/sessions
+If Qdrant is unavailable but MySQL resolves a basic card, Transnet may return the card with empty relationship arrays and `meta.degraded: true`. It must never replace missing verified edges with model-invented relationships.
 
-Status: proposed. Authentication: required `X-Learner-Id`. Creates a session from due bookmarked cards, compact misconceptions, and directly relevant transfer tasks. It does not insert unbookmarked graph neighbors into the study queue.
+## GET /v1/senses/{sense_id}
 
-## POST /v1/practice/sessions/{session_id}/attempts
+Reads one canonical sense and its concise MySQL card. The service keeps no access or saved-item records.
 
-Status: proposed. Authentication: required `X-Learner-Id`. The idempotent request submits one frozen exercise answer and its exercise revision. The result contains `correct`, `needs_revision`, or `needs_review`, observations, bounded feedback, confidence, mastery effects, and the next action.
+Request parameters:
 
-Only sufficiently confident evidence changes the demonstrated skill. `needs_review` has no negative mastery effect. Pronunciation results require acoustic and alignment evidence; unusable audio returns `422 unassessable_audio` without a score.
+```json
+{
+  "path": {
+    "sense_id": "sense_sweltering_hot_01"
+  },
+  "query": {
+    "explanation_language": "zh-CN",
+    "release": "knowledge-2026-09"
+  }
+}
+```
 
-## POST /v1/writing/evaluations
+Response `200`:
 
-Status: proposed. Authentication: required `X-Learner-Id` only when the task is tied to a bookmarked card. The request states audience, purpose, medium, desired register, constraints, and learner text. The response preserves intended meaning and voice and returns a minimal correction, optional natural alternative, at most two prioritized explanations, and a retry task.
+```json
+{
+  "data": {
+    "card_id": "card_sweltering_en_adj_01",
+    "sense_id": "sense_sweltering_hot_01",
+    "canonical_form": "sweltering",
+    "language": "en",
+    "part_of_speech": "adjective",
+    "definitions": ["uncomfortably hot, especially because of the weather"],
+    "translations": [
+      {
+        "language": "zh-CN",
+        "text": "酷热的"
+      }
+    ],
+    "forms": [
+      {
+        "form": "swelteringly",
+        "label": "adverb"
+      }
+    ],
+    "knowledge_root_ids": ["node_sweltering_hot_01"],
+    "domain_ids": ["domain_weather"]
+  },
+  "meta": {
+    "request_id": "req_01K4Z8V2DE5F7G9H1J3K6M8NPQ",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
 
-Raw writing is not added to strategy history or durable state. A standalone evaluation creates no bookmark.
+## GET /v1/graph
 
-## POST /v1/speech/reference
+Reads a bounded canonical subgraph rooted at one sense, node, or domain. `depth` is limited to the configured shallow maximum; this endpoint is not a general graph-query language.
 
-Status: proposed. Authentication: internal deployment policy. Generates clearly labeled reference speech for bounded text, dialect, voice, rate, and exercise purpose. Streaming may be used when supported. Slower output preserves natural stress and phrasing.
+Request parameters:
 
-## POST /v1/pronunciation/evaluations
+```json
+{
+  "query": {
+    "root_kind": "sense",
+    "root_id": "sense_sweltering_hot_01",
+    "depth": 1,
+    "relation_types": ["lower_degree", "higher_degree", "collocation"],
+    "verification_state": "verified",
+    "node_limit": 20,
+    "edge_limit": 30,
+    "release": "knowledge-2026-09"
+  }
+}
+```
 
-Status: proposed. Authentication: required `X-Learner-Id` only for bookmarked practice. Accepts bounded audio plus expected language and optional target phrase. The response reports recording quality, alignment confidence, at most two intelligibility targets, evidence-based cues, and a retry prompt.
+Response `200`:
 
-Audio is not retained by default and never enters strategy history. Only a separately authorized compact derived outcome may update the applicable bookmarked skill.
+```json
+{
+  "data": {
+    "root": {
+      "kind": "sense",
+      "id": "sense_sweltering_hot_01",
+      "node_id": "node_sweltering_hot_01"
+    },
+    "nodes": [
+      {
+        "node_id": "node_sweltering_hot_01",
+        "node_type": "lexical_sense",
+        "label": "sweltering"
+      },
+      {
+        "node_id": "node_scorching_heat_01",
+        "node_type": "lexical_sense",
+        "label": "scorching"
+      }
+    ],
+    "edges": [
+      {
+        "edge_id": "edge_sweltering_scorching_01",
+        "source_node_id": "node_sweltering_hot_01",
+        "target_node_id": "node_scorching_heat_01",
+        "relation_type": "higher_degree",
+        "verification_state": "verified"
+      }
+    ],
+    "truncated": false
+  },
+  "meta": {
+    "request_id": "req_01K4Z8W9RS2T4V6X0Y1Z3A5BCD",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
 
-## GET /v1/history
+## GET /v1/graph/nodes/{kind}/{id}/neighbors
 
-Status: proposed. Authentication: required `X-Learner-Id`. Returns at most 200 compact canonical events from the previous 30 days. It never returns raw queries, passages, writing, answers, conversations, explanations, or recordings.
+Pages direct incoming and outgoing relationships for one canonical node. The cursor is scoped to the root, filters, and release and must not contain request text.
 
-## DELETE /v1/history
+Request parameters:
 
-Status: proposed. Authentication: required `X-Learner-Id`. Immediately removes history from future strategy reconstruction. It does not delete bookmarks; learner-wide deletion is a separate Island-port account workflow.
+```json
+{
+  "path": {
+    "kind": "knowledge_node",
+    "id": "node_sweltering_hot_01"
+  },
+  "query": {
+    "direction": "both",
+    "relation_types": ["lower_degree", "higher_degree"],
+    "verification_state": "verified",
+    "limit": 10,
+    "cursor": null,
+    "release": "knowledge-2026-09"
+  }
+}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "root_node_id": "node_sweltering_hot_01",
+    "neighbors": [
+      {
+        "edge": {
+          "edge_id": "edge_hot_sweltering_01",
+          "source_node_id": "node_hot_temperature_01",
+          "target_node_id": "node_sweltering_hot_01",
+          "relation_type": "higher_degree",
+          "explanation": "Sweltering expresses a more uncomfortable degree of heat than hot.",
+          "verification_state": "verified"
+        },
+        "node": {
+          "node_id": "node_hot_temperature_01",
+          "node_type": "lexical_sense",
+          "label": "hot"
+        }
+      }
+    ],
+    "next_cursor": null
+  },
+  "meta": {
+    "request_id": "req_01K4Z8X6FG1H3J5K7M9N2P4QRS",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
 
 ## Related documents
 
 - [System design](../transnet.md)
-- [Learning experience](../product/learning-experience.md)
 - [MySQL interface](mysql.md)
 - [Qdrant interface](qdrant.md)
-- [Current OpenAPI subset](../reference/transnet-openapi.json)
+- [Current OpenAPI snapshot](../reference/transnet-openapi.json)

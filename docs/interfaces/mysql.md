@@ -2,106 +2,328 @@
 
 中文：[MySQL 适配器接口](../../docs_cn/interfaces/mysql_cn.md)
 
-This contract defines logical MySQL 8 operations for canonical basic cards, private bookmarked learning cards, bounded history, and scheduling state. JSON examples describe typed adapter values, not a network protocol or stored JSON schema.
+This contract defines logical MySQL 8 operations for shared canonical words, phrases, senses, domains, evidence metadata, and immutable content releases. JSON examples describe typed adapter values, not a network protocol or stored JSON columns.
 
 Status: target contract; the current executable does not compose this adapter.
 
-## Common contract
+## Storage boundary
 
-Every operation carries a request ID, deadline, and expected schema version. Reads pin a content or learning-card revision when consistency matters. Mutations require an idempotency key and optimistic revision where a concurrent learner action is possible.
+MySQL is the authoritative store for compact, structured lexical content and publication state. It contains no user, learner, account, profile, preference, history, saved item, bookmark, practice, answer, mastery, schedule, graph layout, feedback, privacy request, or ownership record. It also does not retain raw translation text, lookup queries, or disambiguating context.
 
-Success returns `ok` with the requested value. Closed outcomes are `not_found`, `conflict`, `invalid`, `version_mismatch`, `unavailable`, and `timeout`. Adapter errors never expose SQL, credentials, learner content, ciphertext, or provider bodies.
+Allowed Transnet service data includes:
 
-## Lookup-key boundary
+- immutable knowledge releases and compatibility manifests;
+- canonical words and phrases, language-tagged forms, aliases, and senses;
+- concise definitions, translations, pronunciations, morphology, examples, and usage notes;
+- canonical domains and their scope definitions;
+- stable references to Qdrant knowledge roots and evidence records;
+- publication jobs, validation results, idempotency records, and a Qdrant projection outbox, provided none contains request text or user data.
 
-Input normalization belongs to the Transnet runtime, not the MySQL adapter. The adapter receives an ordered, bounded set of derived lookup forms with their match classes and the normalizer version. It does not receive or persist the learner's raw input, intermediate normalization forms, or transformation trace.
+Use `utf8mb4`, UTC timestamps with microsecond precision, opaque stable public IDs, explicit foreign keys, and immutable published revisions. Credentials and encryption keys remain outside MySQL.
 
-Exact canonical and exact alias forms precede inflection, spelling-correction, and relaxed-alias forms. The adapter returns all eligible collisions at the applicable rank rather than treating relaxed equality as card identity. Significant symbol distinctions such as `C`, `C++`, and `C#` therefore remain available to the runtime resolver.
+## Common operation envelope
 
-Uniqueness is enforced by stable card and sense IDs plus published canonical-form and alias records, never by a derived lookup string. The response identifies which candidate form and match class resolved each result so the runtime can rank or request context without storing the original query.
+Every adapter operation carries a request ID, deadline, expected schema version, and optionally an immutable content release. Publication mutations also require an idempotency key. Reads return `ok`, `not_found`, `version_mismatch`, `unavailable`, or `timeout`; mutations may additionally return `conflict` or `invalid`.
 
-## Basic cards
+Errors never expose SQL, credentials, request text, provider bodies, or internal connection details.
 
-`resolve_basic_card` accepts ordered derived lookup forms, their match classes, the normalizer version, source language, optional non-persisted context hints, English dialect, and active release. It returns ranked sense-specific cards and explicit spelling, collision, or language alternatives when resolution is uncertain.
+Request context:
 
 ```json
 {
-  "card_id": "card_01J...",
-  "sense_id": "sense_01J...",
-  "canonical_form": "sweltering",
-  "language": "en",
-  "part_of_speech": "adjective",
-  "translations": ["酷热的"],
-  "definitions": ["uncomfortably hot"],
-  "knowledge_root_ids": ["node_01J..."],
-  "cefr": "B2",
-  "domain_ids": ["domain_weather"],
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "deadline_at": "2026-09-12T10:30:05.000000Z",
+  "schema_version": "mysql-adapter-v1",
   "content_release": "knowledge-2026-09"
 }
 ```
 
-Cards are concise and independently useful when Qdrant is unavailable. Detailed graph relationships, exploratory associations, long cultural notes, and private state do not belong in a basic card.
-
-Publication operations stage, validate, activate, quarantine, and withdraw immutable card revisions. Activation references the compatible Qdrant node and edge releases. A release cannot activate until every referenced knowledge root exists and passes eligibility checks.
-
-## Domain registry and resolution
-
-Domains are canonical versioned records rather than free-form strings. A domain record contains a stable ID, canonical label, normalized labels, aliases, concise definition, inclusion and exclusion scope, status, release, and optional broader-domain IDs. Alias and normalized-form indexes may map to multiple candidates; they never silently merge a collision.
-
-`resolve_or_create_domain` first searches active labels and aliases and evaluates the bounded RAG candidates retrieved from Qdrant. When an existing scope adequately matches, it returns that stable domain ID. When none matches the model's requested label and scope, it atomically creates an active canonical domain and returns the new ID.
-
-Creation stores the normalized label and scope key, canonical label, concise definition, inclusion and exclusion scope, aliases, model and prompt versions, confidence, and broader or related candidate IDs. A unique constraint and transactional upsert prevent concurrent duplicate creation. If a normalized label collides with a materially different scope, the operation requires disambiguation rather than inserting an indistinguishable row.
-
-The same transaction writes an outbox event for the Qdrant domain node and relationship projection. The new domain may be referenced by basic cards immediately from MySQL. Model-inferred related-domain links are published as exploratory; only evidence-backed publication may mark them verified.
-
-## Bookmarks and learning cards
-
-`create_bookmark` accepts a learner ID, selected basic-card and sense IDs, a frozen generated card body, target skills, inferred generation context, knowledge release, generator, prompt, rubric, evaluator, and scheduler versions. The operation atomically creates the bookmark and first `LearningCard` revision.
-
-Only an explicit bookmark may create durable learning state. A lookup, graph expansion, translation, writing sample, conversation, or pronunciation recording must not create a learning card implicitly.
+Closed error response:
 
 ```json
 {
-  "bookmark_id": "bookmark_01J...",
-  "learning_card_id": "learning_card_01J...",
-  "revision": 1,
-  "source_card_id": "card_01J...",
-  "selected_sense_id": "sense_01J...",
-  "targets": ["recall", "collocation", "listening"],
-  "state": "active",
-  "due_at": "2026-09-13T02:00:00.000000Z"
+  "outcome": "version_mismatch",
+  "error": {
+    "code": "content_release_mismatch",
+    "message": "The requested content release is not available.",
+    "retryable": false
+  }
 }
 ```
 
-`refresh_learning_card` creates a new frozen revision and carries forward only compatible review state. Source correction, quarantine, or withdrawal marks dependent cards for regeneration. It never silently rewrites a learner-owned revision.
+## resolve_basic_cards
 
-`pause_bookmark`, `reprioritize_bookmark`, and `remove_bookmark` use optimistic revisions. Removal excludes the card from future scheduling while retaining only data required by the declared deletion and audit policy.
+Normalization belongs to the Transnet runtime. The adapter receives a bounded, ordered set of derived forms; it never receives the raw query, intermediate transformations, or context. Exact canonical and alias forms precede inflection, spelling-correction, and relaxed aliases. Significant symbols remain distinct, so `C`, `C++`, and `C#` cannot collapse into one identity.
 
-## History and strategy snapshot
+Request:
 
-`append_history_event` accepts only a canonical card or knowledge-node ID, selected sense, action, timestamp, and optional compact outcome, hint count, or misconception category. The adapter retains at most the newest 200 events from the previous 30 days per learner.
+```json
+{
+  "lookup_forms": [
+    {
+      "form": "sweltering",
+      "match_class": "exact_canonical",
+      "rank": 0
+    }
+  ],
+  "normalizer_version": "unicode-nfkc-v2",
+  "source_language": "en",
+  "explanation_language": "zh-CN",
+  "english_dialect": "en-US",
+  "content_release": "knowledge-2026-09",
+  "limit": 5
+}
+```
 
-Raw queries, passages, writing, answers, conversations, explanations, and recordings are rejected from strategy history. `clear_history` removes all history influence immediately.
+Response:
 
-`load_strategy_snapshot` returns current bookmarks plus eligible compact history. It does not return a stored hidden profile. Level, domain, weak-skill, and priority estimates are reconstructed by the agent and are not written back as independent strategy evidence.
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "matches": [
+      {
+        "matched_form": "sweltering",
+        "match_class": "exact_canonical",
+        "card": {
+          "card_id": "card_sweltering_en_adj_01",
+          "sense_id": "sense_sweltering_hot_01",
+          "canonical_form": "sweltering",
+          "language": "en",
+          "part_of_speech": "adjective",
+          "translations": [
+            {
+              "language": "zh-CN",
+              "text": "酷热的"
+            }
+          ],
+          "definitions": ["uncomfortably hot, especially because of the weather"],
+          "knowledge_root_ids": ["node_sweltering_hot_01"],
+          "cefr": "B2",
+          "domain_ids": ["domain_weather"],
+          "revision": 3
+        }
+      }
+    ],
+    "alternatives": []
+  },
+  "content_release": "knowledge-2026-09"
+}
+```
 
-## Attempts, mastery, and scheduling
+Uniqueness is enforced by stable form, card, and sense IDs plus published canonical-form and alias rows, never by an ad hoc normalized lookup string. All eligible collisions at the best applicable rank are returned for resolution by the service.
 
-`record_attempt` atomically consumes one frozen exercise attempt, stores its typed result and evaluator confidence, updates only the demonstrated skill dimensions, and advances the versioned FSRS-style schedule when permitted. Replaying the same idempotency key returns the original result.
+## get_sense
 
-An uncertain or `needs_review` evaluation has no negative mastery effect. Recognition never updates recall, spelling, writing, listening, pronunciation, or cultural pragmatics without direct evidence. Objective correctness and hint use are primary scheduling inputs; response time is optional, bounded, and learner-relative.
+Returns one compact canonical sense revision. Detailed relationship data remains in Qdrant.
 
-Stored outcomes are compact. Raw free-form answers and recordings are excluded from long-term learning state unless a separate, explicit retention contract is introduced.
+Request:
 
-## Storage and privacy rules
+```json
+{
+  "sense_id": "sense_sweltering_hot_01",
+  "explanation_language": "zh-CN",
+  "english_dialect": "en-US",
+  "content_release": "knowledge-2026-09"
+}
+```
 
-Use `utf8mb4`, UTC timestamps with microsecond precision, opaque public IDs, indexed ownership foreign keys, and transactional bookmark and attempt mutations. Encrypt private learner fields with unique authenticated-encryption nonces and versioned keys stored outside MySQL.
+Response:
 
-Learner deletion covers bookmarks, learning-card revisions, mastery, schedules, and history. Canonical cards and release manifests remain shared public content and are not learner-owned.
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "card_id": "card_sweltering_en_adj_01",
+    "sense_id": "sense_sweltering_hot_01",
+    "canonical_form": "sweltering",
+    "language": "en",
+    "part_of_speech": "adjective",
+    "definitions": ["uncomfortably hot, especially because of the weather"],
+    "translations": [
+      {
+        "language": "zh-CN",
+        "text": "酷热的"
+      }
+    ],
+    "pronunciations": [
+      {
+        "dialect": "en-US",
+        "ipa": "/ˈswɛltərɪŋ/"
+      }
+    ],
+    "forms": [
+      {
+        "form": "swelteringly",
+        "label": "adverb"
+      }
+    ],
+    "knowledge_root_ids": ["node_sweltering_hot_01"],
+    "domain_ids": ["domain_weather"],
+    "revision": 3
+  },
+  "content_release": "knowledge-2026-09"
+}
+```
+
+## resolve_domain
+
+Domains are canonical versioned records, not free-form tags. Resolution first checks published labels and aliases. If more than one scope matches, the adapter returns candidates and the publishing workflow must disambiguate.
+
+Request:
+
+```json
+{
+  "normalized_labels": ["meteorology", "weather"],
+  "scope_key": "earth-atmosphere-weather",
+  "content_release": "knowledge-2026-09",
+  "limit": 5
+}
+```
+
+Response:
+
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "resolution": "matched",
+    "domain": {
+      "domain_id": "domain_weather",
+      "canonical_label": "weather",
+      "definition": "Conditions of the atmosphere at a place and time.",
+      "inclusion_scope": ["temperature", "precipitation", "wind", "humidity"],
+      "exclusion_scope": ["long-term climate classification"],
+      "broader_domain_ids": ["domain_earth_science"],
+      "revision": 4
+    }
+  },
+  "content_release": "knowledge-2026-09"
+}
+```
+
+## create_domain_draft
+
+This publication-only operation creates a domain draft when exact MySQL resolution and bounded Qdrant retrieval find no adequate existing scope. Runtime lookup traffic cannot create domains.
+
+Request:
+
+```json
+{
+  "domain_id": "domain_urban_climatology",
+  "canonical_label": "urban climatology",
+  "normalized_label": "urban climatology",
+  "scope_key": "urban-atmosphere-climate",
+  "definition": "Study of atmospheric conditions and climate processes in urban areas.",
+  "inclusion_scope": ["urban heat island", "street-canyon airflow"],
+  "exclusion_scope": ["general urban planning"],
+  "aliases": ["urban climate science"],
+  "broader_domain_ids": ["domain_climatology"],
+  "related_candidate_ids": ["domain_urban_planning"],
+  "generation": {
+    "model_version": "domain-curator-2026-09",
+    "prompt_version": "domain-draft-v3",
+    "confidence": 0.94
+  },
+  "idempotency_key": "publish-domain-urban-climatology-v1"
+}
+```
+
+Response:
+
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "domain_id": "domain_urban_climatology",
+    "revision": 1,
+    "publication_state": "draft",
+    "outbox_event_id": "outbox_domain_urban_climatology_01"
+  }
+}
+```
+
+A unique constraint over normalized label and scope key plus a transactional upsert prevents concurrent duplicates. Generated related-domain links are exploratory until an evidence-backed publication decision verifies them.
+
+## stage_card_revision
+
+Stages an immutable word-or-phrase revision and its Qdrant root references. Staging validates all structured fields but does not make content readable from an active release.
+
+Request:
+
+```json
+{
+  "card": {
+    "card_id": "card_sweltering_en_adj_01",
+    "sense_id": "sense_sweltering_hot_01",
+    "canonical_form": "sweltering",
+    "language": "en",
+    "part_of_speech": "adjective",
+    "definitions": ["uncomfortably hot, especially because of the weather"],
+    "translations": [
+      {
+        "language": "zh-CN",
+        "text": "酷热的"
+      }
+    ],
+    "knowledge_root_ids": ["node_sweltering_hot_01"],
+    "domain_ids": ["domain_weather"]
+  },
+  "target_release": "knowledge-2026-10",
+  "source_revision": 3,
+  "evidence_ids": ["evidence_dictionary_1042"],
+  "idempotency_key": "stage-card-sweltering-r4"
+}
+```
+
+Response:
+
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "card_id": "card_sweltering_en_adj_01",
+    "sense_id": "sense_sweltering_hot_01",
+    "revision": 4,
+    "publication_state": "staged",
+    "target_release": "knowledge-2026-10"
+  }
+}
+```
+
+## activate_release
+
+Activation is atomic and references a compatible immutable Qdrant node/edge release. It fails if any card root, domain, evidence record, content hash, or Qdrant manifest is missing or incompatible.
+
+Request:
+
+```json
+{
+  "release_id": "knowledge-2026-10",
+  "expected_active_release": "knowledge-2026-09",
+  "mysql_content_hash": "sha256:9c49d7f6...",
+  "qdrant_manifest_hash": "sha256:2e17a054...",
+  "idempotency_key": "activate-knowledge-2026-10"
+}
+```
+
+Response:
+
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "active_release": "knowledge-2026-10",
+    "previous_release": "knowledge-2026-09",
+    "activated_at": "2026-10-01T00:00:00.000000Z"
+  }
+}
+```
+
+Quarantine, withdrawal, and correction create new publication state or a new release; published rows are never silently rewritten.
 
 ## Related documents
 
-- [System design](../transnet.md)
+- [Transnet service interface](port.md)
 - [Qdrant interface](qdrant.md)
-- [Island-port interface](port.md)
 - [Content publishing](../guides/content-publishing.md)
