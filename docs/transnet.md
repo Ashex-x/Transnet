@@ -6,14 +6,29 @@ Status: authoritative target design. Transnet is the stateless language and cano
 
 ## Contents
 
-- [System boundary](#system-boundary)
-- [Learning capability map](#learning-capability-map)
-- [Translation and lexical learning](#translation-and-lexical-learning)
-- [Canonical cards and knowledge graph](#canonical-cards-and-knowledge-graph)
-- [Product-owned learning loop](#product-owned-learning-loop)
-- [Practice, writing, listening, and pronunciation](#practice-writing-listening-and-pronunciation)
-- [Agent technology design](#agent-technology-design)
-- [Content publication and quality](#content-publication-and-quality)
+- [Transnet service and integration design](#transnet-service-and-integration-design)
+  - [Contents](#contents)
+  - [System boundary](#system-boundary)
+  - [Learning capability map](#learning-capability-map)
+  - [Translation and lexical learning](#translation-and-lexical-learning)
+    - [Intent routing](#intent-routing)
+    - [Input normalization and identity](#input-normalization-and-identity)
+    - [Words and lexical phrases](#words-and-lexical-phrases)
+    - [Sentences and passages](#sentences-and-passages)
+  - [Canonical cards and knowledge graph](#canonical-cards-and-knowledge-graph)
+    - [MySQL basic cards and domains](#mysql-basic-cards-and-domains)
+    - [Qdrant nodes and edges](#qdrant-nodes-and-edges)
+    - [Retrieval safety](#retrieval-safety)
+  - [Product-owned learning loop](#product-owned-learning-loop)
+  - [Practice, writing, listening, and pronunciation](#practice-writing-listening-and-pronunciation)
+    - [Stateless exercise and feedback generation](#stateless-exercise-and-feedback-generation)
+    - [Writing and communication](#writing-and-communication)
+    - [Reference speech and pronunciation analysis](#reference-speech-and-pronunciation-analysis)
+  - [Agent technology design](#agent-technology-design)
+    - [Model roles and orchestration](#model-roles-and-orchestration)
+    - [Grounding, evaluation, and reproducibility](#grounding-evaluation-and-reproducibility)
+  - [Content publication and quality](#content-publication-and-quality)
+  - [Related documents](#related-documents)
 
 ## System boundary
 
