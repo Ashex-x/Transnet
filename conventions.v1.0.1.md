@@ -22,7 +22,7 @@ These rules apply to the entire repository. A later versioned conventions file s
 - Keep system design in `docs/transnet.md`, task instructions in `docs/guides/`, human contracts in `docs/interfaces/`, machine contracts in `docs/reference/`, and Rust API detail in source comments and rustdoc.
 - Give each contract one authoritative owner; other documents summarize and link instead of copying it.
 - Keep prose paragraphs and simple list items on one physical line; use Mermaid for architecture and flows.
-- Use fenced `json` blocks for endpoint and interface request/response examples. Keep examples simple, valid, and consistently indented; omit unrelated fields.
+- Use indented JSON examples for endpoint and interface requests and responses. Use fenced blocks sparingly, only when syntax highlighting or a multiline non-JSON artifact materially improves clarity; keep examples simple, valid, consistently indented, and limited to relevant fields.
 - Document implemented behavior and update documentation with every public API, configuration, or process-boundary change.
 - Exclude generated files, build output, logs, runtime state, credentials, and editor state from version control; commit `Cargo.lock`.
 
