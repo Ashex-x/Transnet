@@ -10,21 +10,43 @@ English: [Island-port interface](../../docs/interfaces/port.md)
 
 未知字段和查询参数必须拒绝；时间使用 UTC RFC 3339，ID 使用不透明字符串，语言使用 BCP-47。`/v1` 错误使用 `application/problem+json`，`/translate` 保留 `{"error":"description"}` 旧格式。
 
-## 路由
+## 端点清单
 
-- `GET /health`、`GET /livez`、`GET /readyz`：进程状态、存活和就绪。
-- `POST /translate`：直接翻译。
-- `POST /v1/lookups`、`GET /v1/lookup-jobs/{job_id}`：学习卡计算和异步轮询。
-- `GET /v1/senses/{sense_id}`、`GET /v1/graph`、`GET /v1/graph/nodes/{kind}/{id}/neighbors`：规范内容和图读取。
-- `POST /v1/graph-edges/{edge_id}/feedback`：记录个人反馈。
-- `GET/DELETE /v1/history`、`GET/DELETE /v1/history/{lookup_id}`：历史读取和删除。
-- `GET/PUT/DELETE /v1/saved-senses` 及其 ID 路由：保存词义和学习状态。
-- `POST /v1/practice/sessions`、`next`、`current`、`attempts`、`GET /v1/progress`：练习与掌握度。
-- `GET/POST/PUT/DELETE /v1/graph-views`：私人图视图。
-- `GET /v1/me`、`PATCH /v1/me/preferences`、`POST /v1/me/export`、`DELETE /v1/me`：学习者偏好和隐私操作。
-- `GET /v1/privacy-requests/{request_id}`、`POST .../result`：隐私任务。
+健康探针为 GET /health、GET /livez 和 GET /readyz；直接翻译为 POST /translate；学习卡计算和异步轮询为 POST /v1/lookups 与 GET /v1/lookup-jobs/{job_id}。其余路由按下列领域分组。
 
-## 请求示例
+## 进程与翻译
+
+健康、存活和就绪路由不需要学习者上下文。翻译只接受非空文本以及源、目标语言标记。
+
+## 查词与任务
+
+POST /v1/lookups 计算学习卡；GET /v1/lookup-jobs/{job_id} 轮询异步工作。匿名任务以一次性的 Lookup-Capability 受限访问。
+
+## 规范词义与图
+
+GET /v1/senses/{sense_id}、GET /v1/graph 和 GET /v1/graph/nodes/{kind}/{id}/neighbors 读取规范内容和有界图。
+
+## 反馈
+
+POST /v1/graph-edges/{edge_id}/feedback 记录个人反馈，要求学习者上下文和幂等键。
+
+## 历史与保存词义
+
+GET 和 DELETE /v1/history 及其 lookup ID 路由读取或删除历史。GET、PUT 和 DELETE /v1/saved-senses 及其词义路由保存学习状态。
+
+## 练习与进度
+
+POST /v1/practice/sessions、next、attempts，以及 current 和 GET /v1/progress 管理自适应练习与掌握度。
+
+## 已保存图视图
+
+GET、POST、PUT 和 DELETE /v1/graph-views 管理私有图布局；替换操作使用 If-Match。
+
+## 学习者与隐私
+
+GET /v1/me、PATCH /v1/me/preferences、POST /v1/me/export、DELETE /v1/me 和隐私任务路由管理偏好、导出与删除。
+
+## 错误
 
 ```json
 {
