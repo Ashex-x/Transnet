@@ -1,10 +1,10 @@
 //! Transnet process entry point.
 
-use std::{fs, path::Path, sync::Arc};
+use std::{fs, net::IpAddr, path::Path, sync::Arc};
 
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use transnet::{
-  app_router_with_http_config, AppConfig, AppState, OpenAiLearningModel, TranslationService,
+  app_router_with_http_config, logger, AppConfig, AppState, OpenAiLearningModel, TranslationService,
 };
 
 #[tokio::main]
@@ -16,8 +16,26 @@ async fn main() -> Result<()> {
   )
   .with_context(|| format!("failed to parse {}", config_path.display()))?;
 
-  init_tracing(&config.server.log_level, &config.server.log_format)?;
-  let address = format!("{}:{}", config.server.host, config.server.port);
+  logger::init(&config.server.log_level, &config.server.log_format)?;
+  if let Err(error) = run(config).await {
+    tracing::error!(error = %error, "transnet stopped with an error");
+    return Err(error);
+  }
+  tracing::info!("transnet stopped");
+  Ok(())
+}
+
+async fn run(config: AppConfig) -> Result<()> {
+  let host = config
+    .server
+    .host
+    .parse::<IpAddr>()
+    .context("server.host must be a loopback IP address")?;
+  ensure!(
+    host.is_loopback(),
+    "server.host must be loopback; public exposure belongs to Island-port"
+  );
+  let address = std::net::SocketAddr::from((host, config.server.port));
   let gemma4_policy = config
     .provider_resilience
     .gemma4
@@ -37,7 +55,7 @@ async fn main() -> Result<()> {
     config.translate_gemma,
     translate_gemma_policy,
   )?;
-  let listener = tokio::net::TcpListener::bind(&address)
+  let listener = tokio::net::TcpListener::bind(address)
     .await
     .with_context(|| format!("failed to bind to {address}"))?;
 
@@ -51,28 +69,6 @@ async fn main() -> Result<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await
     .context("transnet server failed")?;
-  Ok(())
-}
-
-fn init_tracing(level: &str, format: &str) -> Result<()> {
-  let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(level));
-  let subscriber = tracing_subscriber::fmt()
-    .with_env_filter(filter)
-    .with_target(false)
-    .with_writer(std::io::stdout);
-
-  if format.eq_ignore_ascii_case("json") {
-    subscriber
-      .json()
-      .try_init()
-      .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-  } else {
-    subscriber
-      .compact()
-      .try_init()
-      .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-  }
   Ok(())
 }
 
@@ -94,7 +90,7 @@ async fn shutdown_signal() {
   let terminate = std::future::pending::<()>();
 
   tokio::select! {
-    _ = ctrl_c => {}
-    _ = terminate => {}
+    _ = ctrl_c => tracing::info!(signal = "ctrl_c", "graceful shutdown requested"),
+    _ = terminate => tracing::info!(signal = "terminate", "graceful shutdown requested"),
   }
 }

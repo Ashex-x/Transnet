@@ -207,7 +207,7 @@ async fn lookup_returns_generated_learning_card_without_canonical_ids() {
       Request::post("/v1/lookups")
         .header("content-type", "application/json")
         .body(Body::from(
-          r#"{"query":"caliente","source_language":"es","target_language":"en","context":"La sopa está caliente.","explanation_language":"zh-CN","english_dialect":"en-US","learner_level":"B1","detail":"full","include":["relations","word_history"],"history_mode":"incognito"}"#,
+          r#"{"query":"caliente","source_language":"es","target_language":"en","context":"La sopa está caliente.","explanation_language":"zh-CN","english_dialect":"en-US","learner_level":"B1","detail":"full","include":["relations","word_history"]}"#,
         ))
         .unwrap(),
     )
@@ -263,6 +263,24 @@ async fn lookup_rejects_non_english_target_with_problem_details() {
   let body = json(response).await;
   assert_eq!(body["code"], "validation_error");
   assert_eq!(body["errors"][0]["field"], "target_language");
+  assert_eq!(body["retryable"], false);
+}
+
+#[tokio::test]
+async fn lookup_rejects_persistence_policy_fields() {
+  let response = app()
+    .oneshot(
+      Request::post("/v1/lookups")
+        .header("content-type", "application/json")
+        .body(Body::from(r#"{"query":"hello","history_mode":"save"}"#))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+  let body = json(response).await;
+  assert_eq!(body["code"], "invalid_json");
   assert_eq!(body["retryable"], false);
 }
 

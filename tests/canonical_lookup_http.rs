@@ -245,7 +245,7 @@ async fn injected_canonical_lookup_returns_separated_evidence_backed_fields() {
       Request::post("/v1/lookups")
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
-          r#"{"query":"  HOTTER  ","source_language":"EN","history_mode":"incognito","include":["relations","word_history"]}"#,
+          r#"{"query":"  HOTTER  ","source_language":"EN","include":["relations","word_history"]}"#,
         ))
         .unwrap(),
     )
@@ -309,7 +309,7 @@ async fn canonical_lookup_records_closed_stages_without_model_validation() {
     Request::post("/v1/lookups")
       .header(header::CONTENT_TYPE, "application/json")
       .body(Body::from(
-        r#"{"query":"canonical-query-secret-8172","source_language":"en","history_mode":"incognito"}"#,
+        r#"{"query":"canonical-query-secret-8172","source_language":"en"}"#,
       ))
       .unwrap(),
   )
@@ -380,9 +380,7 @@ async fn canonical_lookup_marks_lexical_fallback_as_vector_degraded() {
   .oneshot(
     Request::post("/v1/lookups")
       .header(header::CONTENT_TYPE, "application/json")
-      .body(Body::from(
-        r#"{"query":"hotter","source_language":"en","history_mode":"incognito"}"#,
-      ))
+      .body(Body::from(r#"{"query":"hotter","source_language":"en"}"#))
       .unwrap(),
   )
   .await
@@ -414,38 +412,6 @@ async fn canonical_lookup_marks_lexical_fallback_as_vector_degraded() {
       },
     ]
   );
-}
-
-#[tokio::test]
-async fn private_history_mode_bypasses_the_shared_cache() {
-  for history_mode in ["incognito", "save"] {
-    let canonical = canonical_service(
-      InMemoryRetrievalAdapter::new(content())
-        .with_candidate(candidate())
-        .with_vector_match(matching_vector()),
-      Arc::new(ForbiddenCache),
-      clock(),
-    );
-    let response =
-      app_router(AppState::new(translation_service()).with_canonical_lookup(canonical))
-        .oneshot(
-          Request::post("/v1/lookups")
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(format!(
-              r#"{{"query":"hotter","source_language":"en","history_mode":"{history_mode}"}}"#,
-            )))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(
-      response.status(),
-      StatusCode::OK,
-      "history mode: {history_mode}"
-    );
-    assert_eq!(json(response).await["provenance"]["evidence_backed"], true);
-  }
 }
 
 #[tokio::test]
@@ -525,7 +491,7 @@ async fn canonical_failures_use_a_redacted_rfc_problem() {
       .header(header::CONTENT_TYPE, "application/json")
       .header("x-request-id", "canonical-42")
       .body(Body::from(
-        r#"{"query":"private-looking-query","source_language":"en","history_mode":"incognito"}"#,
+        r#"{"query":"private-looking-query","source_language":"en"}"#,
       ))
       .unwrap(),
   )
@@ -569,7 +535,7 @@ async fn inconsistent_canonical_content_uses_a_nonretryable_problem() {
       Request::post("/v1/lookups")
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
-          r#"{"query":"private-looking-query","source_language":"en","history_mode":"incognito"}"#,
+          r#"{"query":"private-looking-query","source_language":"en"}"#,
         ))
         .unwrap(),
     )
@@ -602,7 +568,7 @@ async fn invalid_canonical_cache_contract_uses_a_nonretryable_problem() {
     Request::post("/v1/lookups")
       .header(header::CONTENT_TYPE, "application/json")
       .body(Body::from(
-        r#"{"query":"private-looking-query","source_language":"en","history_mode":"incognito"}"#,
+        r#"{"query":"private-looking-query","source_language":"en"}"#,
       ))
       .unwrap(),
   )

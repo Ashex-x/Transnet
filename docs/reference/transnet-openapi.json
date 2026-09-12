@@ -3,7 +3,7 @@
   "info": {
     "title": "Transnet HTTP API",
     "version": "0.1.0",
-    "description": "Hand-maintained contract for only the public routes wired by the default Rust process: health, liveness, readiness, direct translation, and model-backed learning lookup. Routes that require optional application-state injection are intentionally absent. This contract makes no persistence, vector-database, or Web UI claim."
+    "description": "Complete no-authentication contract between trusted Island-port and Transnet. Stateful operations use X-Learner-Id; no cookies, sessions, OIDC, or bearer authentication are accepted."
   },
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
   "servers": [
@@ -16,27 +16,17 @@
   "tags": [
     {
       "name": "process",
-      "description": "Unauthenticated process-health routes."
+      "description": "Loopback process-health routes."
     },
     {
       "name": "translation",
-      "description": "Unauthenticated direct translation that preserves the legacy contract."
+      "description": "Loopback direct translation that preserves the legacy contract."
     },
     {
       "name": "learning",
-      "description": "Unauthenticated, synchronous, model-generated English-learning lookup."
+      "description": "Loopback, synchronous, model-generated English-learning lookup."
     }
   ],
-  "x-transnet-runtime-scope": {
-    "description": "Only routes registered by src/main.rs are specified. Optional dependency-injected routes are not default runtime routes and are deliberately omitted.",
-    "implementedPaths": [
-      "/health",
-      "/livez",
-      "/readyz",
-      "/translate",
-      "/v1/lookups"
-    ]
-  },
   "x-transnet-request-correlation": {
     "responseHeader": "X-Request-Id",
     "description": "Every response, including route misses, payload-limit failures, and configured CORS preflights, contains X-Request-Id. A single safe supplied value is preserved; missing, duplicate, or unsafe values are replaced with a generated ULID.",
@@ -290,7 +280,7 @@
         ],
         "operationId": "lookupLearningCard",
         "summary": "Return a synchronous model-generated English-learning card.",
-        "description": "The default process wires a model-backed learning lookup. It does not expose canonical lexical content, retrieval, persistence, authentication, or a Web UI through this operation. Every returned assertion is generated, canonical identifiers are null, evidence lists are empty, and the response is never shared from an HTTP cache.",
+        "description": "The default process wires a model-backed learning lookup. It does not expose canonical lexical content, retrieval, persistence, caller identity, or a Web UI through this operation. Every returned assertion is generated, canonical identifiers are null, evidence lists are empty, and the response is never shared from an HTTP cache.",
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
@@ -417,6 +407,1322 @@
           }
         }
       }
+    },
+    "/v1/lookup-jobs/{job_id}": {
+      "get": {
+        "summary": "Poll lookup work",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Poll lookup work",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "202": {
+            "description": "Poll lookup work",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Poll lookup work",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "410": {
+            "description": "Poll lookup work",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/senses/{sense_id}": {
+      "get": {
+        "summary": "Read canonical sense details",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read canonical sense details",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Read canonical sense details",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "503": {
+            "description": "Read canonical sense details",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/graph": {
+      "get": {
+        "summary": "Read a bounded canonical graph",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read a bounded canonical graph",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Read a bounded canonical graph",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Read a bounded canonical graph",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "503": {
+            "description": "Read a bounded canonical graph",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/graph/nodes/{kind}/{id}/neighbors": {
+      "get": {
+        "summary": "Page direct graph neighbors",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page direct graph neighbors",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Page direct graph neighbors",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Page direct graph neighbors",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "503": {
+            "description": "Page direct graph neighbors",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/graph-edges/{edge_id}/feedback": {
+      "post": {
+        "summary": "Record graph feedback",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record graph feedback",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "409": {
+            "description": "Record graph feedback",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Record graph feedback",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/history": {
+      "get": {
+        "summary": "Page lookup history",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page lookup history",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Start clear-history work",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Start clear-history work",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyObject"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/history/{lookup_id}": {
+      "get": {
+        "summary": "Reopen a lookup",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reopen a lookup",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete one history item",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Delete one history item",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyObject"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/saved-senses": {
+      "get": {
+        "summary": "Page saved senses",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page saved senses",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/saved-senses/{sense_id}": {
+      "get": {
+        "summary": "Read one saved sense",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read one saved sense",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Save learning state",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Save learning state",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              },
+              "example": {}
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove learning state",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Remove learning state",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyObject"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/practice/sessions": {
+      "post": {
+        "summary": "Create a practice session",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Create a practice session",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/practice/sessions/{session_id}/next": {
+      "post": {
+        "summary": "Claim the outstanding item",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Claim the outstanding item",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "204": {
+            "description": "Claim the outstanding item",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyObject"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/practice/sessions/{session_id}/current": {
+      "get": {
+        "summary": "Read the outstanding item",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read the outstanding item",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "204": {
+            "description": "Read the outstanding item",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/practice/sessions/{session_id}/attempts": {
+      "post": {
+        "summary": "Submit one attempt",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Submit one attempt",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/progress": {
+      "get": {
+        "summary": "Read progress",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read progress",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/graph-views": {
+      "get": {
+        "summary": "Page graph views",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page graph views",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a graph view",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Create a graph view",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/graph-views/{view_id}": {
+      "get": {
+        "summary": "Read a graph view",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read a graph view",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Replace graph layout",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Replace graph layout",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              },
+              "example": {}
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a graph view",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Delete a graph view",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyObject"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "summary": "Read learner preferences",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read learner preferences",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Start learner deletion",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Start learner deletion",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/preferences": {
+      "patch": {
+        "summary": "Update learner preferences",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Update learner preferences",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/export": {
+      "post": {
+        "summary": "Start a learner export",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Start a learner export",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/privacy-requests/{request_id}": {
+      "get": {
+        "summary": "Poll privacy work",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Poll privacy work",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Poll privacy work",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          },
+          "410": {
+            "description": "Poll privacy work",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/privacy-requests/{request_id}/result": {
+      "post": {
+        "summary": "Mint a one-use export URL",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/LearnerId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mint a one-use export URL",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                },
+                "example": {}
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyObject"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -428,6 +1734,28 @@
         "description": "An optional correlation value. A single safe value is echoed; an unsafe, duplicate, or absent value is replaced with a generated ULID.",
         "schema": {
           "$ref": "#/components/schemas/RequestId"
+        }
+      },
+      "LearnerId": {
+        "name": "X-Learner-Id",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._~-]+$"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._~-]+$"
         }
       }
     },
@@ -638,15 +1966,6 @@
               ]
             },
             "description": "Omit to include relations and word history. practice_preview is accepted but currently produces a warning instead of preview data."
-          },
-          "history_mode": {
-            "type": "string",
-            "enum": [
-              "incognito",
-              "save"
-            ],
-            "default": "incognito",
-            "description": "The default anonymous model-only runtime does not persist either mode; save produces a warning."
           }
         }
       },
@@ -1215,7 +2534,19 @@
             "type": "string"
           }
         }
+      },
+      "Object": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "EmptyObject": {
+        "type": "object",
+        "additionalProperties": false
       }
     }
+  },
+  "x-transnet-boundary": {
+    "authentication": "none",
+    "learnerContext": "X-Learner-Id supplied by trusted Island-port"
   }
 }
