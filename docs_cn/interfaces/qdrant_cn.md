@@ -2,36 +2,37 @@
 
 English: [Qdrant adapter interface](../../docs/interfaces/qdrant.md)
 
-Qdrant 是可重建的派生索引；MySQL 保存规范事实和活动的 `(release, collection, schema, ranker)` 版本组。集合按发布版本和嵌入配置不可变创建。
+本合同定义以版本化 Qdrant 节点和边集合存储的共享翻译维基知识图谱。Qdrant 可重建，不包含学习者所有的内容。
 
-## 集合与点
+状态：目标合同；当前可执行文件尚未组合此适配器。
 
-```json
-{
-  "operation": "collection.create",
-  "request_id": "01JREQUEST",
-  "input": {
-    "collection": "transnet_sense_01JRELEASE_e5_v3",
-    "release_id": "01JRELEASE",
-    "vector": {"size": 1024, "distance": "Cosine", "model": "embed-v5"},
-    "payload_indexes": ["release_id", "entity_kind", "status"]
-  }
-}
-```
+## 发布与集合合同
+
+每个逻辑发布包含一个不可变 `knowledge_nodes` 集合和一个不可变 `knowledge_edges` 集合，共同钉住发布 ID、嵌入模型、维度、稀疏配置、payload schema 和哈希，并作为一个单元激活与回滚。
+
+节点先于边构建，ID 必须确定。缺失端点、跨发布引用、方向或词义无效、缺证据与嵌入元数据不匹配都会拒绝发布。任何私有学习者数据都不得进入 Qdrant。
+
+## 知识节点
+
+节点表示可独立解释的词义、短语、概念、实体、现象、习语、隐喻、言语行为、文化实践、语法模式、搭配或误解。它包含确定 ID、类型、标签、别名、翻译、转写、检索描述、范围、证据、信心、验证状态和发布，同时使用跨语言稠密向量和词法稀疏向量。
+
+## 知识边
+
+边同时是有类型连接和可搜索的关系解释，包含两端、类型、方向、完整解释、限制、证据、信心、验证状态和发布。关系分为命名、词汇、概念、对比、文化和探索类。强度关系必须命名维度，不得编码为上/下位词。
 
 ## 检索
 
-```json
-{
-  "operation": "vector.search",
-  "request_id": "01JREQUEST",
-  "content_version": {"release_id": "01JRELEASE", "collection": "transnet_sense_01JRELEASE_e5_v3", "ranking_version": "lookup-v1"},
-  "input": {"purpose": "canonical_definition", "content_language": "es", "query_vector": [0.125, -0.25, 0.5], "limit": 30}
-}
-```
+`search_nodes` 和 `search_edges` 结合稠密、稀疏与精确形式检索。`neighbors` 通过端点过滤取直接边并按 ID 获取另一端。调用者对有界候选做去重和重排，并分开显示已验证与探索结果。
 
-检索必须绑定物理集合，先应用版本、状态和来源过滤，再执行 1–100 的限制。分数只在同一模型和集合版本内可比较；候选 ID 必须回到 MySQL 做权限和证据校验。
+向量相似度不能单独证明翻译、同义、层级、因果、共同机制或文化意义。扩展一次只跟随一个学习者选定节点；任意深度遍历和图分析不在合同内。
 
-## 校准与生命周期
+## 对账与生命周期
 
-构建流程是新建集合、幂等写入点、校验身份与内容哈希、在 MySQL 记录就绪，再发布活动版本。来源隔离先在 MySQL 生效，然后删除匹配点并再次校验。集合删除必须确认没有活动版本或保留回滚版本引用。
+构建把节点/边数量、端点覆盖、哈希、嵌入版本和发布元数据与 manifest 比较。不完整配对不可激活。隔离先禁用内容再删除向量；修正创建新发布；回滚选择保留的未改动配对。
+
+## 相关文档
+
+- [系统设计](../transnet_cn.md)
+- [MySQL](mysql_cn.md)
+- [内容发布](../guides/content-publishing_cn.md)
+- [质量保证](../guides/quality-assurance_cn.md)

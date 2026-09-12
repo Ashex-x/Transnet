@@ -1,20 +1,24 @@
 # Transnet 中文文档
 
-English: [documentation index](../docs/documentation-index.md)
-
-本目录是 `docs/` 的中文镜像。英文文档是规范来源；本目录中的页面与英文页面保持相同的主题、路径层级和链接关系。
+English: [Transnet documentation](../docs/documentation-index.md)
 
 ## 设计与规划
 
-- [系统设计与架构](transnet_cn.md)：运行时边界、信任合同和未来计算扩展。
-- [英语学习体验](product/learning-experience_cn.md)：查词卡片、关系图、练习和个性化。
-- [总体计划](todo_cn.md)：当前基线、后续工作和完成标准。
+- [系统设计与架构](transnet_cn.md)：权威的目标行为、数据模型、学习循环、代理角色和质量场景。
+- [英语学习体验](product/learning-experience_cn.md)：学习者可见行为、书签卡、练习、反馈与隐私。
+- [交付计划](todo_cn.md)：实现阶段和完成标准。
 
 ## 接口
 
-- [Island-port 接口](interfaces/port_cn.md)：无认证的完整 HTTP 合同、请求头、错误和 JSON 示例。
-- [MySQL 适配器接口](interfaces/mysql_cn.md)：持久化操作、事务约束和请求载荷。
-- [Qdrant 适配器接口](interfaces/qdrant_cn.md)：集合、向量点、检索、校验、发布和清理。
+- [Island-port 接口](interfaces/port_cn.md)：内部 HTTP 边界与当前/拟议操作。
+- [MySQL 适配器](interfaces/mysql_cn.md)：基础卡、私有学习卡、有界历史与排程状态。
+- [Qdrant 适配器](interfaces/qdrant_cn.md)：节点、边、检索、校验和发布。
+
+## 参考
+
+- [OpenAPI 3.1 合同](../docs/reference/transnet-openapi.json)：当前实现和 feature-gated 兼容 HTTP 表面。
+
+OpenAPI 不是目标产品合同；旧历史、saved-sense、graph-view、preference、privacy 和 practice schema 不得用来推断目标设计。
 
 ## 指南
 
@@ -25,6 +29,6 @@ English: [documentation index](../docs/documentation-index.md)
 
 ## 仓库规则
 
-- [仓库约定 v1.0.1](conventions-v1.0.1_cn.md)：Rust、文档、验证和 Git 规则。
+- [仓库约定 v1.0.1](conventions-v1.0.1_cn.md)
 
-接口文档是规范合同；Rust trait 的细节仍以源代码注释和 rustdoc 为准。
+系统设计对产品语义最权威。接口文档在其明示的实现状态内具有规范性。
