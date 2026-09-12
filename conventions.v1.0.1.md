@@ -22,9 +22,15 @@ Markdown prose may exceed the code line-width target. Keep each paragraph and si
 
 Use Mermaid for relational diagrams, flows, and architecture. Do not use ASCII art for diagrams. Avoid small two-column tables for simple mappings; write source -> target or key: value inline instead. Write as internal engineering notes: one idea per paragraph, no filler, and selective bold emphasis only.
 
+Use inline backticks sparingly in documentation. Reserve them for exact identifiers, wire names, commands, paths, values, and syntax; write ordinary prose, headings, and explanatory terms as plain text. This limit does not apply inside fenced code blocks, where exact code must remain intact.
+
 Keep doc comments on public items. Docs contains architecture, contracts, operations, and product documentation; do not edit generated documentation directly. Update source comments or hand-written Markdown, then regenerate generated output.
 
-Each public module has one hand-written Markdown document when it needs one. Simple documents may be free-form and minimal. Complex documents include a Contents list linking to Overview, Architecture, API, Design, and Testing when those sections apply.
+Each public module has one hand-written Markdown document when it needs one. Simple documents may be free-form and minimal. The suggested Contents, Overview, Architecture, API, Design, and Testing structure is a reference, not a template to impose blindly: adapt headings, order, and depth to the repository and document's purpose.
+
+Start a document with its purpose, owner or boundary, and intended reader when those are not obvious from its title. Explain prerequisites before procedures, put the smallest working example before advanced variants, and define project-specific terms on first use. End related documents with relative links. Keep a concise status note when a design is proposed, partial, deprecated, or not yet implemented.
+
+Write changes so a new contributor can answer: where the behavior lives, how to run or verify it, which inputs and outputs matter, and which adjacent document or source file is authoritative. Keep examples runnable or explicitly mark them illustrative; never include credentials, private learner data, or production-only identifiers.
 
 English documentation lives in docs. Each translation uses a localized docs_<language> tree and the locale suffix on every inner filename. The Chinese tree is docs_cn and uses the _cn suffix. Localized pages mirror the English path, headings, diagrams, API names, and internal links; link a document to its translation near the top when both exist. Update the corresponding English and localized page in the same change when an API, configuration field, or process boundary changes.
 
