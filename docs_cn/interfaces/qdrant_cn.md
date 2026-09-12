@@ -1,5 +1,7 @@
 # Qdrant 适配器接口
 
+English: [Qdrant adapter interface](../../docs/interfaces/qdrant.md)
+
 Qdrant 是可重建的派生索引；MySQL 保存规范事实和活动的 `(release, collection, schema, ranker)` 版本组。集合按发布版本和嵌入配置不可变创建。
 
 ## 建集合和写入点

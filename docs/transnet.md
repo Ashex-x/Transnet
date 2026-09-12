@@ -1,5 +1,7 @@
 # Transnet compute-service architecture
 
+中文：[计算服务架构](../docs_cn/transnet_cn.md)
+
 ## Boundary
 
 Transnet is a pure loopback compute service used by Island-port. It owns deterministic input validation, model-provider calls, result parsing, pure ranking and assembly, provider resilience, and redacted compute telemetry.

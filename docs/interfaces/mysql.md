@@ -1,5 +1,7 @@
 # MySQL adapter interface
 
+中文：[MySQL 适配器接口](../../docs_cn/interfaces/mysql_cn.md)
+
 This is the typed MySQL 8 adapter contract. JSON examples represent logical adapter values, not a network protocol or stored JSON schema. SQL rows remain private.
 
 ## Common contract
@@ -242,4 +244,3 @@ Jobs persist before external work. Claims use row locking, bounded leases, and w
 Canonical tables cover releases, sources, evidence, lexemes, forms, senses, assertions, relations, and scales. Learner tables cover profiles, preferences, history, saved senses, feedback, graph views, practice, and mastery. Operations tables cover snapshots, lookup jobs, durable jobs, idempotency, outbox, and privacy requests.
 
 Use `utf8mb4`, UTC `DATETIME(6)`, opaque ULID public IDs, numeric internal keys, binary collations for machine values, and indexed ownership foreign keys. JSON is limited to versioned opaque snapshots. Ledgers are append-only and projections transactional. Learner text uses unique authenticated-encryption nonces and versioned keys; equality lookup uses versioned HMACs with secrets outside MySQL. Errors never expose SQL, learner content, credentials, capabilities, hashes, or ciphertext.
-

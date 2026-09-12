@@ -1,5 +1,7 @@
 # MySQL 适配器接口
 
+English: [MySQL adapter interface](../../docs/interfaces/mysql.md)
+
 MySQL 8 保存规范内容、学习者私有状态、反馈、练习、任务和幂等记录。JSON 仅表示适配器的逻辑载荷，不是网络协议或数据库 JSON 表结构。
 
 ## 通用载荷

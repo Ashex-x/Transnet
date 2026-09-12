@@ -1,5 +1,7 @@
 # English-learning experience
 
+中文：[英语学习体验](../../docs_cn/product/learning-experience_cn.md)
+
 ## Status
 
 This document describes learner-facing behavior coordinated by Island-port and Transnet. [System design](../transnet.md) owns the boundary, and the [Island-port interface](../interfaces/port.md) owns the service contract.

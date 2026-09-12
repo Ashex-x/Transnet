@@ -1,5 +1,7 @@
 # Transnet 中文文档
 
+English: [documentation index](../docs/documentation-index.md)
+
 本目录是 `docs/` 的中文镜像。英文文档是规范来源；本目录中的页面与英文页面保持相同的主题、路径层级和链接关系。
 
 ## 设计与规划

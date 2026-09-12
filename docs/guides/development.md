@@ -1,5 +1,7 @@
 # Development and operations
 
+中文：[开发与运维](../../docs_cn/guides/development_cn.md)
+
 The root [README](../../README.md) owns prerequisites, configuration basics, build commands, verification commands, local startup, and curl examples.
 
 ## Operations

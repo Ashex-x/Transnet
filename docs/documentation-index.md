@@ -1,5 +1,7 @@
 # Transnet documentation
 
+中文：[中文文档索引](../docs_cn/documentation-index_cn.md)
+
 ## Design and planning
 
 - [System design and architecture](transnet.md): current runtime and target English-learning service architecture.

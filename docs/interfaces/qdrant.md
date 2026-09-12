@@ -1,5 +1,7 @@
 # Qdrant adapter interface
 
+中文：[Qdrant 适配器接口](../../docs_cn/interfaces/qdrant_cn.md)
+
 Qdrant is a rebuildable derived index. MySQL owns canonical truth and the active compatible `(release, collection, schema, ranker)` tuple. JSON examples show typed adapter requests.
 
 ## Collections and points

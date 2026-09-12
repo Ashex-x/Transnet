@@ -1,5 +1,7 @@
 # Quality assurance
 
+中文：[质量保证](../../docs_cn/guides/quality-assurance_cn.md)
+
 This guide covers the Island-port product around Transnet, including MySQL, Qdrant, privacy, persistence, feedback, practice, and worker behavior. The current Transnet executable implements only the applicable HTTP, provider-resilience, schema-validation, and redaction subset.
 
 ## Status

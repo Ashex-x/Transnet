@@ -1,5 +1,7 @@
 # Transnet compute-service plan
 
+中文：[计算服务计划](../docs_cn/todo_cn.md)
+
 ## Fixed boundary
 
 Transnet remains a pure loopback compute service. Island-port owns identity, permissions, user data, privacy, encryption, persistence, cache policy, idempotency, durable work, MySQL, Qdrant, and every stateful public API.

@@ -1,5 +1,7 @@
 # Island-port 接口
 
+English: [Island-port interface](../../docs/interfaces/port.md)
+
 本文件是受信任的 Island-port 与 Transnet 之间的完整中文 HTTP 合同。Transnet 不认证调用者、不管理会话，也不接受 Cookie 或 Bearer token；Island-port 在转发内部请求前完成认证和授权。
 
 ## 传输约定

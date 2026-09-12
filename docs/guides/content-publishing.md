@@ -1,5 +1,7 @@
 # Publish lexical content
 
+中文：[发布词汇内容](../../docs_cn/guides/content-publishing_cn.md)
+
 Island-port owns this persistence workflow through its MySQL and Qdrant adapters. The current Transnet executable has no database, vector collection, import pipeline, or worker composition.
 
 ## Status

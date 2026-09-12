@@ -1,5 +1,7 @@
 # Island-port interface
 
+中文：[Island-port 接口](../../docs_cn/interfaces/port_cn.md)
+
 This document is the authoritative human-readable contract between trusted Island-port and Transnet. Transnet does not authenticate callers, manage sessions, or accept cookies or bearer tokens. Island-port performs authentication and authorization before forwarding an internal request.
 
 ## Transport

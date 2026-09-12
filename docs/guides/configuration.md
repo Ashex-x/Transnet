@@ -1,5 +1,7 @@
 # Configuration
 
+中文：[配置](../../docs_cn/guides/configuration_cn.md)
+
 The process reads `config/transnet.toml` relative to the Cargo manifest, independent of the shell working directory.
 
 `[server]` configures `host`, `port`, `log_level`, and `log_format`. `host` must be a loopback IP address such as `127.0.0.1` or `::1`; Island-port owns any public-edge deployment. `RUST_LOG` overrides `log_level`; `log_format = "json"` selects newline-delimited JSON and other values select compact text. Debug builds write `logs/debug/transnet.log`; release builds write `logs/release/transnet.log`. The non-blocking logger replaces the applicable file on startup and includes tracing targets.
