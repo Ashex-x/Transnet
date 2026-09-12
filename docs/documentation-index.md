@@ -31,6 +31,6 @@ The OpenAPI document is the machine-readable counterpart of the Island-port inte
 
 ## 中文
 
-- [中文文档索引](../docs_cn/文档索引.md): Chinese translations of the authoritative interfaces and repository conventions.
+- [Chinese documentation index](../docs_cn/index.md): Chinese translations of the authoritative interfaces and repository conventions.
 
 Interface documents are normative contracts. Rust trait details remain in source comments and rustdoc.
