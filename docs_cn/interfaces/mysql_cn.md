@@ -6,17 +6,19 @@ MySQL 8 保存规范内容、学习者私有状态、反馈、练习、任务和
 
 ## 通用载荷
 
-    {
-      "operation": "saved_sense.upsert",
-      "request_id": "01JREQUEST",
-      "learner_id": "learner_01",
-      "idempotency": {
-        "key_digest": "sha256:BASE64",
-        "request_fingerprint": "sha256:BASE64",
-        "expires_at": "2026-09-13T10:00:00Z"
-      },
-      "input": {"sense_id": "01JHOT", "state": "learning"}
-    }
+```json
+{
+  "operation": "saved_sense.upsert",
+  "request_id": "01JREQUEST",
+  "learner_id": "learner_01",
+  "idempotency": {
+    "key_digest": "sha256:BASE64",
+    "request_fingerprint": "sha256:BASE64",
+    "expires_at": "2026-09-13T10:00:00Z"
+  },
+  "input": {"sense_id": "01JHOT", "state": "learning"}
+}
+```
 
 结果限定为 `ok`、`missing`、`conflict`、`replayed`、`expired`、`lease_lost` 或 `unavailable`。所有权、版本和幂等比较必须与写入处于同一事务。
 

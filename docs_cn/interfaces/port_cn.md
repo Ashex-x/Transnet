@@ -26,20 +26,24 @@ English: [Island-port interface](../../docs/interfaces/port.md)
 
 ## 请求示例
 
-    {
-      "query": "caliente",
-      "source_language": "es",
-      "target_language": "en",
-      "explanation_language": "zh-CN",
-      "detail": "full",
-      "include": ["relations", "word_history"]
-    }
+```json
+{
+  "query": "caliente",
+  "source_language": "es",
+  "target_language": "en",
+  "explanation_language": "zh-CN",
+  "detail": "full",
+  "include": ["relations", "word_history"]
+}
+```
 
-    {
-      "schema_version": "1.0",
-      "lookup_id": "01JLOOKUP",
-      "coverage": {"definitions": "available", "relations": "partial"},
-      "warnings": []
-    }
+```json
+{
+  "schema_version": "1.0",
+  "lookup_id": "01JLOOKUP",
+  "coverage": {"definitions": "available", "relations": "partial"},
+  "warnings": []
+}
+```
 
 分页使用不透明游标；私有资源的缺失和非所有者访问均返回 `404`。重复幂等请求重放原结果，不同请求复用同一键返回 `409`。服务错误返回 `503`，超过请求体限制返回 `413`，语义校验失败返回 `422`。

@@ -28,7 +28,7 @@ Each public module has one hand-written Markdown document when it needs one. Sim
 
 English documentation lives in docs. Each translation uses a localized docs_<language> tree and the locale suffix on every inner filename. The Chinese tree is docs_cn and uses the _cn suffix. Localized pages mirror the English path, headings, diagrams, API names, and internal links; link a document to its translation near the top when both exist. Update the corresponding English and localized page in the same change when an API, configuration field, or process boundary changes.
 
-Use indented JSON for endpoint and interface requests and responses. Use fenced blocks only when syntax highlighting or a multiline non-JSON artifact materially improves clarity. Keep examples simple, valid, consistently indented, and limited to relevant fields.
+Use fenced json blocks for endpoint and interface requests and responses. Keep examples simple, valid, consistently indented, and limited to relevant fields. Use other fenced blocks only when syntax highlighting or a multiline non-JSON artifact materially improves clarity.
 
 ## REST API contracts
 

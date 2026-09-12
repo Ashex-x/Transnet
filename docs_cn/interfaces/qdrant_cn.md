@@ -6,25 +6,29 @@ Qdrant 是可重建的派生索引；MySQL 保存规范事实和活动的 `(rele
 
 ## 建集合和写入点
 
-    {
-      "operation": "collection.create",
-      "request_id": "01JREQUEST",
-      "input": {
-        "collection": "transnet_sense_01JRELEASE_e5_v3",
-        "release_id": "01JRELEASE",
-        "vector": {"size": 1024, "distance": "Cosine", "model": "embed-v5"},
-        "payload_indexes": ["release_id", "entity_kind", "status"]
-      }
-    }
+```json
+{
+  "operation": "collection.create",
+  "request_id": "01JREQUEST",
+  "input": {
+    "collection": "transnet_sense_01JRELEASE_e5_v3",
+    "release_id": "01JRELEASE",
+    "vector": {"size": 1024, "distance": "Cosine", "model": "embed-v5"},
+    "payload_indexes": ["release_id", "entity_kind", "status"]
+  }
+}
+```
 
 ## 检索与校验
 
-    {
-      "operation": "vector.search",
-      "request_id": "01JREQUEST",
-      "content_version": {"release_id": "01JRELEASE", "collection": "transnet_sense_01JRELEASE_e5_v3", "ranking_version": "lookup-v1"},
-      "input": {"purpose": "canonical_definition", "content_language": "es", "query_vector": [0.125, -0.25, 0.5], "limit": 30}
-    }
+```json
+{
+  "operation": "vector.search",
+  "request_id": "01JREQUEST",
+  "content_version": {"release_id": "01JRELEASE", "collection": "transnet_sense_01JRELEASE_e5_v3", "ranking_version": "lookup-v1"},
+  "input": {"purpose": "canonical_definition", "content_language": "es", "query_vector": [0.125, -0.25, 0.5], "limit": 30}
+}
+```
 
 检索必须绑定物理集合，先应用版本、状态和来源过滤，再执行 1–100 的限制。分数只在同一模型和集合版本内可比较；候选 ID 必须回到 MySQL 做权限和证据校验。
 
