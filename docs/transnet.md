@@ -87,13 +87,13 @@ The agent chooses an experience from linguistic intent rather than a fixed chara
 
 ### Input normalization and identity
 
-The system preserves the exact learner input for display and diagnosis but never uses that raw string as card identity. A versioned normalizer derives retrieval forms by applying Unicode NFKC normalization, language-aware case folding, outer-whitespace trimming, internal-whitespace collapsing, and canonical equivalents for typographic punctuation. Thus `Make`, `make`, and `make ` share a case-folded lookup form.
+The runtime may hold the exact learner input only for the current response and diagnosis, but never uses that raw string as card identity or persists it as part of normalization. A versioned normalizer derives retrieval forms by applying Unicode NFKC normalization, language-aware case folding, outer-whitespace trimming, internal-whitespace collapsing, and canonical equivalents for typographic punctuation. Thus `Make`, `make`, and `make ` share a case-folded lookup form.
 
 A second, relaxed retrieval form may remove decorative leading or trailing symbols and separators inside an otherwise alphabetic candidate. This allows `make*` and a likely accidental `ma-ke` to retrieve `make`, but it is an alias candidate rather than an automatic identity merge. Exact canonical and exact alias matches rank before relaxed matches.
 
 Normalization must not erase lexical meaning. Case, apostrophes, hyphens, plus signs, number signs, periods, and other symbols remain available as disambiguation features when a language or domain treats them as significant. For example, `C`, `C++`, and `C#` remain distinct, as do terms whose hyphen changes meaning. If a relaxed form collides with multiple canonical entries, the resolver returns ranked alternatives or asks for context instead of selecting or creating a card.
 
-Cards use stable sense IDs, not normalized strings, as identity. The system stores the original input, the matched canonical form, the normalization version, the transformations applied, and the match class: exact, canonical alias, inflection, spelling correction, or relaxed alias. New cards are created only after canonical resolution and collision checks fail under the content-publication workflow.
+Cards use stable sense IDs, not normalized strings, as identity. During the request, the runtime keeps the matched canonical form, normalizer version, and match class: exact, canonical alias, inflection, spelling correction, or relaxed alias. It passes only bounded derived lookup forms to storage and does not persist the raw input, intermediate forms, or transformation trace. New cards are created only after canonical resolution and collision checks fail under the content-publication workflow.
 
 ### Words and lexical phrases
 
@@ -190,18 +190,20 @@ Qdrant indexes the public domain definitions, aliases, scope notes, representati
 
 ```mermaid
 flowchart LR
-  input["Proposed domain label and scope"] --> exact["MySQL labels and aliases"]
+  input["Requested domain label and scope"] --> exact["MySQL labels and aliases"]
   exact --> candidates["Bounded canonical candidates"]
   input --> rag["Qdrant domain RAG"]
   rag --> candidates
   candidates --> decide{"Resolution decision"}
   decide -->|"Confident match"| reuse["Use existing domain ID"]
-  decide -->|"Collision or ambiguity"| review["Needs review"]
-  decide -->|"No adequate domain"| propose["Pending new-domain proposal"]
-  propose --> publish["Validation and editorial publication"]
+  decide -->|"Collision or ambiguity"| clarify["Resolve with scope or context"]
+  decide -->|"No adequate domain"| create["Atomically create canonical domain"]
+  create --> index["Publish domain node and related links"]
 ```
 
-The domain resolver returns either `use_existing` with a domain ID and evidence, `needs_review` with competing candidates, or `propose_new` with a proposed label, definition, scope boundary, aliases, broader-domain candidates, related-domain candidates, evidence, and the reason existing domains are insufficient. A model cannot insert or activate a domain directly. A proposed domain remains pending until deterministic normalization and collision checks plus editorial validation confirm that it is not an alias, duplicate, or unjustified subdivision; publication then assigns its stable ID and graph relationships.
+The domain resolver returns an existing domain ID when one candidate adequately matches. If the database has no adequate domain for the model's requested label and scope, the service automatically creates a canonical domain and returns its new stable ID in the same workflow. Creation records the normalized label, definition, scope boundary, aliases, model and prompt versions, confidence, and broader or related candidates used by the decision.
+
+Automatic creation uses a transaction and a uniqueness/upsert guard over the normalized label and scope key. If another request creates the same domain concurrently, the service reuses that row. A real collision or materially different scope is resolved before creation rather than producing a duplicate. The new domain becomes available to cards immediately; an outbox operation publishes its Qdrant domain node and related-domain links. Model-inferred links remain exploratory until supported as verified relationships.
 
 Related domains influence retrieval expansion and examples but do not imply equivalence or learner interest. Personal domain inference still comes only from canonical domain IDs attached to current bookmarks and bounded history.
 
@@ -511,7 +513,7 @@ The design is successful when these scenarios behave consistently:
 - A normal sentence returns only a translation, while an idiomatic sentence adds one concise tip.
 - Exact and hybrid retrieval resolve a technical term through its translations, transliterations, domain aliases, and concept relationships.
 - `Make`, `make`, `ma-ke`, `make*`, and `make ` retrieve the same likely lexical candidate without collapsing meaningful symbol distinctions such as `C`, `C++`, and `C#`.
-- Domain RAG reuses an existing canonical domain or returns a reviewable new-domain proposal with broader and related candidates; it never lets the model create an active free-form domain.
+- Domain RAG reuses an existing canonical domain or atomically creates one when no adequate match exists; concurrent requests reuse the same normalized scope, and inferred related links remain exploratory.
 - Verified edges remain distinct from embedding-only associations, and a candidate with a missing endpoint or unsupported relation never appears.
 - Selecting a related node expands one bounded neighborhood without asserting that an exploratory multi-hop chain is factual.
 - Bookmarking a selected sense creates a complete per-user learning-card copy; a new knowledge release creates a traceable revision rather than silently rewriting it.

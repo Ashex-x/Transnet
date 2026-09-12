@@ -12,30 +12,17 @@ Every operation carries a request ID, deadline, and expected schema version. Rea
 
 Success returns `ok` with the requested value. Closed outcomes are `not_found`, `conflict`, `invalid`, `version_mismatch`, `unavailable`, and `timeout`. Adapter errors never expose SQL, credentials, learner content, ciphertext, or provider bodies.
 
-## Input normalization and lookup keys
+## Lookup-key boundary
 
-The adapter preserves `original_input` and accepts a versioned `NormalizationResult`; it does not treat raw input as a unique card key. The result contains a Unicode NFKC form, language-aware case-folded form, trimmed and collapsed-whitespace form, canonical typographic punctuation, optional relaxed alias form, transformations applied, and normalization version.
+Input normalization belongs to the Transnet runtime, not the MySQL adapter. The adapter receives an ordered, bounded set of derived lookup forms with their match classes and the normalizer version. It does not receive or persist the learner's raw input, intermediate normalization forms, or transformation trace.
 
-```json
-{
-  "original_input": "  Ma-ke* ",
-  "language": "en",
-  "nfkc_form": "  Ma-ke* ",
-  "case_folded_form": "ma-ke*",
-  "canonical_lookup_form": "ma-ke",
-  "relaxed_alias_form": "make",
-  "transformations": ["trim_outer_space", "case_fold", "strip_boundary_decoration", "remove_alpha_separator"],
-  "normalization_version": "lexical-normalizer-1"
-}
-```
+Exact canonical and exact alias forms precede inflection, spelling-correction, and relaxed-alias forms. The adapter returns all eligible collisions at the applicable rank rather than treating relaxed equality as card identity. Significant symbol distinctions such as `C`, `C++`, and `C#` therefore remain available to the runtime resolver.
 
-Relaxed aliases may remove decorative boundary symbols or separators inside an alphabetic candidate, so `Make`, `make`, `ma-ke`, `make*`, and `make ` can all retrieve the canonical candidate `make`. Relaxed equality is not identity: exact canonical, exact alias, inflection, and spelling matches rank ahead of it, and collisions return alternatives. Significant punctuation and case remain available to distinguish entries such as `C`, `C++`, and `C#` or language-specific hyphen and apostrophe contrasts.
-
-Uniqueness is enforced by stable card and sense IDs plus published canonical-form and alias records, never by one destructively normalized string. Each resolution records the canonical match, match class, normalization version, and transformations for audit and reproducibility.
+Uniqueness is enforced by stable card and sense IDs plus published canonical-form and alias records, never by a derived lookup string. The response identifies which candidate form and match class resolved each result so the runtime can rank or request context without storing the original query.
 
 ## Basic cards
 
-`resolve_basic_card` accepts the original input, its versioned normalization result, source language, optional context hints, English dialect, and active release. It returns ranked sense-specific cards and explicit spelling, collision, or language alternatives when resolution is uncertain.
+`resolve_basic_card` accepts ordered derived lookup forms, their match classes, the normalizer version, source language, optional non-persisted context hints, English dialect, and active release. It returns ranked sense-specific cards and explicit spelling, collision, or language alternatives when resolution is uncertain.
 
 ```json
 {
@@ -61,20 +48,11 @@ Publication operations stage, validate, activate, quarantine, and withdraw immut
 
 Domains are canonical versioned records rather than free-form strings. A domain record contains a stable ID, canonical label, normalized labels, aliases, concise definition, inclusion and exclusion scope, status, release, and optional broader-domain IDs. Alias and normalized-form indexes may map to multiple candidates; they never silently merge a collision.
 
-`resolve_domain` first searches active labels and aliases, then accepts a bounded RAG candidate set retrieved from Qdrant. It returns `use_existing`, `needs_review`, or `propose_new`. `use_existing` names one stable domain ID and supporting match evidence. `needs_review` preserves competing candidates. `propose_new` contains a proposed label, definition, scope boundary, aliases, broader and related candidate IDs, evidence IDs, and a reason no existing domain is sufficient.
+`resolve_or_create_domain` first searches active labels and aliases and evaluates the bounded RAG candidates retrieved from Qdrant. When an existing scope adequately matches, it returns that stable domain ID. When none matches the model's requested label and scope, it atomically creates an active canonical domain and returns the new ID.
 
-```json
-{
-  "decision": "use_existing",
-  "domain_id": "domain_information_technology",
-  "matched_alias": "IT",
-  "related_domain_ids": ["domain_computer_science", "domain_business_technology"],
-  "evidence_ids": ["evidence_01J..."],
-  "confidence": 0.96
-}
-```
+Creation stores the normalized label and scope key, canonical label, concise definition, inclusion and exclusion scope, aliases, model and prompt versions, confidence, and broader or related candidate IDs. A unique constraint and transactional upsert prevent concurrent duplicate creation. If a normalized label collides with a materially different scope, the operation requires disambiguation rather than inserting an indistinguishable row.
 
-Model output cannot write the active registry. `stage_domain_proposal` stores a pending editorial artifact only after deterministic normalization and collision checks. Publication may reject it as an alias or duplicate, merge its proposed aliases into an existing domain, or assign a new stable ID and compatible Qdrant node and edge records. Basic cards reference only active domain IDs.
+The same transaction writes an outbox event for the Qdrant domain node and relationship projection. The new domain may be referenced by basic cards immediately from MySQL. Model-inferred related-domain links are published as exploratory; only evidence-backed publication may mark them verified.
 
 ## Bookmarks and learning cards
 

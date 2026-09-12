@@ -10,13 +10,13 @@ English: [MySQL adapter interface](../../docs/interfaces/mysql.md)
 
 每个操作携带请求 ID、deadline 和预期 schema 版本。需要一致性的读操作钉住发布或卡片修订；变更操作使用幂等键和乐观修订。关闭结果为 `not_found`、`conflict`、`invalid`、`version_mismatch`、`unavailable` 和 `timeout`。
 
-## 输入规范化与检索键
+## 检索键边界
 
-适配器保留 `original_input` 并接受版本化 `NormalizationResult`，不把原始输入当唯一卡片键。结果包含 Unicode NFKC、语言感知 case folding、首尾去空白、内部空白折叠、排版标点等价形式、可选宽松 alias、已应用变换和版本。
+输入规范化属于 Transnet 运行时，不属于 MySQL 适配器。适配器只接收按优先级排序的有界派生检索形式、匹配类型和 normalizer 版本；不接收或保存学习者原始输入、中间形式或变换轨迹。
 
-宽松 alias 可使 `Make`、`make`、`ma-ke`、`make*` 和 `make ` 都召回 `make`，但宽松相等不是身份相等。精确规范、精确 alias、屈折和拼写匹配排在前面；冲突返回备选。有意义的大小写、撗号、连字符、加号和井号保留，因此 `C`、`C++` 和 `C#` 不合并。
+精确规范和精确 alias 优先于屈折、拼写修正和宽松 alias。适配器返回同一层级的所有合格冲突，不把宽松相等当作卡片身份；`C`、`C++` 和 `C#` 等有意义区别仍可供运行时消歧。
 
-唯一性由稳定 card/sense ID 和已发布规范形式/alias 记录维护，不使用单一破坏性规范化字符串。
+唯一性由稳定 card/sense ID 和已发布规范形式/alias 记录维护，不使用派生检索字符串。响应返回命中的候选形式与匹配类型，让运行时在不保存原始查询的情况下重排或请求上下文。
 
 ## 基础卡
 
@@ -28,9 +28,11 @@ English: [MySQL adapter interface](../../docs/interfaces/mysql.md)
 
 领域是规范版本化记录，包含稳定 ID、规范名称、规范化名称、alias、精简定义、包含/排除范围、状态、发布和可选上位领域 ID。Alias 和规范化索引可映射多个候选，不静默合并冲突。
 
-`resolve_domain` 先搜活动名称与 alias，再接收 Qdrant 召回的有界 RAG 候选，返回 `use_existing`、`needs_review` 或 `propose_new`。新建议必须说明名称、定义、范围边界、alias、上位/相关候选、证据以及为何旧领域不足。
+`resolve_or_create_domain` 先搜活动名称与 alias，再评估 Qdrant 召回的有界 RAG 候选。有充分匹配时返回稳定旧 domain ID；没有匹配模型请求名称和范围的领域时，原子创建活动规范领域并返回新 ID。
 
-模型不得写入活动注册表。`stage_domain_proposal` 在确定性规范化和冲突检查后只保存待审核工件。发布可拒绝重复、把 alias 并入旧领域，或分配新稳定 ID 和兼容 Qdrant 节点/边。基础卡只引用活动 domain ID。
+创建保存规范化名称与范围键、规范名称、定义、包含/排除范围、alias、模型/prompt 版本、信心和上位/相关候选 ID。唯一约束和事务 upsert 防止并发重复；名称相同但范围实质不同时先消歧。
+
+同一事务写入 outbox 事件，用于投影 Qdrant 领域节点和关系。新领域可立即从 MySQL 被基础卡引用。模型推断的相关领域链接作为探索关系发布，只有有证据的发布才可标记为已验证。
 
 ## 书签与学习卡
 

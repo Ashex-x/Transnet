@@ -49,13 +49,13 @@ Transnet 是面向 CEFR A1 至 C2 成年学习者的自主英语学习代理，�
 
 ### 输入规范化与身份
 
-系统保留学习者的完整原始输入供展示和诊断，但不把原始字符串当作卡片身份。版本化 normalizer 生成 Unicode NFKC、语言感知 case folding、去除首尾空白、折叠内部空白以及排版标点等价形式。因此 `Make`、`make` 和 `make ` 共享一个大小写折叠检索形式。
+运行时只可在当前响应和诊断期间暂存学习者原始输入，不把它当作卡片身份或 normalization 的持久数据。版本化 normalizer 生成 Unicode NFKC、语言感知 case folding、去除首尾空白、折叠内部空白以及排版标点等价形式。因此 `Make`、`make` 和 `make ` 共享一个大小写折叠检索形式。
 
 第二个宽松检索形式可移除首尾装饰符号以及纯字母候选中的分隔符，使 `make*` 和可能误输的 `ma-ke` 能召回 `make`。但它只是 alias 候选，不会自动合并身份；精确规范和精确 alias 匹配优先。
 
 规范化不得擦除词汇意义。大小写、撗号、连字符、加号、井号、句点和其他有意义符号保留为消歧特征；`C`、`C++` 和 `C#` 必须不同。宽松形式冲突时，resolver 返回排序备选或请求上下文，不擅自选择或新建卡。
 
-卡片身份使用稳定词义 ID，不使用规范化字符串。系统保存原始输入、匹配规范形式、normalization 版本、已应用变换和 exact/canonical alias/inflection/spelling correction/relaxed alias 匹配类型。
+卡片身份使用稳定词义 ID，不使用规范化字符串。运行时在请求内保留命中规范形式、normalizer 版本和 exact/canonical alias/inflection/spelling correction/relaxed alias 匹配类型，只把有界派生检索形式传给存储，不持久化原始输入、中间形式或变换轨迹。
 
 ### 单词与词汇短语
 
@@ -122,18 +122,20 @@ Qdrant 索引公开领域定义、alias、范围说明、代表概念和已验�
 
 ```mermaid
 flowchart LR
-  input["拟议领域名称与范围"] --> exact["MySQL 名称与 alias"]
+  input["请求的领域名称与范围"] --> exact["MySQL 名称与 alias"]
   exact --> candidates["有界规范候选"]
   input --> rag["Qdrant 领域 RAG"]
   rag --> candidates
   candidates --> decide{"解析决策"}
   decide -->|"高信心匹配"| reuse["使用旧 domain ID"]
-  decide -->|"冲突或歧义"| review["需审核"]
-  decide -->|"无充分旧领域"| propose["待审核新领域建议"]
-  propose --> publish["校验与编辑发布"]
+  decide -->|"冲突或歧义"| clarify["用范围或上下文消歧"]
+  decide -->|"无充分旧领域"| create["原子创建规范领域"]
+  create --> index["发布领域节点与相关链接"]
 ```
 
-Resolver 返回 `use_existing` 加 domain ID 与证据、`needs_review` 加竞争候选，或 `propose_new` 加名称、定义、范围边界、alias、上位/相关候选、证据和旧领域不足的理由。模型不得直接插入或激活领域。新建议必须通过规范化、冲突检查和编辑审核，确认不是 alias、重复或无理细分后才发布。相关领域只影响检索与例子，不表示等价或学习者兴趣。
+Resolver 在候选充分匹配时返回旧 domain ID。如果数据库没有匹配模型请求名称和范围的领域，服务会在同一流程中自动创建规范领域并返回新稳定 ID。创建保存规范化名称、定义、范围边界、alias、模型/prompt 版本、信心和上位/相关候选。
+
+自动创建使用事务和基于规范化名称加范围键的唯一/upsert 保护；并发创建时复用已插入行，真实冲突则先消歧。新领域立即可供卡片引用，outbox 异步发布 Qdrant 节点和相关链接。模型推断链接保持探索性，直到有证据支持为已验证关系。相关领域不表示等价或学习者兴趣。
 
 ### MySQL 每用户学习卡
 
@@ -265,7 +267,7 @@ Prompt、schema、rubric、检索发布、模型角色、规范化规则、发�
 - 单词查询通过 MySQL 基础卡和 Qdrant 根组装翻译维基页；Qdrant 故障时仍返回基础卡。
 - 普通句子只返回翻译，习语句最多增加两条精简提示。
 - `Make`、`make`、`ma-ke`、`make*` 和 `make ` 召回同一个可能词汇候选，但 `C`、`C++` 和 `C#` 等有意义符号差异不会被合并。
-- 领域 RAG 要么复用规范旧领域，要么返回带上位和相关候选的可审核新领域建议；模型不得直接创建活动自由领域。
+- 领域 RAG 复用规范旧领域，或在无充分匹配时原子创建新领域；并发请求复用同一规范范围，推断的相关链接保持探索性。
 - 已验证边与嵌入关联分开，缺端点或无支持关系不会出现。
 - 书签创建完整私有卡，新知识发布只创建可追溯修订。
 - 书签和近期规范历史影响领域与例子，但不创建永久隐藏画像。
