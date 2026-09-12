@@ -34,6 +34,7 @@ This plan sequences implementation of the [Transnet service design](transnet.md)
 
 ## Phase 4: reliability and contract quality
 
+- [ ] Design and implement stateless exercise generation, writing evaluation, reference speech, and pronunciation-analysis operations without adding user persistence.
 - [ ] Version prompts, schemas, models, normalizers, retrieval configuration, and content releases.
 - [ ] Add deterministic validation and bounded repair for invalid structured provider output.
 - [ ] Test input non-persistence across storage, caches, logs, traces, metrics, queues, and vectors.

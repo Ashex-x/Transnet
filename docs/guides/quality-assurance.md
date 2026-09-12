@@ -16,7 +16,7 @@ Measure lexical-unit versus sentence-or-passage routing, including ambiguous sho
 
 ## Canonical retrieval evaluation
 
-Measure exact sense resolution, language detection, morphology, spelling suggestions, aliases, transliteration, sparse technical-term recall, dense cross-lingual recall, reranking, evidence eligibility, and degraded MySQL-only behavior.
+Measure exact sense resolution, language detection, morphology, spelling suggestions, aliases, transliteration, sparse technical-term recall, dense cross-lingual recall, reranking, evidence eligibility, and degraded MySQL-only behavior. When the future writing and speech operations are released, evaluate meaning preservation, cultural scope, generated-voice labeling, acoustic evidence, and uncertainty without retaining source text or audio.
 
 Relationship tests verify endpoint existence, release compatibility, direction, sense, evidence, language, region, period, domain, confidence, and verification state. Adversarial cases ensure intensity is not taxonomy and vector proximity is not promoted to translation, synonymy, hierarchy, causation, shared mechanism, or cultural fact. Bounded exploration tests one selected root at a time and separates verified from exploratory results.
 

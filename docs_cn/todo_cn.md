@@ -34,6 +34,7 @@ English: [Transnet service delivery plan](../docs/todo.md)
 
 ## 阶段 4：可靠性与合同质量
 
+- [ ] 设计并实现无状态练习生成、写作评估、参考语音和发音分析操作，且不增加用户持久化。
 - [ ] 版本化 prompt、schema、模型、normalizer、检索配置和内容发布。
 - [ ] 对无效结构化 provider 输出增加确定性校验和有界修复。
 - [ ] 测试输入不持久化到存储、缓存、日志、trace、指标、队列和向量。
