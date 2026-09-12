@@ -4,7 +4,7 @@
 
 This document is the primary interface contract for Transnet. Transnet is a shared, user-agnostic language and knowledge service: it translates text, resolves words and phrases, and reads a bounded canonical knowledge graph. Product applications own accounts, saved items, learning progress, history, recommendations, practice sessions, preferences, exports, and deletion workflows.
 
-Status: target service contract. The current runtime implements parts of this surface with transitional wire shapes, and canonical sense and graph reads are feature-gated. The checked-in OpenAPI file is the exact runtime snapshot and may temporarily include legacy product routes while they are removed; those routes are not part of this contract.
+Status: target service contract. The current runtime implements parts of this surface with transitional wire shapes, and canonical sense and graph reads are feature-gated. The checked-in OpenAPI file mirrors this target contract; runtime availability remains documented here rather than inferred from the machine contract.
 
 ## Service boundary
 

@@ -30,7 +30,7 @@ Each public module has one hand-written Markdown document when it needs one. Sim
 
 Start a document with its purpose, owner or boundary, and intended reader when those are not obvious from its title. Explain prerequisites before procedures, put the smallest working example before advanced variants, and define project-specific terms on first use. End related documents with relative links. Keep a concise status note when a design is proposed, partial, deprecated, or not yet implemented.
 
-Write changes so a new contributor can answer: where the behavior lives, how to run or verify it, which inputs and outputs matter, and which adjacent document or source file is authoritative. Keep examples runnable or explicitly mark them illustrative; never include credentials, private learner data, or production-only identifiers.
+Write changes so a new contributor can answer: where the behavior lives, how to run or verify it, which inputs and outputs matter, and which adjacent document or source file is authoritative. Keep examples runnable or explicitly mark them illustrative; never include credentials, user data, or production-only identifiers.
 
 English documentation lives in docs. Each translation uses a localized docs_<language> tree and the locale suffix on every inner filename. The Chinese tree is docs_cn and uses the _cn suffix. Localized pages mirror the English path, headings, diagrams, API names, and internal links; link a document to its translation near the top when both exist. Update the corresponding English and localized page in the same change when an API, configuration field, or process boundary changes.
 
@@ -58,7 +58,7 @@ Follow the [Google Rust Style Guide](https://google.github.io/styleguide/rustgui
 
 Use contextual `anyhow` errors at process boundaries and `thiserror` for typed library errors. Prefer Result over panics; use context when propagating failures. Avoid `unwrap` and `expect` outside tests.
 
-Use Tokio. Never block executor threads; use `tokio::task::spawn_blocking` for blocking work. Use structured tracing and tracing-subscriber. Prefer structured fields and never log source text, learner content, credentials, capabilities, provider bodies, or other secrets.
+Use Tokio. Never block executor threads; use `tokio::task::spawn_blocking` for blocking work. Use structured tracing and tracing-subscriber. Prefer structured fields and never log source text, request content, credentials, capabilities, provider bodies, or other secrets.
 
 Keep unit tests beside their code in `#[cfg(test)]` modules and integration tests in tests. Add tests for non-trivial behavior and logic that is easy to get wrong; use short behavior-based test names.
 

@@ -8,6 +8,6 @@ English: [Configuration](../../docs/guides/configuration.md)
 
 翻译与结构化查询 provider 表配置 OpenAI-compatible endpoint、model 和可选 API key 环境变量；不得提交真实凭据。容错表限制 timeout、retry、concurrency 和 circuit breaker。
 
-当前可执行文件没有 MySQL、Qdrant、语音、排程和持久学习状态配置。目标能力将需要版本化的发布、保留、模型角色、rubric 和 scheduler 设置。不得在配置中放入学习者内容。
+当前可执行文件没有 MySQL、Qdrant 或规范内容发布配置。目标能力将需要版本化的发布、嵌入、检索、模型角色和评估设置。不得在配置中放入请求内容。
 
-相关：[设计](../transnet_cn.md)、[MySQL](../interfaces/mysql_cn.md)、[Qdrant](../interfaces/qdrant_cn.md)、[Island-port](../interfaces/port_cn.md)和[开发](development_cn.md)。
+相关：[设计](../transnet_cn.md)、[MySQL](../interfaces/mysql_cn.md)、[Qdrant](../interfaces/qdrant_cn.md)、[Transnet 服务](../interfaces/port_cn.md)和[开发](development_cn.md)。

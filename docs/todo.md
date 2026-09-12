@@ -1,70 +1,56 @@
-# Transnet delivery plan
+# Transnet service delivery plan
 
-中文：[Transnet 交付计划](../docs_cn/todo_cn.md)
+中文：[Transnet 服务交付计划](../docs_cn/todo_cn.md)
 
-This plan sequences implementation of the [English-learning agent design](transnet.md). It records target work, not implemented behavior.
+This plan sequences implementation of the [Transnet service design](transnet.md). It records target work, not implemented behavior.
 
 ## Current baseline
 
-- [x] Loopback HTTP process, health probes, request bounds, request IDs, graceful shutdown, and redacted tracing.
+- [x] Private HTTP process, health probes, request bounds, request IDs, graceful shutdown, and redacted tracing.
 - [x] Translation provider routing, resilience, and structured lexical-lookup foundations.
-- [ ] Product routes, storage adapters, knowledge releases, bookmark-driven learning, evaluation, scheduling, writing, and speech aligned with the target design.
+- [ ] Canonical MySQL content, Qdrant relationship releases, and the full stateless service contract.
 
-## Phase 1: intent and response semantics
+## Phase 1: stateless HTTP semantics
 
-- [ ] Replace character-count product behavior with typed lexical-unit versus sentence-or-passage routing while retaining provider size limits as operational constraints.
-- [ ] Return translation-first responses with no more than two justified tips.
-- [ ] Return translation-wiki results separately from learner-owned learning cards.
-- [ ] Define typed role schemas for translation, lexical analysis, planning, generation, evaluation, writing, pragmatics, speech recognition, pronunciation analysis, and TTS.
-- [ ] Add bounded repair and deterministic fallback for invalid structured model output.
+- [ ] Implement the target translation envelope and translation-first routing.
+- [ ] Implement request-local lexical-unit versus sentence-or-passage routing.
+- [ ] Implement the target canonical lookup, sense, graph, and neighbor response schemas.
+- [ ] Reject user identifiers, cookies, end-user bearer tokens, and unsupported mutable product routes.
+- [ ] Ensure request text and context are absent from logs, telemetry, caches, and durable work.
 
-## Phase 2: canonical cards and knowledge graph
+## Phase 2: canonical content and releases
 
-- [ ] Implement sense-specific MySQL basic cards that remain useful without vector retrieval.
-- [ ] Build immutable Qdrant node and edge collections with dense and sparse named vectors.
-- [ ] Add deterministic IDs, endpoint validation, evidence scope, release pinning, reconciliation, atomic logical activation, quarantine, and rollback.
-- [ ] Implement exact, hybrid, endpoint, and bounded one-node expansion retrieval.
-- [ ] Keep verified typed edges separate from exploratory vector associations in storage and presentation.
+- [ ] Implement MySQL cards, senses, aliases, domains, evidence records, immutable revisions, and release activation.
+- [ ] Implement deterministic IDs, publication validation, quarantine, correction, and rollback.
+- [ ] Build immutable Qdrant node and edge collections with named dense and sparse vectors.
+- [ ] Reconcile endpoint coverage, content hashes, embedding metadata, and authenticated manifests before activation.
 
-## Phase 3: bookmarks and continuous learning
+## Phase 3: retrieval and graph safety
 
-- [ ] Create a complete frozen learning-card revision only after an explicit bookmark.
-- [ ] Support inspect, pause, reprioritize, refresh, remove, and regeneration-required states.
-- [ ] Store at most 200 compact canonical events from the previous 30 days and implement immediate history clearing.
-- [ ] Reconstruct approximate level, domain, weak skills, and priority only from current bookmarks and eligible history, with confidence and decay.
-- [ ] Track mastery independently for recognition, recall, spelling, morphology, collocation, grammar, composition, writing, register, culture, listening, and pronunciation when applicable.
-- [ ] Implement a versioned FSRS-style scheduler using objective correctness and hints as primary signals.
+- [ ] Implement exact, hybrid, endpoint, and bounded one-root graph retrieval.
+- [ ] Keep verified typed edges separate from exploratory vector associations.
+- [ ] Implement explicit degraded responses when MySQL is available and Qdrant is not.
+- [ ] Enforce release, language, dialect, region, period, domain, evidence, and verification filters.
 
-## Phase 4: practice, writing, culture, and speech
+## Phase 4: reliability and contract quality
 
-- [ ] Add controlled recognition, recall, spelling, dictation, morphology, collocation, grammar, composition, and transfer exercises.
-- [ ] Add writing evaluation that preserves meaning and voice and prioritizes no more than two actionable corrections.
-- [ ] Add context-scoped communication coaching with dialect, region, relationship, medium, and uncertainty.
-- [ ] Add provider-independent reference TTS with generated-voice labeling and natural slowed speech.
-- [ ] Add recording-quality checks, speech recognition, phoneme alignment, acoustic evidence, uncertainty, and focused pronunciation retry.
-- [ ] Ensure standalone writing, translation, lookup, and speech never create durable learning targets.
-
-## Phase 5: privacy, accessibility, and release quality
-
-- [ ] Keep raw queries, passages, writing, answers, conversations, explanations, and recordings out of strategy history and shared Qdrant collections.
-- [ ] Add learner controls for bookmarks, learning-card revisions, schedules, history clearing, recording retention, export, and deletion.
-- [ ] Provide keyboard-accessible list or tree alternatives to graph views, reduced motion, text labels, and non-color-only meaning.
-- [ ] Version prompts, schemas, rubrics, releases, models, normalization, analyzers, and scheduler parameters.
-- [ ] Gate releases on retrieval, pedagogy, transfer, dialect, cultural safety, pronunciation assessability, privacy, injection, degraded dependency, and rollback suites.
+- [ ] Version prompts, schemas, models, normalizers, retrieval configuration, and content releases.
+- [ ] Add deterministic validation and bounded repair for invalid structured provider output.
+- [ ] Test input non-persistence across storage, caches, logs, traces, metrics, queues, and vectors.
+- [ ] Gate releases on lexical resolution, retrieval, evidence, safety, degraded dependencies, activation, rollback, and schema compatibility.
+- [ ] Keep English and Chinese docs, OpenAPI, source comments, and tests synchronized with the service contract.
 
 ## Definition of done
 
-- A normal sentence receives a translation-first response; a lexical unit receives a sense-specific translation-wiki page.
-- A bookmark is the only event that creates a durable learning card or scheduled target.
-- MySQL basic cards degrade safely without Qdrant, and graph results never promote similarity into unsupported fact.
-- Only directly demonstrated skills advance, and uncertain evaluation does not reduce mastery.
-- Personal strategy can be explained entirely from current bookmarks and bounded history and is reset by the documented controls.
-- Writing and cultural coaching preserve learner intent, and pronunciation claims are grounded in acoustic and alignment evidence.
-- English and Chinese docs, human contracts, machine contracts, source comments, and tests change with the behavior they describe.
+- A sentence receives a translation-first response and a lexical unit receives a canonical sense-specific response.
+- MySQL basic cards remain useful without Qdrant, and graph results never promote similarity into unsupported fact.
+- Content releases activate only as reconciled MySQL/Qdrant pairs and can roll back without mutation.
+- No request text, context, caller identity, or user-related state is stored by Transnet.
+- English and Chinese docs, human contracts, machine contract, source comments, and tests agree.
 
 ## Related documents
 
 - [System design](transnet.md)
-- [Learning experience](product/learning-experience.md)
-- [Island-port interface](interfaces/port.md)
+- [Service behavior](product/learning-experience.md)
+- [Service interface](interfaces/port.md)
 - [Quality assurance](guides/quality-assurance.md)

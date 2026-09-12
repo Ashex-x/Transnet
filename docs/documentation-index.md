@@ -4,21 +4,21 @@
 
 ## Design and planning
 
-- [System design and architecture](transnet.md): authoritative target behavior, data model, learning loop, agent roles, and quality scenarios.
-- [English-learning experience](product/learning-experience.md): learner behavior, learning cards, graph exploration, practice, and personalization.
+- [System design and architecture](transnet.md): authoritative stateless service behavior, canonical data model, publication, retrieval, and quality scenarios.
+- [Service behavior](product/learning-experience.md): consumer-visible translation, lexical lookup, and graph behavior.
 - [Overall plan](todo.md): delivery phases, dependencies, and exit criteria.
 
 ## Interfaces
 
-- [Island-port interface](interfaces/port.md): internal HTTP boundary and proposed product operations.
+- [Transnet service interface](interfaces/port.md): private HTTP boundary and stateless service operations.
 - [MySQL adapter interface](interfaces/mysql.md): typed persistence operations and transaction invariants.
 - [Qdrant adapter interface](interfaces/qdrant.md): collection, point, retrieval, reconciliation, and publication contract.
 
 ## Reference
 
-- [OpenAPI 3.1 contract](reference/transnet-openapi.json): machine-readable contract for routes in the current default runtime.
+- [OpenAPI 3.1 contract](reference/transnet-openapi.json): machine-readable target service contract.
 
-The OpenAPI document describes the currently implemented HTTP subset. Proposed operations remain prose contracts until implemented.
+The OpenAPI document mirrors the target service interface. Runtime availability remains explicitly marked in the human interface contract.
 
 ## Guides
 

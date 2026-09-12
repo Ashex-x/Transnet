@@ -1,4 +1,4 @@
-# Publish learning content
+# Publish canonical knowledge content
 
 中文：[发布学习内容](../../docs_cn/guides/content-publishing_cn.md)
 
@@ -10,7 +10,7 @@ Status: proposed; the current runtime has no ingestion or publication pipeline.
 
 Every source has an owner, license and display policy, supported languages and domains, evidence granularity, update cadence, and removal procedure. A release pins normalization, alignment, embedding, schema, and evidence-policy versions.
 
-Input must exclude credentials, learner data, raw production queries, writing, answers, conversations, recordings, and unreviewed model output. Generated candidates remain visibly generated and cannot become verified facts without evidence and review.
+Input must exclude credentials, user data, raw production requests, and unreviewed model output. Generated candidates remain visibly generated and cannot become verified facts without evidence and review.
 
 ## Release flow
 
@@ -50,17 +50,17 @@ The edge dense vector embeds the complete source–relation–target explanation
 
 Reconcile every MySQL knowledge root with the staged node collection and every edge endpoint with the staged node manifest. Compare card, node, and edge counts, identities, hashes, evidence coverage, embedding versions, and release metadata. Any missing, extra, stale, or incompatible record fails the stage.
 
-Run the [quality-assurance guide](quality-assurance.md) against the exact staged trio. Evaluation covers exact and hybrid resolution, cross-language terminology, sense separation, relationship precision, unsupported-path rejection, degraded MySQL-only cards, cultural scope, pedagogical usefulness, and latency bounds.
+Run the [quality-assurance guide](quality-assurance.md) against the exact staged trio. Evaluation covers exact and hybrid resolution, cross-language terminology, sense separation, relationship precision, unsupported-path rejection, degraded MySQL-only cards, cultural scope, and latency bounds.
 
 ## Activate and roll back
 
 Activate the MySQL card release and paired Qdrant node and edge versions as one logical release. Every request pins all three versions. A partial build is never visible, and an alias is never the source of version authority.
 
-Rollback selects one unchanged retained trio. A newer release never silently rewrites an existing private learning-card revision; compatible learner review state moves only through an explicit refresh operation.
+Rollback selects one unchanged retained trio. Published canonical records are never silently rewritten.
 
 ## Correct, quarantine, and remove
 
-Urgent quarantine first makes affected cards, nodes, and edges ineligible, then removes derived vectors and reconciles the release. Dependent learning cards are marked for regeneration before their next review.
+Urgent quarantine first makes affected cards, nodes, and edges ineligible, then removes derived vectors and reconciles the release. Transnet has no dependent private records to migrate or regenerate.
 
 A normal correction creates a new immutable release and preserves evidence lineage. A verified edge can be added, changed, or removed only through an evidence-backed publishing decision. Source removal follows the recorded license procedure and includes derived aliases, vectors, edges, examples, and cached artifacts.
 

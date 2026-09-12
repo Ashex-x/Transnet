@@ -1,6 +1,6 @@
 # Transnet
 
-Transnet is a self-directed English-learning agent for translation, lexical exploration, bookmark-driven practice, writing, communication, listening, and pronunciation. The checked-in executable currently provides the loopback translation and structured-lookup subset; the [system design](docs/transnet.md) defines the target product.
+Transnet is a private, stateless language and canonical-knowledge service for translation, lexical exploration, and bounded relationship-graph reads. The checked-in executable currently provides the loopback translation and structured-lookup subset; the [system design](docs/transnet.md) defines the target service.
 
 ```mermaid
 flowchart LR
@@ -54,15 +54,15 @@ curl http://127.0.0.1:35792/livez
 curl http://127.0.0.1:35792/readyz
 curl --request POST http://127.0.0.1:35792/translate \
   --header 'content-type: application/json' \
-  --data '{"text":"Hello","source_lang":"en","target_lang":"zh-CN"}'
+  --data '{"text":"Hello","source_language":"en","target_language":"zh-CN"}'
 curl --request POST http://127.0.0.1:35792/v1/lookups \
   --header 'content-type: application/json' \
   --data '{"query":"caliente","source_language":"es","target_language":"en","explanation_language":"en"}'
 ```
 
-The current executable has no TLS termination and enforces a loopback bind. Keep this implementation behind Island-port. MySQL learning cards, bounded history, Qdrant knowledge nodes and edges, review scheduling, writing, and speech remain target capabilities until their status is advanced in the interface and guide documents. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
+The current executable has no TLS termination and enforces a loopback bind. Keep this implementation behind a gateway or service mesh. MySQL canonical cards and releases plus Qdrant knowledge nodes and edges remain target capabilities until their status is advanced in the interface and guide documents. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
 
-See the [design](docs/transnet.md), [Island-port interface](docs/interfaces/port.md), [MySQL adapter](docs/interfaces/mysql.md), [Qdrant adapter](docs/interfaces/qdrant.md), and [configuration reference](docs/guides/configuration.md).
+See the [design](docs/transnet.md), [Transnet service interface](docs/interfaces/port.md), [MySQL adapter](docs/interfaces/mysql.md), [Qdrant adapter](docs/interfaces/qdrant.md), and [configuration reference](docs/guides/configuration.md).
 
 ## License
 
