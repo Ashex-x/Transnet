@@ -4,9 +4,9 @@
 
 ## 接口
 
-- [Island-port 接口](island-port-interface_cn.md)：无认证的完整 HTTP 合同、请求头、错误和 JSON 示例。
-- [MySQL 适配器接口](mysql-interface_cn.md)：持久化操作、事务约束和请求载荷。
-- [Qdrant 适配器接口](qdrant-interface_cn.md)：集合、向量点、检索、校验、发布和清理。
+- [Island-port 接口](interfaces/port_cn.md)：无认证的完整 HTTP 合同、请求头、错误和 JSON 示例。
+- [MySQL 适配器接口](interfaces/mysql_cn.md)：持久化操作、事务约束和请求载荷。
+- [Qdrant 适配器接口](interfaces/qdrant_cn.md)：集合、向量点、检索、校验、发布和清理。
 
 ## 规范
 
