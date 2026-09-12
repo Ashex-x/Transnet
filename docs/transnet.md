@@ -15,10 +15,12 @@ The primary outcome is independent comprehension and natural production in unfam
 - [Learning principles](#learning-principles)
 - [Core learning loop](#core-learning-loop)
 - [Translation and lexical learning](#translation-and-lexical-learning)
+  - [Input normalization and identity](#input-normalization-and-identity)
   - [Words and lexical phrases](#words-and-lexical-phrases)
   - [Sentences and passages](#sentences-and-passages)
 - [Card and knowledge storage](#card-and-knowledge-storage)
   - [MySQL basic cards](#mysql-basic-cards)
+  - [Canonical domains](#canonical-domains)
   - [MySQL per-user learning cards](#mysql-per-user-learning-cards)
   - [Short personal history](#short-personal-history)
   - [Qdrant knowledge nodes](#qdrant-knowledge-nodes)
@@ -82,6 +84,16 @@ Correct recognition does not imply that the learner can recall, spell, inflect, 
 ## Translation and lexical learning
 
 The agent chooses an experience from linguistic intent rather than a fixed character limit. A word, term, idiom, phrasal verb, or other established expression receives a translation-wiki page. A complete clause, sentence, or passage receives a translation-first response. An ambiguous short fragment defaults to the simpler translation experience unless it is confidently recognized as a lexical unit.
+
+### Input normalization and identity
+
+The system preserves the exact learner input for display and diagnosis but never uses that raw string as card identity. A versioned normalizer derives retrieval forms by applying Unicode NFKC normalization, language-aware case folding, outer-whitespace trimming, internal-whitespace collapsing, and canonical equivalents for typographic punctuation. Thus `Make`, `make`, and `make ` share a case-folded lookup form.
+
+A second, relaxed retrieval form may remove decorative leading or trailing symbols and separators inside an otherwise alphabetic candidate. This allows `make*` and a likely accidental `ma-ke` to retrieve `make`, but it is an alias candidate rather than an automatic identity merge. Exact canonical and exact alias matches rank before relaxed matches.
+
+Normalization must not erase lexical meaning. Case, apostrophes, hyphens, plus signs, number signs, periods, and other symbols remain available as disambiguation features when a language or domain treats them as significant. For example, `C`, `C++`, and `C#` remain distinct, as do terms whose hyphen changes meaning. If a relaxed form collides with multiple canonical entries, the resolver returns ranked alternatives or asks for context instead of selecting or creating a card.
+
+Cards use stable sense IDs, not normalized strings, as identity. The system stores the original input, the matched canonical form, the normalization version, the transformations applied, and the match class: exact, canonical alias, inflection, spelling correction, or relaxed alias. New cards are created only after canonical resolution and collision checks fail under the content-publication workflow.
 
 ### Words and lexical phrases
 
@@ -170,6 +182,29 @@ A `BasicCard` is the concise canonical representation of one word or phrase sens
 
 The basic card remains useful when semantic retrieval is unavailable. Detailed relationships, encyclopedia knowledge, cultural material, and exploratory associations are not copied into it.
 
+### Canonical domains
+
+A domain is a versioned canonical concept, not a free-form model tag. MySQL stores its stable domain ID, canonical label, concise scope definition, aliases, status, release, and optional broader-domain IDs. Basic cards and knowledge records reference domain IDs. Labels such as `IT`, `information technology`, and `computing` may resolve to one domain when their published scopes agree; overlapping but materially different scopes remain separate and related.
+
+Qdrant indexes the public domain definitions, aliases, scope notes, representative concepts, and verified domain relationships. Domain resolution first checks normalized MySQL labels and aliases, then uses hybrid RAG to retrieve likely existing domains and directly related broader, narrower, sibling, and cross-disciplinary domains. The model receives this bounded candidate set before assigning a domain.
+
+```mermaid
+flowchart LR
+  input["Proposed domain label and scope"] --> exact["MySQL labels and aliases"]
+  exact --> candidates["Bounded canonical candidates"]
+  input --> rag["Qdrant domain RAG"]
+  rag --> candidates
+  candidates --> decide{"Resolution decision"}
+  decide -->|"Confident match"| reuse["Use existing domain ID"]
+  decide -->|"Collision or ambiguity"| review["Needs review"]
+  decide -->|"No adequate domain"| propose["Pending new-domain proposal"]
+  propose --> publish["Validation and editorial publication"]
+```
+
+The domain resolver returns either `use_existing` with a domain ID and evidence, `needs_review` with competing candidates, or `propose_new` with a proposed label, definition, scope boundary, aliases, broader-domain candidates, related-domain candidates, evidence, and the reason existing domains are insufficient. A model cannot insert or activate a domain directly. A proposed domain remains pending until deterministic normalization and collision checks plus editorial validation confirm that it is not an alias, duplicate, or unjustified subdivision; publication then assigns its stable ID and graph relationships.
+
+Related domains influence retrieval expansion and examples but do not imply equivalence or learner interest. Personal domain inference still comes only from canonical domain IDs attached to current bookmarks and bounded history.
+
 ### MySQL per-user learning cards
 
 Creating a bookmark generates a complete learner-owned `LearningCard` copy. It contains:
@@ -237,7 +272,7 @@ This design uses Qdrant's named dense and sparse vectors, hybrid queries, and pa
 
 The word or phrase page merges concise translation with relevant knowledge:
 
-1. Normalize the query and resolve an exact basic card and sense in MySQL.
+1. Preserve the original input, derive versioned exact and relaxed retrieval forms, and resolve a basic card and sense in MySQL without using a normalized string as identity.
 2. Use its Qdrant root-node IDs, or use hybrid node search when no exact card resolves the term.
 3. Retrieve verified incoming and outgoing edges through indexed endpoint filters.
 4. Search node and edge vectors for semantically relevant descriptions.
@@ -475,6 +510,8 @@ The design is successful when these scenarios behave consistently:
 - A word lookup resolves a concise MySQL basic card, follows its Qdrant root ID, and assembles relevant translation-wiki sections and reference audio.
 - A normal sentence returns only a translation, while an idiomatic sentence adds one concise tip.
 - Exact and hybrid retrieval resolve a technical term through its translations, transliterations, domain aliases, and concept relationships.
+- `Make`, `make`, `ma-ke`, `make*`, and `make ` retrieve the same likely lexical candidate without collapsing meaningful symbol distinctions such as `C`, `C++`, and `C#`.
+- Domain RAG reuses an existing canonical domain or returns a reviewable new-domain proposal with broader and related candidates; it never lets the model create an active free-form domain.
 - Verified edges remain distinct from embedding-only associations, and a candidate with a missing endpoint or unsupported relation never appears.
 - Selecting a related node expands one bounded neighborhood without asserting that an exploratory multi-hop chain is factual.
 - Bookmarking a selected sense creates a complete per-user learning-card copy; a new knowledge release creates a traceable revision rather than silently rewriting it.
