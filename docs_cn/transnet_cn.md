@@ -28,13 +28,7 @@ flowchart LR
 
 ## 当前运行时
 
-| 路由 | 职责 |
-| --- | --- |
-| `GET /health` | 进程健康 |
-| `GET /livez` | 进程存活 |
-| `GET /readyz` | 计算就绪 |
-| `POST /translate` | 直接文本翻译 |
-| `POST /v1/lookups` | 结构化学习卡计算 |
+可执行文件连接进程探针、直接翻译和仅模型驱动的结构化查词。GET /health 报告进程健康；GET /livez 报告进程存活；GET /readyz 报告计算就绪；POST /translate 执行直接文本翻译；POST /v1/lookups 计算结构化学习卡。
 
 Gemma 4 处理短文本翻译和结构化查词，TranslateGemma 处理较长的直接翻译。每个提供商使用独立的超时、重试、并发和熔断策略；请求、凭据和提供商正文不会进入 trace。
 

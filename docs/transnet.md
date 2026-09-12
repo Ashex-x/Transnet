@@ -28,15 +28,7 @@ flowchart LR
 
 ## Current runtime
 
-The executable wires process probes, direct translation, and model-only structured lookup:
-
-| Route | Responsibility |
-| --- | --- |
-| `GET /health` | Process health |
-| `GET /livez` | Process liveness |
-| `GET /readyz` | Compute readiness |
-| `POST /translate` | Direct text translation |
-| `POST /v1/lookups` | Structured learning-card computation |
+The executable wires process probes, direct translation, and model-only structured lookup. GET /health reports process health. GET /livez reports liveness. GET /readyz reports compute readiness. POST /translate performs direct text translation. POST /v1/lookups computes a structured learning card.
 
 Gemma 4 handles short translation and structured lookup. TranslateGemma handles longer direct translation. Provider calls use independent timeout, retry, concurrency, and circuit-breaker policies. Requests, credentials, and provider bodies are excluded from traces.
 

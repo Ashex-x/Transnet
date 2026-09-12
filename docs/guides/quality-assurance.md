@@ -131,19 +131,7 @@ Test:
 
 Inject failures for MySQL, vector retrieval, cache, model timeout, invalid model JSON, rate limits, stale content, worker delay, outbox replay, and partial graph expansion.
 
-Expected fallbacks:
-
-| Failure | Expected result |
-| --- | --- |
-| LLM unavailable | Deterministic card or typed retryable error |
-| Vector unavailable | Exact, morphology, phrase, and full-text lookup continue |
-| MySQL unavailable | Authoritative reads and writes fail closed; vector payloads never substitute for canonical or private state |
-| Cache unavailable | Canonical services continue under bounded concurrency |
-| Invalid model output | One repair attempt, then partial or deterministic fallback |
-| Feedback worker delayed | Personal projection remains correct and aggregate age is visible |
-| Uncertain grader | `needs_review` and no mastery penalty |
-| Oversized graph | Ranked truncation and an expansion cursor |
-| MySQL/Qdrant drift | Active version filtering, alert, reconciliation, and rebuild |
+Expected fallbacks: an unavailable LLM returns a deterministic card or typed retryable error; unavailable vectors preserve exact, morphology, phrase, and full-text lookup; unavailable MySQL fails authoritative reads and writes closed and never substitutes vector payloads for canonical or private state; unavailable cache leaves canonical services running under bounded concurrency; invalid model output receives one repair attempt before a partial or deterministic fallback; delayed feedback workers preserve the personal projection and expose aggregate age; an uncertain grader returns `needs_review` with no mastery penalty; an oversized graph returns ranked truncation and an expansion cursor; MySQL/Qdrant drift triggers active-version filtering, alerting, reconciliation, and rebuild.
 
 Verify deadline propagation, retry classification, circuit breaking, request coalescing, job leases, dead-job replay, and no duplicate billable or state-changing work.
 
