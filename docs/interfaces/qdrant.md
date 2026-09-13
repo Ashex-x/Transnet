@@ -25,21 +25,6 @@ Status: target contract; the current executable does not compose this service cl
 
 ## Endpoint reference
 
-- [Vector data endpoint interface](#vector-data-endpoint-interface)
-  - [Contents](#contents)
-  - [Endpoint reference](#endpoint-reference)
-  - [Storage boundary](#storage-boundary)
-  - [Release and collection contract](#release-and-collection-contract)
-  - [Knowledge node point](#knowledge-node-point)
-  - [Knowledge edge point](#knowledge-edge-point)
-  - [Semantic scale point](#semantic-scale-point)
-  - [POST /data/vec/v1/nodes/search](#post-datavecv1nodessearch)
-  - [POST /data/vec/v1/scales/search](#post-datavecv1scalessearch)
-  - [POST /data/vec/v1/edges/search](#post-datavecv1edgessearch)
-  - [POST /data/vec/v1/neighbors/search](#post-datavecv1neighborssearch)
-  - [POST /data/vec/v1/releases/publish](#post-datavecv1releasespublish)
-  - [Related documents](#related-documents)
-
 Island-port listens on `/run/island-port/island-port.sock` by default and follows the [shared UDS JSON transport](transnet.md). Callers never connect to Qdrant or submit native Qdrant requests; island-port owns collection selection, query construction, credentials, and connection pooling. Only the Transnet runtime and authenticated publication tooling may access the socket. Runtime callers receive search access; publication requires the publisher service account.
 
 Every exact request body has the shape `{"context": RequestContext, "input": EndpointInput}`. `RequestContext` contains `request_id`, `deadline_at`, `schema_version` set to `vector-data-v1`, and the pinned `content_release` when applicable. Endpoint examples below show only `EndpointInput`. Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`; publication may also return `conflict`.
@@ -151,6 +136,7 @@ An edge is both a typed connection and a searchable explanation of why two nodes
   },
   "payload": {
     "edge_id": "edge_sweltering_scorching_01",
+    "relation_version": 3,
     "fact_id": "fact_sweltering_degree_scorching_01",
     "fact_revision": 1,
     "source_node_id": "node_sweltering_hot_01",
@@ -170,12 +156,13 @@ An edge is both a typed connection and a searchable explanation of why two nodes
     "provenance": ["source_dictionary_2026_01"],
     "confidence": 0.96,
     "verification_state": "verified",
+    "assessment_enabled": true,
     "release_id": "knowledge-2026-09"
   }
 }
 ```
 
-Supported families cover lexical naming and translation equivalence; taxonomy and part-whole structure; synonymy, antonymy, contrast, and named intensity dimensions; valency, grammar, collocation, and fixed expressions; morphology; suitability by register, dialect, region, period, scene, and domain; cultural extension; and domain mechanism, causation, dependency, implementation, application, measurement, standardization, and terminology. Exploratory associations remain a separate family. A versioned relation-type registry defines direction, inverse, symmetry, transitivity, and causality; neither the UI nor the LLM infers those properties from wording. Payload indexes cover both endpoints, relation type, publication and verification state, release, applicable sense, language, dialect, region, period, domain, and evidence ID.
+Supported families cover lexical naming and translation equivalence; taxonomy and part-whole structure; synonymy, antonymy, contrast, and named intensity dimensions; valency, grammar, collocation, and fixed expressions; morphology; suitability by register, dialect, region, period, scene, and domain; cultural extension; and domain mechanism, causation, dependency, implementation, application, measurement, standardization, and terminology. Exploratory associations remain a separate family. A versioned relation-type registry defines direction, inverse, symmetry, transitivity, and causality; neither the UI nor the LLM infers those properties from wording. Payload indexes cover both endpoints, relation type and version, assessment eligibility, publication and verification state, release, applicable sense, language, dialect, region, period, domain, and evidence ID. Qdrant stores no judgment or aggregate value.
 
 `is_a` points from a narrower sense to a broader category and `has_subtype` is its inverse. `lower_degree_than` and `higher_degree_than` compare members only within a named compatible dimension. No degree edge implies taxonomy, synonymy, or interchangeability.
 
@@ -463,6 +450,7 @@ Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `una
 ## Related documents
 
 - [Shared UDS JSON transport and Transnet interface](transnet.md)
+- [Target vector collection catalog](tables/vec.md)
 - [Transnet design and external interface](../transnet.md)
 - [MySQL interface](mysql.md)
 - [Content publishing](../guides/content-publishing.md)

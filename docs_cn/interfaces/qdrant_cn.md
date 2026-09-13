@@ -151,6 +151,7 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
   },
   "payload": {
     "edge_id": "edge_sweltering_scorching_01",
+    "relation_version": 3,
     "fact_id": "fact_sweltering_degree_scorching_01",
     "fact_revision": 1,
     "source_node_id": "node_sweltering_hot_01",
@@ -170,12 +171,13 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
     "provenance": ["source_dictionary_2026_01"],
     "confidence": 0.96,
     "verification_state": "verified",
+    "assessment_enabled": true,
     "release_id": "knowledge-2026-09"
   }
 }
 ```
 
-关系族覆盖词汇命名与翻译等价、分类与整体—部分、同义/反义/对比/明确命名的强度、配价/语法/搭配/固定表达、形态、语域/方言/地区/时期/场景/领域适用性、文化延伸，以及领域机理、因果、依赖、实现、应用、测量、标准化和术语。探索关系保持独立。版本化关系类型注册表定义方向、逆关系、对称性、传递性和因果性；UI 与 LLM 不从措辞猜测。Payload 索引覆盖两端、关系类型、发布与验证状态、发布版本、适用词义、语言、方言、地区、时期、领域和证据 ID。
+关系族覆盖词汇命名与翻译等价、分类与整体—部分、同义/反义/对比/明确命名的强度、配价/语法/搭配/固定表达、形态、语域/方言/地区/时期/场景/领域适用性、文化延伸，以及领域机理、因果、依赖、实现、应用、测量、标准化和术语。探索关系保持独立。版本化关系类型注册表定义方向、逆关系、对称性、传递性和因果性；UI 与 LLM 不从措辞猜测。Payload 索引覆盖两端、关系类型与版本、评估资格、发布与验证状态、发布版本、适用词义、语言、方言、地区、时期、领域和证据 ID。Qdrant 不存储任何判断或聚合值。
 
 `is_a` 从较窄词义指向较宽类别，`has_subtype` 是其逆关系。`lower_degree_than` 与 `higher_degree_than` 只在命名且兼容的维度内比较成员。程度边不暗示分类、同义或可互换。
 
@@ -463,6 +465,7 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 ## 相关文档
 
 - [共享 UDS JSON 传输与 Transnet 接口](transnet_cn.md)
+- [目标向量 collection 目录](tables/vec_cn.md)
 - [Transnet 设计与外部接口](../transnet_cn.md)
 - [MySQL 接口](mysql_cn.md)
 - [内容发布](../guides/content-publishing_cn.md)

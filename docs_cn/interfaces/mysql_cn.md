@@ -52,7 +52,7 @@ Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 
 
 ## 存储边界
 
-MySQL 是精简结构化词汇内容、经审慎选择的规范翻译和发布状态的权威存储。它不包含用户、学习者、账户、画像、偏好、历史、保存项目、书签、练习、答案、掌握度、日程、图布局、反馈、隐私请求或所有权记录；也绝不保留实时翻译请求、查询文本、消歧上下文或未审核 provider 输出。只有通过下述发布工作流，才可存储规范源文与译文。
+本 endpoint 背后的 `transnet_canonical` MySQL schema 是精简结构化词汇内容、经审慎选择的规范翻译和发布状态的权威存储。它不包含用户、学习者、账户、画像、偏好、历史、保存项目、书签、练习、答案、掌握度、日程、图布局、反馈、隐私请求或所有权记录；也绝不保留实时翻译请求、查询文本、消歧上下文或未审核 provider 输出。只有通过下述发布工作流，才可存储规范源文与译文。Island-port 可以使用独立授权的产品 schema 保存私有状态，但该 schema 不属于此 endpoint，Transnet 也无权访问。
 
 允许的 Transnet 服务数据：
 
@@ -90,6 +90,8 @@ erDiagram
 MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。领域修订存储多语言名称与别名、定义、包含/排除范围、上层领域 ID，以及包含可用事实族、语言、已验证事实数和覆盖状态（`seed`、`partial` 或 `curated`）的知识 profile。覆盖描述活动发布，绝不声称完整。
 
 `knowledge_fact_revision` 存储稳定事实 ID、主体节点、有类型谓词、客体节点或有类型字面值、陈述、适用词义与领域、条件、证据 ID、来源 ID、验证状态、内容 hash 和不可变修订。事实可独立审核并按发布寻址。Qdrant 边与事实检索 point 引用权威事实修订，不成为第二权威来源。
+
+`knowledge_relationship_revision` 将稳定公开边 ID 和正关系版本映射到发布中的准确事实修订、endpoint、关系类型、方向、限制及评估资格。Island-port 因此可以校验 WebUI 评估目标，而不会把判断视为规范内容。关系判断与聚合保留在[目标 MySQL schema](../../docs/interfaces/tables/sql.sql)定义的独立授权 island-port 产品 schema 中；Transnet 无法访问私有行。
 
 `semantic_scale_revision` 存储稳定尺度 ID、命名维度、递增或递减方向、适用领域与条件、有序词义限定节点成员、证据 ID、验证状态、内容 hash 和不可变修订。成员位置只定义顺序。发布拒绝重复位置、缺失成员、混合不兼容词义、缺失证据，以及把尺度编码成 `is_a` 分类的行为。基础卡、事实、profile 与尺度加入同一不可变发布。
 
@@ -561,6 +563,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 ## 相关文档
 
 - [共享 UDS JSON 传输与 Transnet 接口](transnet_cn.md)
+- [目标 MySQL schema](../../docs/interfaces/tables/sql.sql)
 - [Transnet 设计与外部接口](../transnet_cn.md)
 - [Qdrant 接口](qdrant_cn.md)
 - [内容发布](../guides/content-publishing_cn.md)

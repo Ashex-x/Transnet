@@ -29,30 +29,11 @@ Status: target contract; the current executable does not compose this service cl
 
 ## Endpoint reference
 
-- [SQL data endpoint interface](#sql-data-endpoint-interface)
-  - [Contents](#contents)
-  - [Endpoint reference](#endpoint-reference)
-  - [Storage boundary](#storage-boundary)
-  - [Curated translation storage](#curated-translation-storage)
-  - [Domain facts and semantic scales](#domain-facts-and-semantic-scales)
-  - [Common operation envelope](#common-operation-envelope)
-  - [POST /data/sql/v1/translations/resolve](#post-datasqlv1translationsresolve)
-  - [POST /data/sql/v1/translations/stage](#post-datasqlv1translationsstage)
-  - [POST /data/sql/v1/basic-cards/resolve](#post-datasqlv1basic-cardsresolve)
-  - [POST /data/sql/v1/senses/get](#post-datasqlv1sensesget)
-  - [POST /data/sql/v1/domains/resolve](#post-datasqlv1domainsresolve)
-  - [POST /data/sql/v1/knowledge-facts/get](#post-datasqlv1knowledge-factsget)
-  - [POST /data/sql/v1/semantic-scales/get](#post-datasqlv1semantic-scalesget)
-  - [Domain proposal handling](#domain-proposal-handling)
-  - [POST /data/sql/v1/cards/revisions/stage](#post-datasqlv1cardsrevisionsstage)
-  - [POST /data/sql/v1/releases/activate](#post-datasqlv1releasesactivate)
-  - [Related documents](#related-documents)
-
 Island-port listens on `/run/island-port/island-port.sock` by default and follows the [shared UDS JSON transport](transnet.md). Callers never connect to MySQL or submit SQL; island-port owns queries, transactions, schema compatibility, credentials, and connection pooling. Only the Transnet runtime and authenticated publication tooling may access the socket. Runtime callers receive read access; mutation endpoints additionally require the publisher service account. Authorization comes from socket filesystem credentials, not JSON fields or forwarded headers.
 
 ## Storage boundary
 
-MySQL is the authoritative store for compact, structured lexical content, deliberately selected canonical translations, and publication state. It contains no user, learner, account, profile, preference, history, saved item, bookmark, practice, answer, mastery, schedule, graph layout, feedback, privacy request, or ownership record. It never retains live translation requests, lookup queries, disambiguating context, or unreviewed provider output. Canonical source and target text may be stored only through the publication workflow described below.
+The `transnet_canonical` MySQL schema behind this endpoint is the authoritative store for compact, structured lexical content, deliberately selected canonical translations, and publication state. It contains no user, learner, account, profile, preference, history, saved item, bookmark, practice, answer, mastery, schedule, graph layout, feedback, privacy request, or ownership record. It never retains live translation requests, lookup queries, disambiguating context, or unreviewed provider output. Canonical source and target text may be stored only through the publication workflow described below. Island-port may use a separately authorized product schema for private state, but that schema is outside this endpoint and inaccessible to Transnet.
 
 Allowed Transnet service data includes:
 
@@ -90,6 +71,8 @@ User saves are a separate concern. When an end user stars or saves a translation
 MySQL also owns canonical domain knowledge profiles, atomic basic facts, and semantic scales. A domain revision stores multilingual labels and aliases, definition, inclusion and exclusion scope, broader domain IDs, and a knowledge profile containing available fact families, languages, verified fact count, and coverage state (`seed`, `partial`, or `curated`). Coverage describes the active release and never asserts completeness.
 
 A `knowledge_fact_revision` stores a stable fact ID, subject node, typed predicate, object node or typed literal, statement, applicable senses and domains, conditions, evidence IDs, provenance IDs, verification state, content hash, and immutable revision. Facts are independently reviewable and release-addressable. Qdrant edges and fact-search points reference the authoritative fact revision rather than becoming a second source of truth.
+
+A `knowledge_relationship_revision` maps one stable public edge ID and positive relation version to the exact fact revision, endpoints, relation type, direction, restrictions, and assessment eligibility published in a release. This mapping lets island-port validate a WebUI assessment target without treating the judgment as canonical content. Relationship judgments and aggregates remain in the separately authorized island-port product schema defined by the [target MySQL schema](tables/sql.sql); Transnet cannot access the private rows.
 
 A `semantic_scale_revision` stores a stable scale ID, named dimension, increasing or decreasing direction, applicable domains and conditions, ordered sense-qualified node members, evidence IDs, verification state, content hash, and immutable revision. Member positions define order only. Publication rejects duplicate positions, missing members, mixed incompatible senses, absent evidence, and any attempt to encode a scale as `is_a` taxonomy. Basic cards, facts, profiles, and scales join the same immutable release.
 
@@ -563,6 +546,7 @@ Quarantine, withdrawal, and correction create new publication state or a new rel
 ## Related documents
 
 - [Shared UDS JSON transport and Transnet interface](transnet.md)
+- [Target MySQL schema](tables/sql.sql)
 - [Transnet design and external interface](../transnet.md)
 - [Qdrant interface](qdrant.md)
 - [Content publishing](../guides/content-publishing.md)
