@@ -10,7 +10,7 @@ English: [Module reference](../../docs/reference/modules.md)
 
 - [运行时](runtime/startup_cn.md)：进程启动、组合、就绪、停机及[配置](runtime/configuration_cn.md)。
 - [传输](transport/server_cn.md)：UDS server、JSON 准入、middleware 与薄 API 映射。
-- [Application](application/orchestration_cn.md)：请求流程与用例所有权；另见[翻译](application/translation_cn.md)和[知识](application/knowledge_cn.md)。
+- [Application](application/orchestration_cn.md)：用例所有权；另见端到端[请求数据流](application/request-dataflow_cn.md)、[翻译](application/translation_cn.md)和[知识](application/knowledge_cn.md)。
 - [Domain](domain/translation_cn.md)：翻译词汇；另见[词汇知识](domain/lexical-knowledge_cn.md)和[发布](domain/releases_cn.md)。
 - [Port](ports/models_cn.md)：模型操作；另见[数据访问](ports/data_cn.md)。
 - [Adapter](adapters/providers_cn.md)：provider client；另见 [island-port](adapters/island-port_cn.md)。

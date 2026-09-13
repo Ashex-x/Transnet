@@ -10,7 +10,7 @@ Status: the current executable uses transitional loopback HTTP. Target pages des
 
 - [Runtime](runtime/startup.md): process launch, composition, readiness, shutdown, and [configuration](runtime/configuration.md).
 - [Transport](transport/server.md): UDS server, JSON admission, middleware, and thin API mapping.
-- [Application](application/orchestration.md): request flow and use-case ownership; see [translation](application/translation.md) and [knowledge](application/knowledge.md).
+- [Application](application/orchestration.md): use-case ownership; see the end-to-end [request dataflow](application/request-dataflow.md), [translation](application/translation.md), and [knowledge](application/knowledge.md).
 - [Domain](domain/translation.md): translation vocabulary; see [lexical knowledge](domain/lexical-knowledge.md) and [releases](domain/releases.md).
 - [Ports](ports/models.md): model operations; see [data access](ports/data.md).
 - [Adapters](adapters/providers.md): provider clients; see [island-port](adapters/island-port.md).

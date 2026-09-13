@@ -18,4 +18,4 @@ English: [Request orchestration](../../../docs/reference/application/orchestrati
 
 ## 验证
 
-测试路由歧义、单一 deadline 传播、发布一致性、取消、依赖降级、响应级别单调性与请求状态丢弃。另见[翻译](translation_cn.md)、[知识](knowledge_cn.md)和[服务接口](../../interfaces/transnet_cn.md)。
+测试路由歧义、单一 deadline 传播、发布一致性、取消、依赖降级、响应级别单调性与请求状态丢弃。另见端到端[请求数据流](request-dataflow_cn.md)、[翻译](translation_cn.md)、[知识](knowledge_cn.md)和[服务接口](../../interfaces/transnet_cn.md)。

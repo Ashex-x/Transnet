@@ -18,4 +18,4 @@ The orchestrator owns sequencing and budget allocation, not wire parsing, provid
 
 ## Verification
 
-Test routing ambiguity, one-deadline propagation, release consistency, cancellation, degraded dependencies, response-level monotonicity, and request-state disposal. See [translation](translation.md), [knowledge](knowledge.md), and the [service interface](../../interfaces/transnet.md).
+Test routing ambiguity, one-deadline propagation, release consistency, cancellation, degraded dependencies, response-level monotonicity, and request-state disposal. See the end-to-end [request dataflow](request-dataflow.md), [translation](translation.md), [knowledge](knowledge.md), and the [service interface](../../interfaces/transnet.md).
