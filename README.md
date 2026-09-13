@@ -1,10 +1,31 @@
-# Transnet
+<p align="center">
+  <img src="assets/transnet-logo.png" alt="Transnet logo" width="168">
+</p>
+
+<h1 align="center">Transnet</h1>
+
+<p align="center">Private, stateless translation and relationship knowledge.</p>
+
+<p align="center">
+  <a href="https://www.rust-lang.org/"><img alt="Rust" src="https://img.shields.io/badge/Rust-stable-000000?logo=rust"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-2563eb.svg"></a>
+  <a href="docs/transnet.md"><img alt="Status: active development" src="https://img.shields.io/badge/Status-active_development-0f766e.svg"></a>
+</p>
+
+<p align="center">
+  <a href="docs/documentation-index.md">Documentation</a> ·
+  <a href="README_cn.md">中文</a>
+</p>
 
 Transnet is a private, stateless translation and relationship-knowledge service. It translates connected text and, for a resolved lexical sense or domain concept, builds a concise relationship-centered translation-wiki page. The checked-in executable currently provides the loopback translation and structured-lookup subset; the [system design](docs/transnet.md) defines the target service.
 
 ```mermaid
 flowchart LR
-  client["HTTP client"] --> service["Transnet :35792"]
+  client["WebUI / internet client"] -->|"HTTPS or WSS"| island["island-port"]
+  island -->|"UDS JSON: transnet/v1"| service["Transnet"]
+  service -->|"UDS JSON: data/sql/v1"| island
+  service -->|"UDS JSON: data/vec/v1"| island
+  island --> databases["MySQL / Qdrant"]
   service -->|"at most 4,000 characters"| gemma4["Gemma 4 :18011"]
   service -->|"over 4,000 characters"| translate["TranslateGemma :18007"]
 ```
@@ -15,7 +36,7 @@ Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start O
 
 ## Configure
 
-The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` sets the listener and log filter/format, `[http]` sets the body limit and exact CORS origins, `[translation]` sets routing and legacy retry defaults, `[gemma4]` and `[translate_gemma]` identify those provider endpoints, and `[provider_resilience.*]` sets independent timeout, retry, concurrency, and circuit-breaker bounds. Do not commit real provider credentials.
+The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` currently sets the transitional loopback listener and log filter/format, `[http]` sets the body limit and transitional CORS policy, `[translation]` sets routing and legacy retry defaults, `[gemma4]` and `[translate_gemma]` identify those provider endpoints, and `[provider_resilience.*]` sets independent timeout, retry, concurrency, and circuit-breaker bounds. The target UDS settings are defined in the [configuration guide](docs/guides/configuration.md). Do not commit real provider credentials.
 
 `RUST_LOG` overrides `server.log_level`. `server.log_format = "json"` writes newline-delimited JSON; any other value writes compact text. Debug builds log to `logs/debug/transnet.log`, release builds log to `logs/release/transnet.log`; each file is replaced on startup.
 
@@ -46,23 +67,25 @@ For a release build:
 cargo run --release
 ```
 
-Verify the service:
+Target UDS calls (these become runnable when the transport migration lands):
 
 ```bash
-curl http://127.0.0.1:35792/health
-curl http://127.0.0.1:35792/livez
-curl http://127.0.0.1:35792/readyz
-curl --request POST http://127.0.0.1:35792/translate \
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/health \
+  --header 'content-type: application/json' --data '{}'
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/livez \
+  --header 'content-type: application/json' --data '{}'
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/readyz \
+  --header 'content-type: application/json' --data '{}'
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/translations \
   --header 'content-type: application/json' \
-  --data '{"text":"Hello","source_language":"en","target_language":"zh-CN"}'
-curl --request POST http://127.0.0.1:35792/v1/lookups \
-  --header 'content-type: application/json' \
-  --data '{"query":"caliente","source_language":"es","target_language":"en","explanation_language":"en"}'
+  --data '{"text":"Hello","source_language":"auto","target_language":"zh-CN","response_level":"standard"}'
 ```
 
-The current executable has no TLS termination and enforces a loopback bind. Keep this implementation behind a gateway or service mesh. MySQL canonical cards and releases plus Qdrant knowledge nodes and edges remain target capabilities until their status is advanced in the interface and guide documents. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
+These commands show the target UDS interface. The current executable still uses the transitional loopback listener and legacy paths until the transport migration is implemented. MySQL canonical cards and releases plus Qdrant knowledge nodes and edges remain target capabilities until their status is advanced in the interface and guide documents. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
 
-See the [design](docs/transnet.md), [Transnet service interface](docs/interfaces/port.md), [MySQL adapter](docs/interfaces/mysql.md), [Qdrant adapter](docs/interfaces/qdrant.md), and [configuration reference](docs/guides/configuration.md).
+Verify the current transitional runtime with `curl http://127.0.0.1:35792/health`.
+
+See the [design](docs/transnet.md), [island-port-to-Transnet service interface and UDS transport](docs/interfaces/transnet.md), [Transnet-to-island-port SQL endpoints](docs/interfaces/mysql.md), [Transnet-to-island-port vector endpoints](docs/interfaces/qdrant.md), and [configuration reference](docs/guides/configuration.md).
 
 ## License
 

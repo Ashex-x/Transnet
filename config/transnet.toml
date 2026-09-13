@@ -1,6 +1,6 @@
 [server]
 host = "127.0.0.1"
-port = 35792
+port = 16002
 log_level = "info"
 log_format = "json"
 

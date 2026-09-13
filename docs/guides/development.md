@@ -10,4 +10,4 @@ Run the release binary under a process supervisor and preserve `logs/release/tra
 
 The current executable has no TLS termination and must remain loopback-only behind a gateway or service mesh. It does not yet compose the target MySQL cards, Qdrant knowledge graph, or canonical-release capabilities. Request bodies are bounded and request IDs are propagated; see the [configuration guide](configuration.md). Implement target capabilities behind typed boundaries and advance their status and contracts in the same change.
 
-Related: [configuration](configuration.md), [design](../transnet.md), and [Transnet service interface](../interfaces/port.md).
+Related: [configuration](configuration.md), [design](../transnet.md), and [Transnet service interface](../interfaces/transnet.md).
