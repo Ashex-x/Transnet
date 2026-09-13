@@ -16,16 +16,18 @@ Status: target contract; the current executable does not compose this service cl
   - [Knowledge node point](#knowledge-node-point)
   - [Knowledge edge point](#knowledge-edge-point)
   - [Semantic scale point](#semantic-scale-point)
-  - [POST /data/vec/v1/nodes/search](#post-datavecv1nodessearch)
-  - [POST /data/vec/v1/scales/search](#post-datavecv1scalessearch)
-  - [POST /data/vec/v1/edges/search](#post-datavecv1edgessearch)
-  - [POST /data/vec/v1/neighbors/search](#post-datavecv1neighborssearch)
-  - [POST /data/vec/v1/releases/publish](#post-datavecv1releasespublish)
+  - [POST /api/v1/nodes/search](#post-apiv1nodessearch)
+  - [POST /api/v1/scales/search](#post-apiv1scalessearch)
+  - [POST /api/v1/edges/search](#post-apiv1edgessearch)
+  - [POST /api/v1/neighbors/search](#post-apiv1neighborssearch)
+  - [POST /api/v1/releases/publish](#post-apiv1releasespublish)
   - [Related documents](#related-documents)
 
 ## Endpoint reference
 
 Island-port listens on `/run/island-port/island-port.sock` by default and follows the [shared UDS JSON transport](transnet.md). Callers never connect to Qdrant or submit native Qdrant requests; island-port owns collection selection, query construction, credentials, and connection pooling. Only the Transnet runtime and authenticated publication tooling may access the socket. Runtime callers receive search access; publication requires the publisher service account.
+
+Every route uses the shared `/api/v1` prefix. The island-port socket and the resource path identify this vector-data API; callers do not add `data`, `vec`, or a storage-vendor name to the path.
 
 Every exact request body has the shape `{"context": RequestContext, "input": EndpointInput}`. `RequestContext` contains `request_id`, `deadline_at`, `schema_version` set to `vector-data-v1`, and the pinned `content_release` when applicable. Endpoint examples below show only `EndpointInput`. Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`; publication may also return `conflict`.
 
@@ -200,7 +202,7 @@ A first-class semantic scale is stored as a node projection so one retrieval can
 }
 ```
 
-## POST /data/vec/v1/nodes/search
+## POST /api/v1/nodes/search
 
 Combines named dense and sparse retrieval with exact canonical labels, aliases, translations, transliterations, abbreviations, formulas, and domain terms. The service creates query vectors ephemerally and Qdrant receives no tenant or owner identifier.
 
@@ -255,7 +257,7 @@ Response:
 
 Scores are comparable only within the same model and release. Vector similarity is a candidate signal, never proof of translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
 
-## POST /data/vec/v1/scales/search
+## POST /api/v1/scales/search
 
 Finds complete-scale candidates that contain one selected canonical node. This is an index lookup with optional vector ranking; it returns only IDs, positions, and eligibility metadata. Transnet must hydrate the complete scale and its evidence from the SQL endpoint before presenting it as a fact.
 
@@ -296,7 +298,7 @@ Response:
 
 The endpoint does not infer a new scale or return an incomplete ladder. A missing result means no eligible published scale was found, not that the selected node has no possible intensity relationship.
 
-## POST /data/vec/v1/edges/search
+## POST /api/v1/edges/search
 
 Searches canonical relationship explanations. Eligibility filters apply before limiting, and verified and exploratory results remain separate.
 
@@ -350,9 +352,9 @@ Response:
 }
 ```
 
-Each result is a candidate pointer. Before a factual explanation, evidence, or provenance is used in a response, Transnet hydrates the referenced fact revision through `POST /data/sql/v1/knowledge-facts/get` for the same release.
+Each result is a candidate pointer. Before a factual explanation, evidence, or provenance is used in a response, Transnet hydrates the referenced fact revision through `POST /api/v1/knowledge-facts/get` for the same release.
 
-## POST /data/vec/v1/neighbors/search
+## POST /api/v1/neighbors/search
 
 Retrieves direct incoming and outgoing edges through endpoint indexes, then fetches the opposite nodes by ID. It does not infer ontology semantics, synthesize edges, or execute factual multi-hop traversal.
 
@@ -403,7 +405,7 @@ Response:
 
 Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
 
-## POST /data/vec/v1/releases/publish
+## POST /api/v1/releases/publish
 
 Publication writes deterministic points to new immutable collections and verifies them before activation. It does not mutate an active collection.
 

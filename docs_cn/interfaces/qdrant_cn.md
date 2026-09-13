@@ -16,11 +16,11 @@ English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
   - [知识节点 point](#知识节点-point)
   - [知识边 point](#知识边-point)
   - [语义尺度 point](#语义尺度-point)
-  - [POST /data/vec/v1/nodes/search](#post-datavecv1nodessearch)
-  - [POST /data/vec/v1/scales/search](#post-datavecv1scalessearch)
-  - [POST /data/vec/v1/edges/search](#post-datavecv1edgessearch)
-  - [POST /data/vec/v1/neighbors/search](#post-datavecv1neighborssearch)
-  - [POST /data/vec/v1/releases/publish](#post-datavecv1releasespublish)
+  - [POST /api/v1/nodes/search](#post-apiv1nodessearch)
+  - [POST /api/v1/scales/search](#post-apiv1scalessearch)
+  - [POST /api/v1/edges/search](#post-apiv1edgessearch)
+  - [POST /api/v1/neighbors/search](#post-apiv1neighborssearch)
+  - [POST /api/v1/releases/publish](#post-apiv1releasespublish)
   - [相关文档](#相关文档)
 
 ## endpoint 参考
@@ -33,14 +33,16 @@ English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
   - [知识节点 point](#知识节点-point)
   - [知识边 point](#知识边-point)
   - [语义尺度 point](#语义尺度-point)
-  - [POST /data/vec/v1/nodes/search](#post-datavecv1nodessearch)
-  - [POST /data/vec/v1/scales/search](#post-datavecv1scalessearch)
-  - [POST /data/vec/v1/edges/search](#post-datavecv1edgessearch)
-  - [POST /data/vec/v1/neighbors/search](#post-datavecv1neighborssearch)
-  - [POST /data/vec/v1/releases/publish](#post-datavecv1releasespublish)
+  - [POST /api/v1/nodes/search](#post-apiv1nodessearch)
+  - [POST /api/v1/scales/search](#post-apiv1scalessearch)
+  - [POST /api/v1/edges/search](#post-apiv1edgessearch)
+  - [POST /api/v1/neighbors/search](#post-apiv1neighborssearch)
+  - [POST /api/v1/releases/publish](#post-apiv1releasespublish)
   - [相关文档](#相关文档)
 
 Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 UDS JSON 传输](transnet_cn.md)。调用方绝不直接连接 Qdrant 或提交原生 Qdrant 请求；collection 选择、查询构造、凭据和连接池均由 island-port 负责。只有 Transnet 运行时和经过认证的发布工具可以访问套接字。运行时调用方具有搜索权限；发布要求 publisher 服务账户。
+
+所有路由统一使用 `/api/v1` 前缀。Island-port 套接字与资源路径共同标识本向量数据 API；调用方无需在路径中添加 `data`、`vec` 或存储厂商名称。
 
 每个精确请求 body 的结构为 `{"context": RequestContext, "input": EndpointInput}`。`RequestContext` 包含 `request_id`、`deadline_at`、值为 `vector-data-v1` 的 `schema_version`，并在适用时包含固定的 `content_release`。下方 endpoint 示例仅展示 `EndpointInput`。闭合 outcome 为 `ok`、`missing`、`invalid_payload`、`version_mismatch`、`unavailable` 和 `timeout`；发布还可返回 `conflict`。
 
@@ -215,7 +217,7 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 }
 ```
 
-## POST /data/vec/v1/nodes/search
+## POST /api/v1/nodes/search
 
 结合命名稠密与稀疏检索、精确规范标签、别名、翻译、转写、缩写、公式和领域术语。服务临时创建查询向量，Qdrant 不接收租户或所有者标识。
 
@@ -270,7 +272,7 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 分数只可在相同模型和发布内比较。向量相似度仅是候选信号，不能证明翻译、同义、层级、因果、共同机制或文化意义。
 
-## POST /data/vec/v1/scales/search
+## POST /api/v1/scales/search
 
 查找包含一个选定规范节点的完整尺度候选。这是带可选向量排序的索引读取，只返回 ID、位置和资格元数据。Transnet 在把它呈现为事实前，必须通过 SQL endpoint 补全完整尺度与证据。
 
@@ -311,7 +313,7 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 该 endpoint 不推断新尺度，也不返回不完整梯度。缺少结果仅表示未找到合格的已发布尺度，并不表示选定节点不可能具有强度关系。
 
-## POST /data/vec/v1/edges/search
+## POST /api/v1/edges/search
 
 检索规范关系解释。先应用资格过滤条件再限制数量，已验证和探索性结果必须分开。
 
@@ -365,9 +367,9 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 }
 ```
 
-每项结果均为候选指针。在响应使用事实性解释、证据或来源前，Transnet 必须针对同一发布通过 `POST /data/sql/v1/knowledge-facts/get` 补全引用的事实修订。
+每项结果均为候选指针。在响应使用事实性解释、证据或来源前，Transnet 必须针对同一发布通过 `POST /api/v1/knowledge-facts/get` 补全引用的事实修订。
 
-## POST /data/vec/v1/neighbors/search
+## POST /api/v1/neighbors/search
 
 通过端点索引读取直接入边和出边，再按 ID 获取另一端节点。它不推断本体语义、不合成边，也不执行事实性多跳遍历。
 
@@ -418,7 +420,7 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
 
-## POST /data/vec/v1/releases/publish
+## POST /api/v1/releases/publish
 
 发布向新的不可变集合写入确定性 point，并在激活前校验；不得改写活动集合。
 

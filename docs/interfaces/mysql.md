@@ -15,21 +15,23 @@ Status: target contract; the current executable does not compose this service cl
   - [Curated translation storage](#curated-translation-storage)
   - [Domain facts and semantic scales](#domain-facts-and-semantic-scales)
   - [Common operation envelope](#common-operation-envelope)
-  - [POST /data/sql/v1/translations/resolve](#post-datasqlv1translationsresolve)
-  - [POST /data/sql/v1/translations/stage](#post-datasqlv1translationsstage)
-  - [POST /data/sql/v1/basic-cards/resolve](#post-datasqlv1basic-cardsresolve)
-  - [POST /data/sql/v1/senses/get](#post-datasqlv1sensesget)
-  - [POST /data/sql/v1/domains/resolve](#post-datasqlv1domainsresolve)
-  - [POST /data/sql/v1/knowledge-facts/get](#post-datasqlv1knowledge-factsget)
-  - [POST /data/sql/v1/semantic-scales/get](#post-datasqlv1semantic-scalesget)
+  - [POST /api/v1/translations/resolve](#post-apiv1translationsresolve)
+  - [POST /api/v1/translations/stage](#post-apiv1translationsstage)
+  - [POST /api/v1/basic-cards/resolve](#post-apiv1basic-cardsresolve)
+  - [POST /api/v1/senses/get](#post-apiv1sensesget)
+  - [POST /api/v1/domains/resolve](#post-apiv1domainsresolve)
+  - [POST /api/v1/knowledge-facts/get](#post-apiv1knowledge-factsget)
+  - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
   - [Domain proposal handling](#domain-proposal-handling)
-  - [POST /data/sql/v1/cards/revisions/stage](#post-datasqlv1cardsrevisionsstage)
-  - [POST /data/sql/v1/releases/activate](#post-datasqlv1releasesactivate)
+  - [POST /api/v1/cards/revisions/stage](#post-apiv1cardsrevisionsstage)
+  - [POST /api/v1/releases/activate](#post-apiv1releasesactivate)
   - [Related documents](#related-documents)
 
 ## Endpoint reference
 
 Island-port listens on `/run/island-port/island-port.sock` by default and follows the [shared UDS JSON transport](transnet.md). Callers never connect to MySQL or submit SQL; island-port owns queries, transactions, schema compatibility, credentials, and connection pooling. Only the Transnet runtime and authenticated publication tooling may access the socket. Runtime callers receive read access; mutation endpoints additionally require the publisher service account. Authorization comes from socket filesystem credentials, not JSON fields or forwarded headers.
+
+Every route uses the shared `/api/v1` prefix. The island-port socket and the resource path identify this structured-data API; callers do not add `data`, `sql`, or a storage-vendor name to the path.
 
 ## Storage boundary
 
@@ -108,7 +110,7 @@ Closed error response:
 }
 ```
 
-## POST /data/sql/v1/translations/resolve
+## POST /api/v1/translations/resolve
 
 Resolves an exact reviewed translation from one immutable release. Transnet computes the versioned fingerprint in memory and sends no live source text or disambiguating sentence to the adapter. The adapter returns all eligible same-fingerprint candidates within the limit; Transnet compares the stored source under the named normalizer and applies sense and scope constraints before using one. This read is safe to retry.
 
@@ -152,7 +154,7 @@ Response:
 }
 ```
 
-## POST /data/sql/v1/translations/stage
+## POST /api/v1/translations/stage
 
 Stages one candidate revision for review and later release activation. Only authenticated publication tooling may call this idempotent mutation. Staging does not make content readable by runtime traffic. The publisher must supply canonical, non-personal text and attest that provenance and publication rights have been reviewed.
 
@@ -197,7 +199,7 @@ Response:
 
 A repeated idempotency key with the same request fingerprint returns the original result; reuse with different content returns `conflict`. Activation uses the existing release staging and activation operations, which validate that every translation revision is approved, internally consistent, and evidence-backed.
 
-## POST /data/sql/v1/basic-cards/resolve
+## POST /api/v1/basic-cards/resolve
 
 Normalization belongs to the Transnet runtime. The adapter receives a bounded, ordered set of derived forms; it never receives the raw query, intermediate transformations, or context. Exact canonical and alias forms precede inflection, spelling-correction, and relaxed aliases. Significant symbols remain distinct, so `C`, `C++`, and `C#` cannot collapse into one identity.
 
@@ -266,7 +268,7 @@ Response:
 
 Uniqueness is enforced by stable form, card, and sense IDs plus published canonical-form and alias rows, never by an ad hoc normalized lookup string. All eligible collisions at the best applicable rank are returned for resolution by the service.
 
-## POST /data/sql/v1/senses/get
+## POST /api/v1/senses/get
 
 Returns one compact canonical sense revision using the shared `BasicCard` shape.
 
@@ -328,7 +330,7 @@ Response:
 }
 ```
 
-## POST /data/sql/v1/domains/resolve
+## POST /api/v1/domains/resolve
 
 Domains are canonical versioned records, not free-form tags. Resolution first checks published labels and aliases. If more than one scope matches, the adapter returns candidates and the publishing workflow must disambiguate.
 
@@ -371,7 +373,7 @@ Response:
 }
 ```
 
-## POST /data/sql/v1/knowledge-facts/get
+## POST /api/v1/knowledge-facts/get
 
 Hydrates an ordered, bounded set of exact fact revisions after vector retrieval. Qdrant may nominate `fact_id` values, but it is never allowed to supply the authoritative statement, evidence, rights, or verification state. The caller supplies the release and the eligible fact IDs; the adapter silently excludes IDs that are absent from that release or fail eligibility. This read is safe to retry.
 
@@ -415,7 +417,7 @@ Response:
 
 The returned order follows the request after omitted IDs are removed. Facts are atomic: a response projector may summarize them, but must retain the exact fact ID and evidence state whenever it presents a factual claim at `full` level.
 
-## POST /data/sql/v1/semantic-scales/get
+## POST /api/v1/semantic-scales/get
 
 Returns complete authoritative semantic scales by stable ID. The caller normally obtains candidate scale IDs from Qdrant and supplies the selected sense or node so island-port can apply scope and condition eligibility. A scale is returned whole or omitted; callers must not reconstruct a ladder from unrelated pairwise edges.
 
@@ -468,7 +470,7 @@ There is no live create-domain endpoint. Transnet gives the LLM a bounded allowl
 
 An offline publisher may later place proposed domains, generated fact candidates, semantic scales, and their provenance in the ordinary staged release artifact. The same collision, scope, evidence, rights, review, idempotency, and immutable-release validation used for other canonical content applies. New domains therefore require no domain-specific creation endpoint.
 
-## POST /data/sql/v1/cards/revisions/stage
+## POST /api/v1/cards/revisions/stage
 
 Stages an immutable word-or-phrase revision and its Qdrant root references. Staging validates all structured fields but does not make content readable from an active release.
 
@@ -514,7 +516,7 @@ Response:
 }
 ```
 
-## POST /data/sql/v1/releases/activate
+## POST /api/v1/releases/activate
 
 Activation is atomic and references a compatible immutable Qdrant node/edge release. It fails if any card root, domain, evidence record, content hash, or Qdrant manifest is missing or incompatible.
 

@@ -22,9 +22,8 @@ Transnet is a private, stateless translation and relationship-knowledge service.
 ```mermaid
 flowchart LR
   client["WebUI / internet client"] -->|"HTTPS or WSS"| island["island-port"]
-  island -->|"UDS JSON: transnet/v1"| service["Transnet"]
-  service -->|"UDS JSON: data/sql/v1"| island
-  service -->|"UDS JSON: data/vec/v1"| island
+  island -->|"Transnet UDS: api/v1"| service["Transnet"]
+  service -->|"island-port UDS: api/v1 structured/vector data"| island
   island --> databases["MySQL / Qdrant"]
   service -->|"at most 4,000 characters"| gemma4["Gemma 4 :18011"]
   service -->|"over 4,000 characters"| translate["TranslateGemma :18007"]
@@ -70,13 +69,13 @@ cargo run --release
 Target UDS calls (these become runnable when the transport migration lands):
 
 ```bash
-curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/health \
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/api/v1/health \
   --header 'content-type: application/json' --data '{}'
-curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/livez \
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/api/v1/livez \
   --header 'content-type: application/json' --data '{}'
-curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/readyz \
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/api/v1/readyz \
   --header 'content-type: application/json' --data '{}'
-curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/translations \
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/api/v1/translations \
   --header 'content-type: application/json' \
   --data '{"text":"Hello","source_language":"auto","target_language":"zh-CN","response_level":"standard"}'
 ```
