@@ -17,7 +17,7 @@
 
 ## Reference
 
-- [Service module catalog](reference/modules.md): navigation and shared dependency rules for the individual current/target launcher, transport, API, application, domain, port, adapter, publication, observability, and shutdown module references.
+- [Module reference](reference/modules.md): searchable catalog of module-owned runtime, transport, application, domain, port, adapter, and operations pages.
 
 ## Guides
 

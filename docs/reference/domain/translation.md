@@ -1,27 +1,17 @@
-# Translation
+# Translation domain
 
-中文：[翻译](../../../docs_cn/reference/domain/translation_cn.md)
+中文：[翻译 domain](../../../docs_cn/reference/domain/translation_cn.md)
 
-This page defines translation results independent of HTTP and provider schemas at `src/domain/translation.rs`. It is for contributors implementing or reviewing the target service boundary.
+This module owns transport-independent vocabulary for translation requests and results.
 
-Status: target module design; no target source file is checked in.
+## Model
 
-## Contract
+A request contains source text, source and target language selectors, response level, and optional chronological minimal history. Language tags are canonicalized and bounded. Source language may be automatic only where the service contract permits it. Unknown wire fields are a transport concern; domain construction still rejects invalid or oversized values.
 
-The target aggregate represents unit classification, ordered meaning-specific translations, passage tips, and optional references to reviewed canonical translations. A provider candidate is not canonical; canonical references may name only content in the pinned immutable release. The application builds a superset before response-level projection.
+A translation result separates the primary translated text from optional ambiguity, register, terminology, or cultural notes. A response-level value is one of `brief`, `standard`, or `full`; it controls deterministic breadth after the full result is assembled.
 
-## Ownership and dependencies
+## Invariants
 
-This module contains domain vocabulary or implements only the boundary named above. It must preserve Transnet's user-agnostic, request-stateless design. Wire shapes remain authoritative in the interface contracts, publication policy in the publishing guide, and cross-module semantics in the system design; this page does not create an additional API.
+History is linguistic context, not identity or durable state. It contains only the minimum prior source/translation pairs needed by the current request and is discarded afterward. Domain values must not carry user IDs, persistence policy, provider selection, or storage instructions.
 
-## Verification
-
-Add unit tests beside implemented code for validation and invariants, plus integration or contract tests where values cross a process boundary. Run `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets`, and `cargo doc --no-deps` from the repository root.
-
-## Related documents
-
-- [Service module reference](../modules.md)
-- [System design](../../transnet.md)
-- [Transnet service interface](../../interfaces/transnet.md)
-- [Content publishing](../../guides/content-publishing.md)
-
+Exact public shapes and limits belong to the [Transnet service interface](../../interfaces/transnet.md).

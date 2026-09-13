@@ -1,27 +1,17 @@
-# 翻译
+# 翻译 domain
 
-English: [Translation](../../../docs/reference/domain/translation.md)
+English: [Translation domain](../../../docs/reference/domain/translation.md)
 
-本文定义 `src/domain/translation.rs` 中独立于 HTTP 与提供方 schema 的翻译结果，供实现或评审目标服务边界的贡献者阅读。
+本模块负责与传输无关的翻译请求与结果词汇。
 
-状态：目标模块设计；目标源文件尚未纳入仓库。
+## 模型
 
-## 契约
+请求包含源文本、源语言与目标语言选择器、响应级别，以及可选的按时间排序最小历史。语言标签会被规范化并限制边界。仅在服务合同允许时，源语言才可自动检测。未知线上字段属于传输职责；domain 构造仍拒绝无效或超限值。
 
-目标聚合表示单元分类、按顺序排列的词义级翻译、段落提示，以及对已审核规范翻译的可选引用。提供方候选并非规范内容；规范引用只能指向固定不可变发布中的内容。应用层在响应级别投影之前构建超集。
+翻译结果将主要译文与可选歧义、语域、术语或文化说明分开。响应级别是 `brief`、`standard` 或 `full`；它在完整结果组装后控制确定性广度。
 
-## 所有权与依赖
+## 不变量
 
-本模块包含领域词汇，或仅实现上述边界。它必须保持 Transnet 与用户无关、请求无状态的设计。线路结构以接口契约为准，发布策略以内容发布指南为准，跨模块语义以系统设计为准；本文不创建额外 API。
+历史是语言上下文，不是身份或持久状态。它只包含当前请求所需的最小先前源文/译文对，并在请求后丢弃。Domain 值不得携带用户 ID、持久化策略、provider 选择或存储指令。
 
-## 验证
-
-实现代码后，在代码旁添加覆盖验证与不变量的单元测试，并在值跨进程边界时添加集成或契约测试。从仓库根目录运行 `cargo fmt --all -- --check`、`cargo clippy --all-targets -- -D warnings`、`cargo test --all-targets` 和 `cargo doc --no-deps`。
-
-## 相关文档
-
-- [服务模块参考](../modules_cn.md)
-- [系统设计](../../transnet_cn.md)
-- [Transnet 服务接口](../../interfaces/transnet_cn.md)
-- [内容发布](../../guides/content-publishing_cn.md)
-
+精确公开结构与限制由 [Transnet 服务接口](../../interfaces/transnet_cn.md)负责。
