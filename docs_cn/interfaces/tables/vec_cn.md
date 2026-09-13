@@ -29,13 +29,13 @@ English: [Target vector collections](../../../docs/interfaces/tables/vec.md)
 
 必需索引字段为 `release_id`、`publication_state`、`verification_state`、`edge_id`、`relation_version`、`fact_id`、`fact_revision`、`source_node_id`、`target_node_id`、`relation_type`、`language`、`dialect`、`region`、`period`、`domain_ids`、`applicable_sense_ids` 和 `evidence_ids`。
 
-Payload 还携带完整规范关系解释、方向、条件、限制、证据状态、来源引用、置信度及 `assessment_enabled`。`relation_version` 必须与 MySQL 中的 `release_relationship` 一致。`assessment_enabled` 只声明目标资格；Qdrant 不存储判断、计数、社区分数、距离调整、用户 ID 或聚合版本。
+Payload 还携带完整规范关系解释、方向、条件、限制、证据状态、来源引用、置信度及 `assessment_enabled`。`relation_version` 必须与 MySQL `release_member` 中的关系条目一致。`assessment_enabled` 只声明目标资格；Qdrant 不存储判断、计数、社区分数、距离调整、用户 ID 或聚合版本。
 
 稠密向量嵌入完整的“源—关系—目标”解释。稀疏向量索引规范 endpoint 标签、关系术语和已审核别名。相似度只能提出候选，不能建立或否定关系。
 
 ## 检索与距离 join
 
-Island-port 首先解析活动内容发布和不可变节点/边 alias。Qdrant 返回合格规范候选后，再按 `(content_release, edge_id, relation_version)` join 活动 `relationship_distance_projection`。投影缺失或低于门槛时调整为零。Transnet 随后按有效距离进行排序或布局，并在响应元数据和 cursor 中同时固定内容发布与聚合版本。
+Island-port 首先解析活动内容发布和不可变节点/边 alias。Qdrant 返回合格规范候选后，再按 `(content_release, edge_id, relation_version)` join 活动 `relationship_assessment_projection`。该优化表将匿名计数及其派生距离保存在同一条不可变聚合记录中，因为两者共享一个键和生命周期。投影缺失或低于门槛时调整为零。Transnet 随后按有效距离进行排序或布局，并在响应元数据和 cursor 中同时固定内容发布与聚合版本。
 
 该 join 不能添加 Qdrant 未返回的边、绕过验证过滤、改变 endpoint 或关系类型，也不能替代来自 MySQL 的证据 hydration。聚合依赖不可用时，图读取使用基础距离，在公开合同要求时将响应标为 degraded，并且绝不复用其他关系版本或发布的投影。
 

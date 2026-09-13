@@ -45,19 +45,21 @@ Allowed Transnet service data includes:
 - stable references to Qdrant knowledge roots and evidence records;
 - publication jobs, validation results, idempotency records, and a Qdrant projection outbox, provided none contains request text or user data.
 
-Use `utf8mb4`, UTC timestamps with microsecond precision, opaque stable public IDs, explicit foreign keys, and immutable published revisions. Credentials and encryption keys remain outside MySQL.
+Use `utf8mb4`, UTC timestamps with microsecond precision, opaque stable public IDs, explicit foreign keys where both sides have one concrete type, and immutable published revisions. Credentials and encryption keys remain outside MySQL.
+
+The target schema deliberately uses a hybrid relational model. Stable identity, lifecycle, release membership, relationship endpoints, assessment eligibility, and frequent lookup keys are typed and indexed columns. Bounded fields that vary by content family use closed, versioned JSON payload schemas. This avoids a table per card child or domain attribute without turning core joins and filters into JSON scans. Publication validates payload schemas, referenced entity types, evidence references, and the polymorphic `release_member` target before a release can become active.
 
 ## Curated translation storage
 
-The canonical translation model stores a small reviewed catalog, not traffic history or a cache. A `canonical_translation` row gives one source-target choice a stable `translation_id`, `unit` (`word`, `phrase`, or `passage`), source and target language tags, and an optional canonical `sense_id`. An immutable `canonical_translation_revision` contains source text, target text, the normalizer version and source fingerprint, optional dialect, register, and domain scope, evidence IDs, provenance, publication-rights assertion, selection reason, reviewer decision, and content hash. A release membership row pins exactly one approved revision to a content release. Basic-card translations reference these IDs instead of maintaining a second independently published translation value.
+The canonical translation model stores a small reviewed catalog, not traffic history or a cache. A `canonical_entity` row with `entity_type = 'translation'` gives one source-target choice a stable identity. Its immutable `canonical_entity_revision` promotes the normalized lookup key, language, optional sense identity, publication state, and content hash to columns. The versioned payload contains the word, phrase, or passage unit; source and target language-tagged text; normalizer version and source fingerprint; optional dialect, register, and domain scope; evidence and provenance references; publication-rights assertion; selection reason; and reviewer decision. One `release_member` row pins exactly one approved revision to a release. Basic-card payloads reference these translation entities instead of maintaining a second independently published translation value.
 
 ```mermaid
 erDiagram
-  CANONICAL_TRANSLATION ||--o{ CANONICAL_TRANSLATION_REVISION : has
-  CANONICAL_TRANSLATION_REVISION }o--o{ EVIDENCE : cites
-  CONTENT_RELEASE ||--o{ RELEASE_TRANSLATION : contains
-  CANONICAL_TRANSLATION_REVISION ||--o{ RELEASE_TRANSLATION : pins
-  SENSE o|--o{ CANONICAL_TRANSLATION : scopes
+  CANONICAL_ENTITY ||--o{ CANONICAL_ENTITY_REVISION : has
+  CANONICAL_ENTITY o|--o{ CANONICAL_ENTITY : owns
+  CONTENT_RELEASE ||--o{ RELEASE_MEMBER : contains
+  CANONICAL_ENTITY_REVISION ||--o{ RELEASE_MEMBER : pins
+  CANONICAL_SOURCE ||--o{ EVIDENCE_REVISION : supports
 ```
 
 Published identity is unique by source language, versioned source fingerprint, target language, sense or scope key, and content release. The stored source text is retained so Transnet can compare an exact candidate after retrieval; a fingerprint match alone is never sufficient. Passage entries have a configured length bound and must be reusable reference content rather than personal correspondence or arbitrary submitted text.
@@ -70,11 +72,11 @@ User saves are a separate concern. When an end user stars or saves a translation
 
 MySQL also owns canonical domain knowledge profiles, atomic basic facts, and semantic scales. A domain revision stores multilingual labels and aliases, definition, inclusion and exclusion scope, broader domain IDs, and a knowledge profile containing available fact families, languages, verified fact count, and coverage state (`seed`, `partial`, or `curated`). Coverage describes the active release and never asserts completeness.
 
-A `knowledge_fact_revision` stores a stable fact ID, subject node, typed predicate, object node or typed literal, statement, applicable senses and domains, conditions, evidence IDs, provenance IDs, verification state, content hash, and immutable revision. Facts are independently reviewable and release-addressable. Qdrant edges and fact-search points reference the authoritative fact revision rather than becoming a second source of truth.
+A fact uses `canonical_entity` with `entity_type = 'fact'`. Its immutable `canonical_entity_revision` payload stores the subject, typed predicate, object node or typed literal, statement, applicable senses and domains, conditions, evidence references, provenance, and verification data. Facts remain independently reviewable and release-addressable. Qdrant edges and fact-search points reference the authoritative entity revision rather than becoming a second source of truth.
 
-A `knowledge_relationship_revision` maps one stable public edge ID and positive relation version to the exact fact revision, endpoints, relation type, direction, restrictions, and assessment eligibility published in a release. This mapping lets island-port validate a WebUI assessment target without treating the judgment as canonical content. Relationship judgments and aggregates remain in the separately authorized island-port product schema defined by the [target MySQL schema](tables/sql.sql); Transnet cannot access the private rows.
+A `canonical_relationship_revision` maps one stable public edge ID and positive relation version to the exact fact revision, endpoints, relation type, direction, restrictions, and assessment eligibility published in a release. Endpoint and relation fields remain indexed columns; explanations and bounded scope/support lists use the versioned payload. This mapping lets island-port validate a WebUI assessment target without treating the judgment as canonical content. Relationship judgments and aggregates remain in the separately authorized island-port product schema defined by the [target MySQL schema](tables/sql.sql); Transnet cannot access the private rows.
 
-A `semantic_scale_revision` stores a stable scale ID, named dimension, increasing or decreasing direction, applicable domains and conditions, ordered sense-qualified node members, evidence IDs, verification state, content hash, and immutable revision. Member positions define order only. Publication rejects duplicate positions, missing members, mixed incompatible senses, absent evidence, and any attempt to encode a scale as `is_a` taxonomy. Basic cards, facts, profiles, and scales join the same immutable release.
+A semantic scale uses `canonical_entity` with `entity_type = 'semantic_scale'`. Its immutable revision payload stores the named dimension, increasing or decreasing direction, applicable domains and conditions, ordered sense-qualified node members, and evidence references. Member positions define order only. Publication rejects duplicate positions, missing members, mixed incompatible senses, absent evidence, and any attempt to encode a scale as `is_a` taxonomy. Basic cards, facts, profiles, and scales all join a release through `release_member`.
 
 ## Common operation envelope
 

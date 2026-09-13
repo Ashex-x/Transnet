@@ -29,13 +29,13 @@ Every point has a named dense `semantic` vector and named sparse `lexical` vecto
 
 Required indexed fields are `release_id`, `publication_state`, `verification_state`, `edge_id`, `relation_version`, `fact_id`, `fact_revision`, `source_node_id`, `target_node_id`, `relation_type`, `language`, `dialect`, `region`, `period`, `domain_ids`, `applicable_sense_ids`, and `evidence_ids`.
 
-The payload also carries the complete canonical relationship explanation, direction, conditions, restrictions, evidence state, provenance references, confidence, and `assessment_enabled`. `relation_version` matches `release_relationship` in MySQL. `assessment_enabled` declares target eligibility only; no judgment, count, community score, distance adjustment, user identifier, or aggregate version is stored in Qdrant.
+The payload also carries the complete canonical relationship explanation, direction, conditions, restrictions, evidence state, provenance references, confidence, and `assessment_enabled`. `relation_version` matches the relationship entry in MySQL `release_member`. `assessment_enabled` declares target eligibility only; no judgment, count, community score, distance adjustment, user identifier, or aggregate version is stored in Qdrant.
 
 The dense vector embeds the complete source–relation–target explanation. The sparse vector indexes canonical endpoint labels, relation terminology, and reviewed aliases. Similarity proposes candidates and cannot establish or invalidate a relationship.
 
 ## Retrieval and distance join
 
-Island-port first resolves the active content release and immutable node/edge aliases. After Qdrant returns eligible canonical candidates, it joins the active `relationship_distance_projection` by `(content_release, edge_id, relation_version)`. A missing or below-threshold projection gives zero adjustment. Transnet then orders or lays out edges using effective distance and pins both the content release and aggregate version in response metadata and cursors.
+Island-port first resolves the active content release and immutable node/edge aliases. After Qdrant returns eligible canonical candidates, it joins the active `relationship_assessment_projection` by `(content_release, edge_id, relation_version)`. That optimized table keeps anonymous counts and their derived distance in the same immutable aggregate row because both share one key and lifecycle. A missing or below-threshold projection gives zero adjustment. Transnet then orders or lays out edges using effective distance and pins both the content release and aggregate version in response metadata and cursors.
 
 The join cannot add an edge Qdrant did not return, bypass verification filters, change endpoints or relation type, or replace evidence hydration from MySQL. If the aggregate dependency is unavailable, graph reads use base distance, mark the response degraded when the public contract requires it, and never reuse a projection from another relation version or release.
 

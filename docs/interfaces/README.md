@@ -9,7 +9,7 @@ This directory defines the target contracts between Transnet and island-port. Th
 | [Transnet service interface](transnet.md) | island-port → Transnet | The public translation action, request-scoped history, response levels, result envelope, relationship-assessment metadata, and follow-up canonical reads. |
 | [SQL data endpoint interface](mysql.md) | Transnet / publisher → island-port → MySQL | Release-pinned canonical translations, cards, domains, facts, semantic scales, staging, and activation. |
 | [Vector data endpoint interface](qdrant.md) | Transnet / publisher → island-port → Qdrant | Candidate node, relationship, and scale retrieval plus immutable projection publication. |
-| [Target storage catalog](tables/README.md) | island-port persistence | Logical SQL tables, immutable Qdrant collections, private judgments, and anonymous distance projections. |
+| [Target storage catalog](tables/README.md) | island-port persistence | Optimized hybrid MySQL schema, immutable Qdrant collections, private judgments, and anonymous distance projections. |
 
 ## Reading order
 

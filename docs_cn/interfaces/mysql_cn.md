@@ -64,19 +64,21 @@ Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 
 - 指向 Qdrant 知识根和证据记录的稳定引用；
 - 发布任务、校验结果、幂等记录和 Qdrant 投影 outbox，且均不含请求文本或用户数据。
 
-使用 `utf8mb4`、UTC 微秒时间、不透明稳定公开 ID、显式外键和不可变已发布修订。凭据和加密密钥置于 MySQL 之外。
+使用 `utf8mb4`、UTC 微秒时间、不透明稳定公开 ID、在两端均为单一具体类型时使用显式外键，以及不可变已发布修订。凭据和加密密钥置于 MySQL 之外。
+
+目标 schema 有意采用关系型与 JSON 混合模型。稳定身份、生命周期、发布成员关系、关系 endpoint、评估资格和高频查询键使用有类型且带索引的列；随内容族变化的有界字段使用闭合且带版本的 JSON payload schema。这样既避免为每种卡片子项或领域属性建立一张表，也不会让核心 join 和过滤退化成 JSON 扫描。发布进入活动状态前，必须校验 payload schema、被引用实体类型、证据引用，以及多态 `release_member` 的目标。
 
 ## 精选翻译存储
 
-规范翻译模型保存小型已审核目录，而不是流量历史或缓存。`canonical_translation` 行为一个源文—译文选择提供稳定 `translation_id`、`unit`（`word`、`phrase` 或 `passage`）、源语言与目标语言标签，以及可选规范 `sense_id`。不可变 `canonical_translation_revision` 包含源文、译文、normalizer 版本与源文 fingerprint、可选方言、语域和领域范围、证据 ID、来源、发布权利声明、选择理由、审核决定及内容 hash。发布成员行把一个已批准修订固定到内容发布。基础卡翻译引用这些 ID，不再维护第二份独立发布的翻译值。
+规范翻译模型保存小型已审核目录，而不是流量历史或缓存。`entity_type = 'translation'` 的 `canonical_entity` 行为一个源文—译文选择提供稳定身份。其不可变 `canonical_entity_revision` 将规范化查询键、语言、可选词义身份、发布状态和内容 hash 提升为列；带版本的 payload 包含单词、短语或段落单元，带语言标签的源文与译文，normalizer 版本与源文 fingerprint，可选方言、语域和领域范围，证据与来源引用，发布权利声明、选择理由及审核决定。一条 `release_member` 记录把一个已批准修订固定到发布。基础卡 payload 引用这些翻译实体，不再维护第二份独立发布的翻译值。
 
 ```mermaid
 erDiagram
-  CANONICAL_TRANSLATION ||--o{ CANONICAL_TRANSLATION_REVISION : has
-  CANONICAL_TRANSLATION_REVISION }o--o{ EVIDENCE : cites
-  CONTENT_RELEASE ||--o{ RELEASE_TRANSLATION : contains
-  CANONICAL_TRANSLATION_REVISION ||--o{ RELEASE_TRANSLATION : pins
-  SENSE o|--o{ CANONICAL_TRANSLATION : scopes
+  CANONICAL_ENTITY ||--o{ CANONICAL_ENTITY_REVISION : has
+  CANONICAL_ENTITY o|--o{ CANONICAL_ENTITY : owns
+  CONTENT_RELEASE ||--o{ RELEASE_MEMBER : contains
+  CANONICAL_ENTITY_REVISION ||--o{ RELEASE_MEMBER : pins
+  CANONICAL_SOURCE ||--o{ EVIDENCE_REVISION : supports
 ```
 
 已发布身份按源语言、带版本的源文 fingerprint、目标语言、词义或范围键及内容发布唯一。存储源文以便 Transnet 在检索后进行精确比较；仅 fingerprint 匹配绝不充分。Passage 条目有配置长度上限，且必须是可复用参考内容，不能是私人通信或任意提交文本。
@@ -89,11 +91,11 @@ erDiagram
 
 MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。领域修订存储多语言名称与别名、定义、包含/排除范围、上层领域 ID，以及包含可用事实族、语言、已验证事实数和覆盖状态（`seed`、`partial` 或 `curated`）的知识 profile。覆盖描述活动发布，绝不声称完整。
 
-`knowledge_fact_revision` 存储稳定事实 ID、主体节点、有类型谓词、客体节点或有类型字面值、陈述、适用词义与领域、条件、证据 ID、来源 ID、验证状态、内容 hash 和不可变修订。事实可独立审核并按发布寻址。Qdrant 边与事实检索 point 引用权威事实修订，不成为第二权威来源。
+事实使用 `entity_type = 'fact'` 的 `canonical_entity`。其不可变 `canonical_entity_revision` payload 存储主体、有类型谓词、客体节点或有类型字面值、陈述、适用词义与领域、条件、证据引用、来源及验证数据。事实仍可独立审核并按发布寻址。Qdrant 边与事实检索 point 引用权威实体修订，不成为第二权威来源。
 
-`knowledge_relationship_revision` 将稳定公开边 ID 和正关系版本映射到发布中的准确事实修订、endpoint、关系类型、方向、限制及评估资格。Island-port 因此可以校验 WebUI 评估目标，而不会把判断视为规范内容。关系判断与聚合保留在[目标 MySQL schema](../../docs/interfaces/tables/sql.sql)定义的独立授权 island-port 产品 schema 中；Transnet 无法访问私有行。
+`canonical_relationship_revision` 将稳定公开边 ID 和正关系版本映射到发布中的准确事实修订、endpoint、关系类型、方向、限制及评估资格。Endpoint 和关系字段保留为索引列；解释及有界范围/支持列表使用带版本 payload。Island-port 因此可以校验 WebUI 评估目标，而不会把判断视为规范内容。关系判断与聚合保留在[目标 MySQL schema](../../docs/interfaces/tables/sql.sql)定义的独立授权 island-port 产品 schema 中；Transnet 无法访问私有行。
 
-`semantic_scale_revision` 存储稳定尺度 ID、命名维度、递增或递减方向、适用领域与条件、有序词义限定节点成员、证据 ID、验证状态、内容 hash 和不可变修订。成员位置只定义顺序。发布拒绝重复位置、缺失成员、混合不兼容词义、缺失证据，以及把尺度编码成 `is_a` 分类的行为。基础卡、事实、profile 与尺度加入同一不可变发布。
+语义尺度使用 `entity_type = 'semantic_scale'` 的 `canonical_entity`。其不可变修订 payload 存储命名维度、递增或递减方向、适用领域与条件、有序词义限定节点成员及证据引用。成员位置只定义顺序。发布拒绝重复位置、缺失成员、混合不兼容词义、缺失证据，以及把尺度编码成 `is_a` 分类的行为。基础卡、事实、profile 与尺度均通过 `release_member` 加入发布。
 
 ## 通用操作 envelope
 
