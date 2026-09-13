@@ -55,42 +55,42 @@ The executable currently binds loopback TCP and wires only health, translation, 
 - [Bootstrap](bootstrap.md): configuration, adapter composition, readiness, listener ownership, and shutdown.
 - [Configuration](config.md): typed settings, defaults, validation, and secret references.
 - [Resilience](resilience.md): bounded timeouts, concurrency, retries, and circuit breakers.
-- [Observability](observability/overview.md), [logging](observability/logging.md), and [metrics](observability/metrics.md): safe aggregate telemetry with no request content.
+- [Observability](observability/telemetry.md), [logging](observability/logging.md), and [metrics](observability/metrics.md): safe aggregate telemetry with no request content.
 
 ## Transport and API
 
-- [UDS server](transport/uds_server.md), [JSON transport](transport/json.md), and [transport middleware](transport/middleware.md): HTTP/1.1 over the owned Unix socket, strict bodies, request bounds, and safe outcomes.
+- [UDS server](transport/uds-server.md), [JSON transport](transport/json.md), and [transport middleware](transport/middleware.md): HTTP/1.1 over the owned Unix socket, strict bodies, request bounds, and safe outcomes.
 - [API request types](api/request.md), [response types](api/response.md), and [problem responses](api/problem.md): exact wire mapping and closed safe errors.
 - [Probes](api/v1/probes.md), [translations](api/v1/translations.md), [sense reads](api/v1/sense.md), and [graph reads](api/v1/graph.md): thin versioned route handlers.
 
 ## Application orchestration
 
-- [Request orchestrator](application/request_orchestrator.md): one deadline and release pin across a translation turn.
-- [Intent router](application/intent_router.md): automatic word, phrase, or passage classification.
-- [Translation](application/translation.md) and [long text](application/long_text.md): connected-text translation plus request-local chunk and terminology planning.
-- [Sense resolution](application/sense_resolution.md) and [domain assessment](application/domain_assessment.md): canonical candidate ranking and closed domain outcomes.
-- [Knowledge retrieval](application/knowledge_retrieval.md), [relationship ranker](application/relationship_ranker.md), and [page composer](application/page_composer.md): evidence-aware fact hydration, ranking, and explanation.
-- [Response projection](application/response_projection.md) and [validation](application/validation.md): deterministic `brief`, `standard`, and `full` views plus final invariant checks.
+- [Request orchestrator](application/request-orchestrator.md): one deadline and release pin across a translation turn.
+- [Intent router](application/intent-router.md): automatic word, phrase, or passage classification.
+- [Translation](application/translation.md) and [long text](application/long-text.md): connected-text translation plus request-local chunk and terminology planning.
+- [Sense resolution](application/sense-resolution.md) and [domain assessment](application/domain-assessment.md): canonical candidate ranking and closed domain outcomes.
+- [Knowledge retrieval](application/knowledge-retrieval.md), [relationship ranker](application/relationship-ranker.md), and [page composer](application/page-composer.md): evidence-aware fact hydration, ranking, and explanation.
+- [Response projection](application/response-projection.md) and [validation](application/validation.md): deterministic `brief`, `standard`, and `full` views plus final invariant checks.
 
 ## Domain types
 
-- [Language](domain/language.md), [request](domain/request.md), [translation](domain/translation.md), and [response level](domain/response_level.md): request and result vocabulary independent of transport.
+- [Language](domain/language.md), [request](domain/request.md), [translation](domain/translation.md), and [response level](domain/response-level.md): request and result vocabulary independent of transport.
 - [Lexical](domain/lexical.md) and [domain](domain/domain.md): stable sense, phrase, and knowledge-domain identity.
-- [Knowledge](domain/knowledge.md), [relationship](domain/relationship.md), and [semantic scale](domain/semantic_scale.md): atomic facts, exact typed relations, and ordered non-taxonomic degree dimensions.
+- [Knowledge](domain/knowledge.md), [relationship](domain/relationship.md), and [semantic scale](domain/semantic-scale.md): atomic facts, exact typed relations, and ordered non-taxonomic degree dimensions.
 - [Evidence](domain/evidence.md) and [release](domain/release.md): support, provenance, immutable compatible release identity, and degradation state.
 
 ## Ports and adapters
 
-- [Translation model](ports/translation_model.md), [structured data](ports/structured_data.md), and [vector data](ports/vector_data.md): operation-focused model and canonical/retrieval reads.
+- [Translation model](ports/translation-model.md), [structured data](ports/structured-data.md), and [vector data](ports/vector-data.md): operation-focused model and canonical/retrieval reads.
 - [Clock](ports/clock.md) and [metrics](ports/metrics.md): deadline time and aggregate outcome boundaries.
-- [OpenAI-compatible protocol](adapters/providers/openai.md), [Gemma 4](adapters/providers/gemma4.md), and [TranslateGemma](adapters/providers/translate_gemma.md): protocol and role-specific provider adapters.
-- [Island-port UDS client](adapters/island_port/uds_client.md), [SQL adapter](adapters/island_port/sql.md), and [vector adapter](adapters/island_port/vector.md): bounded JSON calls without direct MySQL or Qdrant drivers.
+- [OpenAI-compatible protocol](adapters/providers/openai.md), [Gemma 4](adapters/providers/gemma4.md), and [TranslateGemma](adapters/providers/translate-gemma.md): protocol and role-specific provider adapters.
+- [Island-port UDS client](adapters/island-port/uds-client.md), [SQL adapter](adapters/island-port/sql.md), and [vector adapter](adapters/island-port/vector.md): bounded JSON calls without direct MySQL or Qdrant drivers.
 
 Port traits express application operations rather than generic persistence. Read inputs may contain derived lookup forms, fingerprints, canonical IDs, filters, and release IDs, but never user identity. Runtime composition receives no mutation method.
 
 ## Offline publication
 
-- [Publication module](publication/overview.md): staging, validation, projection, reconciliation, activation, quarantine, and rollback library boundary.
+- [Publication module](publication/publication-workflow.md): staging, validation, projection, reconciliation, activation, quarantine, and rollback library boundary.
 - [Publisher launcher](bin/transnet-publisher.md): optional composition root that alone receives mutation-capable structured and vector ports.
 
 The publisher builds authoritative structured content first, projects immutable vector collections second, reconciles the exact release trio, evaluates it, and activates it atomically. Live request handling never publishes itself.

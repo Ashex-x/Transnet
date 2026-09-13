@@ -16,5 +16,5 @@ Bootstrap 加载并验证配置、初始化可观测性、构造 Provider 与 is
 
 ## 验证
 
-组合测试应证明路由注册随依赖可用性变化，失败不会声称就绪，且关闭遵守所有权与 Deadline。另见[配置模块](config_cn.md)、[UDS 服务器](transport/uds_server_cn.md)与[Transnet 接口](../interfaces/transnet_cn.md)。
+组合测试应证明路由注册随依赖可用性变化，失败不会声称就绪，且关闭遵守所有权与 Deadline。另见[配置模块](config_cn.md)、[UDS 服务器](transport/uds-server_cn.md)与[Transnet 接口](../interfaces/transnet_cn.md)。
 

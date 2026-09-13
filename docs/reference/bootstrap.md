@@ -16,5 +16,5 @@ Shutdown stops admission, drains accepted work within deadlines, closes clients,
 
 ## Verification
 
-Composition tests should prove route registration follows dependency availability, failures do not claim readiness, and shutdown respects ownership and deadlines. See the [configuration module](config.md), [UDS server](transport/uds_server.md), and [Transnet interface](../interfaces/transnet.md).
+Composition tests should prove route registration follows dependency availability, failures do not claim readiness, and shutdown respects ownership and deadlines. See the [configuration module](config.md), [UDS server](transport/uds-server.md), and [Transnet interface](../interfaces/transnet.md).
 
