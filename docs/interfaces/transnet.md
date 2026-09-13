@@ -8,6 +8,30 @@ This document also defines the transport shared by every internal process bounda
 
 Status: target contract. The current runtime still exposes transitional loopback HTTP and does not yet compose the data services.
 
+## Contents
+
+- [Connection contract](#connection-contract)
+- [HTTP and JSON rules](#http-and-json-rules)
+- [Deadlines, limits, and lifecycle](#deadlines-limits-and-lifecycle)
+- [Service boundary](#service-boundary)
+- [Simple translation request](#simple-translation-request)
+- [Request-scoped translation history](#request-scoped-translation-history)
+- [Shared translation result](#shared-translation-result)
+- [Response levels](#response-levels)
+- [Translation persistence](#translation-persistence)
+- [Endpoint reference](#endpoint-reference)
+- [Related documents](#related-documents)
+
+## Endpoint reference
+
+- [`POST /transnet/v1/health`](#post-transnetv1health)
+- [`POST /transnet/v1/livez`](#post-transnetv1livez)
+- [`POST /transnet/v1/readyz`](#post-transnetv1readyz)
+- [`POST /transnet/v1/translations`](#post-transnetv1translations)
+- [`POST /transnet/v1/senses/get`](#post-transnetv1sensesget)
+- [`POST /transnet/v1/graph/get`](#post-transnetv1graphget)
+- [`POST /transnet/v1/graph/neighbors`](#post-transnetv1graphneighbors)
+
 ## Connection contract
 
 Every internal interface involving Transnet uses HTTP/1.1 over a Unix domain stream socket (UDS). TCP listeners, host names, and port numbers are not part of these internal contracts. Island-port calls Transnet through `/run/transnet/transnet.sock`; Transnet calls island-port's structured, vector, and graph endpoints through `/run/island-port/island-port.sock`. Deployments may relocate sockets through configuration, but endpoint paths and payload schemas do not change. Client-to-island-port traffic is outside this UDS rule and uses island-port's public HTTPS/WSS contract.

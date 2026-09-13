@@ -6,6 +6,28 @@ This contract defines island-port's structured-data HTTP endpoints for shared ca
 
 Status: target contract; the current executable does not compose this service client.
 
+## Contents
+
+- [Storage boundary](#storage-boundary)
+- [Curated translation storage](#curated-translation-storage)
+- [Domain facts and semantic scales](#domain-facts-and-semantic-scales)
+- [Common operation envelope](#common-operation-envelope)
+- [Endpoint reference](#endpoint-reference)
+- [Domain proposal handling](#domain-proposal-handling)
+- [Related documents](#related-documents)
+
+## Endpoint reference
+
+- [`POST /data/sql/v1/translations/resolve`](#post-datasqlv1translationsresolve)
+- [`POST /data/sql/v1/translations/stage`](#post-datasqlv1translationsstage)
+- [`POST /data/sql/v1/basic-cards/resolve`](#post-datasqlv1basic-cardsresolve)
+- [`POST /data/sql/v1/senses/get`](#post-datasqlv1sensesget)
+- [`POST /data/sql/v1/domains/resolve`](#post-datasqlv1domainsresolve)
+- [`POST /data/sql/v1/knowledge-facts/get`](#post-datasqlv1knowledge-factsget)
+- [`POST /data/sql/v1/semantic-scales/get`](#post-datasqlv1semantic-scalesget)
+- [`POST /data/sql/v1/cards/revisions/stage`](#post-datasqlv1cardsrevisionsstage)
+- [`POST /data/sql/v1/releases/activate`](#post-datasqlv1releasesactivate)
+
 Island-port listens on `/run/island-port/island-port.sock` by default and follows the [shared UDS JSON transport](transnet.md). Callers never connect to MySQL or submit SQL; island-port owns queries, transactions, schema compatibility, credentials, and connection pooling. Only the Transnet runtime and authenticated publication tooling may access the socket. Runtime callers receive read access; mutation endpoints additionally require the publisher service account. Authorization comes from socket filesystem credentials, not JSON fields or forwarded headers.
 
 ## Storage boundary

@@ -8,6 +8,30 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 状态：目标合同。当前运行时仍暴露过渡性回环 HTTP，且尚未组合数据服务。
 
+## 目录
+
+- [连接合同](#连接合同)
+- [HTTP 与 JSON 规则](#http-与-json-规则)
+- [Deadline、限制与生命周期](#deadline限制与生命周期)
+- [服务边界](#服务边界)
+- [简单翻译请求](#简单翻译请求)
+- [请求级翻译历史](#请求级翻译历史)
+- [共享翻译结果](#共享翻译结果)
+- [响应级别](#响应级别)
+- [翻译持久化](#翻译持久化)
+- [endpoint 参考](#endpoint-参考)
+- [相关文档](#相关文档)
+
+## endpoint 参考
+
+- [`POST /transnet/v1/health`](#post-transnetv1health)
+- [`POST /transnet/v1/livez`](#post-transnetv1livez)
+- [`POST /transnet/v1/readyz`](#post-transnetv1readyz)
+- [`POST /transnet/v1/translations`](#post-transnetv1translations)
+- [`POST /transnet/v1/senses/get`](#post-transnetv1sensesget)
+- [`POST /transnet/v1/graph/get`](#post-transnetv1graphget)
+- [`POST /transnet/v1/graph/neighbors`](#post-transnetv1graphneighbors)
+
 ## 连接合同
 
 所有涉及 Transnet 的内部接口均使用 Unix 域流套接字（UDS）上的 HTTP/1.1。TCP listener、主机名和端口号不属于这些内部合同。Island-port 通过 `/run/transnet/transnet.sock` 调用 Transnet；Transnet 通过 `/run/island-port/island-port.sock` 调用 island-port 的结构化、向量与图 endpoint。部署可通过配置迁移套接字，但 endpoint 路径和 payload schema 不变。客户端到 island-port 的流量不受本 UDS 规则约束，而使用 island-port 的公开 HTTPS/WSS 合同。

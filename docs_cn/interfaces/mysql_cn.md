@@ -6,6 +6,28 @@ English: [SQL data endpoint interface](../../docs/interfaces/mysql.md)
 
 状态：目标合同；当前可执行文件尚未组合此服务客户端。
 
+## 目录
+
+- [存储边界](#存储边界)
+- [精选翻译存储](#精选翻译存储)
+- [领域事实与语义尺度](#领域事实与语义尺度)
+- [通用操作 envelope](#通用操作-envelope)
+- [endpoint 参考](#endpoint-参考)
+- [领域提案处理](#领域提案处理)
+- [相关文档](#相关文档)
+
+## endpoint 参考
+
+- [`POST /data/sql/v1/translations/resolve`](#post-datasqlv1translationsresolve)
+- [`POST /data/sql/v1/translations/stage`](#post-datasqlv1translationsstage)
+- [`POST /data/sql/v1/basic-cards/resolve`](#post-datasqlv1basic-cardsresolve)
+- [`POST /data/sql/v1/senses/get`](#post-datasqlv1sensesget)
+- [`POST /data/sql/v1/domains/resolve`](#post-datasqlv1domainsresolve)
+- [`POST /data/sql/v1/knowledge-facts/get`](#post-datasqlv1knowledge-factsget)
+- [`POST /data/sql/v1/semantic-scales/get`](#post-datasqlv1semantic-scalesget)
+- [`POST /data/sql/v1/cards/revisions/stage`](#post-datasqlv1cardsrevisionsstage)
+- [`POST /data/sql/v1/releases/activate`](#post-datasqlv1releasesactivate)
+
 Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 UDS JSON 传输](transnet_cn.md)。调用方绝不直接连接 MySQL 或提交 SQL；查询、事务、schema 兼容性、凭据和连接池均由 island-port 负责。只有 Transnet 运行时和经过认证的发布工具可以访问套接字。运行时调用方具有读取权限；变更 endpoint 还要求 publisher 服务账户。
 
 ## 存储边界

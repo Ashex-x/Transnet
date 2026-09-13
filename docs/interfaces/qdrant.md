@@ -6,6 +6,24 @@ This contract defines island-port's vector and graph HTTP endpoints for versione
 
 Status: target contract; the current executable does not compose this service client.
 
+## Contents
+
+- [Storage boundary](#storage-boundary)
+- [Release and collection contract](#release-and-collection-contract)
+- [Knowledge node point](#knowledge-node-point)
+- [Knowledge edge point](#knowledge-edge-point)
+- [Semantic scale point](#semantic-scale-point)
+- [Endpoint reference](#endpoint-reference)
+- [Related documents](#related-documents)
+
+## Endpoint reference
+
+- [`POST /data/vec/v1/nodes/search`](#post-datavecv1nodessearch)
+- [`POST /data/vec/v1/scales/search`](#post-datavecv1scalessearch)
+- [`POST /data/vec/v1/edges/search`](#post-datavecv1edgessearch)
+- [`POST /data/vec/v1/neighbors/search`](#post-datavecv1neighborssearch)
+- [`POST /data/vec/v1/releases/publish`](#post-datavecv1releasespublish)
+
 Island-port listens on `/run/island-port/island-port.sock` by default and follows the [shared UDS JSON transport](transnet.md). Callers never connect to Qdrant or submit native Qdrant requests; island-port owns collection selection, query construction, credentials, and connection pooling. Only the Transnet runtime and authenticated publication tooling may access the socket. Runtime callers receive search access; publication requires the publisher service account.
 
 Every exact request body has the shape `{"context": RequestContext, "input": EndpointInput}`. `RequestContext` contains `request_id`, `deadline_at`, `schema_version` set to `vector-data-v1`, and the pinned `content_release` when applicable. Endpoint examples below show only `EndpointInput`. Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`; publication may also return `conflict`.
