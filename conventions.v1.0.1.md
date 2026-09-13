@@ -28,6 +28,24 @@ Keep doc comments on public items. Docs contains architecture, contracts, operat
 
 Each public module has one hand-written Markdown document when it needs one. Simple documents may be free-form and minimal. The suggested Contents, Overview, Architecture, API, Design, and Testing structure is a reference, not a template to impose blindly: adapt headings, order, and depth to the repository and document's purpose.
 
+### Documentation structure
+
+Use `docs/documentation-index.md` as the repository-wide entry point. It links to the authoritative system design, interface catalog, module-reference catalog, and task-oriented guides; it does not repeat their content. Every documentation directory with multiple independently useful pages has one index or catalog that states the directory's scope and links each owned page with a one-sentence description.
+
+Place documents by authority:
+
+- `docs/transnet.md`: product semantics and system architecture.
+- `docs/product/`: focused consumer-visible behavior that expands the system design without redefining contracts.
+- `docs/interfaces/`: normative HTTP, UDS, and storage-adapter wire contracts, grouped by service boundary or route domain.
+- `docs/reference/<module>/`: implementation-oriented module references, grouped by stable ownership area such as `runtime`, `transport`, `application`, `domain`, `ports`, `adapters`, or `operations`.
+- `docs/guides/`: task-oriented procedures such as development, configuration, publication, and quality assurance.
+
+An important module or stable subsystem owns its own directory and focused inner pages when it has more than one independently searchable concern. Keep closely coupled concerns together; do not create one page per source file, type, route, or hypothetical future module. A page earns its own file when it has a distinct owner or audience and enough unique design, lifecycle, invariants, or verification guidance to remain useful without copied filler. Otherwise document the item in its parent module page or source comments.
+
+Each fact has one authoritative home. A reference page explains module ownership, dependencies, lifecycle, invariants, current-versus-target status, and verification; it links to interface documents for exact fields and examples, guides for procedures, the system design for product semantics, and rustdoc for item-level API detail. Summaries should be short and must not copy whole contracts, field catalogs, test lists, or standard boundary language across sibling pages.
+
+Use concise, descriptive filenames that name the owned concept. Within one module directory, use `README.md` or a clearly named catalog only when navigation is needed; do not add empty indexes or generic files such as `overview.md` whose purpose is unclear in search results. When deleting or merging a page, update every inbound link and preserve unique content in the new authoritative owner.
+
 Start a document with its purpose, owner or boundary, and intended reader when those are not obvious from its title. Explain prerequisites before procedures, put the smallest working example before advanced variants, and define project-specific terms on first use. End related documents with relative links. Keep a concise status note when a design is proposed, partial, deprecated, or not yet implemented.
 
 Write changes so a new contributor can answer: where the behavior lives, how to run or verify it, which inputs and outputs matter, and which adjacent document or source file is authoritative. Keep examples runnable or explicitly mark them illustrative; never include credentials, user data, or production-only identifiers.
@@ -66,7 +84,7 @@ Keep unit tests beside their code in `#[cfg(test)]` modules and integration test
 
 Keep Transnet as one Cargo package: Rust in src, integration tests in tests, configuration in config, and hand-written documentation in docs. Use brief, descriptive, preferably unique filenames; avoid repeated generic names and duplicate documents.
 
-Keep system design in docs/transnet.md, task instructions in docs/guides, human contracts in docs/interfaces, machine contracts in docs/reference, and Rust API detail in source comments and rustdoc. Give each contract one authoritative owner; other documents summarize and link instead of copying it.
+Keep system design in docs/transnet.md, task instructions in docs/guides, wire and storage contracts in docs/interfaces, module references in docs/reference, and Rust API detail in source comments and rustdoc. Give each contract and module concern one authoritative owner; other documents summarize and link instead of copying it.
 
 Document implemented behavior and update documentation with every public API, configuration, or process-boundary change. Exclude generated files, build output, logs, runtime state, credentials, and editor state from version control; commit Cargo.lock.
 
