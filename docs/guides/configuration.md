@@ -4,9 +4,9 @@
 
 The process reads `config/transnet.toml` relative to the Cargo manifest, independent of the shell working directory.
 
-`[server]` configures `host`, `port`, `log_level`, and `log_format`. `host` must be a loopback IP address such as `127.0.0.1` or `::1`; a gateway or service mesh owns any public-edge deployment. `RUST_LOG` overrides `log_level`; `log_format = "json"` selects newline-delimited JSON and other values select compact text. Debug builds write `logs/debug/transnet.log`; release builds write `logs/release/transnet.log`. The non-blocking logger replaces the applicable file on startup and includes tracing targets.
+The target listener configuration uses `socket_path = "/run/transnet/transnet.sock"`, `socket_mode = "0660"`, and an operator-managed socket group. Structured and vector data clients use island-port at `/run/island-port/island-port.sock`. Socket paths are deployment settings; API namespaces are fixed. The current `[server] host` and `port` fields configure only the transitional loopback runtime and are removed when UDS serving lands. `RUST_LOG` overrides `log_level`; `log_format = "json"` selects newline-delimited JSON and other values select compact text. Debug builds write `logs/debug/transnet.log`; release builds write `logs/release/transnet.log`.
 
-`[http]` configures `max_request_body_bytes`, `allowed_origins`, and `allow_credentials`. The body limit applies before JSON is buffered and defaults to 1,048,576 bytes. Production keeps `allowed_origins` empty because browsers call a product gateway, not Transnet. Exact origins remain available only for isolated local development; wildcard origins are rejected.
+`[http]` configures `max_request_body_bytes` and transitional CORS fields. The body limit applies before JSON is buffered and defaults to 1,048,576 bytes. UDS has no browser origin and the target runtime ignores and ultimately removes CORS configuration; browsers call a product gateway, not Transnet.
 
 `[translation]` configures the Unicode-character routing boundary plus legacy defaults for a provider's per-attempt timeout, retry count after the first attempt, and retry delay. Provider-specific overrides take precedence.
 
@@ -20,6 +20,6 @@ Provider traces contain only the static provider boundary, operation name, attem
 
 The structured `/v1/lookups` slice uses the `[gemma4]` provider and requests strict JSON Schema output. The configured server must support the OpenAI-compatible `response_format.type = "json_schema"` request field and return JSON text in the first assistant message.
 
-The current executable has no MySQL, Qdrant, or canonical-release configuration. Those target capabilities require separately versioned settings for releases, embeddings, retrieval, model roles, and evaluation; see the [MySQL](../interfaces/mysql.md), [Qdrant](../interfaces/qdrant.md), and [Transnet service](../interfaces/port.md) contracts. Never place credentials or request content in the checked-in file.
+The current executable has no island-port or canonical-release configuration. Those target capabilities require separately versioned settings for releases, embeddings, retrieval, model roles, and evaluation; see the [SQL endpoints](../interfaces/mysql.md), [vector endpoints](../interfaces/qdrant.md), and [Transnet](../transnet.md) contracts. Never place credentials or request content in the checked-in file.
 
-Related: [design](../transnet.md), [Transnet service interface](../interfaces/port.md), and [development](development.md).
+Related: [design](../transnet.md), [Transnet service interface](../interfaces/transnet.md), and [development](development.md).

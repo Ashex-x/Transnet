@@ -4,9 +4,9 @@ English: [Configuration](../../docs/guides/configuration.md)
 
 进程始终相对于 Cargo Manifest 读取 `config/transnet.toml`，不受 Shell 工作目录影响。
 
-`[server]` 配置 `host`、`port`、`log_level` 和 `log_format`。`host` 必须是 `127.0.0.1`、`::1` 等回环 IP；公网边缘部署由网关或服务网格负责。`RUST_LOG` 覆盖 `log_level`；`log_format = "json"` 选择换行分隔 JSON，其他值选择紧凑文本。Debug 与 Release 构建分别写入 `logs/debug/transnet.log` 和 `logs/release/transnet.log`。非阻塞 Logger 在启动时替换对应文件，并包含 Trace Target。
+目标 listener 配置使用 `socket_path = "/run/transnet/transnet.sock"`、`socket_mode = "0660"` 和由运维管理的套接字用户组。结构化与向量数据客户端通过 `/run/island-port/island-port.sock` 使用 island-port。套接字路径是部署设置，API namespace 固定不变。当前 `[server] host` 与 `port` 仅配置过渡性回环运行时，并在 UDS 服务实现后移除。`RUST_LOG` 覆盖 `log_level`；`log_format = "json"` 选择换行分隔 JSON，其他值选择紧凑文本。
 
-`[http]` 配置 `max_request_body_bytes`、`allowed_origins` 和 `allow_credentials`。请求体限制在缓冲 JSON 前应用，默认 1,048,576 字节。生产环境保持 `allowed_origins` 为空，因为浏览器应调用产品网关而非 Transnet；精确 Origin 仅用于隔离的本地开发，通配 Origin 会被拒绝。
+`[http]` 配置 `max_request_body_bytes` 和过渡性 CORS 字段。请求体限制在缓冲 JSON 前应用，默认 1,048,576 字节。UDS 没有浏览器 Origin，目标运行时忽略并最终移除 CORS 配置；浏览器调用产品网关而非 Transnet。
 
 `[translation]` 配置 Unicode 字符数路由边界，以及 Provider 单次超时、首次之后重试次数和重试延迟的旧版默认值。Provider 专属覆盖优先。
 
@@ -20,6 +20,6 @@ Provider Trace 只包含静态 Provider 边界、操作名、尝试次数、结�
 
 结构化 `/v1/lookups` 切片使用 `[gemma4]` Provider，并请求严格 JSON Schema 输出。配置的服务必须支持 OpenAI-compatible `response_format.type = "json_schema"` 请求字段，并在第一条 Assistant Message 中返回 JSON 文本。
 
-当前可执行文件没有 MySQL、Qdrant 或规范发布配置。这些目标能力需要分别版本化的发布、嵌入、检索、模型角色和评估设置；见 [MySQL](../interfaces/mysql_cn.md)、[Qdrant](../interfaces/qdrant_cn.md)和 [Transnet 服务](../interfaces/port_cn.md)合同。不得把凭据或请求内容写入仓库配置。
+当前可执行文件没有 island-port 或规范发布配置。这些目标能力需要分别版本化的发布、嵌入、检索、模型角色和评估设置；见 [SQL endpoint](../interfaces/mysql_cn.md)、[向量 endpoint](../interfaces/qdrant_cn.md)和 [Transnet](../transnet_cn.md)合同。不得把凭据或请求内容写入仓库配置。
 
-相关：[设计](../transnet_cn.md)、[Transnet 服务接口](../interfaces/port_cn.md)和[开发](development_cn.md)。
+相关：[设计](../transnet_cn.md)、[Transnet 服务接口](../interfaces/transnet_cn.md)和[开发](development_cn.md)。

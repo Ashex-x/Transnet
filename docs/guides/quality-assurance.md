@@ -12,17 +12,19 @@ Every result identifies schema, prompt, model role, normalizer, MySQL card relea
 
 ## Request and translation evaluation
 
-Measure lexical-unit versus sentence-or-passage routing, including ambiguous short fragments. A routing error must choose the least intrusive useful response and create no durable state. Translation evaluation covers meaning, completeness, tone, register, structure, names, terminology, numbers, negation, idioms, and dialect. Tips are penalized unless material and responses are checked for the two-tip limit.
+Measure lexical-unit versus sentence-or-passage routing behind the single translation endpoint, including ambiguous short fragments. A routing error must choose the least intrusive useful response and create no durable state. Translation evaluation covers meaning, completeness, tone, register, structure, names, terminology, numbers, negation, idioms, and dialect. Multi-turn suites vary history length and verify reference resolution and terminology continuity without silent truncation of an accepted request. Ambiguity suites require materially different meanings and reject padded synonym lists.
+
+Projection tests build one canonical superset and compare `brief`, `standard`, and `full` responses. Lower levels must be strict field-and-item subsets except for envelope metadata, while preserving the same ranked meanings, canonical IDs, translation text, evidence states, and degradation signals. Tips are penalized unless material and responses are checked for the two-tip limit.
 
 ## Canonical retrieval evaluation
 
-Measure exact sense and concept resolution, language detection, morphology, spelling suggestions, aliases, transliteration, sparse technical-term recall, dense cross-lingual recall, reranking, evidence eligibility, and degraded MySQL-only behavior. Domain-assessment tests cover `general`, `domain_specific`, `mixed`, and `uncertain`, including familiar words used technically and term-like strings with weak evidence.
+Measure exact sense and concept resolution, language detection, morphology, spelling suggestions, aliases, transliteration, sparse technical-term recall, dense cross-lingual recall, reranking, evidence eligibility, and degraded MySQL-only behavior. Domain-assessment tests cover existing-domain allowlist selection, genuine `proposed_new` detection, `general`, and `uncertain`, including familiar words used technically and term-like strings with weak evidence. Dependency failure must never masquerade as a new domain. Knowledge-profile tests verify fact-family and coverage counts against the release manifest.
 
-Relationship tests verify endpoint existence, release compatibility, direction, applicable sense and domain, conditions, evidence, language, region, period, confidence, provenance, and verification state. Adversarial cases ensure intensity is not taxonomy and vector proximity is not promoted to translation, synonymy, hierarchy, causation, shared mechanism, or cultural fact. Page-composition tests start from one selected root, omit weak sections, rank groups by purpose, validate every step of a short connection path, and keep verified, inferred, and exploratory results visibly separate.
+Relationship tests verify endpoint existence, release compatibility, direction, applicable sense and domain, conditions, evidence, language, region, period, confidence, provenance, and verification state. Taxonomy suites validate `is_a` direction, `has_subtype` inverses, cycle rejection, and sense qualification. Semantic-scale suites validate named dimensions, ordering, conditions, evidence, unequal position spacing, and complete `warm → hot → sweltering → scorching` rendering. Adversarial cases ensure intensity is not taxonomy and vector proximity is not promoted to translation, synonymy, hierarchy, causation, shared mechanism, or cultural fact. Page-composition tests start from one selected root, omit weak sections, rank groups by purpose, validate every step of a short connection path, and keep verified, inferred, and exploratory results visibly separate.
 
 ## Content, privacy, and injection safety
 
-Publication tests validate deterministic IDs, immutable collections, manifest reconciliation, quarantine, activation, and rollback. Privacy tests prove that request text, context, caller identity, generated provider bodies, and user-related state do not enter MySQL, Qdrant, caches, logs, traces, metrics, backups, queues, or vectors.
+Publication tests validate deterministic IDs, immutable collections, manifest reconciliation, quarantine, activation, and rollback. Bootstrap tests prove generated candidates remain quarantined until evidence or an approved editorial-source policy, rights checks, deterministic validation, and review succeed; model output alone can never become verified. Privacy tests prove that current text, translation history, caller identity, generated provider bodies, and user-related state do not enter MySQL, Qdrant, caches, logs, traces, metrics, backups, queues, or vectors.
 
 Treat request text, retrieved documents, evidence, and model output as untrusted data. Injection suites attempt to replace instructions, exfiltrate credentials, bypass release filters, fabricate evidence, or add hidden persistence.
 
@@ -37,4 +39,4 @@ A release passes only when translation, routing, canonical-card, sense and conce
 - [System design](../transnet.md)
 - [Service behavior](../product/service-behavior.md)
 - [Content publishing](content-publishing.md)
-- [Service interface](../interfaces/port.md)
+- [Transnet service interface](../interfaces/transnet.md)
