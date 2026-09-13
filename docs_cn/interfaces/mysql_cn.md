@@ -15,16 +15,16 @@ English: [SQL data endpoint interface](../../docs/interfaces/mysql.md)
   - [精选翻译存储](#精选翻译存储)
   - [领域事实与语义尺度](#领域事实与语义尺度)
   - [通用操作 envelope](#通用操作-envelope)
-  - [POST /data/sql/v1/translations/resolve](#post-datasqlv1translationsresolve)
-  - [POST /data/sql/v1/translations/stage](#post-datasqlv1translationsstage)
-  - [POST /data/sql/v1/basic-cards/resolve](#post-datasqlv1basic-cardsresolve)
-  - [POST /data/sql/v1/senses/get](#post-datasqlv1sensesget)
-  - [POST /data/sql/v1/domains/resolve](#post-datasqlv1domainsresolve)
-  - [POST /data/sql/v1/knowledge-facts/get](#post-datasqlv1knowledge-factsget)
-  - [POST /data/sql/v1/semantic-scales/get](#post-datasqlv1semantic-scalesget)
+  - [POST /api/v1/translations/resolve](#post-apiv1translationsresolve)
+  - [POST /api/v1/translations/stage](#post-apiv1translationsstage)
+  - [POST /api/v1/basic-cards/resolve](#post-apiv1basic-cardsresolve)
+  - [POST /api/v1/senses/get](#post-apiv1sensesget)
+  - [POST /api/v1/domains/resolve](#post-apiv1domainsresolve)
+  - [POST /api/v1/knowledge-facts/get](#post-apiv1knowledge-factsget)
+  - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
   - [领域提案处理](#领域提案处理)
-  - [POST /data/sql/v1/cards/revisions/stage](#post-datasqlv1cardsrevisionsstage)
-  - [POST /data/sql/v1/releases/activate](#post-datasqlv1releasesactivate)
+  - [POST /api/v1/cards/revisions/stage](#post-apiv1cardsrevisionsstage)
+  - [POST /api/v1/releases/activate](#post-apiv1releasesactivate)
   - [相关文档](#相关文档)
 
 ## endpoint 参考
@@ -36,19 +36,21 @@ English: [SQL data endpoint interface](../../docs/interfaces/mysql.md)
   - [精选翻译存储](#精选翻译存储)
   - [领域事实与语义尺度](#领域事实与语义尺度)
   - [通用操作 envelope](#通用操作-envelope)
-  - [POST /data/sql/v1/translations/resolve](#post-datasqlv1translationsresolve)
-  - [POST /data/sql/v1/translations/stage](#post-datasqlv1translationsstage)
-  - [POST /data/sql/v1/basic-cards/resolve](#post-datasqlv1basic-cardsresolve)
-  - [POST /data/sql/v1/senses/get](#post-datasqlv1sensesget)
-  - [POST /data/sql/v1/domains/resolve](#post-datasqlv1domainsresolve)
-  - [POST /data/sql/v1/knowledge-facts/get](#post-datasqlv1knowledge-factsget)
-  - [POST /data/sql/v1/semantic-scales/get](#post-datasqlv1semantic-scalesget)
+  - [POST /api/v1/translations/resolve](#post-apiv1translationsresolve)
+  - [POST /api/v1/translations/stage](#post-apiv1translationsstage)
+  - [POST /api/v1/basic-cards/resolve](#post-apiv1basic-cardsresolve)
+  - [POST /api/v1/senses/get](#post-apiv1sensesget)
+  - [POST /api/v1/domains/resolve](#post-apiv1domainsresolve)
+  - [POST /api/v1/knowledge-facts/get](#post-apiv1knowledge-factsget)
+  - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
   - [领域提案处理](#领域提案处理)
-  - [POST /data/sql/v1/cards/revisions/stage](#post-datasqlv1cardsrevisionsstage)
-  - [POST /data/sql/v1/releases/activate](#post-datasqlv1releasesactivate)
+  - [POST /api/v1/cards/revisions/stage](#post-apiv1cardsrevisionsstage)
+  - [POST /api/v1/releases/activate](#post-apiv1releasesactivate)
   - [相关文档](#相关文档)
 
 Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 UDS JSON 传输](transnet_cn.md)。调用方绝不直接连接 MySQL 或提交 SQL；查询、事务、schema 兼容性、凭据和连接池均由 island-port 负责。只有 Transnet 运行时和经过认证的发布工具可以访问套接字。运行时调用方具有读取权限；变更 endpoint 还要求 publisher 服务账户。授权来自套接字文件系统凭据，而不是 JSON 字段或转发的 header。
+
+所有路由统一使用 `/api/v1` 前缀。Island-port 套接字与资源路径共同标识本结构化数据 API；调用方无需在路径中添加 `data`、`sql` 或存储厂商名称。
 
 ## 存储边界
 
@@ -125,7 +127,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 }
 ```
 
-## POST /data/sql/v1/translations/resolve
+## POST /api/v1/translations/resolve
 
 从一个不可变发布中解析完全匹配的已审核翻译。Transnet 在内存中计算带版本的 fingerprint，不向适配器发送实时源文或消歧句。适配器在限制内返回所有相同 fingerprint 的合格候选；Transnet 使用指定 normalizer 比较已存源文，并在采用候选前应用词义与范围约束。该读取可安全重试。
 
@@ -169,7 +171,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 }
 ```
 
-## POST /data/sql/v1/translations/stage
+## POST /api/v1/translations/stage
 
 暂存一个候选修订，供审核及后续发布激活。只有经过认证的发布工具可以调用此幂等变更。暂存不会使内容对运行时流量可读。Publisher 必须提供规范、非个人文本，并声明已经审核来源与发布权利。
 
@@ -214,7 +216,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 使用同一幂等键与相同请求 fingerprint 会返回原结果；对不同内容复用则返回 `conflict`。激活使用现有发布暂存和激活操作，并验证每个翻译修订已经批准、内部一致且有证据支持。
 
-## POST /data/sql/v1/basic-cards/resolve
+## POST /api/v1/basic-cards/resolve
 
 输入规范化属于 Transnet 运行时。适配器只接收有界、排序后的派生形式，绝不接收原始查询、中间变换或上下文。精确规范形式和别名优先于屈折、拼写修正和宽松别名；`C`、`C++`、`C#` 等有意义符号不合并。
 
@@ -283,7 +285,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 唯一性由稳定的词形、卡片和词义 ID 及已发布规范形式/别名行维护，不依赖临时规范化检索字符串。最佳适用层级的所有合格冲突均须返回，由服务解析。
 
-## POST /data/sql/v1/senses/get
+## POST /api/v1/senses/get
 
 使用共享 `BasicCard` 结构返回一个精简规范词义修订。
 
@@ -345,7 +347,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 }
 ```
 
-## POST /data/sql/v1/domains/resolve
+## POST /api/v1/domains/resolve
 
 领域是规范版本化记录，不是自由标签。先匹配已发布名称和别名；若多个范围均匹配，适配器返回候选，由发布流程消歧。
 
@@ -388,7 +390,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 }
 ```
 
-## POST /data/sql/v1/knowledge-facts/get
+## POST /api/v1/knowledge-facts/get
 
 在向量检索后按顺序、有界地补全精确事实修订。Qdrant 可以提名 `fact_id`，但绝不能提供权威陈述、证据、权利或验证状态。调用方提供发布版本与合格事实 ID；适配器会排除该发布中不存在或不符合资格的 ID。该读取可安全重试。
 
@@ -432,7 +434,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 返回顺序遵循请求顺序，并移除被排除的 ID。事实是原子项：响应投影可以摘要它们，但在 `full` 级别呈现事实性断言时必须保留精确事实 ID 与证据状态。
 
-## POST /data/sql/v1/semantic-scales/get
+## POST /api/v1/semantic-scales/get
 
 按稳定 ID 返回完整的权威语义尺度。调用方通常从 Qdrant 获取候选尺度 ID，并提供选定词义或节点，以便 island-port 应用范围与条件资格。尺度要么完整返回，要么省略；调用方不得从无关的成对边重建梯度。
 
@@ -485,7 +487,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 离线 publisher 可在普通暂存发布工件中加入提议领域、生成事实候选、语义尺度及其来源。它们适用与其他规范内容相同的冲突、范围、证据、权利、审核、幂等和不可变发布校验。因此新领域不需要领域专用创建 endpoint。
 
-## POST /data/sql/v1/cards/revisions/stage
+## POST /api/v1/cards/revisions/stage
 
 暂存不可变的单词或短语修订及其 Qdrant 根引用。暂存校验所有结构化字段，但不会让内容从活动发布中读取。
 
@@ -531,7 +533,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 }
 ```
 
-## POST /data/sql/v1/releases/activate
+## POST /api/v1/releases/activate
 
 激活是原子的，必须引用兼容的不可变 Qdrant 节点/边发布。若任一卡片根、领域、证据记录、内容哈希或 Qdrant manifest 缺失或不兼容，激活失败。
 

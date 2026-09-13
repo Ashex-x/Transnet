@@ -6,7 +6,7 @@ This guide describes consumer-visible behavior of the stateless Transnet service
 
 ## Translation
 
-`POST /transnet/v1/translations` is the only new-turn entry point. Besides the text, the user chooses only source language, target language, and `brief`, `standard`, or `full` response level. Island-port may append a chronological list of minimal prior source/translation pairs; there is no separate history-count limit within the common body bound. Transnet automatically selects lexical lookup, domain expansion, or passage translation and derives all other options.
+`POST /api/v1/translations` is the only new-turn entry point. Besides the text, the user chooses only source language, target language, and `brief`, `standard`, or `full` response level. Island-port may append a chronological list of minimal prior source/translation pairs; there is no separate history-count limit within the common body bound. Transnet automatically selects lexical lookup, domain expansion, or passage translation and derives all other options.
 
 The response contains an ordered translation list. A word or phrase returns several meaning-specific translations when materially different senses remain plausible; history influences their ranking. A sentence or passage keeps natural translated text primary and preserves meaning, tone, terminology, and paragraph structure. Response level selects fields from one canonical superset: brief keeps essential translations and meaning labels, standard adds concise supporting detail, and full adds bounded lexical, domain, relationship, evidence, taxonomy, and intensity detail.
 
