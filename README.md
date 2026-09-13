@@ -1,5 +1,7 @@
 # Transnet
 
+中文：[Transnet 中文说明](README_cn.md)
+
 Transnet is a private, stateless translation and relationship-knowledge service. It translates connected text and, for a resolved lexical sense or domain concept, builds a concise relationship-centered translation-wiki page. The checked-in executable currently provides the loopback translation and structured-lookup subset; the [system design](docs/transnet.md) defines the target service.
 
 ```mermaid
