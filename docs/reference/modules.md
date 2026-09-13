@@ -8,13 +8,13 @@ Status: the current executable uses transitional loopback HTTP. Target pages des
 
 ## Module map
 
-- [Runtime](runtime/startup.md): process launch, composition, readiness, shutdown, and [configuration](runtime/configuration.md).
+- [Runtime](runtime/runtime.md): configuration, process launch, composition, readiness, and shutdown.
 - [Transport](transport/server.md): UDS server, JSON admission, middleware, and thin API mapping.
-- [Application](application/orchestration.md): use-case ownership; see the end-to-end [request dataflow](application/request-dataflow.md), [translation](application/translation.md), and [knowledge](application/knowledge.md).
-- [Domain](domain/translation.md): translation vocabulary; see [lexical knowledge](domain/lexical-knowledge.md) and [releases](domain/releases.md).
-- [Ports](ports/models.md): model operations; see [data access](ports/data.md).
-- [Adapters](adapters/providers.md): provider clients; see [island-port](adapters/island-port.md).
-- [Operations](operations/observability.md): safe telemetry and resilience; see [publication](operations/publication.md).
+- [Application](application/request-dataflow.md): end-to-end request handling and module interaction; see focused [translation](application/translation.md) and [knowledge](application/knowledge.md) behavior.
+- [Domain](domain/domain.md): translation values, lexical knowledge, relationships, releases, and degradation invariants.
+- [Ports](ports/ports.md): model and data operations required by application services.
+- [Adapters](adapters/adapters.md): model-provider and island-port protocol implementations.
+- [Operations](operations/operations.md): observability, resilience, readiness signals, and offline publication.
 
 ## Dependency rule
 
