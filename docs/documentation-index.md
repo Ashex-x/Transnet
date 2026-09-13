@@ -10,15 +10,13 @@
 
 ## Interfaces
 
-- [Transnet service interface](interfaces/port.md): private HTTP boundary and stateless service operations.
-- [MySQL adapter interface](interfaces/mysql.md): typed persistence operations and transaction invariants.
-- [Qdrant adapter interface](interfaces/qdrant.md): collection, point, retrieval, reconciliation, and publication contract.
+- [Transnet service interface](interfaces/transnet.md): island-port-to-Transnet contract and shared internal UDS transport rules.
+- [Island-port SQL endpoints](interfaces/mysql.md): canonical-card and curated-translation storage plus UDS JSON operations under `data/sql/v1`; callers never access MySQL or submit SQL directly.
+- [Island-port vector endpoints](interfaces/qdrant.md): UDS JSON operations under `data/vec/v1`; callers never access Qdrant directly.
 
 ## Reference
 
-- [OpenAPI 3.1 contract](reference/transnet-openapi.json): machine-readable target service contract.
-
-The OpenAPI document mirrors the target service interface. Runtime availability remains explicitly marked in the human interface contract.
+- [Service module reference](reference/modules.md): current and target launcher, transport, API, orchestration, domain, RAG, storage, provider, publication, observability, and shutdown modules.
 
 ## Guides
 
@@ -39,13 +37,13 @@ The system design is authoritative for product semantics. Interface documents ar
 
 ## Terminology and status
 
-- **Current runtime:** the executable built from this repository today. It provides loopback translation and model-backed structured lookup; it does not compose production MySQL or Qdrant adapters.
-- **Target service / target contract:** the intended, versioned service behavior described by the design, interface documents, and OpenAPI. A target route or schema is not evidence that the current runtime enables it.
+- **Current runtime:** the executable built from this repository today. It provides transitional loopback translation and model-backed structured lookup; it does not yet expose the target UDS paths or compose production structured and vector data service clients.
+- **Target service / target contract:** the intended, versioned service behavior described by the design and interface documents. A target route or schema is not evidence that the current runtime enables it.
 - **Canonical content:** reviewed, versioned knowledge that the publication workflow has made authoritative. It is distinct from a model response, a request, or a similarity result.
 - **Basic card:** the concise, release-pinned MySQL record for one independently selectable lexical sense. It remains useful when graph retrieval is unavailable.
 - **Knowledge root:** the stable canonical node or sense from which a lookup page or bounded graph read starts.
 - **Release trio:** one compatible MySQL card release plus its immutable Qdrant node and edge collections. Requests pin all three versions together.
-- **MySQL:** the authoritative relational store for canonical cards, release metadata, and publication state in the target architecture.
+- **MySQL:** the authoritative relational store for canonical cards, deliberately selected translations, release metadata, and publication state in the target architecture.
 - **Qdrant:** the rebuildable vector and payload-index projection used to retrieve published canonical nodes and typed edges in the target architecture.
 - **Gemma 4 / TranslateGemma:** OpenAI-compatible model providers used by the current runtime. Gemma 4 handles short-text translation and structured lookup; TranslateGemma handles longer translation requests.
 - **Verified / inferred / exploratory:** respectively, a published canonical relationship; an evidence-grounded explanation generated only for the current request; and a vector or model candidate. Only verified content is canonical, and the latter two are never persisted as facts.

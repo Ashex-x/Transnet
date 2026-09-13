@@ -10,15 +10,13 @@ English: [Transnet documentation](../docs/documentation-index.md)
 
 ## 接口
 
-- [Transnet 服务接口](interfaces/port_cn.md)：私有 HTTP 边界和无状态服务操作。
-- [MySQL 适配器](interfaces/mysql_cn.md)：有类型持久化操作和事务不变量。
-- [Qdrant 适配器](interfaces/qdrant_cn.md)：集合、Point、检索、对账和发布合同。
+- [Transnet 服务接口](interfaces/transnet_cn.md)：island-port 到 Transnet 的合同及共享内部 UDS 传输规则。
+- [Island-port SQL endpoint](interfaces/mysql_cn.md)：规范卡片和精选翻译存储，以及 `data/sql/v1` 下的 UDS JSON 操作；调用方不得直接访问 MySQL 或提交 SQL。
+- [Island-port 向量 endpoint](interfaces/qdrant_cn.md)：`data/vec/v1` 下的 UDS JSON 操作；调用方不得直接访问 Qdrant。
 
 ## 参考
 
-- [OpenAPI 3.1 合同](../docs/reference/transnet-openapi.json)：机器可读的目标服务合同。
-
-OpenAPI 镜像目标服务接口；运行时可用性在人工接口合同中明确标注。
+- [服务模块参考](reference/modules_cn.md)：当前与目标启动器、传输、API、编排、领域、RAG、存储、provider、发布、可观测性与停机模块。
 
 ## 指南
 
@@ -34,12 +32,12 @@ OpenAPI 镜像目标服务接口；运行时可用性在人工接口合同中明
 ## 术语与实现状态
 
 - **当前运行时：**今天可由本仓库构建的可执行文件。它提供回环地址上的翻译和模型驱动的结构化查询；尚未组合生产级 MySQL 或 Qdrant 适配器。
-- **目标服务 / 目标合同：**设计、接口文档和 OpenAPI 所定义的预期且版本化的服务行为。目标路由或 Schema 并不表示当前运行时已经启用它。
+- **目标服务 / 目标合同：**设计和接口文档所定义的预期且版本化的服务行为。目标路由或 Schema 并不表示当前运行时已经启用它。
 - **规范内容：**经发布工作流审查、版本化并确认为权威的知识。它不同于模型响应、请求内容或相似度结果。
 - **基础卡（`BasicCard`）：**一个可独立选择的词汇词义对应的精简、发布版本固定的 MySQL 记录；即使图检索不可用，它仍应有用。
 - **知识根：**查询页面或有界图读取的起点，即稳定的规范节点或词义。
 - **发布三元组：**一份兼容的 MySQL 卡片发布版本，加上配对的不可变 Qdrant 节点集合和边集合。每个请求同时固定这三个版本。
-- **MySQL：**目标架构中用于规范卡片、发布元数据和发布状态的权威关系型存储。
+- **MySQL：**目标架构中用于规范卡片、经审慎选择的翻译、发布元数据和发布状态的权威关系型存储。
 - **Qdrant：**目标架构中用于检索已发布规范节点和有类型边的、可重建的向量与 Payload 索引投影。
 - **Gemma 4 / TranslateGemma：**当前运行时使用的 OpenAI-compatible 模型 Provider。Gemma 4 处理短文本翻译和结构化查询；TranslateGemma 处理较长的翻译请求。
 - **`verified` / `inferred` / `exploratory`：**分别是已发布的规范关系、仅限当前请求的有证据推断说明，以及向量或模型候选。只有 `verified` 是规范事实；后两者绝不作为事实持久化。
