@@ -12,7 +12,6 @@ Status: target contract. The current runtime still exposes transitional loopback
 
 - [Transnet service interface](#transnet-service-interface)
   - [Contents](#contents)
-  - [Endpoint reference](#endpoint-reference)
   - [Connection contract](#connection-contract)
   - [HTTP and JSON rules](#http-and-json-rules)
   - [Deadlines, limits, and lifecycle](#deadlines-limits-and-lifecycle)
@@ -24,31 +23,7 @@ Status: target contract. The current runtime still exposes transitional loopback
   - [Shared translation result](#shared-translation-result)
   - [Response levels](#response-levels)
   - [Translation persistence](#translation-persistence)
-  - [POST /transnet/v1/health](#post-transnetv1health)
-  - [POST /transnet/v1/livez](#post-transnetv1livez)
-  - [POST /transnet/v1/readyz](#post-transnetv1readyz)
-  - [POST /transnet/v1/translations](#post-transnetv1translations)
-  - [POST /transnet/v1/senses/get](#post-transnetv1sensesget)
-  - [POST /transnet/v1/graph/get](#post-transnetv1graphget)
-  - [POST /transnet/v1/graph/neighbors](#post-transnetv1graphneighbors)
-  - [Related documents](#related-documents)
-
-## Endpoint reference
-
-- [Transnet service interface](#transnet-service-interface)
-  - [Contents](#contents)
-  - [Endpoint reference](#endpoint-reference)
-  - [Connection contract](#connection-contract)
-  - [HTTP and JSON rules](#http-and-json-rules)
-  - [Deadlines, limits, and lifecycle](#deadlines-limits-and-lifecycle)
-  - [Example](#example)
-  - [Service boundary](#service-boundary)
-  - [Shared wire rules](#shared-wire-rules)
-  - [Simple translation request](#simple-translation-request)
-  - [Request-scoped translation history](#request-scoped-translation-history)
-  - [Shared translation result](#shared-translation-result)
-  - [Response levels](#response-levels)
-  - [Translation persistence](#translation-persistence)
+  - [Relationship assessment metadata](#relationship-assessment-metadata)
   - [POST /transnet/v1/health](#post-transnetv1health)
   - [POST /transnet/v1/livez](#post-transnetv1livez)
   - [POST /transnet/v1/readyz](#post-transnetv1readyz)
@@ -359,6 +334,38 @@ A live translation result is ephemeral and has no save flag. Transnet first may 
 
 There are two meanings of important and they have different owners. A translation saved, starred, or labeled important by an end user is private product data and island-port stores the association outside Transnet. A translation important to the shared language product is a canonical-content candidate: authorized publication tooling stages it with provenance and rights metadata, reviewers approve it, and a later immutable content release makes it readable by Transnet. The [SQL data endpoint contract](mysql.md) owns that storage and publication design.
 
+## Relationship assessment metadata
+
+Every canonical stored edge that island-port may expose for WebUI assessment includes an `assessment` object. `allowed_judgments` is a closed set containing `confirm` and `challenge`: `confirm` means the relationship appears correct as presented, while `challenge` means it should be reviewed. These are product-feedback judgments, not editorial approval states, evidence states, or instructions to mutate canonical content. `relation_version` pins the exact revision being judged.
+
+The WebUI-to-island-port submission route is outside this internal interface, but its semantic request must contain exactly this target and judgment shape; the public island-port contract chooses its route, authentication headers, idempotency mechanism, and envelope:
+
+```json
+{
+  "target": {
+    "edge_id": "edge_sweltering_scorching_01",
+    "relation_version": 3,
+    "content_release": "knowledge-2026-09"
+  },
+  "judgment": "challenge"
+}
+```
+
+Island-port rejects an unknown edge, a relation-version or release mismatch, a judgment outside the edge's `allowed_judgments`, and reuse of an idempotency key with a different semantic request. Island-port owns the public endpoint, authentication, abuse controls, retention, aggregation, and any user association. It must not forward an individual judgment or user identity to Transnet. A later publishing workflow may consume a separately reviewed aggregate or moderation signal, but no individual judgment directly verifies, rejects, or republishes an edge.
+
+Transnet may receive only a k-anonymous aggregate snapshot for a stored edge. The minimum threshold is five eligible judgments; below it, the aggregate is omitted and the adjustment is zero. Let `c` be eligible confirms, `h` eligible challenges, and `n = c + h`. The versioned `relationship-distance-v1` algorithm uses a symmetric Beta prior of four judgments per side, a saturation threshold of twenty eligible judgments, and a maximum distance adjustment of 1,500 basis points:
+
+```text
+support = (c + 4) / (n + 8)
+weight = min(1, n / 20)
+adjustment = round((2 * support - 1) * weight * 1500)
+effective_distance = clamp(base_distance - adjustment, 0, 10000)
+```
+
+Positive `adjustment` means net confirmation and shortens the rendered or traversal distance; a negative value means net challenge and lengthens it. Equal evidence produces zero adjustment, and low volume remains close to neutral. `base_distance` comes only from the evidence- and relation-type ranker. The community adjustment may change display order and graph layout, but it cannot make an ineligible edge eligible, change its type or direction, alter evidence or verification state, or create a canonical fact. Every cache key and cursor whose ordering uses effective distance includes `aggregate_version` and `algorithm_version`.
+
+The `assessment` object is omitted from inferred, exploratory, derived, visual-only, and otherwise non-canonical relationships. The WebUI therefore enables the control only when this object is present; it must not infer eligibility from `verification_state`, confidence, relation type, or the shape of an edge ID.
+
 ## POST /transnet/v1/health
 
 Returns process health without probing dependencies or revealing configuration.
@@ -601,7 +608,18 @@ Response `200`:
         "evidence_state": "verified",
         "confidence": 0.96,
         "provenance": ["evidence_dictionary_1042"],
-        "verification_state": "verified"
+        "verification_state": "verified",
+        "assessment": {
+          "relation_version": 3,
+          "allowed_judgments": ["confirm", "challenge"],
+          "distance": {
+            "base_basis_points": 400,
+            "adjustment_basis_points": 120,
+            "effective_basis_points": 280,
+            "aggregate_version": "relationship-assessments-2026-09-13T08:00:00Z",
+            "algorithm_version": "relationship-distance-v1"
+          }
+        }
       }
     ],
     "truncated": false
@@ -650,7 +668,18 @@ Response `200`:
           "evidence_state": "verified",
           "confidence": 0.96,
           "provenance": ["evidence_dictionary_1042"],
-          "verification_state": "verified"
+          "verification_state": "verified",
+          "assessment": {
+            "relation_version": 3,
+            "allowed_judgments": ["confirm", "challenge"],
+            "distance": {
+              "base_basis_points": 400,
+              "adjustment_basis_points": 120,
+              "effective_basis_points": 280,
+              "aggregate_version": "relationship-assessments-2026-09-13T08:00:00Z",
+              "algorithm_version": "relationship-distance-v1"
+            }
+          }
         },
         "node": {
           "node_id": "node_hot_temperature_01",

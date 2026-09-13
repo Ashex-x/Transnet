@@ -24,6 +24,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
   - [共享翻译结果](#共享翻译结果)
   - [响应级别](#响应级别)
   - [翻译持久化](#翻译持久化)
+  - [关系评估元数据](#关系评估元数据)
   - [POST /transnet/v1/health](#post-transnetv1health)
   - [POST /transnet/v1/livez](#post-transnetv1livez)
   - [POST /transnet/v1/readyz](#post-transnetv1readyz)
@@ -49,6 +50,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
   - [共享翻译结果](#共享翻译结果)
   - [响应级别](#响应级别)
   - [翻译持久化](#翻译持久化)
+  - [关系评估元数据](#关系评估元数据)
   - [POST /transnet/v1/health](#post-transnetv1health)
   - [POST /transnet/v1/livez](#post-transnetv1livez)
   - [POST /transnet/v1/readyz](#post-transnetv1readyz)
@@ -359,6 +361,38 @@ Standard 段落响应：
 
 “重要”有两种含义，归属不同。终端用户保存、加星或标记重要的翻译属于私有产品数据，其关联由 island-port 在 Transnet 之外存储。对共享语言产品重要的翻译属于规范内容候选：经授权的发布工具携带来源与权利元数据暂存，审核者批准后，由后续不可变内容发布使其可供 Transnet 读取。[SQL 数据 endpoint 合同](mysql_cn.md)负责该存储和发布设计。
 
+## 关系评估元数据
+
+Island-port 可向 WebUI 开放评估的每条规范存储边都包含 `assessment` object。`allowed_judgments` 是仅含 `confirm` 与 `challenge` 的封闭集合：`confirm` 表示该关系按当前展示看来正确，`challenge` 表示该关系应接受复核。这些值是产品反馈判断，不是编辑批准状态、证据状态，也不是修改规范内容的指令。`relation_version` 固定被判断关系的准确修订版本。
+
+WebUI 到 island-port 的提交路由不属于本内部接口，但其语义请求必须严格包含以下目标与判断结构；公开 island-port 合同负责选择路由、认证 header、幂等机制与 envelope：
+
+```json
+{
+  "target": {
+    "edge_id": "edge_sweltering_scorching_01",
+    "relation_version": 3,
+    "content_release": "knowledge-2026-09"
+  },
+  "judgment": "challenge"
+}
+```
+
+Island-port 拒绝未知边、关系版本或发布不匹配、超出该边 `allowed_judgments` 的判断，以及使用相同幂等键提交不同语义请求。公开 endpoint、认证、防滥用、保留、聚合及任何用户关联均由 island-port 负责。它不得把单次判断或用户身份转发给 Transnet。后续发布流程可以使用经过独立复核的聚合或审核信号，但任何单次判断都不能直接验证、否定或重新发布一条边。
+
+Transnet 只能接收一条存储边达到 k-匿名门槛后的聚合快照。最低门槛为五个合格判断；低于门槛时省略聚合，调整值为零。令 `c` 为合格的 confirm 数，`h` 为合格的 challenge 数，且 `n = c + h`。版本化的 `relationship-distance-v1` 算法对两侧各使用四个判断的对称 Beta 先验，以二十个合格判断为饱和阈值，并将最大距离调整限制为 1,500 个基点：
+
+```text
+support = (c + 4) / (n + 8)
+weight = min(1, n / 20)
+adjustment = round((2 * support - 1) * weight * 1500)
+effective_distance = clamp(base_distance - adjustment, 0, 10000)
+```
+
+正 `adjustment` 表示净确认，使渲染或遍历距离缩短；负值表示净质疑，使距离变长。两侧相等时调整为零，数量较少时保持接近中性。`base_distance` 只能来自证据与关系类型 ranker。社区调整可以改变展示顺序和图布局，但不能使不合格边变为合格、改变类型或方向、修改证据或验证状态，也不能创建规范事实。凡排序使用有效距离的缓存键与 cursor 都必须包含 `aggregate_version` 和 `algorithm_version`。
+
+推断、探索、派生、仅用于可视化及其他非规范关系省略 `assessment` object。因此，WebUI 仅在该 object 存在时启用控件；不得根据 `verification_state`、置信度、关系类型或边 ID 的形状推断是否可评估。
+
 ## POST /transnet/v1/health
 
 返回进程健康，不探测依赖，也不泄露配置。
@@ -601,7 +635,18 @@ Passage 的 `tips` 最多两条，每条一句；没有实质价值时省略。�
         "evidence_state": "verified",
         "confidence": 0.96,
         "provenance": ["evidence_dictionary_1042"],
-        "verification_state": "verified"
+        "verification_state": "verified",
+        "assessment": {
+          "relation_version": 3,
+          "allowed_judgments": ["confirm", "challenge"],
+          "distance": {
+            "base_basis_points": 400,
+            "adjustment_basis_points": 120,
+            "effective_basis_points": 280,
+            "aggregate_version": "relationship-assessments-2026-09-13T08:00:00Z",
+            "algorithm_version": "relationship-distance-v1"
+          }
+        }
       }
     ],
     "truncated": false
@@ -650,7 +695,18 @@ Passage 的 `tips` 最多两条，每条一句；没有实质价值时省略。�
           "evidence_state": "verified",
           "confidence": 0.96,
           "provenance": ["evidence_dictionary_1042"],
-          "verification_state": "verified"
+          "verification_state": "verified",
+          "assessment": {
+            "relation_version": 3,
+            "allowed_judgments": ["confirm", "challenge"],
+            "distance": {
+              "base_basis_points": 400,
+              "adjustment_basis_points": 120,
+              "effective_basis_points": 280,
+              "aggregate_version": "relationship-assessments-2026-09-13T08:00:00Z",
+              "algorithm_version": "relationship-distance-v1"
+            }
+          }
         },
         "node": {
           "node_id": "node_hot_temperature_01",
