@@ -51,47 +51,47 @@ WebUI 调用 island-port，绝不直接调用 Transnet。Island-port 可添加�
 
 ## 启动与组合
 
-- [Main 启动器](modules/main_cn.md)：进程入口、致命启动错误报告与退出状态。
-- [Bootstrap](modules/bootstrap_cn.md)：配置、adapter 组合、就绪、listener 所有权与停机。
-- [配置](modules/config_cn.md)：有类型设置、默认值、校验和 secret 引用。
-- [容错](modules/resilience_cn.md)：有界 timeout、并发、重试和断路器。
-- [可观测性](modules/observability/overview_cn.md)、[日志](modules/observability/logging_cn.md)与[指标](modules/observability/metrics_cn.md)：不含请求内容的安全聚合遥测。
+- [Main 启动器](main_cn.md)：进程入口、致命启动错误报告与退出状态。
+- [Bootstrap](bootstrap_cn.md)：配置、adapter 组合、就绪、listener 所有权与停机。
+- [配置](config_cn.md)：有类型设置、默认值、校验和 secret 引用。
+- [容错](resilience_cn.md)：有界 timeout、并发、重试和断路器。
+- [可观测性](observability/overview_cn.md)、[日志](observability/logging_cn.md)与[指标](observability/metrics_cn.md)：不含请求内容的安全聚合遥测。
 
 ## 传输与 API
 
-- [UDS server](modules/transport/uds_server_cn.md)、[JSON 传输](modules/transport/json_cn.md)与[传输 middleware](modules/transport/middleware_cn.md)：所属 Unix socket 上的 HTTP/1.1、严格 body、请求边界和安全结果。
-- [API 请求类型](modules/api/request_cn.md)、[响应类型](modules/api/response_cn.md)与[问题响应](modules/api/problem_cn.md)：精确线上映射与闭合安全错误。
-- [探针](modules/api/v1/probes_cn.md)、[翻译](modules/api/v1/translations_cn.md)、[词义读取](modules/api/v1/sense_cn.md)与[图读取](modules/api/v1/graph_cn.md)：薄版本化路由 handler。
+- [UDS server](transport/uds_server_cn.md)、[JSON 传输](transport/json_cn.md)与[传输 middleware](transport/middleware_cn.md)：所属 Unix socket 上的 HTTP/1.1、严格 body、请求边界和安全结果。
+- [API 请求类型](api/request_cn.md)、[响应类型](api/response_cn.md)与[问题响应](api/problem_cn.md)：精确线上映射与闭合安全错误。
+- [探针](api/v1/probes_cn.md)、[翻译](api/v1/translations_cn.md)、[词义读取](api/v1/sense_cn.md)与[图读取](api/v1/graph_cn.md)：薄版本化路由 handler。
 
 ## Application 编排
 
-- [请求编排器](modules/application/request_orchestrator_cn.md)：一轮翻译共享一个 deadline 与发布固定值。
-- [意图路由器](modules/application/intent_router_cn.md)：自动分类单词、短语或段落。
-- [翻译](modules/application/translation_cn.md)与[长文本](modules/application/long_text_cn.md)：连续文本翻译以及请求级分块和术语规划。
-- [词义解析](modules/application/sense_resolution_cn.md)与[领域评估](modules/application/domain_assessment_cn.md)：规范候选排序和闭合领域结果。
-- [知识检索](modules/application/knowledge_retrieval_cn.md)、[关系排序器](modules/application/relationship_ranker_cn.md)与[页面组织器](modules/application/page_composer_cn.md)：证据感知的事实补全、排序和解释。
-- [响应投影](modules/application/response_projection_cn.md)与[校验](modules/application/validation_cn.md)：确定性 `brief`、`standard`、`full` 视图及最终不变量检查。
+- [请求编排器](application/request_orchestrator_cn.md)：一轮翻译共享一个 deadline 与发布固定值。
+- [意图路由器](application/intent_router_cn.md)：自动分类单词、短语或段落。
+- [翻译](application/translation_cn.md)与[长文本](application/long_text_cn.md)：连续文本翻译以及请求级分块和术语规划。
+- [词义解析](application/sense_resolution_cn.md)与[领域评估](application/domain_assessment_cn.md)：规范候选排序和闭合领域结果。
+- [知识检索](application/knowledge_retrieval_cn.md)、[关系排序器](application/relationship_ranker_cn.md)与[页面组织器](application/page_composer_cn.md)：证据感知的事实补全、排序和解释。
+- [响应投影](application/response_projection_cn.md)与[校验](application/validation_cn.md)：确定性 `brief`、`standard`、`full` 视图及最终不变量检查。
 
 ## Domain 类型
 
-- [语言](modules/domain/language_cn.md)、[请求](modules/domain/request_cn.md)、[翻译](modules/domain/translation_cn.md)与[响应级别](modules/domain/response_level_cn.md)：独立于传输的请求和结果词汇。
-- [词汇](modules/domain/lexical_cn.md)与[领域](modules/domain/domain_cn.md)：稳定词义、短语和知识领域身份。
-- [知识](modules/domain/knowledge_cn.md)、[关系](modules/domain/relationship_cn.md)与[语义尺度](modules/domain/semantic_scale_cn.md)：原子事实、精确类型化关系和有序非分类程度维度。
-- [证据](modules/domain/evidence_cn.md)与[发布](modules/domain/release_cn.md)：支持、来源、不可变兼容发布身份和降级状态。
+- [语言](domain/language_cn.md)、[请求](domain/request_cn.md)、[翻译](domain/translation_cn.md)与[响应级别](domain/response_level_cn.md)：独立于传输的请求和结果词汇。
+- [词汇](domain/lexical_cn.md)与[领域](domain/domain_cn.md)：稳定词义、短语和知识领域身份。
+- [知识](domain/knowledge_cn.md)、[关系](domain/relationship_cn.md)与[语义尺度](domain/semantic_scale_cn.md)：原子事实、精确类型化关系和有序非分类程度维度。
+- [证据](domain/evidence_cn.md)与[发布](domain/release_cn.md)：支持、来源、不可变兼容发布身份和降级状态。
 
 ## Port 与 adapter
 
-- [翻译模型](modules/ports/translation_model_cn.md)、[结构化数据](modules/ports/structured_data_cn.md)与[向量数据](modules/ports/vector_data_cn.md)：面向操作的模型和规范/检索读取。
-- [时钟](modules/ports/clock_cn.md)与[指标](modules/ports/metrics_cn.md)：deadline 时间和聚合结果边界。
-- [OpenAI-compatible 协议](modules/adapters/providers/openai_cn.md)、[Gemma 4](modules/adapters/providers/gemma4_cn.md)与[TranslateGemma](modules/adapters/providers/translate_gemma_cn.md)：协议和角色专属 provider adapter。
-- [Island-port UDS client](modules/adapters/island_port/uds_client_cn.md)、[SQL adapter](modules/adapters/island_port/sql_cn.md)与[向量 adapter](modules/adapters/island_port/vector_cn.md)：不使用直接 MySQL 或 Qdrant driver 的有界 JSON 调用。
+- [翻译模型](ports/translation_model_cn.md)、[结构化数据](ports/structured_data_cn.md)与[向量数据](ports/vector_data_cn.md)：面向操作的模型和规范/检索读取。
+- [时钟](ports/clock_cn.md)与[指标](ports/metrics_cn.md)：deadline 时间和聚合结果边界。
+- [OpenAI-compatible 协议](adapters/providers/openai_cn.md)、[Gemma 4](adapters/providers/gemma4_cn.md)与[TranslateGemma](adapters/providers/translate_gemma_cn.md)：协议和角色专属 provider adapter。
+- [Island-port UDS client](adapters/island_port/uds_client_cn.md)、[SQL adapter](adapters/island_port/sql_cn.md)与[向量 adapter](adapters/island_port/vector_cn.md)：不使用直接 MySQL 或 Qdrant driver 的有界 JSON 调用。
 
 Port trait 表达 application 操作而非泛型持久化。读取输入可包含派生查询形式、fingerprint、规范 ID、过滤器和发布 ID，但绝不包含用户身份。运行时组合不接收任何变更方法。
 
 ## 离线发布
 
-- [发布模块](modules/publication/overview_cn.md)：暂存、校验、投影、对账、激活、隔离与回滚库边界。
-- [Publisher 启动器](modules/bin/transnet-publisher_cn.md)：唯一接收可变更结构化/向量 port 的可选组合根。
+- [发布模块](publication/overview_cn.md)：暂存、校验、投影、对账、激活、隔离与回滚库边界。
+- [Publisher 启动器](bin/transnet-publisher_cn.md)：唯一接收可变更结构化/向量 port 的可选组合根。
 
 Publisher 先构建权威结构化内容，再投影不可变向量 collection，对账精确发布三元组，完成评估并原子激活。实时请求处理绝不自行发布。
 

@@ -51,47 +51,47 @@ The executable currently binds loopback TCP and wires only health, translation, 
 
 ## Launcher and composition
 
-- [Main launcher](modules/main.md): process entry, fatal startup reporting, and exit status.
-- [Bootstrap](modules/bootstrap.md): configuration, adapter composition, readiness, listener ownership, and shutdown.
-- [Configuration](modules/config.md): typed settings, defaults, validation, and secret references.
-- [Resilience](modules/resilience.md): bounded timeouts, concurrency, retries, and circuit breakers.
-- [Observability](modules/observability/overview.md), [logging](modules/observability/logging.md), and [metrics](modules/observability/metrics.md): safe aggregate telemetry with no request content.
+- [Main launcher](main.md): process entry, fatal startup reporting, and exit status.
+- [Bootstrap](bootstrap.md): configuration, adapter composition, readiness, listener ownership, and shutdown.
+- [Configuration](config.md): typed settings, defaults, validation, and secret references.
+- [Resilience](resilience.md): bounded timeouts, concurrency, retries, and circuit breakers.
+- [Observability](observability/overview.md), [logging](observability/logging.md), and [metrics](observability/metrics.md): safe aggregate telemetry with no request content.
 
 ## Transport and API
 
-- [UDS server](modules/transport/uds_server.md), [JSON transport](modules/transport/json.md), and [transport middleware](modules/transport/middleware.md): HTTP/1.1 over the owned Unix socket, strict bodies, request bounds, and safe outcomes.
-- [API request types](modules/api/request.md), [response types](modules/api/response.md), and [problem responses](modules/api/problem.md): exact wire mapping and closed safe errors.
-- [Probes](modules/api/v1/probes.md), [translations](modules/api/v1/translations.md), [sense reads](modules/api/v1/sense.md), and [graph reads](modules/api/v1/graph.md): thin versioned route handlers.
+- [UDS server](transport/uds_server.md), [JSON transport](transport/json.md), and [transport middleware](transport/middleware.md): HTTP/1.1 over the owned Unix socket, strict bodies, request bounds, and safe outcomes.
+- [API request types](api/request.md), [response types](api/response.md), and [problem responses](api/problem.md): exact wire mapping and closed safe errors.
+- [Probes](api/v1/probes.md), [translations](api/v1/translations.md), [sense reads](api/v1/sense.md), and [graph reads](api/v1/graph.md): thin versioned route handlers.
 
 ## Application orchestration
 
-- [Request orchestrator](modules/application/request_orchestrator.md): one deadline and release pin across a translation turn.
-- [Intent router](modules/application/intent_router.md): automatic word, phrase, or passage classification.
-- [Translation](modules/application/translation.md) and [long text](modules/application/long_text.md): connected-text translation plus request-local chunk and terminology planning.
-- [Sense resolution](modules/application/sense_resolution.md) and [domain assessment](modules/application/domain_assessment.md): canonical candidate ranking and closed domain outcomes.
-- [Knowledge retrieval](modules/application/knowledge_retrieval.md), [relationship ranker](modules/application/relationship_ranker.md), and [page composer](modules/application/page_composer.md): evidence-aware fact hydration, ranking, and explanation.
-- [Response projection](modules/application/response_projection.md) and [validation](modules/application/validation.md): deterministic `brief`, `standard`, and `full` views plus final invariant checks.
+- [Request orchestrator](application/request_orchestrator.md): one deadline and release pin across a translation turn.
+- [Intent router](application/intent_router.md): automatic word, phrase, or passage classification.
+- [Translation](application/translation.md) and [long text](application/long_text.md): connected-text translation plus request-local chunk and terminology planning.
+- [Sense resolution](application/sense_resolution.md) and [domain assessment](application/domain_assessment.md): canonical candidate ranking and closed domain outcomes.
+- [Knowledge retrieval](application/knowledge_retrieval.md), [relationship ranker](application/relationship_ranker.md), and [page composer](application/page_composer.md): evidence-aware fact hydration, ranking, and explanation.
+- [Response projection](application/response_projection.md) and [validation](application/validation.md): deterministic `brief`, `standard`, and `full` views plus final invariant checks.
 
 ## Domain types
 
-- [Language](modules/domain/language.md), [request](modules/domain/request.md), [translation](modules/domain/translation.md), and [response level](modules/domain/response_level.md): request and result vocabulary independent of transport.
-- [Lexical](modules/domain/lexical.md) and [domain](modules/domain/domain.md): stable sense, phrase, and knowledge-domain identity.
-- [Knowledge](modules/domain/knowledge.md), [relationship](modules/domain/relationship.md), and [semantic scale](modules/domain/semantic_scale.md): atomic facts, exact typed relations, and ordered non-taxonomic degree dimensions.
-- [Evidence](modules/domain/evidence.md) and [release](modules/domain/release.md): support, provenance, immutable compatible release identity, and degradation state.
+- [Language](domain/language.md), [request](domain/request.md), [translation](domain/translation.md), and [response level](domain/response_level.md): request and result vocabulary independent of transport.
+- [Lexical](domain/lexical.md) and [domain](domain/domain.md): stable sense, phrase, and knowledge-domain identity.
+- [Knowledge](domain/knowledge.md), [relationship](domain/relationship.md), and [semantic scale](domain/semantic_scale.md): atomic facts, exact typed relations, and ordered non-taxonomic degree dimensions.
+- [Evidence](domain/evidence.md) and [release](domain/release.md): support, provenance, immutable compatible release identity, and degradation state.
 
 ## Ports and adapters
 
-- [Translation model](modules/ports/translation_model.md), [structured data](modules/ports/structured_data.md), and [vector data](modules/ports/vector_data.md): operation-focused model and canonical/retrieval reads.
-- [Clock](modules/ports/clock.md) and [metrics](modules/ports/metrics.md): deadline time and aggregate outcome boundaries.
-- [OpenAI-compatible protocol](modules/adapters/providers/openai.md), [Gemma 4](modules/adapters/providers/gemma4.md), and [TranslateGemma](modules/adapters/providers/translate_gemma.md): protocol and role-specific provider adapters.
-- [Island-port UDS client](modules/adapters/island_port/uds_client.md), [SQL adapter](modules/adapters/island_port/sql.md), and [vector adapter](modules/adapters/island_port/vector.md): bounded JSON calls without direct MySQL or Qdrant drivers.
+- [Translation model](ports/translation_model.md), [structured data](ports/structured_data.md), and [vector data](ports/vector_data.md): operation-focused model and canonical/retrieval reads.
+- [Clock](ports/clock.md) and [metrics](ports/metrics.md): deadline time and aggregate outcome boundaries.
+- [OpenAI-compatible protocol](adapters/providers/openai.md), [Gemma 4](adapters/providers/gemma4.md), and [TranslateGemma](adapters/providers/translate_gemma.md): protocol and role-specific provider adapters.
+- [Island-port UDS client](adapters/island_port/uds_client.md), [SQL adapter](adapters/island_port/sql.md), and [vector adapter](adapters/island_port/vector.md): bounded JSON calls without direct MySQL or Qdrant drivers.
 
 Port traits express application operations rather than generic persistence. Read inputs may contain derived lookup forms, fingerprints, canonical IDs, filters, and release IDs, but never user identity. Runtime composition receives no mutation method.
 
 ## Offline publication
 
-- [Publication module](modules/publication/overview.md): staging, validation, projection, reconciliation, activation, quarantine, and rollback library boundary.
-- [Publisher launcher](modules/bin/transnet-publisher.md): optional composition root that alone receives mutation-capable structured and vector ports.
+- [Publication module](publication/overview.md): staging, validation, projection, reconciliation, activation, quarantine, and rollback library boundary.
+- [Publisher launcher](bin/transnet-publisher.md): optional composition root that alone receives mutation-capable structured and vector ports.
 
 The publisher builds authoritative structured content first, projects immutable vector collections second, reconciles the exact release trio, evaluates it, and activates it atomically. Live request handling never publishes itself.
 
