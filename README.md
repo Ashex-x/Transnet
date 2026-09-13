@@ -1,6 +1,21 @@
-# Transnet
+<p align="center">
+  <img src="assets/transnet-logo.png" alt="Transnet logo" width="168">
+</p>
 
-中文：[Transnet 中文说明](README_cn.md)
+<h1 align="center">Transnet</h1>
+
+<p align="center">Private, stateless translation and relationship knowledge.</p>
+
+<p align="center">
+  <a href="https://www.rust-lang.org/"><img alt="Rust" src="https://img.shields.io/badge/Rust-stable-000000?logo=rust"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-2563eb.svg"></a>
+  <a href="docs/transnet.md"><img alt="Status: active development" src="https://img.shields.io/badge/Status-active_development-0f766e.svg"></a>
+</p>
+
+<p align="center">
+  <a href="docs/documentation-index.md">Documentation</a> ·
+  <a href="README_cn.md">中文</a>
+</p>
 
 Transnet is a private, stateless translation and relationship-knowledge service. It translates connected text and, for a resolved lexical sense or domain concept, builds a concise relationship-centered translation-wiki page. The checked-in executable currently provides the loopback translation and structured-lookup subset; the [system design](docs/transnet.md) defines the target service.
 
