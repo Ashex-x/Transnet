@@ -8,21 +8,37 @@ Status: target contract; the current executable does not compose this service cl
 
 ## Contents
 
-- [Storage boundary](#storage-boundary)
-- [Release and collection contract](#release-and-collection-contract)
-- [Knowledge node point](#knowledge-node-point)
-- [Knowledge edge point](#knowledge-edge-point)
-- [Semantic scale point](#semantic-scale-point)
-- [Endpoint reference](#endpoint-reference)
-- [Related documents](#related-documents)
+- [Vector data endpoint interface](#vector-data-endpoint-interface)
+  - [Contents](#contents)
+  - [Endpoint reference](#endpoint-reference)
+  - [Storage boundary](#storage-boundary)
+  - [Release and collection contract](#release-and-collection-contract)
+  - [Knowledge node point](#knowledge-node-point)
+  - [Knowledge edge point](#knowledge-edge-point)
+  - [Semantic scale point](#semantic-scale-point)
+  - [POST /data/vec/v1/nodes/search](#post-datavecv1nodessearch)
+  - [POST /data/vec/v1/scales/search](#post-datavecv1scalessearch)
+  - [POST /data/vec/v1/edges/search](#post-datavecv1edgessearch)
+  - [POST /data/vec/v1/neighbors/search](#post-datavecv1neighborssearch)
+  - [POST /data/vec/v1/releases/publish](#post-datavecv1releasespublish)
+  - [Related documents](#related-documents)
 
 ## Endpoint reference
 
-- [`POST /data/vec/v1/nodes/search`](#post-datavecv1nodessearch)
-- [`POST /data/vec/v1/scales/search`](#post-datavecv1scalessearch)
-- [`POST /data/vec/v1/edges/search`](#post-datavecv1edgessearch)
-- [`POST /data/vec/v1/neighbors/search`](#post-datavecv1neighborssearch)
-- [`POST /data/vec/v1/releases/publish`](#post-datavecv1releasespublish)
+- [Vector data endpoint interface](#vector-data-endpoint-interface)
+  - [Contents](#contents)
+  - [Endpoint reference](#endpoint-reference)
+  - [Storage boundary](#storage-boundary)
+  - [Release and collection contract](#release-and-collection-contract)
+  - [Knowledge node point](#knowledge-node-point)
+  - [Knowledge edge point](#knowledge-edge-point)
+  - [Semantic scale point](#semantic-scale-point)
+  - [POST /data/vec/v1/nodes/search](#post-datavecv1nodessearch)
+  - [POST /data/vec/v1/scales/search](#post-datavecv1scalessearch)
+  - [POST /data/vec/v1/edges/search](#post-datavecv1edgessearch)
+  - [POST /data/vec/v1/neighbors/search](#post-datavecv1neighborssearch)
+  - [POST /data/vec/v1/releases/publish](#post-datavecv1releasespublish)
+  - [Related documents](#related-documents)
 
 Island-port listens on `/run/island-port/island-port.sock` by default and follows the [shared UDS JSON transport](transnet.md). Callers never connect to Qdrant or submit native Qdrant requests; island-port owns collection selection, query construction, credentials, and connection pooling. Only the Transnet runtime and authenticated publication tooling may access the socket. Runtime callers receive search access; publication requires the publisher service account.
 

@@ -18,11 +18,20 @@ English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
 
 ## endpoint 参考
 
-- [`POST /data/vec/v1/nodes/search`](#post-datavecv1nodessearch)
-- [`POST /data/vec/v1/scales/search`](#post-datavecv1scalessearch)
-- [`POST /data/vec/v1/edges/search`](#post-datavecv1edgessearch)
-- [`POST /data/vec/v1/neighbors/search`](#post-datavecv1neighborssearch)
-- [`POST /data/vec/v1/releases/publish`](#post-datavecv1releasespublish)
+- [向量数据 endpoint 接口](#向量数据-endpoint-接口)
+  - [目录](#目录)
+  - [endpoint 参考](#endpoint-参考)
+  - [存储边界](#存储边界)
+  - [发布与集合合同](#发布与集合合同)
+  - [知识节点 point](#知识节点-point)
+  - [知识边 point](#知识边-point)
+  - [语义尺度 point](#语义尺度-point)
+  - [POST /data/vec/v1/nodes/search](#post-datavecv1nodessearch)
+  - [POST /data/vec/v1/scales/search](#post-datavecv1scalessearch)
+  - [POST /data/vec/v1/edges/search](#post-datavecv1edgessearch)
+  - [POST /data/vec/v1/neighbors/search](#post-datavecv1neighborssearch)
+  - [POST /data/vec/v1/releases/publish](#post-datavecv1releasespublish)
+  - [相关文档](#相关文档)
 
 Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 UDS JSON 传输](transnet_cn.md)。调用方绝不直接连接 Qdrant 或提交原生 Qdrant 请求；collection 选择、查询构造、凭据和连接池均由 island-port 负责。只有 Transnet 运行时和经过认证的发布工具可以访问套接字。运行时调用方具有搜索权限；发布要求 publisher 服务账户。
 
