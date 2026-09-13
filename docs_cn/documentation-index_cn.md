@@ -17,7 +17,7 @@ English: [Transnet documentation](../docs/documentation-index.md)
 
 ## 参考
 
-- [服务模块参考](reference/modules_cn.md)：当前与目标启动器、传输、API、编排、领域、RAG、存储、provider、发布、可观测性与停机模块。
+- [服务模块目录](reference/modules_cn.md)：各份当前/目标启动器、传输、API、application、domain、port、adapter、发布、可观测性与停机模块参考的导航与共享依赖规则。
 
 ## 指南
 
