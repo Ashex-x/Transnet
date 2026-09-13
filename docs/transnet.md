@@ -11,7 +11,7 @@ Transnet is an LLM-based translation and relationship-exploration application. T
 - **Sentences and passages:** translate meaning, intent, tone, terminology, and structure into natural target-language text.
 - **Words, terms, and lexical phrases:** build a concise translation-wiki page around the selected sense or concept and reveal the relationships needed to understand and use it.
 
-The important idea is: **one resolved meaning is the anchor, but the experience is not limited to one isolated word**. A lookup starts from the requested expression, resolves an applicable lexical sense or domain concept, and then explains its useful neighborhood. For ordinary words this includes categories, intensity, grammar, collocations, contrasts, register, morphology, idioms, and cultural extensions. For specialist terms it also includes terminology, domain membership, mechanisms, prerequisites, phenomena, technologies, applications, measurements, standards, and usage conventions. The page remains focused because every displayed node must have an explicit, useful path back to the root.
+The important idea is: **each resolved meaning is its own anchor, but the experience is not limited to one isolated word**. A request may return several materially plausible meanings; each resolves an applicable lexical sense or domain concept and explains only its own useful neighborhood. For ordinary words this includes categories, intensity, grammar, collocations, contrasts, register, morphology, idioms, and cultural extensions. For specialist terms it also includes terminology, domain membership, mechanisms, prerequisites, phenomena, technologies, applications, measurements, standards, and usage conventions. The page remains focused because every displayed node must have an explicit, useful path back to its meaning root.
 
 The project concentrates on these innovations:
 
@@ -27,21 +27,23 @@ Learning profiles, lessons, exercises, mastery, review scheduling, coaching, and
 
 ### Intent routing
 
-A word, term, idiom, phrasal verb, or established lexical phrase receives a translation-wiki page. A clause, sentence, or passage receives translation first. An ambiguous short fragment defaults to translation unless it is confidently recognized as a lexical unit. The user does not need to choose an internal model or workflow.
+A word, term, idiom, phrasal verb, or established lexical phrase receives translation plus an appropriate translation-wiki projection. A clause, sentence, or passage receives connected-text translation. One service entry point classifies the unit and chooses the workflow; neither the user nor island-port selects an endpoint, model, domain, or retrieval strategy.
 
-Optional request-scoped context—language, dialect, domain, sentence context, audience, purpose, and register—helps select the intended meaning and control the response. It is discarded after the request.
+The user enters text and chooses only source language, target language, and response level. The initial product supports English and Simplified Chinese, with automatic source-language detection. Island-port may add a chronological list of minimal previous source/translation pairs. Transnet derives sense, domain, register, formatting, provider, and useful sections automatically; current text and history are discarded after the request.
 
-The same canonical neighborhood may be ranked differently for conversation, academic writing, legal text, technical work, or translation. Context changes selection, ordering, and explanation; it never changes canonical identity or silently rewrites relationship facts.
+History may change reference resolution, terminology continuity, sense ranking, and wording, but it never changes canonical identity or silently rewrites relationship facts. There is no separate turn-count cap; island-port controls the history list within the common request-body and deadline bounds.
 
 ### Input normalization and sense identity
 
 A versioned normalizer derives bounded lookup forms through Unicode normalization, language-aware case folding, whitespace handling, and punctuation equivalents. Exact canonical and alias matches precede inflection, spelling correction, and semantic retrieval. Meaningful symbols remain distinct: `C`, `C++`, and `C#` must not collapse into one entry.
 
-Cards use stable sense IDs, not normalized strings, as identity. If a form maps to several meanings or parts of speech, Transnet ranks them from the request context or asks for clarification. New cards and aliases are created only by the content-publication workflow, never as a lookup side effect.
+Cards use stable sense IDs, not normalized strings, as identity. If a form maps to several materially plausible meanings or parts of speech, Transnet ranks them from the current text and history and may return several meaning-specific translations rather than forcing a false single answer. New cards and aliases are created only by the content-publication workflow, never as a lookup side effect.
 
 ## Words, terms, and lexical phrases
 
 A translation-wiki page begins with the concise MySQL basic card, then enriches it with related knowledge from Qdrant. Distinct meanings and parts of speech remain separate so examples, relationships, grammar, pronunciation, and usage guidance stay attached to the applicable sense.
+
+`brief`, `standard`, and `full` responses are deterministic projections from one release-pinned superset aggregate. Brief keeps the translation and any meaning labels needed to avoid ambiguity. Standard adds the most useful definition, usage, example, tip, or relationship. Full adds all bounded eligible lexical, domain, evidence, taxonomy, and intensity detail. A response level changes breadth, never the selected facts or their truth status.
 
 The selected sense is the page root. Related nodes are included only when their connection helps explain or use that sense; they do not turn the page into an unrestricted graph search. Sections may be reordered by relevance, and empty or weakly supported sections are omitted. Explanations remain concise and use short, natural examples.
 
@@ -64,6 +66,8 @@ flowchart LR
 Show broader categories, narrower variants, and meaningful degree relationships. Semantic hierarchy and intensity are different structures: a hypernym names a broader category, a hyponym names a more specific member, and a gradient orders words along a shared dimension.
 
 For example, `warm → hot → sweltering → scorching` is an intensity scale, not a parent-child hierarchy. The page names the comparison dimension and does not imply that adjacent words are interchangeable in every context.
+
+Taxonomy uses directed `is_a` and inverse `has_subtype` facts between sense-qualified nodes. Intensity uses a separate canonical `SemanticScale` with a stable scale ID, named dimension, direction, domain and usage conditions, ordered sense-qualified members, evidence, and release. Member positions express order, not equal numeric distance. Adjacent `lower_degree_than` and `higher_degree_than` edges may be derived from the scale for retrieval, but neither those edges nor scale membership imply taxonomy or synonymy. Full responses present parent words, child variants, and the complete eligible ladder as separate structures.
 
 ### Valency and syntax patterns
 
@@ -109,11 +113,21 @@ Domain expansion is the central innovation beyond a conventional translation or 
 
 ### Domain detection and concept resolution
 
-After lexical sense resolution, the LLM produces a bounded domain assessment: `general`, `domain_specific`, `mixed`, or `uncertain`, with candidate domains and a reason. Signals include the form itself, aliases, definition, sentence context, co-occurring terminology, and canonical domain matches. Deterministic code validates candidate domain IDs and retrieval bounds; the model does not create a canonical domain or fact during lookup.
+After lexical sense resolution, Transnet retrieves a bounded existing-domain inventory. Each candidate includes a stable ID, multilingual labels and aliases, definition, inclusion and exclusion scope, broader domains, and a release-pinned summary of which RAG fact families are available. The LLM must either choose IDs from that supplied allowlist, classify the meaning as general or uncertain, or return no ID with a structured `proposed_domain`. Deterministic code treats the last case as a newly recognized request-local domain; it is not a published domain and needs no separate live endpoint.
+
+The closed resolution outcomes are `existing`, `proposed_new`, `general`, and `uncertain`. If domain retrieval fails, the outcome is `uncertain`, never `proposed_new`, because an unavailable catalog does not prove that a domain is absent. A proposed domain contains a label, concise definition, broader-domain candidates, and a reason the supplied scopes do not fit. It may appear only in `full` detail and is discarded with the request unless a separate offline publisher deliberately includes it in a later review batch.
 
 Domain expansion runs when it is likely to add useful information. A familiar word used technically—such as `field`, `stress`, or `cell`—can therefore open a domain view when its context selects a technical sense. Conversely, a term-looking string with weak evidence stays in lexical mode or is marked uncertain rather than receiving invented specialist detail.
 
 Resolution is concept-first and multilingual. Labels such as `地转偏向力`, `科里奥利力`, and `Coriolis force` may point to one canonical concept while preserving preferred-term, translated-term, alias, region, discipline, and usage-status differences. `卷绳效应` and `rope-coiling effect` similarly resolve to their own shared concept node. Matching translations do not by themselves assert that the two example concepts are related.
+
+### RAG knowledge and basic facts
+
+RAG has two explicit jobs. First, it supplies the existing-domain inventory from which the LLM chooses or detects that none fits. Second, after domain selection, it retrieves the basic facts stored for that domain. A domain knowledge profile names available fact families, languages, verified fact count, and `seed`, `partial`, or `curated` coverage. The profile tells the model what the active release contains; it never claims the field is complete.
+
+A basic fact is atomic, independently evidence-addressable, sense- and domain-scoped canonical content. It records a subject, typed predicate, object or literal value, human-readable statement, conditions, evidence IDs, provenance IDs, verification state, immutable revision, and release. MySQL or the signed release artifact is authoritative; Qdrant contains searchable projections. Retrieval similarity selects candidates, then structured hydration confirms exact facts and evidence before the LLM sees a bounded fact bundle.
+
+Initial knowledge may be bootstrapped by an LLM in the offline publication workflow. Generated output begins as a candidate with model, prompt, schema, run ID, and generation time. Model output is provenance, not evidence. It becomes runtime-visible basic fact data only after independent evidence or an explicitly approved editorial-source policy, rights checks, deterministic validation, and review. Live translation traffic never writes domains or facts.
 
 ### Domain node and edge model
 
@@ -151,6 +165,8 @@ At most two one-sentence tips appear, and only for a material ambiguity, idiom, 
 
 Long or difficult text may use request-local chunk planning and a terminology ledger to keep names, abbreviations, and repeated terms consistent. This ledger is discarded after the response and is not a persistent user translation memory.
 
+Only translations deliberately selected as reusable shared knowledge may be stored. Authorized publication tooling stages a word, established phrase, or bounded reference passage with provenance, publication rights, scope, and review evidence; an immutable release makes approved content canonical. A live request never promotes itself. User-saved or starred translations, including their ownership and retention, remain product data in island-port rather than Transnet knowledge.
+
 ## How the LLM builds a relationship page
 
 The LLM is the page composer, not the source of truth for every fact. The target pipeline is:
@@ -183,7 +199,7 @@ Deterministic code owns normalization, exact matching, stable IDs, release filte
 
 ## Canonical knowledge and relationship model
 
-**MySQL basic cards** are authoritative for compact canonical content: cards, senses, forms, aliases, definitions, translations, pronunciation, morphology, examples, usage notes, domains, evidence metadata, immutable revisions, and release manifests.
+**MySQL canonical content** is authoritative for compact cards and deliberately selected translations: senses, forms, aliases, definitions, reviewed source-target choices, pronunciation, morphology, examples, usage notes, domains, evidence metadata, immutable revisions, and release manifests. Word and phrase translations link to their applicable sense; reusable passages remain bounded release content and do not become graph nodes merely because they were published.
 
 **Qdrant** is a rebuildable, release-pinned projection. Nodes represent senses, phrases, terms, concepts, entities, phenomena, mechanisms, processes, equations, quantities, instruments, methods, technologies, applications, standards, idioms, metaphors, grammar patterns, collocations, misconceptions, and domains. Edges are searchable explanations of typed relationships. Every edge records endpoints, direction, relation type, restrictions, domain and sense scope, evidence, confidence, verification state, provenance, and release.
 
@@ -205,7 +221,7 @@ The service does not perform arbitrary-depth traversal or return every neighbor.
 
 ## Service boundary and quality, briefly
 
-Transnet is stateless and runs behind a private gateway or service mesh. Text, context, and intermediate analysis exist only for the request lifetime and must not be written to MySQL, Qdrant, caches, logs, metrics, traces, telemetry, vectors, or durable queues. Callers must not send user identities, profiles, private history, or end-user credentials.
+Transnet is stateless and runs behind a private gateway or service mesh. Live request text, context, provider output, and intermediate analysis exist only for the request lifetime and must not be written to MySQL, Qdrant, caches, logs, metrics, traces, telemetry, vectors, or durable queues. This prohibition does not apply to separate, rights-cleared canonical content submitted by authenticated publication tooling. Callers must not send user identities, profiles, private history, or end-user credentials.
 
 Prompts, schemas, models, normalizers, retrieval configuration, evidence policy, and knowledge releases are versioned. Quality evaluation covers sense selection, relationship precision, omission and fabrication, translation fidelity, naturalness, terminology, register, cultural scope, degraded reads, prompt injection resistance, and request non-persistence. Human review and curated challenge sets remain necessary; vector similarity, round-trip translation, and LLM judging are signals rather than sole authorities.
 
@@ -213,7 +229,7 @@ The design succeeds when a user can translate connected text or deeply understan
 
 ## Related documents
 
-- [Service interface](interfaces/port.md)
+- [Transnet service interface](interfaces/transnet.md)
 - [MySQL interface](interfaces/mysql.md)
 - [Qdrant interface](interfaces/qdrant.md)
 - [Service behavior](product/service-behavior.md)

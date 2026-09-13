@@ -1,10 +1,14 @@
-# Qdrant adapter interface
+# Vector data endpoint interface
 
-中文：[Qdrant 适配器接口](../../docs_cn/interfaces/qdrant_cn.md)
+中文：[向量数据 endpoint 接口](../../docs_cn/interfaces/qdrant_cn.md)
 
-This contract defines the shared canonical relationship graph stored as versioned Qdrant node and edge collections. JSON examples describe typed adapter values and point payloads, not a public network API.
+This contract defines island-port's vector and graph HTTP endpoints for versioned canonical nodes and edges. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. Point examples document island-port's internal projection.
 
-Status: target contract; the current executable does not compose this adapter.
+Status: target contract; the current executable does not compose this service client.
+
+Island-port listens on `/run/island-port/island-port.sock` by default and follows the [shared UDS JSON transport](transnet.md). Callers never connect to Qdrant or submit native Qdrant requests; island-port owns collection selection, query construction, credentials, and connection pooling. Only the Transnet runtime and authenticated publication tooling may access the socket. Runtime callers receive search access; publication requires the publisher service account.
+
+Every exact request body has the shape `{"context": RequestContext, "input": EndpointInput}`. `RequestContext` contains `request_id`, `deadline_at`, `schema_version` set to `vector-data-v1`, and the pinned `content_release` when applicable. Endpoint examples below show only `EndpointInput`. Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`; publication may also return `conflict`.
 
 ## Storage boundary
 
@@ -75,6 +79,28 @@ A node represents one independently explainable lexical sense, phrase, multiling
 
 Payload indexes cover release, publication and verification state, node type, sense ID, language, dialect, region, period, domain ID, and evidence ID.
 
+Canonical domain nodes additionally carry a compact knowledge profile so the LLM can distinguish available RAG coverage from an empty result. The profile lists available fact families, supported languages, verified fact count, and `seed`, `partial`, or `curated` coverage. It is release-pinned inventory metadata, not evidence and not a completeness claim.
+
+```json
+{
+  "node_id": "domain_weather",
+  "node_type": "domain",
+  "canonical_label": "weather",
+  "aliases": ["meteorology context"],
+  "description": "Conditions of the atmosphere at a place and time.",
+  "inclusion_scope": ["temperature", "precipitation", "wind", "humidity"],
+  "exclusion_scope": ["long-term climate classification"],
+  "knowledge_profile": {
+    "available_fact_families": ["definition", "taxonomy", "terminology", "measurement"],
+    "languages": ["en", "zh-CN"],
+    "verified_fact_count": 184,
+    "coverage_state": "partial"
+  },
+  "verification_state": "verified",
+  "release_id": "knowledge-2026-09"
+}
+```
+
 ## Knowledge edge point
 
 An edge is both a typed connection and a searchable explanation of why two nodes relate.
@@ -91,6 +117,8 @@ An edge is both a typed connection and a searchable explanation of why two nodes
   },
   "payload": {
     "edge_id": "edge_sweltering_scorching_01",
+    "fact_id": "fact_sweltering_degree_scorching_01",
+    "fact_revision": 1,
     "source_node_id": "node_sweltering_hot_01",
     "target_node_id": "node_scorching_heat_01",
     "relation_type": "higher_degree",
@@ -115,7 +143,43 @@ An edge is both a typed connection and a searchable explanation of why two nodes
 
 Supported families cover lexical naming and translation equivalence; taxonomy and part-whole structure; synonymy, antonymy, contrast, and named intensity dimensions; valency, grammar, collocation, and fixed expressions; morphology; suitability by register, dialect, region, period, scene, and domain; cultural extension; and domain mechanism, causation, dependency, implementation, application, measurement, standardization, and terminology. Exploratory associations remain a separate family. A versioned relation-type registry defines direction, inverse, symmetry, transitivity, and causality; neither the UI nor the LLM infers those properties from wording. Payload indexes cover both endpoints, relation type, publication and verification state, release, applicable sense, language, dialect, region, period, domain, and evidence ID.
 
-## search_nodes
+`is_a` points from a narrower sense to a broader category and `has_subtype` is its inverse. `lower_degree_than` and `higher_degree_than` compare members only within a named compatible dimension. No degree edge implies taxonomy, synonymy, or interchangeability.
+
+## Semantic scale point
+
+A first-class semantic scale is stored as a node projection so one retrieval can return the complete eligible ladder rather than reconstructing it from unrelated pairwise edges. Members are sense-qualified nodes. Positions express order, not equal distance; adjacent degree edges may be derived from this record.
+
+```json
+{
+  "id": "scale_environmental_heat_intensity_01",
+  "vectors": {
+    "semantic": "<1536-dimensional scale-description vector>",
+    "lexical": {
+      "indices": [1842, 77103, 99104],
+      "values": [0.7, 1.0, 0.8]
+    }
+  },
+  "payload": {
+    "node_id": "scale_environmental_heat_intensity_01",
+    "node_type": "semantic_scale",
+    "dimension": "environmental_heat_intensity",
+    "direction": "increasing",
+    "domain_ids": ["domain_weather"],
+    "conditions": ["describes weather or an environment"],
+    "members": [
+      {"node_id": "node_warm_temperature_01", "position": 10},
+      {"node_id": "node_hot_temperature_01", "position": 20},
+      {"node_id": "node_sweltering_hot_01", "position": 30},
+      {"node_id": "node_scorching_heat_01", "position": 40}
+    ],
+    "evidence_ids": ["evidence_dictionary_1042"],
+    "verification_state": "verified",
+    "release_id": "knowledge-2026-09"
+  }
+}
+```
+
+## POST /data/vec/v1/nodes/search
 
 Combines named dense and sparse retrieval with exact canonical labels, aliases, translations, transliterations, abbreviations, formulas, and domain terms. The service creates query vectors ephemerally and Qdrant receives no tenant or owner identifier.
 
@@ -170,7 +234,7 @@ Response:
 
 Scores are comparable only within the same model and release. Vector similarity is a candidate signal, never proof of translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
 
-## search_edges
+## POST /data/vec/v1/edges/search
 
 Searches canonical relationship explanations. Eligibility filters apply before limiting, and verified and exploratory results remain separate.
 
@@ -222,7 +286,7 @@ Response:
 }
 ```
 
-## neighbors
+## POST /data/vec/v1/neighbors/search
 
 Retrieves direct incoming and outgoing edges through endpoint indexes, then fetches the opposite nodes by ID. It does not infer ontology semantics, synthesize edges, or execute factual multi-hop traversal.
 
@@ -273,7 +337,7 @@ Response:
 
 Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
 
-## publish_release_projection
+## POST /data/vec/v1/releases/publish
 
 Publication writes deterministic points to new immutable collections and verifies them before activation. It does not mutate an active collection.
 
@@ -319,7 +383,8 @@ Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `una
 
 ## Related documents
 
-- [Transnet service interface](port.md)
+- [Shared UDS JSON transport and Transnet interface](transnet.md)
+- [Transnet design and external interface](../transnet.md)
 - [MySQL interface](mysql.md)
 - [Content publishing](../guides/content-publishing.md)
 - [Quality assurance](../guides/quality-assurance.md)

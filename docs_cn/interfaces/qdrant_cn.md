@@ -1,10 +1,14 @@
-# Qdrant 适配器接口
+# 向量数据 endpoint 接口
 
-English: [Qdrant adapter interface](../../docs/interfaces/qdrant.md)
+English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
 
-本合同定义存储于版本化 Qdrant 节点和边集合中的共享规范关系图。JSON 示例表示适配器值和 point payload，不是公开网络 API。
+本合同定义 island-port 提供的向量与图 HTTP endpoint，用于版本化规范节点与边。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。Point 示例描述 island-port 的内部投影。
 
-状态：目标合同；当前可执行文件尚未组合此适配器。
+状态：目标合同；当前可执行文件尚未组合此服务客户端。
+
+Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 UDS JSON 传输](transnet_cn.md)。调用方绝不直接连接 Qdrant 或提交原生 Qdrant 请求；collection 选择、查询构造、凭据和连接池均由 island-port 负责。只有 Transnet 运行时和经过认证的发布工具可以访问套接字。运行时调用方具有搜索权限；发布要求 publisher 服务账户。
+
+每个精确请求 body 的结构为 `{"context": RequestContext, "input": EndpointInput}`。`RequestContext` 包含 `request_id`、`deadline_at`、值为 `vector-data-v1` 的 `schema_version`，并在适用时包含固定的 `content_release`。下方 endpoint 示例仅展示 `EndpointInput`。闭合 outcome 为 `ok`、`missing`、`invalid_payload`、`version_mismatch`、`unavailable` 和 `timeout`；发布还可返回 `conflict`。
 
 ## 存储边界
 
@@ -67,6 +71,28 @@ Point ID 必须确定。先构建节点再构建边。发布拒绝缺失端点�
 
 Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义 ID、语言、方言、地区、时期、领域 ID 和证据 ID。
 
+规范领域节点还携带精简知识 profile，使 LLM 能区分可用 RAG 覆盖与空结果。Profile 列出可用事实族、支持语言、已验证事实数及 `seed`、`partial` 或 `curated` 覆盖。它是发布固定的清单元数据，不是证据，也不声称完整。
+
+```json
+{
+  "node_id": "domain_weather",
+  "node_type": "domain",
+  "canonical_label": "weather",
+  "aliases": ["meteorology context"],
+  "description": "Conditions of the atmosphere at a place and time.",
+  "inclusion_scope": ["temperature", "precipitation", "wind", "humidity"],
+  "exclusion_scope": ["long-term climate classification"],
+  "knowledge_profile": {
+    "available_fact_families": ["definition", "taxonomy", "terminology", "measurement"],
+    "languages": ["en", "zh-CN"],
+    "verified_fact_count": 184,
+    "coverage_state": "partial"
+  },
+  "verification_state": "verified",
+  "release_id": "knowledge-2026-09"
+}
+```
+
 ## 知识边 point
 
 边既是有类型连接，也是可检索的关系原因说明。
@@ -80,6 +106,8 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
   },
   "payload": {
     "edge_id": "edge_sweltering_scorching_01",
+    "fact_id": "fact_sweltering_degree_scorching_01",
+    "fact_revision": 1,
     "source_node_id": "node_sweltering_hot_01",
     "target_node_id": "node_scorching_heat_01",
     "relation_type": "higher_degree",
@@ -101,7 +129,43 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 关系族覆盖词汇命名与翻译等价、分类与整体—部分、同义/反义/对比/明确命名的强度、配价/语法/搭配/固定表达、形态、语域/方言/地区/时期/场景/领域适用性、文化延伸，以及领域机理、因果、依赖、实现、应用、测量、标准化和术语。探索关系保持独立。版本化关系类型注册表定义方向、逆关系、对称性、传递性和因果性；UI 与 LLM 不从措辞猜测。Payload 索引覆盖两端、关系类型、发布与验证状态、发布版本、适用词义、语言、方言、地区、时期、领域和证据 ID。
 
-## search_nodes
+`is_a` 从较窄词义指向较宽类别，`has_subtype` 是其逆关系。`lower_degree_than` 与 `higher_degree_than` 只在命名且兼容的维度内比较成员。程度边不暗示分类、同义或可互换。
+
+## 语义尺度 point
+
+第一类语义尺度存储为节点投影，使一次检索可返回完整合格梯度，而不是从无关 pairwise 边重建。成员为词义限定节点；位置表示顺序而非相等距离，可从该记录派生相邻程度边。
+
+```json
+{
+  "id": "scale_environmental_heat_intensity_01",
+  "vectors": {
+    "semantic": "<1536-dimensional scale-description vector>",
+    "lexical": {
+      "indices": [1842, 77103, 99104],
+      "values": [0.7, 1.0, 0.8]
+    }
+  },
+  "payload": {
+    "node_id": "scale_environmental_heat_intensity_01",
+    "node_type": "semantic_scale",
+    "dimension": "environmental_heat_intensity",
+    "direction": "increasing",
+    "domain_ids": ["domain_weather"],
+    "conditions": ["describes weather or an environment"],
+    "members": [
+      {"node_id": "node_warm_temperature_01", "position": 10},
+      {"node_id": "node_hot_temperature_01", "position": 20},
+      {"node_id": "node_sweltering_hot_01", "position": 30},
+      {"node_id": "node_scorching_heat_01", "position": 40}
+    ],
+    "evidence_ids": ["evidence_dictionary_1042"],
+    "verification_state": "verified",
+    "release_id": "knowledge-2026-09"
+  }
+}
+```
+
+## POST /data/vec/v1/nodes/search
 
 结合命名稠密与稀疏检索、精确规范标签、别名、翻译、转写、缩写、公式和领域术语。服务临时创建查询向量，Qdrant 不接收租户或所有者标识。
 
@@ -153,7 +217,7 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 分数只可在相同模型和发布内比较。向量相似度仅是候选信号，不能证明翻译、同义、层级、因果、共同机制或文化意义。
 
-## search_edges
+## POST /data/vec/v1/edges/search
 
 检索规范关系解释。先应用资格过滤条件再限制数量，已验证和探索性结果必须分开。
 
@@ -202,7 +266,7 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 }
 ```
 
-## neighbors
+## POST /data/vec/v1/neighbors/search
 
 通过端点索引读取直接入边和出边，再按 ID 获取另一端节点。它不推断本体语义、不合成边，也不执行事实性多跳遍历。
 
@@ -253,7 +317,7 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
 
-## publish_release_projection
+## POST /data/vec/v1/releases/publish
 
 发布向新的不可变集合写入确定性 point，并在激活前校验；不得改写活动集合。
 
@@ -299,7 +363,8 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 ## 相关文档
 
-- [Transnet 服务接口](port_cn.md)
+- [共享 UDS JSON 传输与 Transnet 接口](transnet_cn.md)
+- [Transnet 设计与外部接口](../transnet_cn.md)
 - [MySQL 接口](mysql_cn.md)
 - [内容发布](../guides/content-publishing_cn.md)
 - [质量保证](../guides/quality-assurance_cn.md)
