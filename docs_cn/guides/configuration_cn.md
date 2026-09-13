@@ -1,25 +1,25 @@
 # 配置
 
-English: [configuration](../../docs/guides/configuration.md)
+English: [Configuration](../../docs/guides/configuration.md)
 
-进程从 Cargo manifest 相对路径读取 `config/transnet.toml`，不受 shell 当前目录影响。
+进程始终相对于 Cargo Manifest 读取 `config/transnet.toml`，不受 Shell 工作目录影响。
 
-`[server]` 配置 `host`、`port`、`log_level` 和 `log_format`。`host` 必须是 `127.0.0.1` 或 `::1` 等回环 IP；公共边缘部署由 Island-port 负责。`RUST_LOG` 覆盖 `log_level`；`log_format = "json"` 使用逐行 JSON。调试和发布日志分别写入 `logs/debug/transnet.log` 与 `logs/release/transnet.log`，启动时替换对应文件。
+`[server]` 配置 `host`、`port`、`log_level` 和 `log_format`。`host` 必须是 `127.0.0.1`、`::1` 等回环 IP；公网边缘部署由网关或服务网格负责。`RUST_LOG` 覆盖 `log_level`；`log_format = "json"` 选择换行分隔 JSON，其他值选择紧凑文本。Debug 与 Release 构建分别写入 `logs/debug/transnet.log` 和 `logs/release/transnet.log`。非阻塞 Logger 在启动时替换对应文件，并包含 Trace Target。
 
-`[http]` 配置 `max_request_body_bytes`、`allowed_origins` 和 `allow_credentials`。默认请求体上限为 1,048,576 字节，并在缓冲 JSON 前检查。生产环境应保持 `allowed_origins` 为空；通配符来源会被拒绝。
+`[http]` 配置 `max_request_body_bytes`、`allowed_origins` 和 `allow_credentials`。请求体限制在缓冲 JSON 前应用，默认 1,048,576 字节。生产环境保持 `allowed_origins` 为空，因为浏览器应调用产品网关而非 Transnet；精确 Origin 仅用于隔离的本地开发，通配 Origin 会被拒绝。
 
-`[translation]` 配置 Unicode 字符路由边界，以及提供商单次超时、首次之后的重试次数和重试延迟。提供商专属配置优先。
+`[translation]` 配置 Unicode 字符数路由边界，以及 Provider 单次超时、首次之后重试次数和重试延迟的旧版默认值。Provider 专属覆盖优先。
 
-`[gemma4]` 与 `[translate_gemma]` 配置 OpenAI 兼容的 `base_url`、`model` 和 `api_key`。默认端口分别为 18011 和 18007。真实凭据不得提交到 Git；Rust `Debug` 输出会脱敏凭据。
+`[gemma4]` 和 `[translate_gemma]` 分别配置 OpenAI-compatible `base_url`、`model` 和 `api_key`。默认指向 18011 端口的 Gemma 4 和 18007 端口的 TranslateGemma。真实凭据必须在不提交 Git 的情况下提供；解析后的凭据会从 Rust `Debug` 诊断中脱敏，仅用于出站 Provider 请求。
 
-`[provider_resilience.gemma4]` 和 `[provider_resilience.translate_gemma]` 独立配置 `timeout_seconds`、`max_retries`、`retry_delay_ms`、`max_retry_delay_ms`、`max_concurrent_requests`、`circuit_failure_threshold` 和 `circuit_open_ms`。默认并发为 8、阈值为 5、熔断窗口为 30 秒、重试延迟上限为 5 秒；TranslateGemma 的已提交策略将并发收紧为 4。
+`[provider_resilience.gemma4]` 和 `[provider_resilience.translate_gemma]` 配置独立容错边界。`timeout_seconds`、`max_retries` 与 `retry_delay_ms` 可覆盖 `[translation]`；`max_retry_delay_ms` 限制 Provider `Retry-After` 延迟；`max_concurrent_requests` 是快速失败 Bulkhead；`circuit_failure_threshold` 是打开熔断器的连续瞬时逻辑调用失败次数；`circuit_open_ms` 是半开探测前的开放时长。省略表时使用 Rust 默认值：8 个并发尝试、阈值 5、开放 30 秒、重试延迟上限 5 秒；仓库中的 TranslateGemma 策略把并发收紧到 4。
 
-只有超时、建连失败、429、500、502、503、504 以及不可用的成功响应封装会重试。合法的 `Retry-After` 会在上限内替代配置延迟；其他失败不重复请求。打开的熔断器和已满的 bulkhead 会快速返回现有的 unavailable 响应。
+仅请求超时、建连失败、`429`、`500`、`502`、`503`、`504` 和不可用的成功 Envelope 会重试。有效 `Retry-After` 代替配置延迟，但受 `max_retry_delay_ms` 限制；其他客户端、服务端或歧义传输失败不再发起请求。熔断器打开或 Bulkhead 已满时，相关请求迅速失败并映射到现有 unavailable 响应。
 
-提供商 trace 只包含静态边界、操作名、尝试次数、结果类别、可用的状态码、耗时和重试延迟。不会包含查询、上下文、生成答案、正文、凭据或身份。
+Provider Trace 只包含静态 Provider 边界、操作名、尝试次数、结果类别、可用时的状态码、耗时和重试延迟。进程通过 Rust 服务 API 暴露内存中的脱敏计数器快照；遥测不含原始查询、上下文、生成答案、Provider Body、凭据或身份。
 
-结构化 `/v1/lookups` 使用 `[gemma4]`，并要求服务器支持 `response_format.type = "json_schema"`，且第一条 assistant 消息返回 JSON 文本。
+结构化 `/v1/lookups` 切片使用 `[gemma4]` Provider，并请求严格 JSON Schema 输出。配置的服务必须支持 OpenAI-compatible `response_format.type = "json_schema"` 请求字段，并在第一条 Assistant Message 中返回 JSON 文本。
 
-MySQL、Qdrant、加密、共享缓存、遥测导出器和 worker 配置不属于 Transnet。参见 [MySQL](../interfaces/mysql_cn.md)、[Qdrant](../interfaces/qdrant_cn.md) 和 [Island-port 接口](../interfaces/port_cn.md)。
+当前可执行文件没有 MySQL、Qdrant 或规范发布配置。这些目标能力需要分别版本化的发布、嵌入、检索、模型角色和评估设置；见 [MySQL](../interfaces/mysql_cn.md)、[Qdrant](../interfaces/qdrant_cn.md)和 [Transnet 服务](../interfaces/port_cn.md)合同。不得把凭据或请求内容写入仓库配置。
 
-相关：[设计](../transnet_cn.md)、[Island-port 接口](../interfaces/port_cn.md)、[开发](development_cn.md)。
+相关：[设计](../transnet_cn.md)、[Transnet 服务接口](../interfaces/port_cn.md)和[开发](development_cn.md)。

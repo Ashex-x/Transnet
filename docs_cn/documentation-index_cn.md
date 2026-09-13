@@ -1,30 +1,48 @@
 # Transnet 中文文档
 
-English: [documentation index](../docs/documentation-index.md)
-
-本目录是 `docs/` 的中文镜像。英文文档是规范来源；本目录中的页面与英文页面保持相同的主题、路径层级和链接关系。
+English: [Transnet documentation](../docs/documentation-index.md)
 
 ## 设计与规划
 
-- [系统设计与架构](transnet_cn.md)：运行时边界、信任合同和未来计算扩展。
-- [英语学习体验](product/learning-experience_cn.md)：查词卡片、关系图、练习和个性化。
-- [总体计划](todo_cn.md)：当前基线、后续工作和完成标准。
+- [系统设计与架构](transnet_cn.md)：权威的翻译、关系页面、领域展开、规范数据与质量语义。
+- [服务行为](product/service-behavior_cn.md)：消费者可见的翻译与关系型查询行为。
+- [交付计划](todo_cn.md)：实现阶段和完成标准。
 
 ## 接口
 
-- [Island-port 接口](interfaces/port_cn.md)：无认证的完整 HTTP 合同、请求头、错误和 JSON 示例。
-- [MySQL 适配器接口](interfaces/mysql_cn.md)：持久化操作、事务约束和请求载荷。
-- [Qdrant 适配器接口](interfaces/qdrant_cn.md)：集合、向量点、检索、校验、发布和清理。
+- [Transnet 服务接口](interfaces/port_cn.md)：私有 HTTP 边界和无状态服务操作。
+- [MySQL 适配器](interfaces/mysql_cn.md)：有类型持久化操作和事务不变量。
+- [Qdrant 适配器](interfaces/qdrant_cn.md)：集合、Point、检索、对账和发布合同。
+
+## 参考
+
+- [OpenAPI 3.1 合同](../docs/reference/transnet-openapi.json)：机器可读的目标服务合同。
+
+OpenAPI 镜像目标服务接口；运行时可用性在人工接口合同中明确标注。
 
 ## 指南
 
-- [配置](guides/configuration_cn.md)
-- [开发与运维](guides/development_cn.md)
-- [内容发布](guides/content-publishing_cn.md)
-- [质量保证](guides/quality-assurance_cn.md)
+- [配置](guides/configuration_cn.md)：当前监听器、路由、Provider 设置及目标基础设施配置边界。
+- [开发与运维](guides/development_cn.md)：对根 README 的运维补充。
+- [内容发布](guides/content-publishing_cn.md)：拟议的 MySQL/Qdrant 摄取、校验、发布、移除和回滚工作流。
+- [质量保证](guides/quality-assurance_cn.md)：拟议的基准、失败测试、发布门禁和监控。
 
 ## 仓库规则
 
-- [仓库约定 v1.0.1](conventions-v1.0.1_cn.md)：Rust、文档、验证和 Git 规则。
+- [仓库约定 v1.0.1](conventions-v1.0.1_cn.md)
 
-接口文档是规范合同；Rust trait 的细节仍以源代码注释和 rustdoc 为准。
+## 术语与实现状态
+
+- **当前运行时：**今天可由本仓库构建的可执行文件。它提供回环地址上的翻译和模型驱动的结构化查询；尚未组合生产级 MySQL 或 Qdrant 适配器。
+- **目标服务 / 目标合同：**设计、接口文档和 OpenAPI 所定义的预期且版本化的服务行为。目标路由或 Schema 并不表示当前运行时已经启用它。
+- **规范内容：**经发布工作流审查、版本化并确认为权威的知识。它不同于模型响应、请求内容或相似度结果。
+- **基础卡（`BasicCard`）：**一个可独立选择的词汇词义对应的精简、发布版本固定的 MySQL 记录；即使图检索不可用，它仍应有用。
+- **知识根：**查询页面或有界图读取的起点，即稳定的规范节点或词义。
+- **发布三元组：**一份兼容的 MySQL 卡片发布版本，加上配对的不可变 Qdrant 节点集合和边集合。每个请求同时固定这三个版本。
+- **MySQL：**目标架构中用于规范卡片、发布元数据和发布状态的权威关系型存储。
+- **Qdrant：**目标架构中用于检索已发布规范节点和有类型边的、可重建的向量与 Payload 索引投影。
+- **Gemma 4 / TranslateGemma：**当前运行时使用的 OpenAI-compatible 模型 Provider。Gemma 4 处理短文本翻译和结构化查询；TranslateGemma 处理较长的翻译请求。
+- **`verified` / `inferred` / `exploratory`：**分别是已发布的规范关系、仅限当前请求的有证据推断说明，以及向量或模型候选。只有 `verified` 是规范事实；后两者绝不作为事实持久化。
+- **关系状态字段：**公共页面将上述三种标签命名为 `evidence_state`。在 Qdrant 存储合同中，`evidence_state` 表示附带证据是否支持某条边（例如 `supported`），而 `verification_state` 表示存储的边是否为规范边（`verified`）或探索性边。它们相关，但不可互换。
+
+系统设计对产品语义最权威。接口文档在其明示的实现状态内具有规范性。

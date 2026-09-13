@@ -1,579 +1,469 @@
-# Island-port interface
+# Transnet service HTTP interface
 
-中文：[Island-port 接口](../../docs_cn/interfaces/port_cn.md)
+中文：[Transnet 服务接口](../../docs_cn/interfaces/port_cn.md)
 
-This document is the authoritative human-readable contract between trusted Island-port and Transnet. Transnet does not authenticate callers, manage sessions, or accept cookies or bearer tokens. Island-port performs authentication and authorization before forwarding an internal request.
+This document is the primary interface contract for Transnet. Transnet is a shared, user-agnostic translation and relationship-knowledge service: it translates connected text and builds a bounded relationship-centered page around one resolved lexical sense or domain concept. Calling products own their users, private state, and presentation workflows.
 
-## Transport
+Status: target service contract. The current runtime implements parts of this surface with transitional wire shapes, and canonical sense and graph reads are feature-gated. The checked-in OpenAPI file mirrors this target contract; runtime availability remains documented here rather than inferred from the machine contract.
 
-Requests and responses use JSON over loopback HTTP. Every response contains `X-Request-Id`; an inbound value must contain 1–128 ASCII letters, digits, hyphens, underscores, or periods. All `/v1` responses use `Cache-Control: no-store` unless an endpoint explicitly returns an immutable public representation with an `ETag`.
+## Service boundary
 
-Stateful routes require `X-Learner-Id`, an opaque Island-port-issued identifier of 1–128 URL-safe characters. Transnet trusts this header only at the internal boundary and never accepts a learner ID in a request body. Mutating routes require an `Idempotency-Key` of 16–128 URL-safe characters. Reuse with the same normalized request replays the original result; reuse with different content returns `409 idempotency_conflict`.
+Transnet accepts no user ID, learner ID, account ID, cookie, end-user bearer token, profile, preference set, saved-item state, mastery state, or personal history. Learning profiles, lessons, exercises, mastery, review scheduling, coaching, progress tracking, writing evaluation, speech, and pronunciation are not Transnet modules.
 
-`Lookup-Capability` and `Privacy-Capability` are 32–256-character URL-safe bearer capabilities used only to resume anonymous asynchronous work. They are returned once, never placed in URLs, and are redacted from logs. `If-Match` carries an opaque quoted ETag for optimistic replacement. Cursors are opaque, version-bound strings of at most 4,096 UTF-8 bytes.
+Source text, lookup text, and optional disambiguating context are request payloads, not user records. They may exist in memory only for the bounded request lifetime and must not be written to MySQL, Qdrant, logs, metrics, traces, caches, or durable queues. A caller that needs personalization supplies only request-scoped linguistic options and owns any association between a response and an end user.
 
-Request bodies are limited by `[http].max_request_body_bytes`. Unknown JSON fields and query parameters are rejected. Timestamps are RFC 3339 UTC strings, IDs are opaque strings, language values are BCP-47 tags, and all bounded counts are inclusive.
+Transnet binds a private address and does not terminate public TLS. Deployment authentication identifies the calling service, never its end user. Outside a single-host loopback deployment, a gateway or service mesh must authenticate callers.
 
-## Endpoint inventory
+## Shared wire rules
 
-| Method and route | Required context | Purpose |
-| --- | --- | --- |
-| `GET /health` | None | Process health |
-| `GET /livez` | None | Process liveness |
-| `GET /readyz` | None | Required-dependency readiness |
-| `POST /translate` | None | Direct translation |
-| `POST /v1/lookups` | Optional learner | Build an evidence-backed learning card |
-| `GET /v1/lookup-jobs/{job_id}` | Learner or `Lookup-Capability` | Poll lookup work |
-| `GET /v1/senses/{sense_id}` | None | Read canonical sense details |
-| `GET /v1/graph` | None | Read a bounded canonical graph |
-| `GET /v1/graph/nodes/{kind}/{id}/neighbors` | None | Page direct graph neighbors |
-| `POST /v1/graph-edges/{edge_id}/feedback` | Learner, idempotency | Record personal feedback |
-| `GET /v1/history` | Learner | Page lookup history |
-| `GET /v1/history/{lookup_id}` | Learner | Reopen a lookup |
-| `DELETE /v1/history/{lookup_id}` | Learner, idempotency | Delete one history item |
-| `DELETE /v1/history` | Learner, idempotency | Start clear-history work |
-| `GET /v1/saved-senses` | Learner | Page saved senses |
-| `GET /v1/saved-senses/{sense_id}` | Learner | Read one saved sense |
-| `PUT /v1/saved-senses/{sense_id}` | Learner, idempotency | Save learning state |
-| `DELETE /v1/saved-senses/{sense_id}` | Learner, idempotency | Remove learning state |
-| `POST /v1/practice/sessions` | Learner, idempotency | Create an adaptive session |
-| `POST /v1/practice/sessions/{session_id}/next` | Learner, idempotency | Claim the outstanding item |
-| `GET /v1/practice/sessions/{session_id}/current` | Learner | Read the outstanding item |
-| `POST /v1/practice/sessions/{session_id}/attempts` | Learner, idempotency | Submit one answer exactly once |
-| `GET /v1/progress` | Learner | Read due counts and mastery |
-| `POST /v1/graph-views` | Learner, idempotency | Create a graph view |
-| `GET /v1/graph-views` | Learner | Page graph views |
-| `GET /v1/graph-views/{view_id}` | Learner | Read a graph view |
-| `PUT /v1/graph-views/{view_id}` | Learner, idempotency, `If-Match` | Replace layout state |
-| `DELETE /v1/graph-views/{view_id}` | Learner, idempotency | Delete a graph view |
-| `GET /v1/me` | Learner | Read learner preferences |
-| `PATCH /v1/me/preferences` | Learner, idempotency | Update preferences |
-| `POST /v1/me/export` | Learner, idempotency | Start an export |
-| `DELETE /v1/me` | Learner, idempotency | Start learner-data deletion |
-| `GET /v1/privacy-requests/{request_id}` | Learner or `Privacy-Capability` | Poll privacy work |
-| `POST /v1/privacy-requests/{request_id}/result` | Learner or capability, idempotency | Mint a one-use export URL |
+Requests and responses use JSON. Every response returns `X-Request-Id`. Timestamps are UTC RFC 3339 with microsecond precision. IDs are opaque URL-safe strings; clients must not infer type or order from them. Unknown request fields are rejected.
 
-## Process and translation
-
-`GET /health` and `GET /livez` return `200`; `GET /readyz` returns `503` when a mandatory dependency cannot safely serve traffic.
+Successful application responses use `data` and `meta`. `meta.request_id` matches the response header. Canonical reads also return the immutable content release used to answer the request.
 
 ```json
 {
-  "status": "ok"
-}
-```
-
-`POST /translate` accepts nonblank text and source and target language tags. Text longer than `translation.long_text_chars` uses the long-text provider.
-
-```json
-{
-  "text": "Hello",
-  "source_lang": "en",
-  "target_lang": "zh-CN"
-}
-```
-
-```json
-{
-  "translation": "你好"
-}
-```
-
-## Lookups and jobs
-
-`POST /v1/lookups` accepts a word or short expression of at most 100 Unicode characters and optional context of at most 1,000 characters. `source_language` is a language tag or `auto`; `target_language` is `en`; dialect is `en-US` or `en-GB`; learner levels are `A1`–`C2`; detail is `brief` or `full`; include values are `relations`, `word_history`, and `practice_preview`; history mode is `save` or `incognito`. Without `X-Learner-Id`, history mode is incognito.
-
-```json
-{
-  "query": "caliente",
-  "source_language": "es",
-  "target_language": "en",
-  "context": "La sopa está caliente.",
-  "explanation_language": "zh-CN",
-  "english_dialect": "en-US",
-  "learner_level": "B1",
-  "detail": "full",
-  "include": [
-    "relations",
-    "word_history"
-  ],
-  "history_mode": "save"
-}
-```
-
-A completed lookup returns `200`. Durable work returns `202`, `Location`, `Retry-After`, and an anonymous `Lookup-Capability` when no learner header was supplied.
-
-```json
-{
-  "schema_version": "1.0",
-  "lookup_id": "01JLOOKUP",
-  "query": {
-    "original": "caliente",
-    "normalized": "caliente",
-    "language": "es",
-    "language_confidence": "high"
-  },
-  "matches": [
-    {
-      "source_sense_id": "01JSOURCE",
-      "english_senses": [
-        {
-          "sense_id": "01JHOT",
-          "lemma": "hot",
-          "part_of_speech": "adjective",
-          "definition": {
-            "text": "having a high temperature",
-            "evidence_ids": [
-              "ev-1"
-            ]
-          },
-          "confidence": "high"
-        }
-      ],
-      "context_relevance": 0.96
-    }
-  ],
-  "coverage": {
-    "definitions": "available",
-    "relations": "partial",
-    "word_history": "unavailable"
-  },
-  "warnings": [],
-  "provenance": {
-    "release_id": "01JRELEASE",
-    "collection_version": "sense-v3",
-    "ranking_version": "lookup-v1",
-    "generated_at": "2026-09-12T10:00:00Z"
+  "data": {},
+  "meta": {
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+    "content_release": "knowledge-2026-09"
   }
 }
 ```
 
-```json
-{
-  "job_id": "01JJOB",
-  "status": "queued",
-  "expires_at": "2026-09-12T10:15:00Z"
-}
-```
-
-`GET /v1/lookup-jobs/{job_id}` returns `202` for `queued` or `running`, `200` with the lookup envelope for `completed`, `200` with a redacted terminal failure for `failed`, `404` for absent or foreign work, and `410` after expiry.
-
-## Canonical senses and graph
-
-`GET /v1/senses/{sense_id}` returns localized glosses, pronunciations, usage labels, grammar patterns, collocations, examples, pitfalls, etymology, history, and assertion-level permitted evidence.
+Errors use one safe envelope and never echo request text, context, credentials, provider bodies, vectors, or storage internals.
 
 ```json
 {
-  "schema_version": "1.0",
-  "sense": {
-    "id": "01JHOT",
-    "lemma": "hot",
-    "part_of_speech": "adjective",
-    "definition": "having a high temperature"
-  },
-  "localized_glosses": [
-    {
-      "language": "zh-CN",
-      "text": "温度高的",
-      "evidence_ids": [
-        "ev-1"
-      ]
-    }
-  ],
-  "pronunciations": [
-    {
-      "dialect": "en-US",
-      "notation": "ipa",
-      "value": "hɑt",
-      "evidence_ids": [
-        "ev-2"
-      ]
-    }
-  ],
-  "usage_labels": [],
-  "grammar_patterns": [],
-  "collocations": [],
-  "examples": [],
-  "pitfalls": [],
-  "etymologies": [],
-  "sense_history": [],
-  "provenance": {
-    "release_id": "01JRELEASE"
+  "error": {
+    "code": "invalid_request",
+    "message": "The request is invalid.",
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+    "retryable": false,
+    "fields": [
+      {
+        "field": "target_language",
+        "message": "A valid BCP 47 language tag is required."
+      }
+    ]
   }
 }
 ```
 
-`GET /v1/graph` requires `root_kind` (`sense`, `lexeme`, `construction`, or `scale`) and `root_id`. `depth` is 0–2; `node_limit` is 1–75; `edge_limit` is 1–200. `relation_types` is comma-separated. The neighbor route accepts the same filters plus an opaque cursor and requires `node_limit` of 2–75.
+Common statuses are `400` malformed JSON or unknown fields, `401` failed deployment authentication, `404` unknown canonical resource, `409` release conflict, `413` body too large, `422` invalid semantic input, `429` bounded capacity, `502` invalid provider result, `503` required dependency unavailable, and `504` deadline exceeded.
 
-```json
-{
-  "schema_version": "1.0",
-  "root": {
-    "kind": "sense",
-    "id": "01JHOT"
-  },
-  "content_version": {
-    "release_id": "01JRELEASE",
-    "ranking_version": "graph-v1",
-    "community_aggregate_version": "community-v42"
-  },
-  "nodes": [
-    {
-      "id": "01JHOT",
-      "kind": "sense",
-      "label": "hot",
-      "language": "en",
-      "expandable": true
-    }
-  ],
-  "edges": [],
-  "relation_list": [],
-  "truncated": false,
-  "next_cursor": null
-}
-```
+For the GET examples below, the request JSON is documentation notation for path and query parameters; GET requests have no JSON body.
 
-Relation types are `synonym`, `near_synonym`, `translation_equivalent`, `antonym`, `hypernym`, `hyponym`, `holonym`, `meronym`, `confusable_with`, `associated_with`, `inflection_of`, `has_inflection`, `derivationally_related_to`, `etymologically_derived_from`, `etymological_source_of`, `construction_member`, `has_construction_member`, `scale_contains`, `member_of_scale`, `lower_degree`, and `higher_degree`. Every edge endpoint appears in `nodes`; derived edges have no feedback capability.
+## GET /health
 
-## Feedback
+Returns process health without probing dependencies or revealing configuration.
 
-Feedback accepts usefulness judgments `more`, `less`, or `reset`, and accuracy judgments `accurate`, `wrong_sense`, `wrong_type`, `too_broad`, `missing_restriction`, `unsupported`, `unsure`, or `reset`. A stale relation version returns `409`; a derived edge returns `422`.
-
-```json
-{
-  "relation_version": 3,
-  "dimension": "accuracy",
-  "judgment": "missing_restriction",
-  "context": {
-    "root_kind": "sense",
-    "root_id": "01JHOT",
-    "english_dialect": "en-US"
-  },
-  "comment": "Only synonymous in informal American English."
-}
-```
-
-```json
-{
-  "event_id": "01JFEEDBACK",
-  "recorded_at": "2026-09-12T10:00:00Z",
-  "current": {
-    "usefulness": null,
-    "accuracy": "missing_restriction",
-    "revision": 4
-  }
-}
-```
-
-## History and saved senses
-
-History uses `limit` 1–100 and an opaque `before` cursor. A history item may be reopened with `view=current` or `snapshot`. Delete-one returns `204`; clear-all returns `202` with a privacy request.
-
-```json
-{
-  "items": [
-    {
-      "lookup_id": "01JLOOKUP",
-      "sense_id": "01JHOT",
-      "occurred_at": "2026-09-12T10:00:00Z",
-      "expires_at": "2026-12-11T10:00:00Z"
-    }
-  ],
-  "next_cursor": null
-}
-```
-
-Saved senses use `limit` 1–100, an opaque `after` cursor, and optional state filter. States are `learning`, `known`, `paused`, and `archived`.
-
-```json
-{
-  "state": "learning",
-  "note": "temperature sense",
-  "expected_revision": 3
-}
-```
-
-```json
-{
-  "id": "01JSAVED",
-  "sense_id": "01JHOT",
-  "state": "learning",
-  "note": "temperature sense",
-  "revision": 4,
-  "updated_at": "2026-09-12T10:00:00Z"
-}
-```
-
-List and single-item reads use that shape; lists contain `items` and `next_cursor`. Successful deletion returns `204`.
-
-## Practice and progress
-
-Session creation accepts `item_count` 1–100 and optional skills: `meaning_recognition`, `sense_discrimination`, `english_recall`, `spelling_form`, `collocation`, `grammar_pattern`, `register_choice`, `contrast`, `free_production`, and `listening_pronunciation`.
-
-```json
-{
-  "item_count": 10,
-  "skills": [
-    "meaning_recognition",
-    "english_recall"
-  ],
-  "english_dialect": "en-US",
-  "explanation_language": "zh-CN"
-}
-```
-
-```json
-{
-  "session_id": "01JSESSION",
-  "scheduler_version": "scheduler-v1",
-  "item_count": 10,
-  "created_at": "2026-09-12T10:00:00Z"
-}
-```
-
-Claim-next has an empty JSON body and replays the outstanding item. Current returns the same item without mutation; both return `204` when no item remains.
+Request parameters:
 
 ```json
 {}
 ```
 
+Response `200`:
+
 ```json
 {
-  "exercise_id": "01JEXERCISE",
-  "session_item_id": "01JITEM",
-  "skill": "meaning_recognition",
-  "prompt": {
-    "kind": "multiple_choice",
-    "text": "Which meaning fits?",
-    "choices": [
-      "hot",
-      "cold"
+  "data": {
+    "status": "ok"
+  },
+  "meta": {
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX"
+  }
+}
+```
+
+## GET /livez
+
+Returns success while the process event loop is responsive.
+
+Request parameters:
+
+```json
+{}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "status": "ok"
+  },
+  "meta": {
+    "request_id": "req_01K4Z8Q8X2A6B7C4D9E0F3G5HJ"
+  }
+}
+```
+
+## GET /readyz
+
+Returns `200` only when dependencies required by enabled routes are ready. Optional capabilities may be degraded without making the process unready.
+
+Request parameters:
+
+```json
+{}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "status": "ok",
+    "dependencies": {
+      "mysql": "ready",
+      "qdrant": "ready",
+      "translation_provider": "ready"
+    },
+    "capabilities": {
+      "translation": "available",
+      "canonical_lookup": "available",
+      "relationship_pages": "available"
+    }
+  },
+  "meta": {
+    "request_id": "req_01K4Z8R4CX7E2J6K1M9N3P5Q8S"
+  }
+}
+```
+
+Response `503` uses the standard error envelope with code `not_ready`. It may name a dependency class but must not expose a host, credential, collection name, or provider response.
+
+## POST /translate
+
+Translates bounded text. `source_language` may be `auto`; the remaining options are linguistic instructions for this request only. Dialect, domain, context, audience, purpose, and register affect this response but create no history, translation memory, canonical fact, or reusable profile.
+
+Request:
+
+```json
+{
+  "text": "That plan is still up in the air.",
+  "source_language": "en",
+  "target_language": "zh-CN",
+  "dialect": "en-US",
+  "domain": "general",
+  "audience": "general",
+  "purpose": "inform",
+  "preserve_formatting": true,
+  "register": "neutral"
+}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "translation": "那个计划仍然悬而未决。",
+    "detected_source_language": "en",
+    "tips": [
+      {
+        "kind": "idiom",
+        "message": "“up in the air” means undecided rather than physically airborne."
+      }
     ]
   },
-  "served_at": "2026-09-12T10:01:00Z"
-}
-```
-
-Attempts require the outstanding item, answer, hint count 0–20, and optional client duration. Results are `correct`, `incorrect`, `skipped`, or `needs_review`; only definite results advance mastery.
-
-```json
-{
-  "session_item_id": "01JITEM",
-  "answer": {
-    "kind": "choice",
-    "value": "hot"
-  },
-  "hint_count": 0,
-  "response_duration_ms": 4200
-}
-```
-
-```json
-{
-  "attempt_id": "01JATTEMPT",
-  "resolution": "correct",
-  "scheduler_rating": "good",
-  "explanation": "The context refers to temperature.",
-  "mastery": {
-    "sense_id": "01JHOT",
-    "skill": "meaning_recognition",
-    "revision": 8,
-    "due_at": "2026-09-15T10:00:00Z"
+  "meta": {
+    "request_id": "req_01K4Z8S1AK6C8D2F0G4H7J9M3N",
+    "model_version": "translate-2026-09"
   }
 }
 ```
 
-Progress accepts optional `skill`, `due_before`, `cursor`, and `limit` 1–100.
+`tips` contains at most two one-sentence items and is omitted when it adds no material value. When context is insufficient, `alternative` may contain one clearly labeled translation and reason; otherwise it is omitted. Protected spans, paragraph structure, and formatting are preserved as requested. Any chunk plan or terminology ledger used for long text is discarded with the request.
+
+## POST /v1/lookups
+
+Resolves a word, term, idiom, phrasal verb, or established phrase to one selected canonical lexical sense or domain concept, then composes a concise translation-wiki page around that root. Ambiguity returns ranked candidates or a clarification result. `context`, `domain`, `audience`, `purpose`, `register`, and `dialect` affect sense selection, ranking, and explanation for this request only; they never change canonical identity or relationship facts. `detail` controls response size, not personalization.
+
+Request:
 
 ```json
 {
-  "due_count": 12,
-  "mastery": [
-    {
-      "sense_id": "01JHOT",
-      "skill": "meaning_recognition",
-      "level": 0.72,
-      "due_at": "2026-09-15T10:00:00Z"
-    }
-  ],
-  "next_cursor": null
-}
-```
-
-## Saved graph views
-
-Views contain a typed root, normalized relation filters, content release, layout algorithm, camera, and at most 75 finite positions.
-
-```json
-{
-  "name": "Temperature words",
-  "root": {
-    "kind": "sense",
-    "id": "01JHOT"
-  },
-  "relation_types": [
-    "lower_degree",
-    "higher_degree"
-  ],
-  "content_release_id": "01JRELEASE",
-  "layout_algorithm": "force-v2",
-  "camera": {
-    "x": 0.0,
-    "y": 1.0,
-    "z": 4.0
-  },
-  "positions": {
-    "01JHOT": {
-      "x": 0.0,
-      "y": 0.0,
-      "z": 0.0
-    }
-  }
-}
-```
-
-```json
-{
-  "view_id": "01JVIEW",
-  "name": "Temperature words",
-  "root": {
-    "kind": "sense",
-    "id": "01JHOT"
-  },
-  "relation_types": [
-    "lower_degree",
-    "higher_degree"
-  ],
-  "content_release_id": "01JRELEASE",
-  "layout_algorithm": "force-v2",
-  "camera": {
-    "x": 0.0,
-    "y": 1.0,
-    "z": 4.0
-  },
-  "positions": {
-    "01JHOT": {
-      "x": 0.0,
-      "y": 0.0,
-      "z": 0.0
-    }
-  },
-  "etag": "\"view-4\"",
-  "updated_at": "2026-09-12T10:00:00Z"
-}
-```
-
-List uses `limit` 1–100 and a cursor. Replace accepts mutable view fields and requires `If-Match`; stale state returns `412`. Delete returns `204`.
-
-## Learner and privacy
-
-Preferences updates accept any nonempty subset and require `expected_revision`.
-
-```json
-{
-  "expected_revision": 7,
+  "query": "sweltering",
+  "source_language": "en",
   "explanation_language": "zh-CN",
-  "english_dialect": "en-US",
-  "english_level": "B1",
-  "time_zone": "Asia/Shanghai",
-  "daily_goal": 10,
-  "history_enabled": true,
-  "history_retention_days": 90,
-  "personalization_enabled": true,
-  "mature_content_mode": "warn",
-  "accessibility": {
-    "reduced_motion": true
+  "dialect": "en-US",
+  "domain": "weather",
+  "context": "a sweltering afternoon",
+  "audience": "general",
+  "purpose": "translation",
+  "register": "neutral",
+  "detail": "full",
+  "include": ["meaning", "degree", "contrasts", "collocations", "usage"]
+}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "query_analysis": {
+      "normalized_form": "sweltering",
+      "detected_language": "en",
+      "match_class": "exact_canonical"
+    },
+    "result_mode": "lookup",
+    "selected_root": {
+      "kind": "sense",
+      "sense_id": "sense_sweltering_hot_01",
+      "node_id": "node_sweltering_hot_01"
+    },
+    "domain_assessment": {
+      "classification": "general",
+      "candidate_domain_ids": ["domain_weather"],
+      "reason": "The selected sense describes uncomfortable atmospheric heat."
+    },
+    "page": {
+      "basic_card": {
+          "card_id": "card_sweltering_en_adj_01",
+          "sense_id": "sense_sweltering_hot_01",
+          "canonical_form": "sweltering",
+          "part_of_speech": "adjective",
+          "definitions": ["uncomfortably hot, especially because of the weather"],
+          "translations": ["酷热的", "闷热难耐的"],
+          "domain_ids": ["domain_weather"]
+      },
+      "pronunciations": [
+          {
+            "dialect": "en-US",
+            "ipa": "/ˈswɛltərɪŋ/"
+          }
+        ],
+      "examples": [
+          {
+            "text": "We waited until evening to leave the sweltering house.",
+            "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
+          }
+        ],
+      "relationship_sections": [
+        {
+          "kind": "degree",
+          "title": "Intensity",
+          "items": [
+          {
+            "edge_id": "edge_sweltering_scorching_01",
+            "relation_type": "higher_degree",
+            "target_node_id": "node_scorching_heat_01",
+            "target_label": "scorching",
+            "explanation": "Scorching usually expresses a stronger degree of heat.",
+            "restrictions": {"dimension": "temperature_intensity"},
+            "evidence_state": "verified",
+            "confidence": 0.96,
+            "provenance": ["evidence_dictionary_1042"]
+          }
+          ]
+        }
+      ],
+      "connection_paths": [],
+      "exploratory_sections": []
+    },
+    "alternatives": []
+  },
+  "meta": {
+    "request_id": "req_01K4Z8T5BN2P6Q9R1S3V7W0XYZ",
+    "content_release": "knowledge-2026-09",
+    "degraded": false
   }
 }
 ```
 
+`relationship_sections` are purpose-ranked and omit empty or weakly supported groups. Items use `verified`, `inferred`, or `exploratory` evidence states; inferred and exploratory content is request-local and never silently phrased as canonical fact. Every connection path is short and gives each step a named relationship plus independently eligible evidence. If Qdrant is unavailable but MySQL resolves a basic card, Transnet returns the card with empty relationship and path sections plus `meta.degraded: true`; it never invents replacements.
+
+## GET /v1/senses/{sense_id}
+
+Reads one canonical sense and its concise MySQL card. The service keeps no access or saved-item records.
+
+Request parameters:
+
 ```json
 {
-  "learner_id": "learner_01",
-  "revision": 8,
-  "preferences": {
+  "path": {
+    "sense_id": "sense_sweltering_hot_01"
+  },
+  "query": {
     "explanation_language": "zh-CN",
-    "english_dialect": "en-US",
-    "english_level": "B1",
-    "time_zone": "Asia/Shanghai",
-    "daily_goal": 10,
-    "history_enabled": true,
-    "history_retention_days": 90,
-    "personalization_enabled": true,
-    "mature_content_mode": "warn",
-    "accessibility": {
-      "reduced_motion": true
-    }
+    "release": "knowledge-2026-09"
   }
 }
 ```
 
-Export and learner deletion start durable privacy work.
+Response `200`:
 
 ```json
 {
-  "format": "json",
-  "include": [
-    "profile",
-    "history",
-    "saved_senses",
-    "feedback",
-    "practice",
-    "graph_views"
-  ]
+  "data": {
+    "card_id": "card_sweltering_en_adj_01",
+    "sense_id": "sense_sweltering_hot_01",
+    "canonical_form": "sweltering",
+    "aliases": ["oppressively hot"],
+    "language": "en",
+    "part_of_speech": "adjective",
+    "definitions": ["uncomfortably hot, especially because of the weather"],
+    "translations": [
+      {
+        "language": "zh-CN",
+        "text": "酷热的"
+      }
+    ],
+    "forms": [
+      {
+        "form": "swelteringly",
+        "label": "adverb"
+      }
+    ],
+    "examples": [
+      {
+        "text": "We waited until evening to leave the sweltering house.",
+        "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
+      }
+    ],
+    "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
+    "knowledge_root_ids": ["node_sweltering_hot_01"],
+    "domain_ids": ["domain_weather"],
+    "evidence_ids": ["evidence_dictionary_1042"]
+  },
+  "meta": {
+    "request_id": "req_01K4Z8V2DE5F7G9H1J3K6M8NPQ",
+    "content_release": "knowledge-2026-09"
+  }
 }
 ```
+
+## GET /v1/graph
+
+Reads a bounded canonical subgraph rooted at one sense, concept node, or domain. `depth` is limited to the configured shallow maximum. Results remain rooted, typed, and scope-filtered; this endpoint is not a general graph-query language or an unrestricted neighbor dump.
+
+Request parameters:
 
 ```json
 {
-  "request_id": "01JPRIVACY",
-  "kind": "export",
-  "status": "queued",
-  "expires_at": "2026-09-19T10:00:00Z"
+  "query": {
+    "root_kind": "sense",
+    "root_id": "sense_sweltering_hot_01",
+    "depth": 1,
+    "relation_types": ["lower_degree", "higher_degree", "collocation"],
+    "verification_state": "verified",
+    "node_limit": 20,
+    "edge_limit": 30,
+    "release": "knowledge-2026-09"
+  }
 }
 ```
 
-Learner deletion accepts confirmation and returns the same request shape with kind `delete_learner`.
+Response `200`:
 
 ```json
 {
-  "confirm": true
+  "data": {
+    "root": {
+      "kind": "sense",
+      "id": "sense_sweltering_hot_01",
+      "node_id": "node_sweltering_hot_01"
+    },
+    "nodes": [
+      {
+        "node_id": "node_sweltering_hot_01",
+        "node_type": "lexical_sense",
+        "label": "sweltering"
+      },
+      {
+        "node_id": "node_scorching_heat_01",
+        "node_type": "lexical_sense",
+        "label": "scorching"
+      }
+    ],
+    "edges": [
+      {
+        "edge_id": "edge_sweltering_scorching_01",
+        "source_node_id": "node_sweltering_hot_01",
+        "target_node_id": "node_scorching_heat_01",
+        "relation_type": "higher_degree",
+        "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
+        "restrictions": {"dimension": "temperature_intensity"},
+        "evidence_state": "verified",
+        "confidence": 0.96,
+        "provenance": ["evidence_dictionary_1042"],
+        "verification_state": "verified"
+      }
+    ],
+    "truncated": false
+  },
+  "meta": {
+    "request_id": "req_01K4Z8W9RS2T4V6X0Y1Z3A5BCD",
+    "content_release": "knowledge-2026-09"
+  }
 }
 ```
 
-Privacy polling returns `queued`, `running`, `completed`, or `failed`. Export-result creation has an empty body and returns a short-lived, one-use URL.
+## GET /v1/graph/nodes/{kind}/{id}/neighbors
 
-```json
-{}
-```
+Pages direct incoming and outgoing relationships for one canonical node. The cursor is scoped to the root, filters, and release and must not contain request text.
+
+Request parameters:
 
 ```json
 {
-  "download_url": "https://download.example/one-use-token",
-  "expires_at": "2026-09-12T10:15:00Z"
+  "path": {
+    "kind": "knowledge_node",
+    "id": "node_sweltering_hot_01"
+  },
+  "query": {
+    "direction": "both",
+    "relation_types": ["lower_degree", "higher_degree"],
+    "verification_state": "verified",
+    "limit": 10,
+    "cursor": null,
+    "release": "knowledge-2026-09"
+  }
 }
 ```
 
-## Errors
-
-Malformed JSON returns `400`, oversized bodies `413`, unavailable dependencies `503`, and a hard deadline without durable continuation `504`. Private absent and foreign resources both return `404`. Rate limits return `429` with `Retry-After`. `/translate` retains `{"error":"description"}`; `/v1` uses `application/problem+json`.
+Response `200`:
 
 ```json
 {
-  "type": "about:blank",
-  "title": "Invalid request",
-  "status": 422,
-  "code": "validation_error",
-  "detail": "One or more fields are invalid.",
-  "request_id": "01JREQUEST",
-  "retryable": false,
-  "errors": [
-    {
-      "field": "query",
-      "message": "must not be blank"
-    }
-  ]
+  "data": {
+    "root_node_id": "node_sweltering_hot_01",
+    "neighbors": [
+      {
+        "edge": {
+          "edge_id": "edge_hot_sweltering_01",
+          "source_node_id": "node_hot_temperature_01",
+          "target_node_id": "node_sweltering_hot_01",
+          "relation_type": "higher_degree",
+          "explanation": "Sweltering expresses a more uncomfortable degree of heat than hot.",
+          "restrictions": {"dimension": "temperature_intensity"},
+          "evidence_state": "verified",
+          "confidence": 0.96,
+          "provenance": ["evidence_dictionary_1042"],
+          "verification_state": "verified"
+        },
+        "node": {
+          "node_id": "node_hot_temperature_01",
+          "node_type": "lexical_sense",
+          "label": "hot"
+        }
+      }
+    ],
+    "next_cursor": null
+  },
+  "meta": {
+    "request_id": "req_01K4Z8X6FG1H3J5K7M9N2P4QRS",
+    "content_release": "knowledge-2026-09"
+  }
 }
 ```
 
-Errors never contain learner text, credentials, capabilities, database details, provider bodies, or stack traces.
+## Related documents
+
+- [System design](../transnet.md)
+- [MySQL interface](mysql.md)
+- [Qdrant interface](qdrant.md)
+- [Current OpenAPI snapshot](../reference/transnet-openapi.json)

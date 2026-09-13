@@ -1,6 +1,6 @@
 # Transnet
 
-Transnet is Island-port's pure loopback compute service for translation and English-learning generation. Island-port owns the public API, identity, permissions, user data, privacy, encryption, persistence, MySQL, Qdrant, and all stateful product behavior.
+Transnet is a private, stateless translation and relationship-knowledge service. It translates connected text and, for a resolved lexical sense or domain concept, builds a concise relationship-centered translation-wiki page. The checked-in executable currently provides the loopback translation and structured-lookup subset; the [system design](docs/transnet.md) defines the target service.
 
 ```mermaid
 flowchart LR
@@ -11,11 +11,11 @@ flowchart LR
 
 ## Prerequisites
 
-Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start OpenAI-compatible Gemma 4 and TranslateGemma servers at the endpoints in `config/transnet.toml`. The Gemma 4 endpoint used by structured lookup must support OpenAI-compatible strict JSON Schema output.
+Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start OpenAI-compatible Gemma 4 and TranslateGemma servers at the endpoints in `config/transnet.toml`. **Gemma 4** is the general-purpose provider used for short-text translation and the current structured lookup; **TranslateGemma** is the translation-specialized provider selected for longer text. The Gemma 4 endpoint used by structured lookup must support OpenAI-compatible strict JSON Schema output.
 
 ## Configure
 
-The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` sets the listener and log filter/format, `[http]` sets the body limit and exact CORS origins, `[translation]` sets routing and legacy retry defaults, provider tables identify the model endpoints, and `[provider_resilience.*]` sets independent timeout, retry, concurrency, and circuit-breaker bounds. Do not commit real provider credentials.
+The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` sets the listener and log filter/format, `[http]` sets the body limit and exact CORS origins, `[translation]` sets routing and legacy retry defaults, `[gemma4]` and `[translate_gemma]` identify those provider endpoints, and `[provider_resilience.*]` sets independent timeout, retry, concurrency, and circuit-breaker bounds. Do not commit real provider credentials.
 
 `RUST_LOG` overrides `server.log_level`. `server.log_format = "json"` writes newline-delimited JSON; any other value writes compact text. Debug builds log to `logs/debug/transnet.log`, release builds log to `logs/release/transnet.log`; each file is replaced on startup.
 
@@ -54,15 +54,15 @@ curl http://127.0.0.1:35792/livez
 curl http://127.0.0.1:35792/readyz
 curl --request POST http://127.0.0.1:35792/translate \
   --header 'content-type: application/json' \
-  --data '{"text":"Hello","source_lang":"en","target_lang":"zh-CN"}'
+  --data '{"text":"Hello","source_language":"en","target_language":"zh-CN"}'
 curl --request POST http://127.0.0.1:35792/v1/lookups \
   --header 'content-type: application/json' \
   --data '{"query":"caliente","source_language":"es","target_language":"en","explanation_language":"en"}'
 ```
 
-The current executable has no TLS termination and enforces a loopback bind. Keep it behind Island-port; never provide it with database, identity, session, encryption, or persistence configuration. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
+The current executable has no TLS termination and enforces a loopback bind. Keep this implementation behind a gateway or service mesh. MySQL canonical cards and releases plus Qdrant knowledge nodes and edges remain target capabilities until their status is advanced in the interface and guide documents. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
 
-See the [design](docs/transnet.md), [Island-port interface](docs/interfaces/port.md), [MySQL adapter](docs/interfaces/mysql.md), [Qdrant adapter](docs/interfaces/qdrant.md), and [configuration reference](docs/guides/configuration.md).
+See the [design](docs/transnet.md), [Transnet service interface](docs/interfaces/port.md), [MySQL adapter](docs/interfaces/mysql.md), [Qdrant adapter](docs/interfaces/qdrant.md), and [configuration reference](docs/guides/configuration.md).
 
 ## License
 
