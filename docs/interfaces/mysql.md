@@ -344,6 +344,97 @@ Response:
 }
 ```
 
+## POST /data/sql/v1/knowledge-facts/get
+
+Hydrates an ordered, bounded set of exact fact revisions after vector retrieval. Qdrant may nominate `fact_id` values, but it is never allowed to supply the authoritative statement, evidence, rights, or verification state. The caller supplies the release and the eligible fact IDs; the adapter silently excludes IDs that are absent from that release or fail eligibility. This read is safe to retry.
+
+Request `input`:
+
+```json
+{
+  "fact_ids": ["fact_sweltering_degree_scorching_01"],
+  "content_release": "knowledge-2026-09",
+  "verification_states": ["verified"],
+  "limit": 20
+}
+```
+
+Response:
+
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "facts": [
+      {
+        "fact_id": "fact_sweltering_degree_scorching_01",
+        "revision": 2,
+        "statement": "For environmental heat, scorching usually indicates greater intensity than sweltering.",
+        "subject_node_id": "node_scorching_heat_01",
+        "predicate": "higher_degree_than",
+        "object_node_id": "node_sweltering_hot_01",
+        "domain_ids": ["domain_weather"],
+        "applicable_sense_ids": ["sense_sweltering_hot_01"],
+        "conditions": ["describes weather or an environment"],
+        "evidence_ids": ["evidence_dictionary_1042"],
+        "provenance": ["source_dictionary_2026_01"],
+        "verification_state": "verified"
+      }
+    ]
+  },
+  "content_release": "knowledge-2026-09"
+}
+```
+
+The returned order follows the request after omitted IDs are removed. Facts are atomic: a response projector may summarize them, but must retain the exact fact ID and evidence state whenever it presents a factual claim at `full` level.
+
+## POST /data/sql/v1/semantic-scales/get
+
+Returns complete authoritative semantic scales by stable ID. The caller normally obtains candidate scale IDs from Qdrant and supplies the selected sense or node so island-port can apply scope and condition eligibility. A scale is returned whole or omitted; callers must not reconstruct a ladder from unrelated pairwise edges.
+
+Request `input`:
+
+```json
+{
+  "scale_ids": ["scale_environmental_heat_intensity_01"],
+  "for_node_id": "node_sweltering_hot_01",
+  "content_release": "knowledge-2026-09",
+  "verification_states": ["verified"],
+  "limit": 5
+}
+```
+
+Response:
+
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "scales": [
+      {
+        "scale_id": "scale_environmental_heat_intensity_01",
+        "revision": 1,
+        "dimension": "environmental_heat_intensity",
+        "direction": "increasing",
+        "domain_ids": ["domain_weather"],
+        "conditions": ["describes weather or an environment"],
+        "members": [
+          {"node_id": "node_warm_temperature_01", "position": 10},
+          {"node_id": "node_hot_temperature_01", "position": 20},
+          {"node_id": "node_sweltering_hot_01", "position": 30},
+          {"node_id": "node_scorching_heat_01", "position": 40}
+        ],
+        "evidence_ids": ["evidence_dictionary_1042"],
+        "verification_state": "verified"
+      }
+    ]
+  },
+  "content_release": "knowledge-2026-09"
+}
+```
+
+`position` establishes ordinal order only; it never represents a numeric intensity interval. The caller derives adjacent degree presentation from this returned scale, while taxonomy remains a separately typed `is_a` / `has_subtype` relation.
+
 ## Domain proposal handling
 
 There is no live create-domain endpoint. Transnet gives the LLM a bounded allowlist returned by domain resolution. If the LLM selects none and emits a structured proposal, deterministic code returns `proposed_new` for that request. An unavailable or failed catalog produces `uncertain`, not a proposal. Runtime traffic cannot write the proposal.

@@ -311,6 +311,97 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 }
 ```
 
+## POST /data/sql/v1/knowledge-facts/get
+
+在向量检索后按顺序、有界地补全精确事实修订。Qdrant 可以提名 `fact_id`，但绝不能提供权威陈述、证据、权利或验证状态。调用方提供发布版本与合格事实 ID；适配器会排除该发布中不存在或不符合资格的 ID。该读取可安全重试。
+
+请求 `input`：
+
+```json
+{
+  "fact_ids": ["fact_sweltering_degree_scorching_01"],
+  "content_release": "knowledge-2026-09",
+  "verification_states": ["verified"],
+  "limit": 20
+}
+```
+
+响应：
+
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "facts": [
+      {
+        "fact_id": "fact_sweltering_degree_scorching_01",
+        "revision": 2,
+        "statement": "For environmental heat, scorching usually indicates greater intensity than sweltering.",
+        "subject_node_id": "node_scorching_heat_01",
+        "predicate": "higher_degree_than",
+        "object_node_id": "node_sweltering_hot_01",
+        "domain_ids": ["domain_weather"],
+        "applicable_sense_ids": ["sense_sweltering_hot_01"],
+        "conditions": ["describes weather or an environment"],
+        "evidence_ids": ["evidence_dictionary_1042"],
+        "provenance": ["source_dictionary_2026_01"],
+        "verification_state": "verified"
+      }
+    ]
+  },
+  "content_release": "knowledge-2026-09"
+}
+```
+
+返回顺序遵循请求顺序，并移除被排除的 ID。事实是原子项：响应投影可以摘要它们，但在 `full` 级别呈现事实性断言时必须保留精确事实 ID 与证据状态。
+
+## POST /data/sql/v1/semantic-scales/get
+
+按稳定 ID 返回完整的权威语义尺度。调用方通常从 Qdrant 获取候选尺度 ID，并提供选定词义或节点，以便 island-port 应用范围与条件资格。尺度要么完整返回，要么省略；调用方不得从无关的成对边重建梯度。
+
+请求 `input`：
+
+```json
+{
+  "scale_ids": ["scale_environmental_heat_intensity_01"],
+  "for_node_id": "node_sweltering_hot_01",
+  "content_release": "knowledge-2026-09",
+  "verification_states": ["verified"],
+  "limit": 5
+}
+```
+
+响应：
+
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "scales": [
+      {
+        "scale_id": "scale_environmental_heat_intensity_01",
+        "revision": 1,
+        "dimension": "environmental_heat_intensity",
+        "direction": "increasing",
+        "domain_ids": ["domain_weather"],
+        "conditions": ["describes weather or an environment"],
+        "members": [
+          {"node_id": "node_warm_temperature_01", "position": 10},
+          {"node_id": "node_hot_temperature_01", "position": 20},
+          {"node_id": "node_sweltering_hot_01", "position": 30},
+          {"node_id": "node_scorching_heat_01", "position": 40}
+        ],
+        "evidence_ids": ["evidence_dictionary_1042"],
+        "verification_state": "verified"
+      }
+    ]
+  },
+  "content_release": "knowledge-2026-09"
+}
+```
+
+`position` 只建立序数顺序，绝不表示数值强度间隔。调用方从返回的尺度推导相邻程度展示；分类仍是独立类型的 `is_a` / `has_subtype` 关系。
+
 ## 领域提案处理
 
 不存在 live 创建领域 endpoint。Transnet 向 LLM 提供领域解析返回的有界 allowlist。若 LLM 不选择任何项并输出结构化提案，确定性代码为该请求返回 `proposed_new`。清单不可用或失败时返回 `uncertain`，而非提案。运行时流量不能写入提案。

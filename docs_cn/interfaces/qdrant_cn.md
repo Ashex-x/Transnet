@@ -217,6 +217,47 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 分数只可在相同模型和发布内比较。向量相似度仅是候选信号，不能证明翻译、同义、层级、因果、共同机制或文化意义。
 
+## POST /data/vec/v1/scales/search
+
+查找包含一个选定规范节点的完整尺度候选。这是带可选向量排序的索引读取，只返回 ID、位置和资格元数据。Transnet 在把它呈现为事实前，必须通过 SQL endpoint 补全完整尺度与证据。
+
+请求：
+
+```json
+{
+  "member_node_id": "node_sweltering_hot_01",
+  "filters": {
+    "release_id": "knowledge-2026-09",
+    "publication_states": ["published"],
+    "verification_states": ["verified"],
+    "domain_ids": ["domain_weather"]
+  },
+  "limit": 5
+}
+```
+
+响应：
+
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "candidates": [
+      {
+        "scale_id": "scale_environmental_heat_intensity_01",
+        "score": 1.0,
+        "member_position": 30,
+        "verification_state": "verified",
+        "fact_ids": ["fact_sweltering_degree_scorching_01"]
+      }
+    ]
+  },
+  "release_id": "knowledge-2026-09"
+}
+```
+
+该 endpoint 不推断新尺度，也不返回不完整梯度。缺少结果仅表示未找到合格的已发布尺度，并不表示选定节点不可能具有强度关系。
+
 ## POST /data/vec/v1/edges/search
 
 检索规范关系解释。先应用资格过滤条件再限制数量，已验证和探索性结果必须分开。
@@ -258,6 +299,8 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree",
         "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
+        "fact_id": "fact_sweltering_degree_scorching_01",
+        "fact_revision": 2,
         "verification_state": "verified"
       }
     ]
@@ -265,6 +308,8 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
   "release_id": "knowledge-2026-09"
 }
 ```
+
+每项结果均为候选指针。在响应使用事实性解释、证据或来源前，Transnet 必须针对同一发布通过 `POST /data/sql/v1/knowledge-facts/get` 补全引用的事实修订。
 
 ## POST /data/vec/v1/neighbors/search
 

@@ -422,14 +422,15 @@ Passage 的 `tips` 最多两条，每条一句；没有实质价值时省略。�
 
 ## POST /transnet/v1/senses/get
 
-读取一个规范词义及其精简 MySQL 卡片。服务不保存访问或已保存项目记录。
+读取一个规范词义，并使用与翻译结果相同的响应级别规则进行投影。这是 port 使用 Transnet 先前返回的 ID 发起的后续读取，不是第二种由用户选择的翻译模式。服务不保存访问或已保存项目记录。
 
 请求：
 
 ```json
 {
   "sense_id": "sense_sweltering_hot_01",
-  "explanation_language": "zh-CN",
+  "target_language": "zh-CN",
+  "response_level": "full",
   "release": "knowledge-2026-09"
 }
 ```
@@ -456,14 +457,15 @@ Passage 的 `tips` 最多两条，每条一句；没有实质价值时省略。�
   },
   "meta": {
     "request_id": "req_01K4Z8V2DE5F7G9H1J3K6M8NPQ",
-    "content_release": "knowledge-2026-09"
+    "content_release": "knowledge-2026-09",
+    "response_level": "full"
   }
 }
 ```
 
 ## POST /transnet/v1/graph/get
 
-读取以一个词义、概念节点或领域为根的有界规范子图。`depth` 受配置的浅层最大值限制。结果保持有根、有类型且经过范围过滤；本端点不是通用图查询语言或无限制邻居倾倒接口。
+读取以一个词义、概念节点或领域为根的有界规范子图。port 根据选定资源和响应级别派生其过滤条件；这些字段不是 WebUI 控件。`depth` 受配置的浅层最大值限制。结果保持有根、有类型且经过范围过滤；本端点不是通用图查询语言或无限制邻居倾倒接口。
 
 请求：
 

@@ -234,6 +234,47 @@ Response:
 
 Scores are comparable only within the same model and release. Vector similarity is a candidate signal, never proof of translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
 
+## POST /data/vec/v1/scales/search
+
+Finds complete-scale candidates that contain one selected canonical node. This is an index lookup with optional vector ranking; it returns only IDs, positions, and eligibility metadata. Transnet must hydrate the complete scale and its evidence from the SQL endpoint before presenting it as a fact.
+
+Request:
+
+```json
+{
+  "member_node_id": "node_sweltering_hot_01",
+  "filters": {
+    "release_id": "knowledge-2026-09",
+    "publication_states": ["published"],
+    "verification_states": ["verified"],
+    "domain_ids": ["domain_weather"]
+  },
+  "limit": 5
+}
+```
+
+Response:
+
+```json
+{
+  "outcome": "ok",
+  "value": {
+    "candidates": [
+      {
+        "scale_id": "scale_environmental_heat_intensity_01",
+        "score": 1.0,
+        "member_position": 30,
+        "verification_state": "verified",
+        "fact_ids": ["fact_sweltering_degree_scorching_01"]
+      }
+    ]
+  },
+  "release_id": "knowledge-2026-09"
+}
+```
+
+The endpoint does not infer a new scale or return an incomplete ladder. A missing result means no eligible published scale was found, not that the selected node has no possible intensity relationship.
+
 ## POST /data/vec/v1/edges/search
 
 Searches canonical relationship explanations. Eligibility filters apply before limiting, and verified and exploratory results remain separate.
@@ -278,6 +319,8 @@ Response:
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree",
         "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
+        "fact_id": "fact_sweltering_degree_scorching_01",
+        "fact_revision": 2,
         "verification_state": "verified"
       }
     ]
@@ -285,6 +328,8 @@ Response:
   "release_id": "knowledge-2026-09"
 }
 ```
+
+Each result is a candidate pointer. Before a factual explanation, evidence, or provenance is used in a response, Transnet hydrates the referenced fact revision through `POST /data/sql/v1/knowledge-facts/get` for the same release.
 
 ## POST /data/vec/v1/neighbors/search
 

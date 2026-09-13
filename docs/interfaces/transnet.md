@@ -443,14 +443,15 @@ Passage `tips` contains at most two one-sentence items and is omitted when it ad
 
 ## POST /transnet/v1/senses/get
 
-Reads one canonical sense and its concise MySQL card. The service keeps no access or saved-item records.
+Reads one canonical sense and projects it with the same response-level rules as a translation result. It is a port-driven follow-up using an ID previously returned by Transnet, not a second user-selected translation mode. The service keeps no access or saved-item records.
 
 Request:
 
 ```json
 {
   "sense_id": "sense_sweltering_hot_01",
-  "explanation_language": "zh-CN",
+  "target_language": "zh-CN",
+  "response_level": "full",
   "release": "knowledge-2026-09"
 }
 ```
@@ -492,14 +493,15 @@ Response `200`:
   },
   "meta": {
     "request_id": "req_01K4Z8V2DE5F7G9H1J3K6M8NPQ",
-    "content_release": "knowledge-2026-09"
+    "content_release": "knowledge-2026-09",
+    "response_level": "full"
   }
 }
 ```
 
 ## POST /transnet/v1/graph/get
 
-Reads a bounded canonical subgraph rooted at one sense, concept node, or domain. `depth` is limited to the configured shallow maximum. Results remain rooted, typed, and scope-filtered; this endpoint is not a general graph-query language or an unrestricted neighbor dump.
+Reads a bounded canonical subgraph rooted at one sense, concept node, or domain. The port derives its filters from the selected resource and response level; these fields are not WebUI controls. `depth` is limited to the configured shallow maximum. Results remain rooted, typed, and scope-filtered; this endpoint is not a general graph-query language or an unrestricted neighbor dump.
 
 Request:
 
