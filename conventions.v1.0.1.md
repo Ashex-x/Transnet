@@ -37,10 +37,11 @@ Place documents by authority:
 - `docs/transnet.md`: product semantics and system architecture.
 - `docs/product/`: focused consumer-visible behavior that expands the system design without redefining contracts.
 - `docs/interfaces/`: normative HTTP, UDS, and storage-adapter wire contracts, grouped by service boundary or route domain.
-- `docs/reference/<module>/`: implementation-oriented module references, grouped by stable ownership area such as `runtime`, `transport`, `application`, `domain`, `ports`, `adapters`, or `operations`.
+- `docs/reference/<module>.md`: one implementation-oriented reference for a module with a single documentation concern.
+- `docs/reference/<module>/`: focused inner pages only when a module has multiple independently useful documentation concerns.
 - `docs/guides/`: task-oriented procedures such as development, configuration, publication, and quality assurance.
 
-An important module or stable subsystem owns its own directory. A small module has one substantive document that covers all of its concerns. Split inner pages only when the module has multiple independently searchable concerns and each page contains enough unique design, lifecycle, invariants, or verification guidance to stand on its own. Keep closely coupled concerns together; do not create one page per source file, type, route, or hypothetical future module.
+An important module or stable subsystem owns one substantive document. Keep that document directly under `docs/reference` when it is the module's only page; a one-file directory is prohibited. Create a module directory only when it contains multiple independently searchable pages and each page has enough unique design, lifecycle, invariants, or verification guidance to stand on its own. Keep closely coupled concerns together; do not create one page per source file, type, route, or hypothetical future module.
 
 Do not keep short placeholder pages, repeated boundary boilerplate, or pages that merely name responsibilities already obvious from an index or source module. Merge such material into the module's main document or source comments. Page count and file-to-module symmetry are not goals; clear ownership and useful search results are.
 
