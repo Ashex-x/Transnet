@@ -11,11 +11,11 @@ flowchart LR
 
 ## Prerequisites
 
-Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start OpenAI-compatible Gemma 4 and TranslateGemma servers at the endpoints in `config/transnet.toml`. The Gemma 4 endpoint used by structured lookup must support OpenAI-compatible strict JSON Schema output.
+Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start OpenAI-compatible Gemma 4 and TranslateGemma servers at the endpoints in `config/transnet.toml`. **Gemma 4** is the general-purpose provider used for short-text translation and the current structured lookup; **TranslateGemma** is the translation-specialized provider selected for longer text. The Gemma 4 endpoint used by structured lookup must support OpenAI-compatible strict JSON Schema output.
 
 ## Configure
 
-The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` sets the listener and log filter/format, `[http]` sets the body limit and exact CORS origins, `[translation]` sets routing and legacy retry defaults, provider tables identify the model endpoints, and `[provider_resilience.*]` sets independent timeout, retry, concurrency, and circuit-breaker bounds. Do not commit real provider credentials.
+The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` sets the listener and log filter/format, `[http]` sets the body limit and exact CORS origins, `[translation]` sets routing and legacy retry defaults, `[gemma4]` and `[translate_gemma]` identify those provider endpoints, and `[provider_resilience.*]` sets independent timeout, retry, concurrency, and circuit-breaker bounds. Do not commit real provider credentials.
 
 `RUST_LOG` overrides `server.log_level`. `server.log_format = "json"` writes newline-delimited JSON; any other value writes compact text. Debug builds log to `logs/debug/transnet.log`, release builds log to `logs/release/transnet.log`; each file is replaced on startup.
 

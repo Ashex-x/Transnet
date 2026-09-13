@@ -36,3 +36,17 @@ The OpenAPI document mirrors the target service interface. Runtime availability 
 - [Chinese documentation index](../docs_cn/documentation-index_cn.md): Chinese translations of the authoritative interfaces and repository conventions.
 
 The system design is authoritative for product semantics. Interface documents are normative within their stated implementation status; Rust trait details remain in source comments and rustdoc.
+
+## Terminology and status
+
+- **Current runtime:** the executable built from this repository today. It provides loopback translation and model-backed structured lookup; it does not compose production MySQL or Qdrant adapters.
+- **Target service / target contract:** the intended, versioned service behavior described by the design, interface documents, and OpenAPI. A target route or schema is not evidence that the current runtime enables it.
+- **Canonical content:** reviewed, versioned knowledge that the publication workflow has made authoritative. It is distinct from a model response, a request, or a similarity result.
+- **Basic card:** the concise, release-pinned MySQL record for one independently selectable lexical sense. It remains useful when graph retrieval is unavailable.
+- **Knowledge root:** the stable canonical node or sense from which a lookup page or bounded graph read starts.
+- **Release trio:** one compatible MySQL card release plus its immutable Qdrant node and edge collections. Requests pin all three versions together.
+- **MySQL:** the authoritative relational store for canonical cards, release metadata, and publication state in the target architecture.
+- **Qdrant:** the rebuildable vector and payload-index projection used to retrieve published canonical nodes and typed edges in the target architecture.
+- **Gemma 4 / TranslateGemma:** OpenAI-compatible model providers used by the current runtime. Gemma 4 handles short-text translation and structured lookup; TranslateGemma handles longer translation requests.
+- **Verified / inferred / exploratory:** respectively, a published canonical relationship; an evidence-grounded explanation generated only for the current request; and a vector or model candidate. Only verified content is canonical, and the latter two are never persisted as facts.
+- **Relationship status fields:** the public page calls that three-way label `evidence_state`. In the Qdrant storage contract, `evidence_state` instead records whether the attached evidence supports an edge (for example, `supported`), while `verification_state` records whether the stored edge is canonical (`verified`) or exploratory. The terms are related but are not interchangeable.
