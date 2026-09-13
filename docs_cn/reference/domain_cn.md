@@ -1,6 +1,6 @@
 # Domain 模块
 
-English: [Domain module](../../../docs/reference/domain/domain.md)
+English: [Domain module](../../docs/reference/domain.md)
 
 Domain 模块负责与传输无关的翻译词汇、词汇与规范知识身份、关系语义、发布兼容性及降级结果不变量。它不包含 HTTP、provider、数据库、日志或进程生命周期代码。
 
@@ -8,7 +8,7 @@ Domain 模块负责与传输无关的翻译词汇、词汇与规范知识身份�
 
 翻译请求包含源文本、源语言与目标语言选择器、响应级别及可选的按时间排序最小历史。语言标签会规范化并限制边界。历史是语言上下文，不是身份或持久状态；domain 值绝不携带用户 ID、持久化策略、provider 选择或存储指令。
 
-翻译结果将主要译文与可选歧义、语域、术语或文化说明分开。Brief、standard 与 full 在完整结果组装后控制确定性广度。精确公开结构与限制由 [Transnet 服务接口](../../interfaces/transnet_cn.md)负责。
+翻译结果将主要译文与可选歧义、语域、术语或文化说明分开。Brief、standard 与 full 在完整结果组装后控制确定性广度。精确公开结构与限制由 [Transnet 服务接口](../interfaces/transnet_cn.md)负责。
 
 ## 词汇身份
 
@@ -28,7 +28,7 @@ Verified 内容是已发布规范知识；inferred 解释与 exploratory 候选�
 
 向量失败时可返回带显式降级的 MySQL 基础卡，但不得虚构关系或隐藏缺失知识族。权威内容缺失或发布不兼容必须安全失败。实时请求不能创建别名、卡片、事实、领域、边、修订或发布。
 
-精确持久 payload 由 [SQL](../../interfaces/mysql_cn.md) 与[向量](../../interfaces/qdrant_cn.md)接口负责。
+精确持久 payload 由 [SQL](../interfaces/mysql_cn.md) 与[向量](../interfaces/qdrant_cn.md)接口负责。
 
 ## 验证
 

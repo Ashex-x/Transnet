@@ -1,6 +1,6 @@
 # 运维模块
 
-English: [Operations module](../../../docs/reference/operations/operations.md)
+English: [Operations module](../../docs/reference/operations.md)
 
 运维模块负责安全可观测性、依赖容错与离线发布。在线遥测和容错参与每个请求；发布保持为独立且不可到达的组合。
 
@@ -20,7 +20,7 @@ Publisher 暂存结构化内容，校验 schema 与权利，检查证据和确�
 
 Publisher 是单独组合根，也是唯一允许接收可变更数据 port 的组件。生成候选不是证据；只有证据、权利、校验与审核策略通过后才成为规范内容。
 
-实时翻译与查询绝不调用发布、创建持久提案，也不把请求文本或输出写入规范存储。操作步骤由[内容发布指南](../../guides/content-publishing_cn.md)负责。
+实时翻译与查询绝不调用发布、创建持久提案，也不把请求文本或输出写入规范存储。操作步骤由[内容发布指南](../guides/content-publishing_cn.md)负责。
 
 ## 验证
 

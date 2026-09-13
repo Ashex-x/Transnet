@@ -4,7 +4,7 @@ English: [Request dataflow](../../../docs/reference/application/request-dataflow
 
 本页跟踪一个请求如何经过 Transnet，并说明每个模块接收什么、决定什么、返回什么以及必须丢弃什么。精确路由与 payload 仍以 [Transnet 服务接口](../../interfaces/transnet_cn.md)为权威。
 
-状态：下述目标流程尚未完成组合。当前可执行文件使用回环 HTTP，并直接连接过渡期翻译与模型驱动查询路径；[运行时模块](../runtime/runtime_cn.md)说明今天实际可用的行为。
+状态：下述目标流程尚未完成组合。当前可执行文件使用回环 HTTP，并直接连接过渡期翻译与模型驱动查询路径；[运行时模块](../runtime_cn.md)说明今天实际可用的行为。
 
 ## 端到端流程
 

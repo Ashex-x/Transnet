@@ -1,8 +1,8 @@
 # 传输与 API 边界
 
-English: [Transport and API boundary](../../../docs/reference/transport/server.md)
+English: [Transport and API boundary](../../docs/reference/transport.md)
 
-本模块负责请求准入，以及 HTTP/JSON 与 application 操作之间的映射。路由、body、envelope、标识符、deadline 与错误以 [Transnet 服务接口](../../interfaces/transnet_cn.md)为规范来源。
+本模块负责请求准入，以及 HTTP/JSON 与 application 操作之间的映射。路由、body、envelope、标识符、deadline 与错误以 [Transnet 服务接口](../interfaces/transnet_cn.md)为规范来源。
 
 ## 当前运行时
 

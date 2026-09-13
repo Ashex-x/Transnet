@@ -1,6 +1,6 @@
 # Domain module
 
-中文：[Domain 模块](../../../docs_cn/reference/domain/domain_cn.md)
+中文：[Domain 模块](../../docs_cn/reference/domain_cn.md)
 
 The domain module owns transport-independent translation vocabulary, lexical and canonical knowledge identity, relationship semantics, release compatibility, and degraded-result invariants. It contains no HTTP, provider, database, logging, or process-lifecycle code.
 
@@ -8,7 +8,7 @@ The domain module owns transport-independent translation vocabulary, lexical and
 
 A translation request contains source text, source and target language selectors, response level, and optional chronological minimal history. Language tags are canonicalized and bounded. History is linguistic context, not identity or durable state, and domain values never carry user IDs, persistence policy, provider selection, or storage instructions.
 
-A translation result separates primary translated text from optional ambiguity, register, terminology, or cultural notes. Brief, standard, and full control deterministic breadth after the complete result is assembled. Exact public shapes and limits belong to the [Transnet service interface](../../interfaces/transnet.md).
+A translation result separates primary translated text from optional ambiguity, register, terminology, or cultural notes. Brief, standard, and full control deterministic breadth after the complete result is assembled. Exact public shapes and limits belong to the [Transnet service interface](../interfaces/transnet.md).
 
 ## Lexical identity
 
@@ -28,7 +28,7 @@ One content view consists of a MySQL card release plus paired immutable Qdrant n
 
 Vector failure may yield an explicitly degraded MySQL-backed basic card, but never invented relationships or hidden missing knowledge families. Missing authoritative content or incompatible releases fail safely. Live requests cannot create aliases, cards, facts, domains, edges, revisions, or releases.
 
-Exact persisted payloads belong to the [SQL](../../interfaces/mysql.md) and [vector](../../interfaces/qdrant.md) interfaces.
+Exact persisted payloads belong to the [SQL](../interfaces/mysql.md) and [vector](../interfaces/qdrant.md) interfaces.
 
 ## Verification
 

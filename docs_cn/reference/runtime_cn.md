@@ -1,16 +1,16 @@
 # 运行时模块
 
-English: [Runtime module](../../../docs/reference/runtime/runtime.md)
+English: [Runtime module](../../docs/reference/runtime.md)
 
 运行时模块负责进程配置、启动、依赖组合、就绪、listener 生命周期与优雅停机。它包含生命周期接线，不包含翻译或检索策略。
 
-状态：当前可执行文件绑定过渡期回环 TCP。目标组合使用 [Transnet 服务接口](../../interfaces/transnet_cn.md)定义的 UDS 边界。
+状态：当前可执行文件绑定过渡期回环 TCP。目标组合使用 [Transnet 服务接口](../interfaces/transnet_cn.md)定义的 UDS 边界。
 
 ## 配置
 
 进程相对 Cargo manifest 读取 config/transnet.toml。RUST_LOG 可覆盖配置 filter。解析拒绝未知字段；创建 client 或 listener 前，校验检查单项边界与不兼容组合。
 
-Provider 凭据是 secret，绝不能出现在已提交文件、Debug 输出、日志、指标、trace 或错误中。配置与 bootstrap 之外的代码接收有类型设置，不重新读取文件或环境变量。精确字段、默认值与目标基础设施设置由[配置指南](../../guides/configuration_cn.md)负责。
+Provider 凭据是 secret，绝不能出现在已提交文件、Debug 输出、日志、指标、trace 或错误中。配置与 bootstrap 之外的代码接收有类型设置，不重新读取文件或环境变量。精确字段、默认值与目标基础设施设置由[配置指南](../guides/configuration_cn.md)负责。
 
 ## 启动与组合
 

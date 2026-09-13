@@ -1,8 +1,8 @@
 # Transport and API boundary
 
-中文：[传输与 API 边界](../../../docs_cn/reference/transport/server_cn.md)
+中文：[传输与 API 边界](../../docs_cn/reference/transport_cn.md)
 
-This module owns request admission and mapping between HTTP/JSON and application operations. The [Transnet service interface](../../interfaces/transnet.md) is the normative source for routes, bodies, envelopes, identifiers, deadlines, and errors.
+This module owns request admission and mapping between HTTP/JSON and application operations. The [Transnet service interface](../interfaces/transnet.md) is the normative source for routes, bodies, envelopes, identifiers, deadlines, and errors.
 
 ## Current runtime
 

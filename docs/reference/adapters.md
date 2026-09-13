@@ -1,6 +1,6 @@
 # Adapters module
 
-中文：[Adapter 模块](../../../docs_cn/reference/adapters/adapters_cn.md)
+中文：[Adapter 模块](../../docs_cn/reference/adapters_cn.md)
 
 The adapters module implements model and data ports. It owns external protocol mechanics while preserving domain deadlines, release pins, closed outcomes, and privacy rules.
 
@@ -16,7 +16,7 @@ The island-port client maps data-port operations to versioned HTTP/1.1 JSON call
 
 Structured and vector mapping preserves release identifiers and closed outcomes. Island-port owns MySQL and Qdrant drivers, queries, pooling, transactions, collection selection, and credentials. Transnet does not expose SQL or Qdrant-native requests. Filesystem permissions authenticate processes; JSON never forwards end-user identity or credentials.
 
-Online adapters are read-only. A separately authorized publisher composition uses mutation-capable operations. Exact payloads remain in the [SQL](../../interfaces/mysql.md) and [vector](../../interfaces/qdrant.md) interfaces.
+Online adapters are read-only. A separately authorized publisher composition uses mutation-capable operations. Exact payloads remain in the [SQL](../interfaces/mysql.md) and [vector](../interfaces/qdrant.md) interfaces.
 
 ## Verification
 

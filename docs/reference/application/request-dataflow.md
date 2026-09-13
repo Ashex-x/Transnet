@@ -4,7 +4,7 @@
 
 This page traces one request across Transnet and identifies what each module receives, decides, returns, and must discard. Exact routes and payloads remain authoritative in the [Transnet service interface](../../interfaces/transnet.md).
 
-Status: the target flow below is not fully composed. The current executable uses loopback HTTP and directly wires transitional translation and model-backed lookup paths; the [runtime module](../runtime/runtime.md) identifies what is available today.
+Status: the target flow below is not fully composed. The current executable uses loopback HTTP and directly wires transitional translation and model-backed lookup paths; the [runtime module](../runtime.md) identifies what is available today.
 
 ## End-to-end flow
 

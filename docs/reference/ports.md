@@ -1,6 +1,6 @@
 # Ports module
 
-中文：[Port 模块](../../../docs_cn/reference/ports/ports_cn.md)
+中文：[Port 模块](../../docs_cn/reference/ports_cn.md)
 
 The ports module defines narrow operations that application services require from model and data dependencies. Ports use validated domain types, explicit deadlines, closed outcomes, and release identifiers; they do not expose provider or database protocols.
 
@@ -16,7 +16,7 @@ Structured reads resolve active releases, canonical candidates, complete sense d
 
 Every read carries the request deadline and exact release identifiers. Closed outcomes distinguish missing, incompatible, unavailable, invalid, and permission-filtered data without disclosing withheld content.
 
-The online composition receives no mutation methods. Separate publication ports may stage, validate, project, activate, quarantine, remove, and roll back reviewed canonical content, and are never passed to request handlers. Exact operations belong to the [SQL](../../interfaces/mysql.md) and [vector](../../interfaces/qdrant.md) contracts.
+The online composition receives no mutation methods. Separate publication ports may stage, validate, project, activate, quarantine, remove, and roll back reviewed canonical content, and are never passed to request handlers. Exact operations belong to the [SQL](../interfaces/mysql.md) and [vector](../interfaces/qdrant.md) contracts.
 
 ## Verification
 

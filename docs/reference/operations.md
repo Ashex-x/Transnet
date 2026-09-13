@@ -1,6 +1,6 @@
 # Operations module
 
-中文：[运维模块](../../../docs_cn/reference/operations/operations_cn.md)
+中文：[运维模块](../../docs_cn/reference/operations_cn.md)
 
 The operations module owns safe observability, dependency resilience, and offline publication. Online telemetry and resilience participate in every request; publication remains a separate, unreachable composition.
 
@@ -20,7 +20,7 @@ The publisher stages structured content, validates schema and rights, checks evi
 
 The publisher is a separate composition root and the only component allowed mutation-capable data ports. Generated candidates are not evidence; they become canonical only after evidence, rights, validation, and review policies succeed.
 
-Live translation and lookup never invoke publication, create durable proposals, or write request text or output to canonical storage. Operational procedures belong to the [content-publishing guide](../../guides/content-publishing.md).
+Live translation and lookup never invoke publication, create durable proposals, or write request text or output to canonical storage. Operational procedures belong to the [content-publishing guide](../guides/content-publishing.md).
 
 ## Verification
 

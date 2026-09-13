@@ -1,6 +1,6 @@
 # Adapter 模块
 
-English: [Adapters module](../../../docs/reference/adapters/adapters.md)
+English: [Adapters module](../../docs/reference/adapters.md)
 
 Adapter 模块实现模型与数据 port。它负责外部协议机制，同时保留 domain deadline、发布固定值、闭合结果与隐私规则。
 
@@ -16,7 +16,7 @@ Island-port client 把数据 port 操作映射到 island-port 在其所属 Unix 
 
 结构化与向量映射保留发布标识符与闭合结果。Island-port 负责 MySQL 和 Qdrant driver、查询、连接池、事务、collection 选择与凭据。Transnet 不暴露 SQL 或 Qdrant-native 请求。文件系统权限认证进程；JSON 绝不转发终端用户身份或凭据。
 
-在线 adapter 只读。单独授权的 publisher 组合使用可变更操作。精确 payload 保留在 [SQL](../../interfaces/mysql_cn.md) 与[向量](../../interfaces/qdrant_cn.md)接口。
+在线 adapter 只读。单独授权的 publisher 组合使用可变更操作。精确 payload 保留在 [SQL](../interfaces/mysql_cn.md) 与[向量](../interfaces/qdrant_cn.md)接口。
 
 ## 验证
 
