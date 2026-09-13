@@ -210,8 +210,16 @@ Island-port 可添加 `history` 以支持多轮翻译。数组按时间从旧到
     "unit": "word",
     "detected_source_language": "en",
     "translations": [
-      {"text": "热的", "language": "zh-CN", "meaning": "having a high temperature"},
-      {"text": "热门的", "language": "zh-CN", "meaning": "currently popular or receiving much attention"}
+      {
+        "text": "热的",
+        "language": "zh-CN",
+        "meaning": "having a high temperature"
+      },
+      {
+        "text": "热门的",
+        "language": "zh-CN",
+        "meaning": "currently popular or receiving much attention"
+      }
     ]
   }
 }
@@ -258,7 +266,10 @@ Island-port 可添加 `history` 以支持多轮翻译。数组按时间从旧到
               "evidence_state": "verified"
             }
           ],
-          "taxonomy": {"hypernyms": ["hot"], "hyponyms": []},
+          "taxonomy": {
+            "hypernyms": ["hot"],
+            "hyponyms": []
+          },
           "intensity_scales": [
             {
               "dimension": "temperature_intensity",
@@ -362,8 +373,12 @@ Standard 段落响应：
 
 ```json
 {
-  "data": {"status": "ok"},
-  "meta": {"request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX"}
+  "data": {
+    "status": "ok"
+  },
+  "meta": {
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX"
+  }
 }
 ```
 
@@ -381,8 +396,12 @@ Standard 段落响应：
 
 ```json
 {
-  "data": {"status": "ok"},
-  "meta": {"request_id": "req_01K4Z8Q8X2A6B7C4D9E0F3G5HJ"}
+  "data": {
+    "status": "ok"
+  },
+  "meta": {
+    "request_id": "req_01K4Z8Q8X2A6B7C4D9E0F3G5HJ"
+  }
 }
 ```
 
@@ -413,7 +432,9 @@ Standard 段落响应：
       "relationship_pages": "available"
     }
   },
-  "meta": {"request_id": "req_01K4Z8R4CX7E2J6K1M9N3P5Q8S"}
+  "meta": {
+    "request_id": "req_01K4Z8R4CX7E2J6K1M9N3P5Q8S"
+  }
 }
 ```
 
@@ -497,9 +518,24 @@ Passage 的 `tips` 最多两条，每条一句；没有实质价值时省略。�
     "language": "en",
     "part_of_speech": "adjective",
     "definitions": ["uncomfortably hot, especially because of the weather"],
-    "translations": [{"language": "zh-CN", "text": "酷热的"}],
-    "forms": [{"form": "swelteringly", "label": "adverb"}],
-    "examples": [{"text": "We waited until evening to leave the sweltering house.", "translation": "我们一直等到傍晚才离开闷热难耐的房子。"}],
+    "translations": [
+      {
+        "language": "zh-CN",
+        "text": "酷热的"
+      }
+    ],
+    "forms": [
+      {
+        "form": "swelteringly",
+        "label": "adverb"
+      }
+    ],
+    "examples": [
+      {
+        "text": "We waited until evening to leave the sweltering house.",
+        "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
+      }
+    ],
     "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
     "knowledge_root_ids": ["node_sweltering_hot_01"],
     "domain_ids": ["domain_weather"],
@@ -537,10 +573,22 @@ Passage 的 `tips` 最多两条，每条一句；没有实质价值时省略。�
 ```json
 {
   "data": {
-    "root": {"kind": "sense", "id": "sense_sweltering_hot_01", "node_id": "node_sweltering_hot_01"},
+    "root": {
+      "kind": "sense",
+      "id": "sense_sweltering_hot_01",
+      "node_id": "node_sweltering_hot_01"
+    },
     "nodes": [
-      {"node_id": "node_sweltering_hot_01", "node_type": "lexical_sense", "label": "sweltering"},
-      {"node_id": "node_scorching_heat_01", "node_type": "lexical_sense", "label": "scorching"}
+      {
+        "node_id": "node_sweltering_hot_01",
+        "node_type": "lexical_sense",
+        "label": "sweltering"
+      },
+      {
+        "node_id": "node_scorching_heat_01",
+        "node_type": "lexical_sense",
+        "label": "scorching"
+      }
     ],
     "edges": [
       {
@@ -604,7 +652,11 @@ Passage 的 `tips` 最多两条，每条一句；没有实质价值时省略。�
           "provenance": ["evidence_dictionary_1042"],
           "verification_state": "verified"
         },
-        "node": {"node_id": "node_hot_temperature_01", "node_type": "lexical_sense", "label": "hot"}
+        "node": {
+          "node_id": "node_hot_temperature_01",
+          "node_type": "lexical_sense",
+          "label": "hot"
+        }
       }
     ],
     "next_cursor": null

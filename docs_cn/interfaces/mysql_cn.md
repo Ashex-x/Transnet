@@ -8,13 +8,24 @@ English: [SQL data endpoint interface](../../docs/interfaces/mysql.md)
 
 ## 目录
 
-- [存储边界](#存储边界)
-- [精选翻译存储](#精选翻译存储)
-- [领域事实与语义尺度](#领域事实与语义尺度)
-- [通用操作 envelope](#通用操作-envelope)
-- [endpoint 参考](#endpoint-参考)
-- [领域提案处理](#领域提案处理)
-- [相关文档](#相关文档)
+- [SQL 数据 endpoint 接口](#sql-数据-endpoint-接口)
+  - [目录](#目录)
+  - [endpoint 参考](#endpoint-参考)
+  - [存储边界](#存储边界)
+  - [精选翻译存储](#精选翻译存储)
+  - [领域事实与语义尺度](#领域事实与语义尺度)
+  - [通用操作 envelope](#通用操作-envelope)
+  - [POST /data/sql/v1/translations/resolve](#post-datasqlv1translationsresolve)
+  - [POST /data/sql/v1/translations/stage](#post-datasqlv1translationsstage)
+  - [POST /data/sql/v1/basic-cards/resolve](#post-datasqlv1basic-cardsresolve)
+  - [POST /data/sql/v1/senses/get](#post-datasqlv1sensesget)
+  - [POST /data/sql/v1/domains/resolve](#post-datasqlv1domainsresolve)
+  - [POST /data/sql/v1/knowledge-facts/get](#post-datasqlv1knowledge-factsget)
+  - [POST /data/sql/v1/semantic-scales/get](#post-datasqlv1semantic-scalesget)
+  - [领域提案处理](#领域提案处理)
+  - [POST /data/sql/v1/cards/revisions/stage](#post-datasqlv1cardsrevisionsstage)
+  - [POST /data/sql/v1/releases/activate](#post-datasqlv1releasesactivate)
+  - [相关文档](#相关文档)
 
 ## endpoint 参考
 
@@ -37,7 +48,7 @@ English: [SQL data endpoint interface](../../docs/interfaces/mysql.md)
   - [POST /data/sql/v1/releases/activate](#post-datasqlv1releasesactivate)
   - [相关文档](#相关文档)
 
-Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 UDS JSON 传输](transnet_cn.md)。调用方绝不直接连接 MySQL 或提交 SQL；查询、事务、schema 兼容性、凭据和连接池均由 island-port 负责。只有 Transnet 运行时和经过认证的发布工具可以访问套接字。运行时调用方具有读取权限；变更 endpoint 还要求 publisher 服务账户。
+Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 UDS JSON 传输](transnet_cn.md)。调用方绝不直接连接 MySQL 或提交 SQL；查询、事务、schema 兼容性、凭据和连接池均由 island-port 负责。只有 Transnet 运行时和经过认证的发布工具可以访问套接字。运行时调用方具有读取权限；变更 endpoint 还要求 publisher 服务账户。授权来自套接字文件系统凭据，而不是 JSON 字段或转发的 header。
 
 ## 存储边界
 
@@ -209,7 +220,13 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 ```json
 {
-  "lookup_forms": [{"form": "sweltering", "match_class": "exact_canonical", "rank": 0}],
+  "lookup_forms": [
+    {
+      "form": "sweltering",
+      "match_class": "exact_canonical",
+      "rank": 0
+    }
+  ],
   "normalizer_version": "unicode-nfkc-v2",
   "source_language": "en",
   "explanation_language": "zh-CN",
@@ -236,7 +253,12 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
           "aliases": ["oppressively hot"],
           "language": "en",
           "part_of_speech": "adjective",
-          "translations": [{"language": "zh-CN", "text": "酷热的"}],
+          "translations": [
+            {
+              "language": "zh-CN",
+              "text": "酷热的"
+            }
+          ],
           "definitions": ["uncomfortably hot, especially because of the weather"],
           "pronunciations": [{"dialect": "en-US", "ipa": "/ˈswɛltərɪŋ/"}],
           "forms": [{"form": "swelteringly", "label": "adverb"}],
@@ -285,10 +307,30 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
     "language": "en",
     "part_of_speech": "adjective",
     "definitions": ["uncomfortably hot, especially because of the weather"],
-    "translations": [{"language": "zh-CN", "text": "酷热的"}],
-    "pronunciations": [{"dialect": "en-US", "ipa": "/ˈswɛltərɪŋ/"}],
-    "forms": [{"form": "swelteringly", "label": "adverb"}],
-    "examples": [{"text": "We waited until evening to leave the sweltering house.", "translation": "我们一直等到傍晚才离开闷热难耐的房子。"}],
+    "translations": [
+      {
+        "language": "zh-CN",
+        "text": "酷热的"
+      }
+    ],
+    "pronunciations": [
+      {
+        "dialect": "en-US",
+        "ipa": "/ˈswɛltərɪŋ/"
+      }
+    ],
+    "forms": [
+      {
+        "form": "swelteringly",
+        "label": "adverb"
+      }
+    ],
+    "examples": [
+      {
+        "text": "We waited until evening to leave the sweltering house.",
+        "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
+      }
+    ],
     "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
     "knowledge_root_ids": ["node_sweltering_hot_01"],
     "domain_ids": ["domain_weather"],
@@ -454,7 +496,12 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
     "language": "en",
     "part_of_speech": "adjective",
     "definitions": ["uncomfortably hot, especially because of the weather"],
-    "translations": [{"language": "zh-CN", "text": "酷热的"}],
+    "translations": [
+      {
+        "language": "zh-CN",
+        "text": "酷热的"
+      }
+    ],
     "knowledge_root_ids": ["node_sweltering_hot_01"],
     "domain_ids": ["domain_weather"]
   },

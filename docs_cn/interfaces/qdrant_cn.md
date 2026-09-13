@@ -8,13 +8,20 @@ English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
 
 ## 目录
 
-- [存储边界](#存储边界)
-- [发布与集合合同](#发布与集合合同)
-- [知识节点 point](#知识节点-point)
-- [知识边 point](#知识边-point)
-- [语义尺度 point](#语义尺度-point)
-- [endpoint 参考](#endpoint-参考)
-- [相关文档](#相关文档)
+- [向量数据 endpoint 接口](#向量数据-endpoint-接口)
+  - [目录](#目录)
+  - [endpoint 参考](#endpoint-参考)
+  - [存储边界](#存储边界)
+  - [发布与集合合同](#发布与集合合同)
+  - [知识节点 point](#知识节点-point)
+  - [知识边 point](#知识边-point)
+  - [语义尺度 point](#语义尺度-point)
+  - [POST /data/vec/v1/nodes/search](#post-datavecv1nodessearch)
+  - [POST /data/vec/v1/scales/search](#post-datavecv1scalessearch)
+  - [POST /data/vec/v1/edges/search](#post-datavecv1edgessearch)
+  - [POST /data/vec/v1/neighbors/search](#post-datavecv1neighborssearch)
+  - [POST /data/vec/v1/releases/publish](#post-datavecv1releasespublish)
+  - [相关文档](#相关文档)
 
 ## endpoint 参考
 
@@ -76,7 +83,10 @@ Point ID 必须确定。先构建节点再构建边。发布拒绝缺失端点�
   "id": "node_sweltering_hot_01",
   "vectors": {
     "semantic": "<1536-dimensional canonical-content vector>",
-    "lexical": {"indices": [1842, 99104], "values": [1.0, 0.62]}
+    "lexical": {
+      "indices": [1842, 99104],
+      "values": [1.0, 0.62]
+    }
   },
   "payload": {
     "node_id": "node_sweltering_hot_01",
@@ -84,7 +94,12 @@ Point ID 必须确定。先构建节点再构建边。发布拒绝缺失端点�
     "sense_id": "sense_sweltering_hot_01",
     "canonical_label": "sweltering",
     "aliases": ["oppressively hot"],
-    "translations": [{"language": "zh-CN", "text": "酷热的"}],
+    "translations": [
+      {
+        "language": "zh-CN",
+        "text": "酷热的"
+      }
+    ],
     "description": "uncomfortably hot, especially because of the weather",
     "language": "en",
     "domain_ids": ["domain_weather"],
@@ -129,7 +144,10 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
   "id": "edge_sweltering_scorching_01",
   "vectors": {
     "semantic": "<1536-dimensional canonical-relationship vector>",
-    "lexical": {"indices": [1842, 77103, 99104], "values": [0.71, 1.0, 0.48]}
+    "lexical": {
+      "indices": [1842, 77103, 99104],
+      "values": [0.71, 1.0, 0.48]
+    }
   },
   "payload": {
     "edge_id": "edge_sweltering_scorching_01",
@@ -141,7 +159,10 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
     "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
     "applicable_sense_ids": ["sense_sweltering_hot_01"],
     "conditions": ["temperature describes weather or an environment"],
-    "restrictions": {"dimension": "temperature_intensity", "register": "general"},
+    "restrictions": {
+      "dimension": "temperature_intensity",
+      "register": "general"
+    },
     "language": "en",
     "domain_ids": ["domain_weather"],
     "evidence_ids": ["evidence_dictionary_1042"],
@@ -201,7 +222,10 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 ```json
 {
   "dense_vector": "<1536-dimensional ephemeral query vector>",
-  "sparse_vector": {"indices": [1842, 99104], "values": [1.0, 0.55]},
+  "sparse_vector": {
+    "indices": [1842, 99104],
+    "values": [1.0, 0.55]
+  },
   "filters": {
     "release_id": "knowledge-2026-09",
     "publication_states": ["published"],
@@ -294,7 +318,10 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 ```json
 {
   "dense_vector": "<1536-dimensional ephemeral relationship vector>",
-  "sparse_vector": {"indices": [77103, 99104], "values": [1.0, 0.6]},
+  "sparse_vector": {
+    "indices": [77103, 99104],
+    "values": [1.0, 0.6]
+  },
   "filters": {
     "release_id": "knowledge-2026-09",
     "publication_states": ["published"],
