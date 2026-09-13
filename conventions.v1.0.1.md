@@ -40,7 +40,9 @@ Place documents by authority:
 - `docs/reference/<module>/`: implementation-oriented module references, grouped by stable ownership area such as `runtime`, `transport`, `application`, `domain`, `ports`, `adapters`, or `operations`.
 - `docs/guides/`: task-oriented procedures such as development, configuration, publication, and quality assurance.
 
-An important module or stable subsystem owns its own directory and focused inner pages when it has more than one independently searchable concern. Keep closely coupled concerns together; do not create one page per source file, type, route, or hypothetical future module. A page earns its own file when it has a distinct owner or audience and enough unique design, lifecycle, invariants, or verification guidance to remain useful without copied filler. Otherwise document the item in its parent module page or source comments.
+An important module or stable subsystem owns its own directory. A small module has one substantive document that covers all of its concerns. Split inner pages only when the module has multiple independently searchable concerns and each page contains enough unique design, lifecycle, invariants, or verification guidance to stand on its own. Keep closely coupled concerns together; do not create one page per source file, type, route, or hypothetical future module.
+
+Do not keep short placeholder pages, repeated boundary boilerplate, or pages that merely name responsibilities already obvious from an index or source module. Merge such material into the module's main document or source comments. Page count and file-to-module symmetry are not goals; clear ownership and useful search results are.
 
 Each fact has one authoritative home. A reference page explains module ownership, dependencies, lifecycle, invariants, current-versus-target status, and verification; it links to interface documents for exact fields and examples, guides for procedures, the system design for product semantics, and rustdoc for item-level API detail. Summaries should be short and must not copy whole contracts, field catalogs, test lists, or standard boundary language across sibling pages.
 
