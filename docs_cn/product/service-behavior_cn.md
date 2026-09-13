@@ -6,7 +6,7 @@ English: [Transnet service behavior](../../docs/product/service-behavior.md)
 
 ## 翻译
 
-`POST /transnet/v1/translations` 是新翻译 turn 的唯一入口。除文本外，用户只选择源语言、目标语言和 `brief`、`standard` 或 `full` 响应级别。Island-port 可添加按时间排序的最小先前源文/译文对；在通用 body 限制内没有独立历史条数上限。Transnet 自动选择词汇查询、领域展开或段落翻译，并推导其他全部选项。
+`POST /api/v1/translations` 是新翻译 turn 的唯一入口。除文本外，用户只选择源语言、目标语言和 `brief`、`standard` 或 `full` 响应级别。Island-port 可添加按时间排序的最小先前源文/译文对；在通用 body 限制内没有独立历史条数上限。Transnet 自动选择词汇查询、领域展开或段落翻译，并推导其他全部选项。
 
 响应包含有序翻译列表。当多个实质不同词义仍然合理时，单词或短语返回多个词义专属译文；历史影响其排序。句子或段落以自然译文为主，并保留含义、语气、术语和段落结构。响应级别从同一规范超集中选择字段：brief 保留必要译文与含义标签，standard 添加精简支持详情，full 添加有界词汇、领域、关系、证据、分类与强度详情。
 

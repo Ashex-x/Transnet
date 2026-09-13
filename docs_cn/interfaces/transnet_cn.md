@@ -12,7 +12,6 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 - [Transnet 服务接口](#transnet-服务接口)
   - [目录](#目录)
-  - [endpoint 参考](#endpoint-参考)
   - [连接合同](#连接合同)
   - [HTTP 与 JSON 规则](#http-与-json-规则)
   - [Deadline、限制与生命周期](#deadline限制与生命周期)
@@ -25,39 +24,13 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
   - [响应级别](#响应级别)
   - [翻译持久化](#翻译持久化)
   - [关系评估元数据](#关系评估元数据)
-  - [POST /transnet/v1/health](#post-transnetv1health)
-  - [POST /transnet/v1/livez](#post-transnetv1livez)
-  - [POST /transnet/v1/readyz](#post-transnetv1readyz)
-  - [POST /transnet/v1/translations](#post-transnetv1translations)
-  - [POST /transnet/v1/senses/get](#post-transnetv1sensesget)
-  - [POST /transnet/v1/graph/get](#post-transnetv1graphget)
-  - [POST /transnet/v1/graph/neighbors](#post-transnetv1graphneighbors)
-  - [相关文档](#相关文档)
-
-## endpoint 参考
-
-- [Transnet 服务接口](#transnet-服务接口)
-  - [目录](#目录)
-  - [endpoint 参考](#endpoint-参考)
-  - [连接合同](#连接合同)
-  - [HTTP 与 JSON 规则](#http-与-json-规则)
-  - [Deadline、限制与生命周期](#deadline限制与生命周期)
-  - [示例](#示例)
-  - [服务边界](#服务边界)
-  - [共享线上规则](#共享线上规则)
-  - [简单翻译请求](#简单翻译请求)
-  - [请求级翻译历史](#请求级翻译历史)
-  - [共享翻译结果](#共享翻译结果)
-  - [响应级别](#响应级别)
-  - [翻译持久化](#翻译持久化)
-  - [关系评估元数据](#关系评估元数据)
-  - [POST /transnet/v1/health](#post-transnetv1health)
-  - [POST /transnet/v1/livez](#post-transnetv1livez)
-  - [POST /transnet/v1/readyz](#post-transnetv1readyz)
-  - [POST /transnet/v1/translations](#post-transnetv1translations)
-  - [POST /transnet/v1/senses/get](#post-transnetv1sensesget)
-  - [POST /transnet/v1/graph/get](#post-transnetv1graphget)
-  - [POST /transnet/v1/graph/neighbors](#post-transnetv1graphneighbors)
+  - [POST /api/v1/health](#post-apiv1health)
+  - [POST /api/v1/livez](#post-apiv1livez)
+  - [POST /api/v1/readyz](#post-apiv1readyz)
+  - [POST /api/v1/translations](#post-apiv1translations)
+  - [POST /api/v1/senses/get](#post-apiv1sensesget)
+  - [POST /api/v1/graph/get](#post-apiv1graphget)
+  - [POST /api/v1/graph/neighbors](#post-apiv1graphneighbors)
   - [相关文档](#相关文档)
 
 ## 连接合同
@@ -71,8 +44,8 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 ```mermaid
 flowchart LR
   client["WebUI / 互联网客户端"] -->|"HTTPS 或 WSS"| port["island-port"]
-  port -->|"transnet/v1"| transnet["Transnet"]
-  transnet -->|"data/sql/v1 或 data/vec/v1"| port
+  port -->|"Transnet socket：api/v1"| transnet["Transnet"]
+  transnet -->|"island-port socket：api/v1"| port
   port --> database["MySQL / Qdrant"]
   port -->|"将 Transnet 结果与用户数据合并"| client
 ```
@@ -81,11 +54,7 @@ flowchart LR
 
 请求使用 HTTP/1.1 origin-form 路径及 `Host: localhost`；Host 值不参与路由。请求与响应 body 均为 UTF-8 JSON，并设置 `Content-Type: application/json`。包括读取与探针在内的所有操作均使用 `POST` 并携带一个 JSON object；空输入为 `{}`。拒绝 query string、表单、multipart body、协议升级和流式响应。
 
-Endpoint namespace 标识所属服务和合同版本：
-
-- Transnet：`/transnet/v1/...`
-- 结构化数据：`/data/sql/v1/...`
-- 向量与图数据：`/data/vec/v1/...`
+所有内部 HTTP 接口统一使用 `/api/v1/...` 前缀。所属服务由连接的 UDS 而非路径片段标识：`/run/transnet/transnet.sock` 上的请求使用本文定义的 Transnet 路由；`/run/island-port/island-port.sock` 上的请求使用各自合同定义的结构化数据或向量数据路由。同一套接字上的资源名称用于区分路由域。统一版本前缀可使客户端保持一致，并避免在线上 API 中暴露存储技术名称。
 
 客户端发送 `Accept: application/json`、有界 `Content-Length`，并可发送 `X-Request-Id`。拒绝 chunked request body。服务端返回 `X-Request-Id`，拒绝未知 JSON 字段，并在有界请求数后关闭连接。ID 为不透明 URL-safe 字符串；时间为 UTC RFC 3339 微秒精度。
 
@@ -105,7 +74,7 @@ Endpoint namespace 标识所属服务和合同版本：
 
 ```bash
 curl --unix-socket /run/transnet/transnet.sock \
-  --request POST http://localhost/transnet/v1/health \
+  --request POST http://localhost/api/v1/health \
   --header 'content-type: application/json' \
   --header 'accept: application/json' \
   --data '{}'
@@ -393,7 +362,7 @@ effective_distance = clamp(base_distance - adjustment, 0, 10000)
 
 推断、探索、派生、仅用于可视化及其他非规范关系省略 `assessment` object。因此，WebUI 仅在该 object 存在时启用控件；不得根据 `verification_state`、置信度、关系类型或边 ID 的形状推断是否可评估。
 
-## POST /transnet/v1/health
+## POST /api/v1/health
 
 返回进程健康，不探测依赖，也不泄露配置。
 
@@ -416,7 +385,7 @@ effective_distance = clamp(base_distance - adjustment, 0, 10000)
 }
 ```
 
-## POST /transnet/v1/livez
+## POST /api/v1/livez
 
 进程事件循环可响应时返回成功。
 
@@ -439,7 +408,7 @@ effective_distance = clamp(base_distance - adjustment, 0, 10000)
 }
 ```
 
-## POST /transnet/v1/readyz
+## POST /api/v1/readyz
 
 仅在已启用路由所需依赖就绪时返回 `200`。可选能力可降级而不使进程变为未就绪。
 
@@ -474,7 +443,7 @@ effective_distance = clamp(base_distance - adjustment, 0, 10000)
 
 `503` 使用标准错误 envelope，代码为 `not_ready`。它可说明依赖类别，但不得暴露主机、凭据、集合名称或 provider 响应。
 
-## POST /transnet/v1/translations
+## POST /api/v1/translations
 
 这是新翻译 turn 的唯一入口。它翻译单词、短语、句子或段落，并自动选择词汇查询、领域展开或连续文本翻译。WebUI 和 island-port 都不选择该模式。请求使用上述简单字段；`history` 可省略，默认空数组。
 
@@ -525,7 +494,7 @@ effective_distance = clamp(base_distance - adjustment, 0, 10000)
 
 Passage 的 `tips` 最多两条，每条一句；没有实质价值时省略。受保护片段、段落结构与格式由服务自动推断并保留。长文处理使用的分块计划或术语台账随请求丢弃。若 Qdrant 不可用但 MySQL 已解析规范单词或短语，Transnet 返回合格词汇字段，省略关系分区并设置 `meta.degraded: true`，不得编造替代关系。
 
-## POST /transnet/v1/senses/get
+## POST /api/v1/senses/get
 
 读取一个规范词义，并使用与翻译结果相同的响应级别规则进行投影。这是 port 使用 Transnet 先前返回的 ID 发起的后续读取，不是第二种由用户选择的翻译模式。服务不保存访问或已保存项目记录。
 
@@ -583,7 +552,7 @@ Passage 的 `tips` 最多两条，每条一句；没有实质价值时省略。�
 }
 ```
 
-## POST /transnet/v1/graph/get
+## POST /api/v1/graph/get
 
 读取以一个词义、概念节点或领域为根的有界规范子图。port 根据选定资源和响应级别派生其过滤条件；这些字段不是 WebUI 控件。`depth` 受配置的浅层最大值限制。结果保持有根、有类型且经过范围过滤；本端点不是通用图查询语言或无限制邻居倾倒接口。
 
@@ -658,7 +627,7 @@ Passage 的 `tips` 最多两条，每条一句；没有实质价值时省略。�
 }
 ```
 
-## POST /transnet/v1/graph/neighbors
+## POST /api/v1/graph/neighbors
 
 分页读取一个规范节点的直接入边和出边。cursor 绑定根、过滤条件和发布，且不得包含请求文本。
 

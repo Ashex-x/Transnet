@@ -22,9 +22,8 @@ Transnet 是一项私有、无状态的翻译与关系知识服务。它翻译�
 ```mermaid
 flowchart LR
   client["WebUI / 互联网客户端"] -->|"HTTPS 或 WSS"| island["island-port"]
-  island -->|"UDS JSON: transnet/v1"| service["Transnet"]
-  service -->|"UDS JSON: data/sql/v1"| island
-  service -->|"UDS JSON: data/vec/v1"| island
+  island -->|"Transnet UDS：api/v1"| service["Transnet"]
+  service -->|"island-port UDS：api/v1 结构化/向量数据"| island
   island --> databases["MySQL / Qdrant"]
   service -->|"不超过 4,000 个字符"| gemma4["Gemma 4 :18011"]
   service -->|"超过 4,000 个字符"| translate["TranslateGemma :18007"]
@@ -70,13 +69,13 @@ cargo run --release
 目标 UDS 调用（将在传输迁移完成后可运行）：
 
 ```bash
-curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/health \
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/api/v1/health \
   --header 'content-type: application/json' --data '{}'
-curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/livez \
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/api/v1/livez \
   --header 'content-type: application/json' --data '{}'
-curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/readyz \
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/api/v1/readyz \
   --header 'content-type: application/json' --data '{}'
-curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/transnet/v1/translations \
+curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/api/v1/translations \
   --header 'content-type: application/json' \
   --data '{"text":"Hello","source_language":"auto","target_language":"zh-CN","response_level":"standard"}'
 ```

@@ -24,13 +24,13 @@ Status: target contract. The current runtime still exposes transitional loopback
   - [Response levels](#response-levels)
   - [Translation persistence](#translation-persistence)
   - [Relationship assessment metadata](#relationship-assessment-metadata)
-  - [POST /transnet/v1/health](#post-transnetv1health)
-  - [POST /transnet/v1/livez](#post-transnetv1livez)
-  - [POST /transnet/v1/readyz](#post-transnetv1readyz)
-  - [POST /transnet/v1/translations](#post-transnetv1translations)
-  - [POST /transnet/v1/senses/get](#post-transnetv1sensesget)
-  - [POST /transnet/v1/graph/get](#post-transnetv1graphget)
-  - [POST /transnet/v1/graph/neighbors](#post-transnetv1graphneighbors)
+  - [POST /api/v1/health](#post-apiv1health)
+  - [POST /api/v1/livez](#post-apiv1livez)
+  - [POST /api/v1/readyz](#post-apiv1readyz)
+  - [POST /api/v1/translations](#post-apiv1translations)
+  - [POST /api/v1/senses/get](#post-apiv1sensesget)
+  - [POST /api/v1/graph/get](#post-apiv1graphget)
+  - [POST /api/v1/graph/neighbors](#post-apiv1graphneighbors)
   - [Related documents](#related-documents)
 
 ## Connection contract
@@ -44,8 +44,8 @@ Socket ownership authenticates the calling workload on a single host. These Tran
 ```mermaid
 flowchart LR
   client["WebUI / internet client"] -->|"HTTPS or WSS"| port["island-port"]
-  port -->|"transnet/v1"| transnet["Transnet"]
-  transnet -->|"data/sql/v1 or data/vec/v1"| port
+  port -->|"Transnet socket: api/v1"| transnet["Transnet"]
+  transnet -->|"island-port socket: api/v1"| port
   port --> database["MySQL / Qdrant"]
   port -->|"Merge Transnet result with user data"| client
 ```
@@ -54,11 +54,7 @@ flowchart LR
 
 Requests use HTTP/1.1 with an origin-form path and `Host: localhost`; the Host value is ignored for routing. Request and response bodies use UTF-8 JSON with `Content-Type: application/json`. Every operation, including reads and probes, uses `POST` and carries one JSON object; an empty input is `{}`. Query strings, form data, multipart bodies, upgrades, and streaming responses are rejected.
 
-Endpoint namespaces identify the owning service and contract version:
-
-- Transnet: `/transnet/v1/...`
-- structured data: `/data/sql/v1/...`
-- vector and graph data: `/data/vec/v1/...`
+Every internal HTTP interface uses the common `/api/v1/...` prefix. The connected UDS, not a path segment, identifies the owning service: requests on `/run/transnet/transnet.sock` use the Transnet routes in this document, while requests on `/run/island-port/island-port.sock` use the structured-data or vector-data routes in their owning contracts. Resource names distinguish route domains on the same socket. Versioning the shared prefix keeps clients predictable and leaves storage technology names out of the wire API.
 
 Clients send `Accept: application/json`, a bounded `Content-Length`, and optionally `X-Request-Id`. Chunked request bodies are rejected. Servers return `X-Request-Id`, reject unknown JSON fields, and close the connection after a bounded number of requests. IDs are opaque URL-safe strings and timestamps are UTC RFC 3339 with microsecond precision.
 
@@ -78,7 +74,7 @@ The following call uses curl's Unix-socket support; the URL host is a placeholde
 
 ```bash
 curl --unix-socket /run/transnet/transnet.sock \
-  --request POST http://localhost/transnet/v1/health \
+  --request POST http://localhost/api/v1/health \
   --header 'content-type: application/json' \
   --header 'accept: application/json' \
   --data '{}'
@@ -366,7 +362,7 @@ Positive `adjustment` means net confirmation and shortens the rendered or traver
 
 The `assessment` object is omitted from inferred, exploratory, derived, visual-only, and otherwise non-canonical relationships. The WebUI therefore enables the control only when this object is present; it must not infer eligibility from `verification_state`, confidence, relation type, or the shape of an edge ID.
 
-## POST /transnet/v1/health
+## POST /api/v1/health
 
 Returns process health without probing dependencies or revealing configuration.
 
@@ -389,7 +385,7 @@ Response `200`:
 }
 ```
 
-## POST /transnet/v1/livez
+## POST /api/v1/livez
 
 Returns success while the process event loop is responsive.
 
@@ -412,7 +408,7 @@ Response `200`:
 }
 ```
 
-## POST /transnet/v1/readyz
+## POST /api/v1/readyz
 
 Returns `200` only when dependencies required by enabled routes are ready. Optional capabilities may be degraded without making the process unready.
 
@@ -447,7 +443,7 @@ Response `200`:
 
 Response `503` uses the standard error envelope with code `not_ready`. It may name a dependency class but must not expose a host, credential, collection name, or provider response.
 
-## POST /transnet/v1/translations
+## POST /api/v1/translations
 
 This is the single entry point for a new translation turn. It translates a word, phrase, sentence, or passage and automatically chooses lexical lookup, domain expansion, or connected-text translation. The WebUI and island-port never select that mode. The request uses the simple fields above; `history` is optional and defaults to an empty array.
 
@@ -498,7 +494,7 @@ Response `200`:
 
 Passage `tips` contains at most two one-sentence items and is omitted when it adds no material value. Protected spans, paragraph structure, and formatting are inferred and preserved automatically. Any chunk plan or terminology ledger used for long text is discarded with the request. If Qdrant is unavailable but MySQL resolves a canonical word or phrase, Transnet returns the eligible lexical fields with relationship sections omitted and `meta.degraded: true`; it never invents replacements.
 
-## POST /transnet/v1/senses/get
+## POST /api/v1/senses/get
 
 Reads one canonical sense and projects it with the same response-level rules as a translation result. It is a port-driven follow-up using an ID previously returned by Transnet, not a second user-selected translation mode. The service keeps no access or saved-item records.
 
@@ -556,7 +552,7 @@ Response `200`:
 }
 ```
 
-## POST /transnet/v1/graph/get
+## POST /api/v1/graph/get
 
 Reads a bounded canonical subgraph rooted at one sense, concept node, or domain. The port derives its filters from the selected resource and response level; these fields are not WebUI controls. `depth` is limited to the configured shallow maximum. Results remain rooted, typed, and scope-filtered; this endpoint is not a general graph-query language or an unrestricted neighbor dump.
 
@@ -631,7 +627,7 @@ Response `200`:
 }
 ```
 
-## POST /transnet/v1/graph/neighbors
+## POST /api/v1/graph/neighbors
 
 Pages direct incoming and outgoing relationships for one canonical node. The cursor is scoped to the root, filters, and release and must not contain request text.
 
