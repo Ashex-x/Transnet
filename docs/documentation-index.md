@@ -10,6 +10,7 @@
 
 ## Interfaces
 
+- [Interface catalog](interfaces/README.md): table of contents, boundaries, and recommended reading order for this directory.
 - [Transnet service interface](interfaces/transnet.md): island-port-to-Transnet contract and shared internal UDS transport rules.
 - [Island-port SQL endpoints](interfaces/mysql.md): canonical-card and curated-translation storage plus UDS JSON operations under `data/sql/v1`; callers never access MySQL or submit SQL directly.
 - [Island-port vector endpoints](interfaces/qdrant.md): UDS JSON operations under `data/vec/v1`; callers never access Qdrant directly.

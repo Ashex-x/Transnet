@@ -10,6 +10,7 @@ English: [Transnet documentation](../docs/documentation-index.md)
 
 ## 接口
 
+- [接口目录](interfaces/README_cn.md)：本目录的目录、边界与建议阅读顺序。
 - [Transnet 服务接口](interfaces/transnet_cn.md)：island-port 到 Transnet 的合同及共享内部 UDS 传输规则。
 - [Island-port SQL endpoint](interfaces/mysql_cn.md)：规范卡片和精选翻译存储，以及 `data/sql/v1` 下的 UDS JSON 操作；调用方不得直接访问 MySQL 或提交 SQL。
 - [Island-port 向量 endpoint](interfaces/qdrant_cn.md)：`data/vec/v1` 下的 UDS JSON 操作；调用方不得直接访问 Qdrant。
