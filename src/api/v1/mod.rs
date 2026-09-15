@@ -1,4 +1,4 @@
-//! Version 1 learning HTTP API routing and common failures.
+//! Version 1 lexical-knowledge HTTP routing and common failures.
 
 use axum::{
   extract::Extension,
@@ -12,21 +12,14 @@ use super::{problem, request_id::RequestId, AppState};
 
 pub(crate) mod graph;
 pub(crate) mod lookup;
-pub(crate) mod lookup_job;
 pub(crate) mod sense;
 
 /// Builds the versioned API router before application state is attached.
 pub(crate) fn router(
-  lookup_jobs_enabled: bool,
   graph_enabled: bool,
   canonical_sense_details_enabled: bool,
 ) -> Router<AppState> {
   let router = Router::new().route("/lookups", post(lookup::lookup));
-  let router = if lookup_jobs_enabled {
-    router.route("/lookup-jobs/:job_id", get(lookup_job::poll))
-  } else {
-    router
-  };
   let router = if graph_enabled {
     router.route("/graph", get(graph::read)).route(
       "/graph/nodes/:node_kind/:node_id/neighbors",

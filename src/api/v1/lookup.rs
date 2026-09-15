@@ -19,19 +19,16 @@ use crate::{
     canonical::{
       EvidenceConfidence, EvidenceKind, EvidenceUse, FormKind, LanguageTag, LexicalPartOfSpeech,
     },
-    canonical_lookup_cache::{
-      CanonicalCardPolicyVersions, CanonicalLookupCacheEligibility, PublicCanonicalLookupRequest,
-    },
     lookup_card::{
       CanonicalLookupAssertionKind, CanonicalLookupCard, CanonicalLookupCardAssertion,
       CanonicalLookupCardCandidate, CanonicalLookupCardCoverage, CanonicalLookupCardCoverageState,
       CanonicalLookupCardEvidence, CanonicalLookupCardEvidenceProvenance, CanonicalLookupCardForm,
       CanonicalLookupCardLexeme, CanonicalLookupCardSectionCoverage, CanonicalLookupCardSense,
     },
-    retrieval::DEFAULT_RETRIEVAL_LIMIT,
+    retrieval::{RetrievalRequest, DEFAULT_RETRIEVAL_LIMIT},
     translation::{
-      CefrLevel, Confidence, EnglishDialect, EnglishEntry, PartOfSpeech, RelationKind,
-      TranslationInput, TranslationValidationError, UsageNoteKind,
+      Confidence, EnglishDialect, EnglishEntry, PartOfSpeech, RelationKind, TranslationInput,
+      TranslationValidationError, UsageNoteKind,
     },
   },
   ports::learning_model::LearningModelError,
@@ -40,7 +37,7 @@ use crate::{
 const CANONICAL_RETRIEVAL_POLICY_VERSION: &str = "canonical-retrieval-v1";
 const CANONICAL_PRESENTATION_POLICY_VERSION: &str = "canonical-card-v1";
 
-/// Public request for a model-backed learning lookup.
+/// Request-local input for a model-backed lexical lookup.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct LookupRequest {
@@ -54,7 +51,6 @@ pub(crate) struct LookupRequest {
   explanation_language: String,
   #[serde(default)]
   english_dialect: ApiEnglishDialect,
-  learner_level: Option<ApiCefrLevel>,
   #[serde(default)]
   detail: Detail,
   include: Option<Vec<IncludeSection>>,
@@ -67,16 +63,6 @@ enum ApiEnglishDialect {
   American,
   #[serde(rename = "en-GB")]
   British,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-enum ApiCefrLevel {
-  A1,
-  A2,
-  B1,
-  B2,
-  C1,
-  C2,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -92,7 +78,6 @@ enum Detail {
 enum IncludeSection {
   Relations,
   WordHistory,
-  PracticePreview,
 }
 
 #[derive(Debug, Serialize)]
@@ -374,7 +359,6 @@ pub(crate) async fn lookup(
     request.context.as_deref(),
     &request.explanation_language,
     request.english_dialect.into(),
-    request.learner_level.map(Into::into),
   ) {
     Ok(input) => input,
     Err(error) => {
@@ -389,10 +373,7 @@ pub(crate) async fn lookup(
 
   if let Some(service) = state.canonical_lookup_service() {
     if let Some(canonical_request) = canonical_request(&request, &input) {
-      return match service
-        .lookup(canonical_request, CanonicalLookupCacheEligibility::public())
-        .await
-      {
+      return match service.lookup(canonical_request).await {
         Ok(card) => {
           let response = build_canonical_response(&request, card);
           problem::no_store((StatusCode::OK, Json(response)).into_response())
@@ -486,13 +467,6 @@ fn build_response(
   warnings.push(
     "This result is model-generated and is not backed by the canonical lexicon yet.".to_string(),
   );
-  if request
-    .include
-    .as_ref()
-    .is_some_and(|sections| sections.contains(&IncludeSection::PracticePreview))
-  {
-    warnings.push("Practice preview is not implemented yet.".to_string());
-  }
 
   let entry_limit = if matches!(request.detail, Detail::Brief) {
     3
@@ -564,22 +538,17 @@ fn build_response(
 fn canonical_request(
   request: &LookupRequest,
   input: &TranslationInput,
-) -> Option<PublicCanonicalLookupRequest> {
+) -> Option<RetrievalRequest> {
   if input.source_language == "auto" || input.context.is_some() {
     return None;
   }
 
   let language = LanguageTag::parse(&input.source_language).ok()?;
-  let policy_versions = CanonicalCardPolicyVersions::new(
-    CANONICAL_RETRIEVAL_POLICY_VERSION,
-    CANONICAL_PRESENTATION_POLICY_VERSION,
-  )
-  .ok()?;
-  PublicCanonicalLookupRequest::new(
+  RetrievalRequest::new(
     &input.query,
     language,
+    EvidenceUse::ApiRedistribution,
     canonical_candidate_limit(request.detail),
-    policy_versions,
   )
   .ok()
 }
@@ -644,13 +613,6 @@ fn canonical_warnings(request: &LookupRequest) -> Vec<String> {
       "Relations and word history are not included by the current canonical lookup foundation."
         .to_string(),
     );
-  }
-  if request
-    .include
-    .as_ref()
-    .is_some_and(|sections| sections.contains(&IncludeSection::PracticePreview))
-  {
-    warnings.push("Practice preview is not implemented yet.".to_string());
   }
   warnings
 }
@@ -1027,19 +989,6 @@ impl From<ApiEnglishDialect> for EnglishDialect {
     match value {
       ApiEnglishDialect::American => Self::American,
       ApiEnglishDialect::British => Self::British,
-    }
-  }
-}
-
-impl From<ApiCefrLevel> for CefrLevel {
-  fn from(value: ApiCefrLevel) -> Self {
-    match value {
-      ApiCefrLevel::A1 => Self::A1,
-      ApiCefrLevel::A2 => Self::A2,
-      ApiCefrLevel::B1 => Self::B1,
-      ApiCefrLevel::B2 => Self::B2,
-      ApiCefrLevel::C1 => Self::C1,
-      ApiCefrLevel::C2 => Self::C2,
     }
   }
 }

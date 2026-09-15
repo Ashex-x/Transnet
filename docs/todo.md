@@ -26,13 +26,15 @@ Status: active implementation plan. The checked-in runtime provides loopback tra
 
 ## Milestone 0: enforce the focused stateless boundary
 
-- [ ] Remove learner profiles, history, saved vocabulary, mastery, scheduling, exercises, practice sessions, coaching, graph layouts, private feedback, writing evaluation, and speech or pronunciation modules from reachable service APIs and reusable public domain types.
-- [ ] Remove asynchronous lookup jobs and durable work paths that can retain queries, context, derived vectors, model output, or provider results; lookup stays within the request lifetime.
-- [ ] Remove transitional user-oriented fields and reject cookies, end-user credentials, user or account identifiers, private-state fields, and unknown fields without echoing their values.
+- [x] Remove learner profiles, history, saved vocabulary, mastery, scheduling, exercises, practice sessions, coaching, graph layouts, private feedback, writing evaluation, and speech or pronunciation modules from reachable service APIs and reusable public domain types.
+- [x] Remove asynchronous lookup jobs and durable work paths that can retain queries, context, derived vectors, model output, or provider results; lookup stays within the request lifetime.
+- [x] Remove transitional user-oriented fields and reject cookies, end-user credentials, user or account identifiers, private-state fields, and unknown fields without echoing their values.
 - [ ] Audit logs, traces, metrics, caches, queues, errors, debug formatting, and provider telemetry for request content, context, intermediate analysis, credentials, and caller identity.
-- [ ] Synchronize code comments, tests, and human contracts around translation plus relationship-centered lookup only.
+- [x] Synchronize code comments, tests, and human contracts around translation plus relationship-centered lookup only.
 
 Exit criteria: no reachable route or reusable public service API accepts product-owned state or exposes an out-of-scope learning module; no request-derived content can reach a durable port; boundary rejection and non-persistence tests pass.
+
+Repository-side admission, request/result Debug redaction, closed telemetry, and removal of query-derived caches and queues are implemented. External model-server telemetry and retention still require deployment verification; this audit item remains open. UDS and target translation/history contracts remain milestone 1 and transport work.
 
 ## Milestone 1: freeze translation and intent routing
 

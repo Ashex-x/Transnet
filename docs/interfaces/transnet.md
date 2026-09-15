@@ -8,6 +8,13 @@ This document also defines the transport shared by every internal process bounda
 
 Status: target contract. The current runtime still exposes transitional loopback HTTP and does not yet compose the data services.
 
+
+The current transitional runtime enforces the stateless boundary before handler dispatch. It rejects Cookie, Cookie2, Authorization, Proxy-Authorization, X-API-Key, Lookup-Capability, Remote-User, X-Authenticated-User, X-Forwarded-User, and X-User-*, X-Learner-*, X-Account-*, X-Owner-*, and X-Session-* headers without echoing their values. Only the existing graph routes accept their strictly decoded query parameters; other routes reject query strings. Boundary failures return HTTP 400 with the `invalid_service_request` problem code and a request ID. Responses carry `Cache-Control: no-store`. Outbound model-provider credentials remain separate from incoming end-user credentials.
+
+Current `POST /translate` accepts exactly `text`, `source_lang`, and `target_lang`. Current `POST /v1/lookups` accepts `query`, `source_language`, `target_language`, `context`, `explanation_language`, `english_dialect`, `detail`, and `include`; target language remains `en`, detail remains `brief` or `full`, and include accepts only `relations` and `word_history`. Unknown fields, including `learner_level`, are rejected, as is `practice_preview`. Chronological translation history, the unified target request, and UDS remain unimplemented. There is no lookup-job polling route or reusable learner, practice, private-feedback, saved-layout, or durable request-job module.
+
+Canonical lookup performs release-pinned reads for each request with no query snapshot cache, query fingerprint, or persistence dependency. The remaining topology cache contains canonical graph data keyed by canonical node identity and release metadata. Canonical pronunciation and usage-pitfall facts remain lexical content, not speech training or personal learner state.
+
 ## Contents
 
 - [Transnet service interface](#transnet-service-interface)

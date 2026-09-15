@@ -51,7 +51,7 @@ pub struct HttpConfig {
   pub max_request_body_bytes: usize,
   /// Exact browser origins allowed to make cross-origin requests.
   pub allowed_origins: Vec<String>,
-  /// Whether allowed browser origins may include credentials.
+  /// Transitional compatibility setting; must be false because end-user credentials are rejected.
   pub allow_credentials: bool,
 }
 
@@ -79,6 +79,9 @@ impl HttpConfig {
     for origin in &self.allowed_origins {
       validate_origin(origin)?;
     }
+    if self.allow_credentials {
+      return Err(HttpConfigError::CredentialsNotAllowed);
+    }
     Ok(())
   }
 
@@ -98,6 +101,9 @@ impl HttpConfig {
 /// Invalid HTTP boundary configuration.
 #[derive(Debug, Error)]
 pub enum HttpConfigError {
+  /// Browser credential forwarding conflicts with the stateless service boundary.
+  #[error("allow_credentials must be false; end-user authentication belongs to island-port")]
+  CredentialsNotAllowed,
   /// The configured body limit would reject every nonempty request.
   #[error("max_request_body_bytes must be greater than zero")]
   ZeroRequestBodyLimit,
@@ -151,7 +157,7 @@ pub struct TranslationConfig {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct ProviderResilienceConfigs {
-  /// Policy for the short-text Gemma 4 provider and structured learning-card requests.
+  /// Policy for the short-text Gemma 4 provider and structured lexical-card requests.
   pub gemma4: ProviderResilienceConfig,
   /// Policy for the long-text TranslateGemma provider.
   pub translate_gemma: ProviderResilienceConfig,

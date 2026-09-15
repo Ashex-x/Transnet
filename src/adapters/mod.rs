@@ -6,7 +6,7 @@ pub mod clock;
 pub mod in_memory;
 /// Test-only deterministic canonical repository and vector adapter.
 pub mod in_memory_retrieval;
-/// OpenAI-compatible structured learning-model client.
+/// OpenAI-compatible structured lexical-model client.
 pub mod learning_model;
 /// ULID-backed and deterministic public-ID implementations.
 pub mod public_id;

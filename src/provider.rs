@@ -146,7 +146,10 @@ impl TranslationProvider {
     config: ProviderConfig,
     policy: ProviderPolicy,
   ) -> anyhow::Result<Self> {
-    let client = Client::builder().timeout(policy.timeout()).build()?;
+    let client = Client::builder()
+      .no_proxy()
+      .timeout(policy.timeout())
+      .build()?;
     Ok(Self {
       client,
       config,

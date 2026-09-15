@@ -114,7 +114,7 @@ impl GraphNodeKey {
 pub struct GraphNode {
   /// Typed stable identity of this node.
   pub key: GraphNodeKey,
-  /// Concise learner-visible label.
+  /// Concise reader-visible label.
   pub label: String,
   /// Node language when the entity has one.
   pub language: Option<LanguageTag>,
@@ -127,7 +127,7 @@ pub struct GraphNode {
 }
 
 impl GraphNode {
-  /// Creates a graph node after validating its learner-visible label.
+  /// Creates a graph node after validating its reader-visible label.
   ///
   /// # Errors
   ///
@@ -234,7 +234,7 @@ impl RelationVersion {
 pub enum GraphRelationType {
   /// Equivalent meaning within an explicitly supported scope.
   Synonym,
-  /// Similar meaning that requires a learner-visible contrast.
+  /// Similar meaning that requires a reader-visible contrast.
   NearSynonym,
   /// Explicit equivalence across languages or lexicalizations.
   TranslationEquivalent,

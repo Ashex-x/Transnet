@@ -172,7 +172,6 @@ fn input() -> TranslationInput {
     Some("La sopa está caliente."),
     "zh-CN",
     EnglishDialect::American,
-    None,
   )
   .unwrap()
 }
@@ -213,6 +212,8 @@ async fn sends_protected_input_and_strict_schema() {
   let user_message = bodies[0]["messages"][1]["content"].as_str().unwrap();
   assert!(user_message.contains("\"query\":\"caliente\""));
   assert!(user_message.contains("\"context\":\"La sopa está caliente.\""));
+  assert!(!user_message.contains("learner_level"));
+  assert!(!user_message.contains("practice_preview"));
 }
 
 #[tokio::test]

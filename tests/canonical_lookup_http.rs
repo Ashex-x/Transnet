@@ -1,9 +1,6 @@
 //! Canonical `POST /v1/lookups` composition and fallback contract tests.
 
-use std::{
-  sync::Arc,
-  time::{Duration, SystemTime},
-};
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use axum::{
@@ -14,29 +11,22 @@ use serde_json::Value;
 use tower::ServiceExt;
 use transnet::{
   adapters::{
-    clock::FixedClock,
-    in_memory::{InMemoryCache, InMemoryMetricsRecorder},
+    in_memory::InMemoryMetricsRecorder,
     in_memory_retrieval::{InMemoryRetrievalAdapter, InMemoryVectorAvailability},
   },
   app_router,
-  application::{
-    canonical_lookup::CanonicalLookupService,
-    canonical_lookup_cache::CanonicalLookupSnapshotCacheService,
-    retrieval::CanonicalRetrievalService,
-  },
+  application::{canonical_lookup::CanonicalLookupService, retrieval::CanonicalRetrievalService},
   domain::{
     canonical::{
       ActiveContentVersion, CanonicalId, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
       EvidenceKind, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, Sense, SourcePermissions,
       WordForm,
     },
-    canonical_lookup_cache::{CanonicalLookupSnapshot, CanonicalLookupSnapshotKey},
     observability::{LookupStage, MetricEvent, MetricOutcome, ModelValidationOutcome},
     retrieval::{CanonicalCandidate, RetrievalScore, VectorMatch, VectorPurpose, VectorTarget},
     translation::{Confidence, TranslationInput, TranslationResult},
   },
   ports::{
-    cache::{Cache, CacheEntry, CacheError},
     canonical_repository::{CanonicalRepository, CanonicalRepositoryError},
     learning_model::{LearningModel, LearningModelError},
     vector_retriever::{VectorRetriever, VectorRetrieverError},
@@ -147,52 +137,21 @@ fn translation_service() -> TranslationService {
   .unwrap()
 }
 
-fn clock() -> Arc<FixedClock> {
-  Arc::new(FixedClock::new(
-    SystemTime::UNIX_EPOCH + Duration::from_secs(1_000),
-  ))
-}
-
-fn canonical_service(
-  adapter: InMemoryRetrievalAdapter,
-  cache: Arc<dyn Cache<CanonicalLookupSnapshotKey, CanonicalLookupSnapshot>>,
-  clock: Arc<FixedClock>,
-) -> Arc<CanonicalLookupService> {
+fn in_memory_canonical_service(adapter: InMemoryRetrievalAdapter) -> Arc<CanonicalLookupService> {
   let adapter = Arc::new(adapter);
   let repository: Arc<dyn CanonicalRepository> = adapter.clone();
   let vectors: Arc<dyn VectorRetriever> = adapter;
-  let retrieval = Arc::new(CanonicalRetrievalService::new(repository, vectors));
-  let snapshots =
-    CanonicalLookupSnapshotCacheService::new(retrieval, cache, clock, Duration::from_secs(30))
-      .unwrap();
-  Arc::new(CanonicalLookupService::new(Arc::new(snapshots)))
-}
-
-fn in_memory_canonical_service(adapter: InMemoryRetrievalAdapter) -> Arc<CanonicalLookupService> {
-  let clock = clock();
-  let cache: Arc<dyn Cache<CanonicalLookupSnapshotKey, CanonicalLookupSnapshot>> =
-    Arc::new(InMemoryCache::new(clock.clone()));
-  canonical_service(adapter, cache, clock)
+  Arc::new(CanonicalLookupService::new(Arc::new(
+    CanonicalRetrievalService::new(repository, vectors),
+  )))
 }
 
 fn canonical_service_for_repository(
   repository: Arc<dyn CanonicalRepository>,
 ) -> Arc<CanonicalLookupService> {
-  let retrieval = Arc::new(CanonicalRetrievalService::new(
-    repository,
-    Arc::new(UnavailableVector),
-  ));
-  let fixed_clock = clock();
-  let cache: Arc<dyn Cache<CanonicalLookupSnapshotKey, CanonicalLookupSnapshot>> =
-    Arc::new(InMemoryCache::new(fixed_clock.clone()));
-  let snapshots = CanonicalLookupSnapshotCacheService::new(
-    retrieval,
-    cache,
-    fixed_clock,
-    Duration::from_secs(30),
-  )
-  .unwrap();
-  Arc::new(CanonicalLookupService::new(Arc::new(snapshots)))
+  Arc::new(CanonicalLookupService::new(Arc::new(
+    CanonicalRetrievalService::new(repository, Arc::new(UnavailableVector)),
+  )))
 }
 
 async fn json(response: axum::response::Response) -> Value {
@@ -415,17 +374,15 @@ async fn canonical_lookup_marks_lexical_fallback_as_vector_degraded() {
 }
 
 #[tokio::test]
-async fn automatic_language_and_context_fall_back_to_the_model_without_cache_access() {
+async fn automatic_language_and_context_fall_back_to_the_model() {
   for request in [
     r#"{"query":"caliente","source_language":"auto"}"#,
     r#"{"query":"hotter","source_language":"en","context":"The soup is hot."}"#,
   ] {
-    let canonical = canonical_service(
+    let canonical = in_memory_canonical_service(
       InMemoryRetrievalAdapter::new(content())
         .with_candidate(candidate())
         .with_vector_match(matching_vector()),
-      Arc::new(ForbiddenCache),
-      clock(),
     );
     let response = app_router(
       AppState::new(translation_service())
@@ -556,7 +513,7 @@ async fn inconsistent_canonical_content_uses_a_nonretryable_problem() {
 }
 
 #[tokio::test]
-async fn invalid_canonical_cache_contract_uses_a_nonretryable_problem() {
+async fn invalid_canonical_content_contract_uses_a_nonretryable_problem() {
   let canonical = canonical_service_for_repository(Arc::new(InvalidContentRepository));
   let recorder = InMemoryMetricsRecorder::new();
   let response = app_router(
@@ -593,31 +550,6 @@ async fn invalid_canonical_cache_contract_uses_a_nonretryable_problem() {
       outcome: MetricOutcome::Succeeded,
     }]
   );
-}
-
-struct ForbiddenCache;
-
-#[async_trait]
-impl Cache<CanonicalLookupSnapshotKey, CanonicalLookupSnapshot> for ForbiddenCache {
-  async fn get(
-    &self,
-    _key: &CanonicalLookupSnapshotKey,
-  ) -> Result<Option<CacheEntry<CanonicalLookupSnapshot>>, CacheError> {
-    panic!("private and model-fallback paths must not read the shared canonical cache")
-  }
-
-  async fn put(
-    &self,
-    _key: CanonicalLookupSnapshotKey,
-    _value: CanonicalLookupSnapshot,
-    _expires_at: SystemTime,
-  ) -> Result<(), CacheError> {
-    panic!("private and model-fallback paths must not write the shared canonical cache")
-  }
-
-  async fn remove(&self, _key: &CanonicalLookupSnapshotKey) -> Result<(), CacheError> {
-    panic!("private and model-fallback paths must not remove shared canonical cache state")
-  }
 }
 
 #[derive(Clone)]
@@ -670,6 +602,78 @@ impl CanonicalRepository for InvalidContentRepository {
 }
 
 struct UnavailableVector;
+
+struct CountingRepository {
+  inner: InMemoryRetrievalAdapter,
+  pins: std::sync::atomic::AtomicUsize,
+  searches: std::sync::atomic::AtomicUsize,
+}
+
+#[async_trait]
+impl CanonicalRepository for CountingRepository {
+  async fn active_content_version(&self) -> Result<ActiveContentVersion, CanonicalRepositoryError> {
+    self.pins.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    self.inner.active_content_version().await
+  }
+
+  async fn search_lexical(
+    &self,
+    request: &transnet::domain::retrieval::LexicalSearchRequest,
+  ) -> Result<Vec<transnet::domain::retrieval::RepositoryMatch>, CanonicalRepositoryError> {
+    self
+      .searches
+      .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    self.inner.search_lexical(request).await
+  }
+
+  async fn load_candidates(
+    &self,
+    request: &transnet::domain::retrieval::CandidateLoadRequest,
+  ) -> Result<Vec<CanonicalCandidate>, CanonicalRepositoryError> {
+    self.inner.load_candidates(request).await
+  }
+}
+
+#[tokio::test]
+async fn repeated_queries_pin_and_retrieve_again_without_retaining_query_snapshots() {
+  let repository = Arc::new(CountingRepository {
+    inner: InMemoryRetrievalAdapter::new(content()).with_candidate(candidate()),
+    pins: std::sync::atomic::AtomicUsize::new(0),
+    searches: std::sync::atomic::AtomicUsize::new(0),
+  });
+  let service = Arc::new(CanonicalLookupService::new(Arc::new(
+    CanonicalRetrievalService::new(
+      repository.clone(),
+      Arc::new(InMemoryRetrievalAdapter::new(content())),
+    ),
+  )));
+  let app = app_router(AppState::new(translation_service()).with_canonical_lookup(service));
+  for _ in 0..2 {
+    let response = app
+      .clone()
+      .oneshot(
+        Request::post("/v1/lookups")
+          .header(header::CONTENT_TYPE, "application/json")
+          .body(Body::from(r#"{"query":"hot","source_language":"en"}"#))
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    assert_eq!(
+      json(response).await["matches"][0]["sense"]["id"],
+      "sense-hot"
+    );
+  }
+  assert_eq!(repository.pins.load(std::sync::atomic::Ordering::SeqCst), 2);
+  assert_eq!(
+    repository
+      .searches
+      .load(std::sync::atomic::Ordering::SeqCst),
+    2
+  );
+}
 
 #[async_trait]
 impl VectorRetriever for UnavailableVector {

@@ -1,4 +1,4 @@
-//! Port for generating a structured English learning translation.
+//! Port for generating a structured English lexical translation.
 
 use async_trait::async_trait;
 use thiserror::Error;

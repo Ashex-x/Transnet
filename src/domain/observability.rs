@@ -16,16 +16,10 @@ pub enum MetricName {
   LookupStageTotal,
   /// Count of learning-model contract-validation outcomes.
   ModelValidationTotal,
-  /// Count of durable-job lifecycle transitions.
-  JobLifecycleTotal,
   /// Count of categorical vector-reconciliation lag observations.
   VectorLagStateTotal,
   /// Count of graph-read operation outcomes.
   GraphOperationTotal,
-  /// Count of private feedback operation outcomes without owner labels.
-  FeedbackOperationTotal,
-  /// Count of practice operation outcomes without learner labels.
-  PracticeOperationTotal,
 }
 
 impl MetricName {
@@ -34,11 +28,8 @@ impl MetricName {
     match self {
       Self::LookupStageTotal => "transnet_lookup_stage_total",
       Self::ModelValidationTotal => "transnet_model_validation_total",
-      Self::JobLifecycleTotal => "transnet_job_lifecycle_total",
       Self::VectorLagStateTotal => "transnet_vector_lag_state_total",
       Self::GraphOperationTotal => "transnet_graph_operation_total",
-      Self::FeedbackOperationTotal => "transnet_feedback_operation_total",
-      Self::PracticeOperationTotal => "transnet_practice_operation_total",
     }
   }
 }
@@ -91,7 +82,7 @@ impl MetricOutcome {
   }
 }
 
-/// A bounded result of validating a structured learning-model response.
+/// A bounded result of validating a structured lexical-model response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ModelValidationOutcome {
   /// The first model response satisfied the typed contract.
@@ -108,54 +99,6 @@ impl ModelValidationOutcome {
       Self::Accepted => "accepted",
       Self::Repaired => "repaired",
       Self::Rejected => "rejected",
-    }
-  }
-}
-
-/// A durable job family with operationally safe names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum JobKind {
-  /// A private asynchronous lookup job.
-  Lookup,
-  /// An immutable content-release workflow job.
-  ContentRelease,
-  /// A derived vector reconciliation job.
-  VectorReconciliation,
-}
-
-impl JobKind {
-  const fn as_label(self) -> &'static str {
-    match self {
-      Self::Lookup => "lookup",
-      Self::ContentRelease => "content_release",
-      Self::VectorReconciliation => "vector_reconciliation",
-    }
-  }
-}
-
-/// A durable job lifecycle outcome.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum JobLifecycleOutcome {
-  /// The job was accepted for later processing.
-  Enqueued,
-  /// A worker obtained a bounded lease for the job.
-  Leased,
-  /// The job completed successfully.
-  Completed,
-  /// The job ended with a recoverable or terminal failure.
-  Failed,
-  /// The job became unavailable because its deadline or lease expired.
-  Expired,
-}
-
-impl JobLifecycleOutcome {
-  const fn as_label(self) -> &'static str {
-    match self {
-      Self::Enqueued => "enqueued",
-      Self::Leased => "leased",
-      Self::Completed => "completed",
-      Self::Failed => "failed",
-      Self::Expired => "expired",
     }
   }
 }
@@ -212,45 +155,6 @@ impl GraphOperation {
   }
 }
 
-/// A private graph-feedback operation without an owner or edge identifier label.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum FeedbackOperation {
-  /// Validate and append one private feedback event.
-  Submission,
-  /// Read one private current projection.
-  ProjectionRead,
-}
-
-impl FeedbackOperation {
-  const fn as_label(self) -> &'static str {
-    match self {
-      Self::Submission => "submission",
-      Self::ProjectionRead => "projection_read",
-    }
-  }
-}
-
-/// A future private practice operation without learner or answer labels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum PracticeOperation {
-  /// Claim one outstanding or scheduled practice item.
-  ItemClaim,
-  /// Submit one already-owned practice attempt.
-  AttemptSubmission,
-  /// Schedule or reschedule a private practice item.
-  Scheduling,
-}
-
-impl PracticeOperation {
-  const fn as_label(self) -> &'static str {
-    match self {
-      Self::ItemClaim => "item_claim",
-      Self::AttemptSubmission => "attempt_submission",
-      Self::Scheduling => "scheduling",
-    }
-  }
-}
-
 /// One closed metric event accepted by the metrics port.
 ///
 /// Every variant contains only typed categorical values. There is deliberately no generic
@@ -274,17 +178,10 @@ pub enum MetricEvent {
     /// Safe categorical result.
     outcome: MetricOutcome,
   },
-  /// One structured learning-model validation outcome.
+  /// One structured lexical-model validation outcome.
   ModelValidation {
     /// Safe categorical validation result.
     outcome: ModelValidationOutcome,
-  },
-  /// One durable job lifecycle transition.
-  JobLifecycle {
-    /// Operational job family.
-    job: JobKind,
-    /// Safe lifecycle transition.
-    outcome: JobLifecycleOutcome,
   },
   /// One vector-release reconciliation lag bucket.
   VectorLag {
@@ -298,20 +195,6 @@ pub enum MetricEvent {
     /// Safe categorical result.
     outcome: MetricOutcome,
   },
-  /// One private graph-feedback operation outcome.
-  FeedbackOperation {
-    /// Private operation family without owner or target labels.
-    operation: FeedbackOperation,
-    /// Safe categorical result.
-    outcome: MetricOutcome,
-  },
-  /// One private practice operation outcome.
-  PracticeOperation {
-    /// Private operation family without learner or answer labels.
-    operation: PracticeOperation,
-    /// Safe categorical result.
-    outcome: MetricOutcome,
-  },
 }
 
 impl MetricEvent {
@@ -320,11 +203,8 @@ impl MetricEvent {
     match self {
       Self::LookupStage { .. } => MetricName::LookupStageTotal,
       Self::ModelValidation { .. } => MetricName::ModelValidationTotal,
-      Self::JobLifecycle { .. } => MetricName::JobLifecycleTotal,
       Self::VectorLag { .. } => MetricName::VectorLagStateTotal,
       Self::GraphOperation { .. } => MetricName::GraphOperationTotal,
-      Self::FeedbackOperation { .. } => MetricName::FeedbackOperationTotal,
-      Self::PracticeOperation { .. } => MetricName::PracticeOperationTotal,
     }
   }
 
@@ -341,22 +221,10 @@ impl MetricEvent {
       Self::ModelValidation { outcome } => {
         vec![MetricLabel::new("outcome", outcome.as_label())]
       }
-      Self::JobLifecycle { job, outcome } => vec![
-        MetricLabel::new("job", job.as_label()),
-        MetricLabel::new("outcome", outcome.as_label()),
-      ],
       Self::VectorLag { bucket } => {
         vec![MetricLabel::new("lag_bucket", bucket.as_label())]
       }
       Self::GraphOperation { operation, outcome } => vec![
-        MetricLabel::new("operation", operation.as_label()),
-        MetricLabel::new("outcome", outcome.as_label()),
-      ],
-      Self::FeedbackOperation { operation, outcome } => vec![
-        MetricLabel::new("operation", operation.as_label()),
-        MetricLabel::new("outcome", outcome.as_label()),
-      ],
-      Self::PracticeOperation { operation, outcome } => vec![
         MetricLabel::new("operation", operation.as_label()),
         MetricLabel::new("outcome", outcome.as_label()),
       ],
@@ -443,26 +311,6 @@ mod tests {
       MetricEvent::ModelValidation {
         outcome: ModelValidationOutcome::Rejected,
       },
-      MetricEvent::JobLifecycle {
-        job: JobKind::Lookup,
-        outcome: JobLifecycleOutcome::Enqueued,
-      },
-      MetricEvent::JobLifecycle {
-        job: JobKind::ContentRelease,
-        outcome: JobLifecycleOutcome::Leased,
-      },
-      MetricEvent::JobLifecycle {
-        job: JobKind::VectorReconciliation,
-        outcome: JobLifecycleOutcome::Completed,
-      },
-      MetricEvent::JobLifecycle {
-        job: JobKind::Lookup,
-        outcome: JobLifecycleOutcome::Failed,
-      },
-      MetricEvent::JobLifecycle {
-        job: JobKind::Lookup,
-        outcome: JobLifecycleOutcome::Expired,
-      },
       MetricEvent::VectorLag {
         bucket: VectorLagBucket::InSync,
       },
@@ -490,26 +338,6 @@ mod tests {
         operation: GraphOperation::Traversal,
         outcome: MetricOutcome::Failed,
       },
-      MetricEvent::FeedbackOperation {
-        operation: FeedbackOperation::Submission,
-        outcome: MetricOutcome::Succeeded,
-      },
-      MetricEvent::FeedbackOperation {
-        operation: FeedbackOperation::ProjectionRead,
-        outcome: MetricOutcome::Rejected,
-      },
-      MetricEvent::PracticeOperation {
-        operation: PracticeOperation::ItemClaim,
-        outcome: MetricOutcome::Succeeded,
-      },
-      MetricEvent::PracticeOperation {
-        operation: PracticeOperation::AttemptSubmission,
-        outcome: MetricOutcome::Rejected,
-      },
-      MetricEvent::PracticeOperation {
-        operation: PracticeOperation::Scheduling,
-        outcome: MetricOutcome::Failed,
-      },
     ]
   }
 
@@ -523,12 +351,9 @@ mod tests {
     assert_eq!(
       names,
       std::collections::BTreeSet::from([
-        "transnet_feedback_operation_total",
         "transnet_graph_operation_total",
-        "transnet_job_lifecycle_total",
         "transnet_lookup_stage_total",
         "transnet_model_validation_total",
-        "transnet_practice_operation_total",
         "transnet_vector_lag_state_total",
       ])
     );

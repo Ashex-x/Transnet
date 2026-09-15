@@ -71,7 +71,7 @@ impl RetrievalScore {
 }
 
 /// Bounded, normalized request for canonical retrieval.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct RetrievalRequest {
   /// NFC and case-normalized query used only for retrieval, never telemetry.
   pub query: String,
@@ -194,7 +194,7 @@ impl VectorTarget {
 }
 
 /// Mandatory release and metadata filters for one vector query.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct VectorSearchRequest {
   /// Normalized query text passed to the embedding or vector adapter.
   pub query: String,
@@ -563,6 +563,18 @@ fn lexical_match_priority(kind: LexicalMatchKind) -> u8 {
     LexicalMatchKind::Lemma => 3,
     LexicalMatchKind::Morphology => 2,
     LexicalMatchKind::FullText => 1,
+  }
+}
+
+impl std::fmt::Debug for RetrievalRequest {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("RetrievalRequest(REDACTED)")
+  }
+}
+
+impl std::fmt::Debug for VectorSearchRequest {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("VectorSearchRequest(REDACTED)")
   }
 }
 

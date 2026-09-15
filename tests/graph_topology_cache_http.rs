@@ -632,8 +632,7 @@ async fn full_graph_cache_rejects_private_or_entity_tag_query_inputs_and_never_e
   let cache = Arc::new(TestTopologyCache::available());
   let router = cached_graph_app(topology_cache_service(repository.clone(), cache.clone()));
 
-  let (_, _, baseline_body) =
-    wire(router.clone().oneshot(graph_request("hot")).await.unwrap()).await;
+  let (_, _, _) = wire(router.clone().oneshot(graph_request("hot")).await.unwrap()).await;
   let request =
     Request::get("/v1/graph?root_kind=sense&root_id=hot&depth=1&node_limit=3&edge_limit=2")
       .header(header::IF_NONE_MATCH, "\"private-entity-tag\"")
@@ -643,11 +642,14 @@ async fn full_graph_cache_rejects_private_or_entity_tag_query_inputs_and_never_e
   let (header_status, header_headers, header_body) =
     wire(router.clone().oneshot(request).await.unwrap()).await;
 
-  assert_eq!(header_status, StatusCode::OK);
+  assert_eq!(header_status, StatusCode::BAD_REQUEST);
   assert_no_cache_state_headers(&header_headers);
-  assert_eq!(header_body, baseline_body);
+  let header_body: serde_json::Value = serde_json::from_slice(&header_body).unwrap();
+  assert_eq!(header_body["code"], "invalid_service_request");
+  assert!(!header_body.to_string().contains("private-learner"));
+  assert!(!header_body.to_string().contains("private-entity-tag"));
   assert_eq!(repository.adjacency_calls(), 1);
-  assert_eq!(cache.counts().gets, 2);
+  assert_eq!(cache.counts().gets, 1);
 
   let rejected = router
     .oneshot(
@@ -667,5 +669,5 @@ async fn full_graph_cache_rejects_private_or_entity_tag_query_inputs_and_never_e
   assert_eq!(rejected_body["code"], "invalid_graph_request");
   assert!(!rejected_body.to_string().contains("private-learner"));
   assert!(!rejected_body.to_string().contains("private-entity-tag"));
-  assert_eq!(cache.counts().gets, 2);
+  assert_eq!(cache.counts().gets, 1);
 }

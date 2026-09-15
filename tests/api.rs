@@ -207,7 +207,7 @@ async fn lookup_returns_generated_learning_card_without_canonical_ids() {
       Request::post("/v1/lookups")
         .header("content-type", "application/json")
         .body(Body::from(
-          r#"{"query":"caliente","source_language":"es","target_language":"en","context":"La sopa está caliente.","explanation_language":"zh-CN","english_dialect":"en-US","learner_level":"B1","detail":"full","include":["relations","word_history"]}"#,
+          r#"{"query":"caliente","source_language":"es","target_language":"en","context":"La sopa está caliente.","explanation_language":"zh-CN","english_dialect":"en-US","detail":"full","include":["relations","word_history"]}"#,
         ))
         .unwrap(),
     )

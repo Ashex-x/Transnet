@@ -8,6 +8,13 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 状态：目标合同。当前运行时仍暴露过渡性回环 HTTP，且尚未组合数据服务。
 
+
+当前过渡性运行时在处理器分派前强制执行无状态边界。它拒绝 Cookie、Cookie2、Authorization、Proxy-Authorization、X-API-Key、Lookup-Capability、Remote-User、X-Authenticated-User、X-Forwarded-User，以及 X-User-*、X-Learner-*、X-Account-*、X-Owner-*、X-Session-* 请求头，且不回显其值。只有现有图查询路由接受严格解析的查询参数；其他路由拒绝查询字符串。边界错误返回 HTTP 400、`invalid_service_request` 问题码和请求 ID。响应携带 `Cache-Control: no-store`。出站模型 Provider 凭据与入站终端用户凭据保持分离。
+
+当前 `POST /translate` 仅接受 `text`、`source_lang`、`target_lang`。当前 `POST /v1/lookups` 接受 `query`、`source_language`、`target_language`、`context`、`explanation_language`、`english_dialect`、`detail` 和 `include`；目标语言仍限 `en`，详情仍为 `brief` 或 `full`，include 仅接受 `relations` 与 `word_history`。包括 `learner_level` 在内的未知字段会被拒绝，`practice_preview` 也会被拒绝。按时间排序的翻译历史、统一目标请求和 UDS 尚未实现。查询任务轮询路由及可复用的学习者、练习、私有反馈、保存布局、持久请求任务模块已经移除。
+
+规范查询对每个请求执行发布固定读取，不包含查询快照缓存、查询指纹或持久化依赖。保留的拓扑缓存仅保存按规范节点身份和发布元数据索引的规范图数据。规范发音与用法易错点仍属于词汇内容，不属于语音训练或个人学习者状态。
+
 ## 目录
 
 - [Transnet 服务接口](#transnet-服务接口)

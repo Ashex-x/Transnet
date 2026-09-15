@@ -19,7 +19,7 @@ impl LookupService {
     Self { model }
   }
 
-  /// Produces a structured English learning translation.
+  /// Produces a structured English lexical translation.
   ///
   /// # Errors
   ///
@@ -59,8 +59,7 @@ mod tests {
   #[tokio::test]
   async fn delegates_validated_input_to_model() {
     let service = LookupService::new(Arc::new(StubModel));
-    let input =
-      TranslationInput::new("hola", "es", None, "en", EnglishDialect::American, None).unwrap();
+    let input = TranslationInput::new("hola", "es", None, "en", EnglishDialect::American).unwrap();
 
     let result = service.lookup(&input).await.unwrap();
 

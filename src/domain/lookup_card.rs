@@ -20,7 +20,7 @@ pub const MAX_LOOKUP_CARD_EVIDENCE_PER_ASSERTION: usize = 8;
 pub const MAX_LOOKUP_CARD_CANDIDATES: usize = MAX_RETRIEVAL_LIMIT;
 
 /// One normalized request property retained in a canonical lookup card.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct CanonicalLookupQueryAnalysis {
   /// NFC and case-normalized lookup key used by the deterministic retriever.
   pub normalized_query: String,
@@ -193,4 +193,10 @@ pub struct CanonicalLookupCardCoverage {
   pub forms: CanonicalLookupCardSectionCoverage,
   /// Assertion-level permitted evidence shown in definitions and forms.
   pub evidence: CanonicalLookupCardSectionCoverage,
+}
+
+impl std::fmt::Debug for CanonicalLookupQueryAnalysis {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("CanonicalLookupQueryAnalysis(REDACTED)")
+  }
 }

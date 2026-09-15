@@ -1,4 +1,4 @@
-//! Domain model for an English learning translation.
+//! Domain model for an English lexical translation.
 
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
@@ -10,10 +10,10 @@ pub const MAX_QUERY_CHARS: usize = 100;
 /// Maximum number of Unicode scalar values in optional disambiguating context.
 pub const MAX_CONTEXT_CHARS: usize = 1_000;
 
-/// Validated input to the learning translation pipeline.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Request-local input to the structured lexical translation pipeline.
+#[derive(Clone, PartialEq, Eq)]
 pub struct TranslationInput {
-  /// NFC-normalized word or short expression supplied by the learner.
+  /// NFC-normalized word or short expression supplied for this request.
   pub query: String,
   /// BCP-47 source language or `auto`.
   pub source_language: String,
@@ -23,12 +23,10 @@ pub struct TranslationInput {
   pub explanation_language: String,
   /// Requested English dialect.
   pub english_dialect: EnglishDialect,
-  /// Optional CEFR level used to simplify explanations.
-  pub learner_level: Option<CefrLevel>,
 }
 
 impl TranslationInput {
-  /// Validates and normalizes learner input.
+  /// Validates and normalizes request-local linguistic input.
   ///
   /// # Errors
   ///
@@ -39,7 +37,6 @@ impl TranslationInput {
     context: Option<&str>,
     explanation_language: &str,
     english_dialect: EnglishDialect,
-    learner_level: Option<CefrLevel>,
   ) -> Result<Self, TranslationValidationError> {
     let query = normalize_text(query);
     if query.is_empty() {
@@ -87,7 +84,6 @@ impl TranslationInput {
       context,
       explanation_language: normalize_language_tag(explanation_language),
       english_dialect,
-      learner_level,
     })
   }
 }
@@ -111,39 +107,8 @@ impl EnglishDialect {
   }
 }
 
-/// Common European Framework of Reference learner level.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CefrLevel {
-  /// Beginner.
-  A1,
-  /// Elementary.
-  A2,
-  /// Intermediate.
-  B1,
-  /// Upper intermediate.
-  B2,
-  /// Advanced.
-  C1,
-  /// Proficient.
-  C2,
-}
-
-impl CefrLevel {
-  /// Returns the standard CEFR label.
-  pub const fn as_str(self) -> &'static str {
-    match self {
-      Self::A1 => "A1",
-      Self::A2 => "A2",
-      Self::B1 => "B1",
-      Self::B2 => "B2",
-      Self::C1 => "C1",
-      Self::C2 => "C2",
-    }
-  }
-}
-
 /// Structured model result for one lookup.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct TranslationResult {
   /// Resolved BCP-47 source language.
   pub source_language: String,
@@ -151,12 +116,12 @@ pub struct TranslationResult {
   pub language_confidence: Confidence,
   /// Ranked possible English meanings.
   pub entries: Vec<EnglishEntry>,
-  /// Non-fatal limitations visible to the learner.
+  /// Non-fatal limitations visible to the caller.
   pub warnings: Vec<String>,
 }
 
-/// One English meaning and its learning annotations.
-#[derive(Debug, Clone, PartialEq)]
+/// One English meaning and its lexical annotations.
+#[derive(Clone, PartialEq)]
 pub struct EnglishEntry {
   /// English dictionary headword.
   pub lemma: String,
@@ -174,7 +139,7 @@ pub struct EnglishEntry {
   pub pronunciations: Vec<Pronunciation>,
   /// Important inflected or derived forms.
   pub forms: Vec<WordForm>,
-  /// Register, dialect, grammar, and learner-habit guidance.
+  /// Register, dialect, grammar, and usage guidance.
   pub usage_notes: Vec<UsageNote>,
   /// Contextual examples.
   pub examples: Vec<UsageExample>,
@@ -223,7 +188,7 @@ pub enum PartOfSpeech {
 }
 
 /// One pronunciation spelling.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Pronunciation {
   /// IPA or another explicitly named notation.
   pub value: String,
@@ -234,7 +199,7 @@ pub struct Pronunciation {
 }
 
 /// One English form connected to the entry.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct WordForm {
   /// Surface form.
   pub form: String,
@@ -243,7 +208,7 @@ pub struct WordForm {
 }
 
 /// Usage guidance attached to this meaning.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct UsageNote {
   /// Note category such as `register`, `grammar`, `collocation`, or `pitfall`.
   pub kind: UsageNoteKind,
@@ -269,7 +234,7 @@ pub enum UsageNoteKind {
 }
 
 /// Example sentence showing the entry in use.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct UsageExample {
   /// English example sentence.
   pub english: String,
@@ -278,7 +243,7 @@ pub struct UsageExample {
 }
 
 /// Suggested non-canonical relation to another English word.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct RelatedWord {
   /// Related English lemma.
   pub lemma: String,
@@ -364,6 +329,54 @@ fn normalize_language_tag(value: &str) -> String {
     .join("-")
 }
 
+impl std::fmt::Debug for TranslationInput {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("TranslationInput(REDACTED)")
+  }
+}
+
+impl std::fmt::Debug for TranslationResult {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("TranslationResult(REDACTED)")
+  }
+}
+
+impl std::fmt::Debug for EnglishEntry {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("EnglishEntry(REDACTED)")
+  }
+}
+
+impl std::fmt::Debug for UsageExample {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("UsageExample(REDACTED)")
+  }
+}
+
+impl std::fmt::Debug for RelatedWord {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("RelatedWord(REDACTED)")
+  }
+}
+
+impl std::fmt::Debug for UsageNote {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("UsageNote(REDACTED)")
+  }
+}
+
+impl std::fmt::Debug for WordForm {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("WordForm(REDACTED)")
+  }
+}
+
+impl std::fmt::Debug for Pronunciation {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("Pronunciation(REDACTED)")
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -376,7 +389,6 @@ mod tests {
       Some("  un cafe\u{301} chaud  "),
       "zh-cn",
       EnglishDialect::American,
-      Some(CefrLevel::B1),
     )
     .unwrap();
 
@@ -388,15 +400,8 @@ mod tests {
 
   #[test]
   fn blank_context_is_removed() {
-    let input = TranslationInput::new(
-      "caliente",
-      "es",
-      Some("  "),
-      "en",
-      EnglishDialect::British,
-      None,
-    )
-    .unwrap();
+    let input =
+      TranslationInput::new("caliente", "es", Some("  "), "en", EnglishDialect::British).unwrap();
 
     assert_eq!(input.context, None);
   }
@@ -404,23 +409,21 @@ mod tests {
   #[test]
   fn input_rejects_invalid_or_oversized_fields() {
     let cases = [
-      TranslationInput::new(" ", "es", None, "en", EnglishDialect::American, None),
+      TranslationInput::new(" ", "es", None, "en", EnglishDialect::American),
       TranslationInput::new(
         &"a".repeat(MAX_QUERY_CHARS + 1),
         "es",
         None,
         "en",
         EnglishDialect::American,
-        None,
       ),
-      TranslationInput::new("hola", "es_ES", None, "en", EnglishDialect::American, None),
+      TranslationInput::new("hola", "es_ES", None, "en", EnglishDialect::American),
       TranslationInput::new(
         "hola",
         "es",
         Some(&"a".repeat(MAX_CONTEXT_CHARS + 1)),
         "en",
         EnglishDialect::American,
-        None,
       ),
     ];
 

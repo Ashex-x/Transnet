@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 /// Translation request accepted by `POST /translate`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct TranslateRequest {
   /// Nonblank source text.
   pub text: String,
@@ -14,7 +15,7 @@ pub struct TranslateRequest {
 }
 
 /// Successful translation response.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct TranslateResponse {
   /// Text returned by the selected model.
   pub translation: String,
@@ -54,6 +55,18 @@ pub fn is_language_code(value: &str) -> bool {
       && subtag.len() <= 8
       && subtag.bytes().all(|byte| byte.is_ascii_alphanumeric())
   })
+}
+
+impl std::fmt::Debug for TranslateRequest {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("TranslateRequest(REDACTED)")
+  }
+}
+
+impl std::fmt::Debug for TranslateResponse {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter.write_str("TranslateResponse(REDACTED)")
+  }
 }
 
 #[cfg(test)]

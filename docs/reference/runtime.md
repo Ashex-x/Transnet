@@ -14,7 +14,7 @@ Provider credentials are secrets. They must never appear in checked-in files, De
 
 ## Startup and composition
 
-The current entry point loads configuration, initializes redacted logging and provider clients, builds the transitional router, binds the listener, and waits for shutdown. The default executable composes health, translation, and legacy model-backed lookup. Other checked-in foundations are not necessarily production-composed.
+The current entry point loads configuration, initializes redacted logging and provider clients, builds the transitional router, binds the listener, and waits for shutdown. The default executable composes health, translation, and legacy model-backed lookup behind stateless admission. Learner state, practice, private feedback, saved layouts, and lookup jobs are not exposed by the public library or router. Other checked-in foundations are not necessarily production-composed.
 
 The target bootstrap validates settings before side effects, constructs adapters outside-in, binds the owned Unix socket, registers only routes whose dependencies exist, and reports ready only after required dependencies are usable. Handlers and adapters receive explicit dependencies; they do not create global clients.
 

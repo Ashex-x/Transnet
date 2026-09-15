@@ -6,6 +6,8 @@ English: [Runtime module](../../docs/reference/runtime.md)
 
 状态：当前可执行文件绑定过渡期回环 TCP。目标组合使用 [Transnet 服务接口](../interfaces/transnet_cn.md)定义的 UDS 边界。
 
+当前公共库与路由已移除学习者状态、练习、私有反馈、保存布局和查询任务；健康检查、翻译及旧版模型查询经过无状态请求边界后执行。
+
 ## 配置
 
 进程相对 Cargo manifest 读取 config/transnet.toml。RUST_LOG 可覆盖配置 filter。解析拒绝未知字段；创建 client 或 listener 前，校验检查单项边界与不兼容组合。

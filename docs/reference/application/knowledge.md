@@ -4,6 +4,8 @@
 
 This module owns sense resolution, domain assessment, release-pinned retrieval, relationship ranking, page composition, and deterministic projection for word and established-phrase requests.
 
+Status: current canonical lookup uses read-only retrieval ports and assembles each card within the request. Query-derived snapshot caching and its public cache contracts have been removed. Graph topology caching remains release-pinned canonical content caching. Domain assessment and the complete page composition below are target behavior, not default runtime composition.
+
 ## Resolution and assessment
 
 Normalization creates bounded language-aware lookup forms but never serves as canonical identity. Exact canonical and alias matches outrank inflection, spelling, and semantic candidates. Materially plausible meanings remain separate.

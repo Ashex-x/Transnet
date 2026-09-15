@@ -8,9 +8,13 @@ English: [Configuration](../../docs/guides/configuration.md)
 
 `[http]` 配置 `max_request_body_bytes` 和过渡性 CORS 字段。请求体限制在缓冲 JSON 前应用，默认 1,048,576 字节。UDS 没有浏览器 Origin，目标运行时忽略并最终移除 CORS 配置；浏览器调用产品网关而非 Transnet。
 
+`http.allow_credentials` 必须为 false；true 会在启动时被拒绝。过渡性 CORS 只允许配置中的精确 Origin，以及 Content-Type 和 X-Request-Id 请求头。终端用户认证仍由 island-port 负责。
+
 `[translation]` 配置 Unicode 字符数路由边界，以及 Provider 单次超时、首次之后重试次数和重试延迟的旧版默认值。Provider 专属覆盖优先。
 
 `[gemma4]` 和 `[translate_gemma]` 分别配置 OpenAI-compatible `base_url`、`model` 和 `api_key`。默认指向 18011 端口的 Gemma 4 和 18007 端口的 TranslateGemma。真实凭据必须在不提交 Git 的情况下提供；解析后的凭据会从 Rust `Debug` 诊断中脱敏，仅用于出站 Provider 请求。
+
+Provider client 直接连接所配置的 endpoint，不继承操作系统或环境代理设置。这样可避免回环与私有模型流量（包括 Bearer 凭据）进入无关代理进程。
 
 `[provider_resilience.gemma4]` 和 `[provider_resilience.translate_gemma]` 配置独立容错边界。`timeout_seconds`、`max_retries` 与 `retry_delay_ms` 可覆盖 `[translation]`；`max_retry_delay_ms` 限制 Provider `Retry-After` 延迟；`max_concurrent_requests` 是快速失败 Bulkhead；`circuit_failure_threshold` 是打开熔断器的连续瞬时逻辑调用失败次数；`circuit_open_ms` 是半开探测前的开放时长。省略表时使用 Rust 默认值：8 个并发尝试、阈值 5、开放 30 秒、重试延迟上限 5 秒；仓库中的 TranslateGemma 策略把并发收紧到 4。
 

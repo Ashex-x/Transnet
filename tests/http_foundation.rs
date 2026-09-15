@@ -189,7 +189,7 @@ async fn cors_allows_only_configured_origins_and_never_uses_a_wildcard() {
   let config = HttpConfig {
     max_request_body_bytes: 1_024,
     allowed_origins: vec!["https://app.example.test".to_string()],
-    allow_credentials: true,
+    allow_credentials: false,
   };
   let response = configured_app(config.clone())
     .oneshot(
@@ -213,10 +213,9 @@ async fn cors_allows_only_configured_origins_and_never_uses_a_wildcard() {
     response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
     "https://app.example.test"
   );
-  assert_eq!(
-    response.headers()[header::ACCESS_CONTROL_ALLOW_CREDENTIALS],
-    "true"
-  );
+  assert!(!response
+    .headers()
+    .contains_key(header::ACCESS_CONTROL_ALLOW_CREDENTIALS));
   assert!(response.headers().contains_key("x-request-id"));
 
   let response = configured_app(config)
@@ -239,11 +238,20 @@ async fn cors_allows_only_configured_origins_and_never_uses_a_wildcard() {
   let wildcard = HttpConfig {
     max_request_body_bytes: 1_024,
     allowed_origins: vec!["*".to_string()],
-    allow_credentials: true,
+    allow_credentials: false,
   };
   assert!(matches!(
     app_router_with_http_config(AppState::new(service()), &wildcard),
     Err(HttpConfigError::InvalidOrigin(_))
+  ));
+  let credentials = HttpConfig {
+    allowed_origins: vec!["https://app.example.test".to_string()],
+    allow_credentials: true,
+    ..HttpConfig::default()
+  };
+  assert!(matches!(
+    app_router_with_http_config(AppState::new(service()), &credentials),
+    Err(HttpConfigError::CredentialsNotAllowed)
   ));
 }
 

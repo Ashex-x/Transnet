@@ -13,7 +13,7 @@ use axum::{
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tower_http::{
-  cors::{AllowCredentials, AllowOrigin, CorsLayer},
+  cors::{AllowOrigin, CorsLayer},
   limit::RequestBodyLimitLayer,
   trace::{DefaultOnFailure, DefaultOnResponse, TraceLayer},
 };
@@ -26,15 +26,12 @@ use crate::{
     graph::GraphService,
     graph_topology_cache::GraphTopologySnapshotCacheService,
     lookup::LookupService,
-    lookup_job::LookupJobService,
     observability::ClosedMetricsDispatcher,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
   domain::observability::MetricEvent,
   ports::{
-    active_content_reader::ActiveContentReader,
-    learning_model::LearningModel,
-    lookup_job::{LookupJobOwner, LookupJobStore},
+    active_content_reader::ActiveContentReader, learning_model::LearningModel,
     metrics::MetricsRecorder,
   },
   provider::{TranslationError, TranslationService},
@@ -44,6 +41,7 @@ use crate::{
 mod problem;
 mod readiness;
 mod request_id;
+mod stateless;
 mod v1;
 
 pub use readiness::{AlwaysReady, Readiness};
@@ -148,7 +146,6 @@ pub struct AppState {
   lookup: Option<Arc<LookupService>>,
   canonical_lookup: Option<Arc<CanonicalLookupService>>,
   canonical_sense_details: Option<Arc<ActiveCanonicalSenseDetailsService>>,
-  lookup_jobs: Option<Arc<LookupJobService>>,
   graph: Option<GraphRouteService>,
   graph_cursor_protection_key: GraphCursorProtectionKey,
   metrics: Option<Arc<ClosedMetricsDispatcher>>,
@@ -167,7 +164,6 @@ impl AppState {
       lookup: None,
       canonical_lookup: None,
       canonical_sense_details: None,
-      lookup_jobs: None,
       graph: None,
       graph_cursor_protection_key: GraphCursorProtectionKey::ephemeral(),
       metrics: None,
@@ -175,7 +171,7 @@ impl AppState {
     }
   }
 
-  /// Adds the structured learning-model dependency used by `/v1/lookups`.
+  /// Adds the structured lexical-model dependency used by `/v1/lookups`.
   pub fn with_learning_model(mut self, model: Arc<dyn LearningModel>) -> Self {
     self.lookup = Some(Arc::new(LookupService::new(model)));
     self
@@ -215,21 +211,13 @@ impl AppState {
     self
   }
 
-  /// Adds the lookup-job store required to expose authorized asynchronous polling.
-  ///
-  /// Without this injected dependency, the lookup-job route is intentionally not registered.
-  pub fn with_lookup_job_store(mut self, store: Arc<dyn LookupJobStore>) -> Self {
-    self.lookup_jobs = Some(Arc::new(LookupJobService::new(store)));
-    self
-  }
-
   /// Adds a closed, best-effort metric recorder to the available observed backend dependencies.
   ///
   /// The recorder accepts only the closed metric catalog. Its bounded dispatcher is never awaited:
   /// saturated or runtime-less delivery drops telemetry rather than delaying or changing a response.
   /// Canonical lookup and graph services already attached to this state are cloned with this
   /// dispatcher, as are services attached later through their respective builders. Translation,
-  /// health, readiness, and lookup-job routes do not invent events that the catalog cannot express.
+  /// health and readiness routes do not invent events that the catalog cannot express.
   pub fn with_metrics_recorder(self, recorder: Arc<dyn MetricsRecorder>) -> Self {
     self.with_metrics_dispatcher(Arc::new(ClosedMetricsDispatcher::new(recorder)))
   }
@@ -300,10 +288,6 @@ impl AppState {
     self
   }
 
-  pub(crate) fn lookup_job_service(&self) -> Option<&Arc<LookupJobService>> {
-    self.lookup_jobs.as_ref()
-  }
-
   pub(crate) fn canonical_lookup_service(&self) -> Option<&Arc<CanonicalLookupService>> {
     self.canonical_lookup.as_ref()
   }
@@ -337,34 +321,12 @@ impl AppState {
     self.graph_cursor_protection_key.as_bytes()
   }
 
-  fn has_lookup_job_service(&self) -> bool {
-    self.lookup_jobs.is_some()
-  }
-
   fn has_graph_service(&self) -> bool {
     self.graph.is_some()
   }
 
   fn has_canonical_sense_details_service(&self) -> bool {
     self.canonical_sense_details.is_some()
-  }
-}
-
-/// Authenticated owner principal that authorization middleware may attach to a lookup-job poll.
-///
-/// The HTTP handler never accepts an owner identity from a request header. Middleware must derive
-/// this opaque value from an authenticated session before inserting this extension.
-#[derive(Clone)]
-pub struct AuthenticatedLookupJobOwner(LookupJobOwner);
-
-impl AuthenticatedLookupJobOwner {
-  /// Creates an authenticated lookup-job owner extension from a validated opaque principal.
-  pub fn new(owner: LookupJobOwner) -> Self {
-    Self(owner)
-  }
-
-  pub(crate) fn owner(&self) -> &LookupJobOwner {
-    &self.0
   }
 }
 
@@ -395,7 +357,6 @@ fn build_router(state: AppState, max_request_body_bytes: usize, cors: Option<Cor
     .nest(
       "/v1",
       v1::router(
-        state.has_lookup_job_service(),
         state.has_graph_service(),
         state.has_canonical_sense_details_service(),
       ),
@@ -428,6 +389,7 @@ fn build_router(state: AppState, max_request_body_bytes: usize, cors: Option<Cor
         .on_response(DefaultOnResponse::new().level(Level::INFO))
         .on_failure(DefaultOnFailure::new().level(Level::WARN)),
     )
+    .layer(middleware::from_fn(stateless::admit))
     .layer(middleware::from_fn(request_id::propagate_request_id))
 }
 
@@ -444,23 +406,15 @@ fn cors_layer(config: &HttpConfig) -> Result<Option<CorsLayer>, HttpConfigError>
     return Ok(None);
   }
 
-  let credential_origins = origins.clone();
   let cors = CorsLayer::new()
     .allow_origin(AllowOrigin::list(origins))
     .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
     .allow_headers([
       header::CONTENT_TYPE,
       HeaderName::from_static("x-request-id"),
-      HeaderName::from_static("lookup-capability"),
     ])
     .expose_headers([HeaderName::from_static("x-request-id")]);
-  if config.allow_credentials {
-    Ok(Some(cors.allow_credentials(AllowCredentials::predicate(
-      move |origin, _| credential_origins.contains(origin),
-    ))))
-  } else {
-    Ok(Some(cors))
-  }
+  Ok(Some(cors))
 }
 
 async fn payload_limit_response(request: Request, next: middleware::Next) -> Response {
