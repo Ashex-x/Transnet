@@ -16,3 +16,5 @@ pub mod observability;
 pub mod retrieval;
 /// Structured multilingual-to-English translation.
 pub mod translation;
+/// Request-local unified translation values, normalization, and response projection.
+pub mod translation_turn;

@@ -1,12 +1,15 @@
 //! OpenAI-compatible provider clients and text-length routing.
 
 use anyhow::Context;
+use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
   config::{ProviderConfig, ProviderResilienceConfig, TranslationConfig},
+  domain::translation_turn::{TranslationTurn, TurnLanguage},
+  ports::translation_model::{ConnectedTextModel, TranslationModelError},
   resilience::{
     response_failure, status_failure, transport_failure, ProviderAttemptError,
     ProviderMetricsSnapshot, ProviderPolicy, ProviderResilience,
@@ -23,6 +26,28 @@ pub enum TranslationError {
   /// The selected model could not produce a translation.
   #[error("translation provider unavailable")]
   Provider,
+}
+
+#[async_trait]
+impl ConnectedTextModel for TranslationService {
+  async fn translate_connected_text(
+    &self,
+    turn: &TranslationTurn,
+    source_language: TurnLanguage,
+  ) -> Result<String, TranslationModelError> {
+    let response = self
+      .translate(TranslateRequest {
+        text: turn.text().to_string(),
+        source_lang: source_language.as_str().to_string(),
+        target_lang: turn.target_language().as_str().to_string(),
+      })
+      .await
+      .map_err(|error| match error {
+        TranslationError::Provider => TranslationModelError::Unavailable,
+        TranslationError::Validation(_) => TranslationModelError::InvalidOutput,
+      })?;
+    Ok(response.translation)
+  }
 }
 
 /// Translation service backed by Gemma 4 and TranslateGemma.
@@ -245,27 +270,27 @@ fn translate_gemma_body(model: &str, request: &TranslateRequest) -> ChatCompleti
   }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct ChatCompletionRequest {
   model: String,
   messages: Vec<ChatMessage>,
   temperature: f32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct ChatMessage {
   role: &'static str,
   content: MessageContent,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(untagged)]
 enum MessageContent {
   Text(String),
   Structured(Vec<TranslateGemmaContent>),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct TranslateGemmaContent {
   #[serde(rename = "type")]
   content_type: &'static str,
