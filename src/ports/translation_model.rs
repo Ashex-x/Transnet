@@ -7,6 +7,18 @@ use crate::domain::translation_turn::{
   LexicalTurnDraft, TranslationTurn, TranslationUnit, TurnLanguage,
 };
 
+/// One connected-text operation with request-local consistency context.
+pub struct ConnectedTextRequest<'a> {
+  /// Validated parent turn supplying languages and minimal history.
+  pub turn: &'a TranslationTurn,
+  /// Current complete segment; it is never retained by the model port.
+  pub text: &'a str,
+  /// Bounded repeated source terms that should be rendered consistently.
+  pub terminology: &'a [String],
+  /// Immediately preceding translated segment, when chunking is active.
+  pub preceding_translation: Option<&'a str>,
+}
+
 /// Closed model-operation failure without provider or request content.
 #[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
 pub enum TranslationModelError {
@@ -24,7 +36,7 @@ pub trait ConnectedTextModel: Send + Sync {
   /// Translates the current text using a source language already resolved by orchestration.
   async fn translate_connected_text(
     &self,
-    turn: &TranslationTurn,
+    request: ConnectedTextRequest<'_>,
     source_language: TurnLanguage,
   ) -> Result<String, TranslationModelError>;
 }

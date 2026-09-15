@@ -8,8 +8,8 @@ use thiserror::Error;
 
 use crate::{
   config::{ProviderConfig, ProviderResilienceConfig, TranslationConfig},
-  domain::translation_turn::{TranslationTurn, TurnLanguage},
-  ports::translation_model::{ConnectedTextModel, TranslationModelError},
+  domain::translation_turn::TurnLanguage,
+  ports::translation_model::{ConnectedTextModel, ConnectedTextRequest, TranslationModelError},
   resilience::{
     response_failure, status_failure, transport_failure, ProviderAttemptError,
     ProviderMetricsSnapshot, ProviderPolicy, ProviderResilience,
@@ -32,15 +32,19 @@ pub enum TranslationError {
 impl ConnectedTextModel for TranslationService {
   async fn translate_connected_text(
     &self,
-    turn: &TranslationTurn,
+    request: ConnectedTextRequest<'_>,
     source_language: TurnLanguage,
   ) -> Result<String, TranslationModelError> {
     let response = self
-      .translate(TranslateRequest {
-        text: turn.text().to_string(),
-        source_lang: source_language.as_str().to_string(),
-        target_lang: turn.target_language().as_str().to_string(),
-      })
+      .translate_with_context(
+        TranslateRequest {
+          text: request.text.to_string(),
+          source_lang: source_language.as_str().to_string(),
+          target_lang: request.turn.target_language().as_str().to_string(),
+        },
+        request.terminology,
+        request.preceding_translation,
+      )
       .await
       .map_err(|error| match error {
         TranslationError::Provider => TranslationModelError::Unavailable,
@@ -142,18 +146,32 @@ impl TranslationService {
     &self,
     request: TranslateRequest,
   ) -> Result<TranslateResponse, TranslationError> {
+    self.translate_with_context(request, &[], None).await
+  }
+
+  async fn translate_with_context(
+    &self,
+    request: TranslateRequest,
+    terminology: &[String],
+    preceding_translation: Option<&str>,
+  ) -> Result<TranslateResponse, TranslationError> {
     validate_request(&request)?;
 
     let use_translate_gemma = request.text.chars().count() > self.translation.long_text_chars;
+    let consistency = consistency_instruction(terminology, preceding_translation);
     let (provider, body) = if use_translate_gemma {
       (
         &self.translate_gemma,
-        translate_gemma_body(&self.translate_gemma.config.model, &request),
+        translate_gemma_body_with_context(
+          &self.translate_gemma.config.model,
+          &request,
+          consistency,
+        ),
       )
     } else {
       (
         &self.gemma4,
-        gemma4_body(&self.gemma4.config.model, &request),
+        gemma4_body_with_context(&self.gemma4.config.model, &request, consistency),
       )
     };
     let translation = provider
@@ -163,6 +181,21 @@ impl TranslationService {
       .map_err(|_| TranslationError::Provider)?;
     Ok(TranslateResponse { translation })
   }
+}
+
+fn consistency_instruction(
+  terminology: &[String],
+  preceding_translation: Option<&str>,
+) -> Option<String> {
+  if terminology.is_empty() && preceding_translation.is_none() {
+    return None;
+  }
+  let terms = serde_json::to_string(terminology).unwrap_or_else(|_| "[]".to_string());
+  let previous = preceding_translation.unwrap_or("");
+  Some(format!(
+    "Maintain terminology consistently across this request. Repeated source terms: {terms}. \
+Use the preceding translated segment only as linguistic context: {previous}"
+  ))
 }
 
 impl TranslationProvider {
@@ -232,15 +265,27 @@ fn validate_request(request: &TranslateRequest) -> Result<(), TranslationError> 
   Ok(())
 }
 
+#[cfg(test)]
 fn gemma4_body(model: &str, request: &TranslateRequest) -> ChatCompletionRequest {
+  gemma4_body_with_context(model, request, None)
+}
+
+fn gemma4_body_with_context(
+  model: &str,
+  request: &TranslateRequest,
+  consistency: Option<String>,
+) -> ChatCompletionRequest {
+  let mut system = "Translate accurately and return only the translated text.".to_string();
+  if let Some(consistency) = consistency {
+    system.push(' ');
+    system.push_str(&consistency);
+  }
   ChatCompletionRequest {
     model: model.to_string(),
     messages: vec![
       ChatMessage {
         role: "system",
-        content: MessageContent::Text(
-          "Translate accurately and return only the translated text.".to_string(),
-        ),
+        content: MessageContent::Text(system),
       },
       ChatMessage {
         role: "user",
@@ -254,18 +299,35 @@ fn gemma4_body(model: &str, request: &TranslateRequest) -> ChatCompletionRequest
   }
 }
 
+#[cfg(test)]
 fn translate_gemma_body(model: &str, request: &TranslateRequest) -> ChatCompletionRequest {
+  translate_gemma_body_with_context(model, request, None)
+}
+
+fn translate_gemma_body_with_context(
+  model: &str,
+  request: &TranslateRequest,
+  consistency: Option<String>,
+) -> ChatCompletionRequest {
+  let mut messages = Vec::with_capacity(2);
+  if let Some(consistency) = consistency {
+    messages.push(ChatMessage {
+      role: "system",
+      content: MessageContent::Text(consistency),
+    });
+  }
+  messages.push(ChatMessage {
+    role: "user",
+    content: MessageContent::Structured(vec![TranslateGemmaContent {
+      content_type: "text",
+      source_lang_code: request.source_lang.clone(),
+      target_lang_code: request.target_lang.clone(),
+      text: request.text.clone(),
+    }]),
+  });
   ChatCompletionRequest {
     model: model.to_string(),
-    messages: vec![ChatMessage {
-      role: "user",
-      content: MessageContent::Structured(vec![TranslateGemmaContent {
-        content_type: "text",
-        source_lang_code: request.source_lang.clone(),
-        target_lang_code: request.target_lang.clone(),
-        text: request.text.clone(),
-      }]),
-    }],
+    messages,
     temperature: 0.0,
   }
 }

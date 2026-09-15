@@ -339,7 +339,7 @@ pub enum TranslationUnit {
   Passage,
 }
 
-/// A model classification is used for lexical routing only at high confidence.
+/// Deterministic classification permits lexical routing only at high confidence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RoutingConfidence {
@@ -359,6 +359,104 @@ pub struct TurnClassification {
   pub detected_source_language: Option<TurnLanguage>,
   /// Confidence in lexical routing.
   pub confidence: RoutingConfidence,
+}
+
+/// Stateless classifier that routes only structurally unambiguous lexical units to lexical work.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TranslationIntentClassifier;
+
+impl TranslationIntentClassifier {
+  /// Creates the deterministic request-local classifier.
+  pub const fn new() -> Self {
+    Self
+  }
+
+  /// Classifies normalized input without consulting provider policy or retaining request content.
+  pub fn classify(
+    self,
+    turn: &TranslationTurn,
+    normalized: &NormalizedTranslationInput,
+  ) -> TurnClassification {
+    let detected_source_language = match turn.source_language() {
+      SourceLanguage::Known(language) => Some(language),
+      SourceLanguage::Auto => detect_supported_language(&normalized.primary),
+    };
+    let (unit, confidence) = classify_unit(turn, &normalized.primary);
+    TurnClassification {
+      unit,
+      detected_source_language,
+      confidence,
+    }
+  }
+}
+
+fn detect_supported_language(value: &str) -> Option<TurnLanguage> {
+  if value.chars().any(is_cjk_ideograph) {
+    Some(TurnLanguage::Chinese)
+  } else if value.chars().any(char::is_alphabetic) {
+    Some(TurnLanguage::English)
+  } else {
+    None
+  }
+}
+
+fn is_cjk_ideograph(character: char) -> bool {
+  matches!(
+    character as u32,
+    0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff | 0x20000..=0x2fa1f
+  )
+}
+
+fn classify_unit(turn: &TranslationTurn, normalized: &str) -> (TranslationUnit, RoutingConfidence) {
+  if turn.requires_passage() || contains_connected_text_punctuation(normalized) {
+    return (TranslationUnit::Passage, RoutingConfidence::Uncertain);
+  }
+
+  let words = normalized.split_whitespace().collect::<Vec<_>>();
+  if words.len() == 1 && contains_lexical_content(words[0]) {
+    return (TranslationUnit::Word, RoutingConfidence::High);
+  }
+
+  if is_high_confidence_phrase(normalized, &words) {
+    return (TranslationUnit::Phrase, RoutingConfidence::High);
+  }
+
+  (TranslationUnit::Passage, RoutingConfidence::Uncertain)
+}
+
+fn contains_connected_text_punctuation(value: &str) -> bool {
+  value.ends_with(['.', '!', '?', '。', '！', '？'])
+    || value
+      .chars()
+      .any(|character| matches!(character, ',' | ';' | ':' | '，' | '；' | '：'))
+}
+
+fn contains_lexical_content(value: &str) -> bool {
+  value
+    .chars()
+    .any(|character| character.is_alphanumeric() || is_cjk_ideograph(character))
+}
+
+fn is_high_confidence_phrase(value: &str, words: &[&str]) -> bool {
+  if !(2..=6).contains(&words.len()) || words.iter().any(|word| !contains_lexical_content(word)) {
+    return false;
+  }
+
+  let explicitly_quoted = (value.starts_with('"') && value.ends_with('"'))
+    || (value.starts_with('\'') && value.ends_with('\''));
+  explicitly_quoted || !looks_like_connected_clause(words)
+}
+
+fn looks_like_connected_clause(words: &[&str]) -> bool {
+  const CLAUSE_MARKERS: &[&str] = &[
+    "i", "you", "he", "she", "it", "we", "they", "this", "that", "these", "those", "am", "is",
+    "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "can",
+    "could", "will", "would", "shall", "should", "may", "might", "must", "what", "when", "where",
+    "which", "who", "why", "how", "please",
+  ];
+  words
+    .iter()
+    .any(|word| CLAUSE_MARKERS.contains(&word.trim_matches(['\'', '"'])))
 }
 
 /// One generated bilingual example, never canonical evidence.

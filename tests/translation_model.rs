@@ -18,7 +18,9 @@ use transnet::{
   domain::translation_turn::{
     TranslationTurn, TranslationTurnRequest, TranslationUnit, TurnLanguage,
   },
-  ports::translation_model::{ConnectedTextModel, LexicalDraftModel, TranslationModelError},
+  ports::translation_model::{
+    ConnectedTextModel, ConnectedTextRequest, LexicalDraftModel, TranslationModelError,
+  },
   ProviderConfig, TranslationConfig, TranslationService,
 };
 
@@ -108,23 +110,70 @@ async fn connected_text_port_keeps_length_selection_inside_the_adapter() {
     provider(vec![Reply::Content("长".to_string())], "long-secret").await;
   let model: Arc<dyn ConnectedTextModel> =
     Arc::new(TranslationService::new(settings(4), short_provider, long_provider).unwrap());
+  let short_turn = turn("four".to_string());
+  let long_turn = turn("longer".to_string());
 
   assert_eq!(
     model
-      .translate_connected_text(&turn("four".to_string()), TurnLanguage::English)
+      .translate_connected_text(
+        ConnectedTextRequest {
+          turn: &short_turn,
+          text: short_turn.text(),
+          terminology: &[],
+          preceding_translation: None,
+        },
+        TurnLanguage::English,
+      )
       .await
       .unwrap(),
     "短"
   );
   assert_eq!(
     model
-      .translate_connected_text(&turn("longer".to_string()), TurnLanguage::English)
+      .translate_connected_text(
+        ConnectedTextRequest {
+          turn: &long_turn,
+          text: long_turn.text(),
+          terminology: &[],
+          preceding_translation: None,
+        },
+        TurnLanguage::English,
+      )
       .await
       .unwrap(),
     "长"
   );
   assert_eq!(short_state.bodies.lock().unwrap().len(), 1);
   assert_eq!(long_state.bodies.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn connected_text_adapter_passes_only_request_local_consistency_context() {
+  let (short_provider, state) =
+    provider(vec![Reply::Content("一致译文".to_string())], "secret").await;
+  let (unused, _) = provider(vec![Reply::Content("unused".to_string())], "unused").await;
+  let model = TranslationService::new(settings(4_000), short_provider, unused).unwrap();
+  let turn = turn("Database remains consistent.".to_string());
+  let terms = vec!["Database".to_string()];
+
+  model
+    .translate_connected_text(
+      ConnectedTextRequest {
+        turn: &turn,
+        text: turn.text(),
+        terminology: &terms,
+        preceding_translation: Some("数据库保持一致。"),
+      },
+      TurnLanguage::English,
+    )
+    .await
+    .unwrap();
+
+  let bodies = state.bodies.lock().unwrap();
+  let system = bodies[0]["messages"][0]["content"].as_str().unwrap();
+  assert!(system.contains("Database"));
+  assert!(system.contains("数据库保持一致。"));
+  assert_eq!(bodies[0]["model"], "private-model-name");
 }
 
 #[tokio::test]
@@ -191,9 +240,18 @@ async fn provider_failure_maps_to_a_stable_redacted_port_error() {
   .await;
   let (unused, _) = provider(vec![Reply::Content("unused".to_string())], "unused").await;
   let model = TranslationService::new(settings(4_000), failed, unused).unwrap();
+  let secret_turn = turn(input_secret.to_string());
 
   let error = model
-    .translate_connected_text(&turn(input_secret.to_string()), TurnLanguage::English)
+    .translate_connected_text(
+      ConnectedTextRequest {
+        turn: &secret_turn,
+        text: secret_turn.text(),
+        terminology: &[],
+        preceding_translation: None,
+      },
+      TurnLanguage::English,
+    )
     .await
     .unwrap_err();
   assert_eq!(error, TranslationModelError::Unavailable);
