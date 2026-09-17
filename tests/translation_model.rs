@@ -113,36 +113,36 @@ async fn connected_text_port_keeps_length_selection_inside_the_adapter() {
   let short_turn = turn("four".to_string());
   let long_turn = turn("longer".to_string());
 
-  assert_eq!(
-    model
-      .translate_connected_text(
-        ConnectedTextRequest {
-          turn: &short_turn,
-          text: short_turn.text(),
-          terminology: &[],
-          preceding_translation: None,
-        },
-        TurnLanguage::English,
-      )
-      .await
-      .unwrap(),
-    "短"
-  );
-  assert_eq!(
-    model
-      .translate_connected_text(
-        ConnectedTextRequest {
-          turn: &long_turn,
-          text: long_turn.text(),
-          terminology: &[],
-          preceding_translation: None,
-        },
-        TurnLanguage::English,
-      )
-      .await
-      .unwrap(),
-    "长"
-  );
+  let short = model
+    .translate_connected_text(
+      ConnectedTextRequest {
+        turn: &short_turn,
+        text: short_turn.text(),
+        terminology: &[],
+        preceding_translation: None,
+      },
+      TurnLanguage::English,
+    )
+    .await
+    .unwrap();
+  let long = model
+    .translate_connected_text(
+      ConnectedTextRequest {
+        turn: &long_turn,
+        text: long_turn.text(),
+        terminology: &[],
+        preceding_translation: None,
+      },
+      TurnLanguage::English,
+    )
+    .await
+    .unwrap();
+  assert_eq!(short.translation, "短");
+  assert_eq!(short.versions.model_version, "private-model-name");
+  assert_eq!(short.versions.prompt_version, "connected-text-prompt-v1");
+  assert_eq!(long.translation, "长");
+  assert_eq!(long.versions.model_version, "private-model-name");
+  assert_eq!(long.versions.prompt_version, "connected-text-prompt-v1");
   assert_eq!(short_state.bodies.lock().unwrap().len(), 1);
   assert_eq!(long_state.bodies.lock().unwrap().len(), 1);
 }
@@ -186,7 +186,7 @@ async fn lexical_draft_port_uses_strict_structured_output() {
   let model: Arc<dyn LexicalDraftModel> =
     Arc::new(OpenAiLearningModel::new(&settings(4_000), provider).unwrap());
 
-  let draft = model
+  let output = model
     .generate_lexical_draft(
       &turn("hot".to_string()),
       TranslationUnit::Word,
@@ -194,7 +194,9 @@ async fn lexical_draft_port_uses_strict_structured_output() {
     )
     .await
     .unwrap();
-  assert!(draft.is_valid(TranslationUnit::Word));
+  assert!(output.draft.is_valid(TranslationUnit::Word));
+  assert_eq!(output.versions.model_version, "private-model-name");
+  assert_eq!(output.versions.prompt_version, "lexical-draft-prompt-v1");
   let bodies = state.bodies.lock().unwrap();
   assert_eq!(bodies[0]["response_format"]["type"], "json_schema");
   assert_eq!(

@@ -9,7 +9,10 @@ use thiserror::Error;
 use crate::{
   config::{ProviderConfig, ProviderResilienceConfig, TranslationConfig},
   domain::translation_turn::TurnLanguage,
-  ports::translation_model::{ConnectedTextModel, ConnectedTextRequest, TranslationModelError},
+  ports::translation_model::{
+    ConnectedTextModel, ConnectedTextOutput, ConnectedTextRequest, ModelOperationVersions,
+    TranslationModelError,
+  },
   resilience::{
     response_failure, status_failure, transport_failure, ProviderAttemptError,
     ProviderMetricsSnapshot, ProviderPolicy, ProviderResilience,
@@ -34,9 +37,9 @@ impl ConnectedTextModel for TranslationService {
     &self,
     request: ConnectedTextRequest<'_>,
     source_language: TurnLanguage,
-  ) -> Result<String, TranslationModelError> {
-    let response = self
-      .translate_with_context(
+  ) -> Result<ConnectedTextOutput, TranslationModelError> {
+    let operation = self
+      .translate_operation_with_context(
         TranslateRequest {
           text: request.text.to_string(),
           source_lang: source_language.as_str().to_string(),
@@ -50,8 +53,22 @@ impl ConnectedTextModel for TranslationService {
         TranslationError::Provider => TranslationModelError::Unavailable,
         TranslationError::Validation(_) => TranslationModelError::InvalidOutput,
       })?;
-    Ok(response.translation)
+    Ok(ConnectedTextOutput {
+      translation: operation.translation,
+      versions: ModelOperationVersions {
+        model_version: operation.model_version,
+        prompt_version: CONNECTED_TEXT_PROMPT_VERSION,
+      },
+    })
   }
+}
+
+/// Version of the connected-text prompt contract used by both provider roles.
+pub const CONNECTED_TEXT_PROMPT_VERSION: &str = "connected-text-prompt-v1";
+
+struct TranslationOperation {
+  translation: String,
+  model_version: String,
 }
 
 /// Translation service backed by Gemma 4 and TranslateGemma.
@@ -155,6 +172,20 @@ impl TranslationService {
     terminology: &[String],
     preceding_translation: Option<&str>,
   ) -> Result<TranslateResponse, TranslationError> {
+    let operation = self
+      .translate_operation_with_context(request, terminology, preceding_translation)
+      .await?;
+    Ok(TranslateResponse {
+      translation: operation.translation,
+    })
+  }
+
+  async fn translate_operation_with_context(
+    &self,
+    request: TranslateRequest,
+    terminology: &[String],
+    preceding_translation: Option<&str>,
+  ) -> Result<TranslationOperation, TranslationError> {
     validate_request(&request)?;
 
     let use_translate_gemma = request.text.chars().count() > self.translation.long_text_chars;
@@ -179,7 +210,10 @@ impl TranslationService {
       .execute("translate", || provider.send(&body))
       .await
       .map_err(|_| TranslationError::Provider)?;
-    Ok(TranslateResponse { translation })
+    Ok(TranslationOperation {
+      translation,
+      model_version: provider.config.model.clone(),
+    })
   }
 }
 

@@ -10,6 +10,8 @@ pub const MAX_TURN_BYTES: usize = 1_048_576;
 pub const NORMALIZER_VERSION: &str = "translation-lookup-nfc-v1";
 /// Version of deterministic response breadth rules.
 pub const PROJECTION_VERSION: &str = "translation-projection-v1";
+/// Version of the response-level-independent translation result schema.
+pub const TRANSLATION_RESULT_SCHEMA_VERSION: &str = "translation-result-v1";
 /// Long input is conservatively translated as connected text, not classified as one lexical unit.
 pub const MAX_LEXICAL_CHARS: usize = 128;
 /// Maximum number of deterministic lookup forms emitted for one input.
@@ -546,6 +548,38 @@ pub struct TranslationTurnResult {
   pub translations: Vec<TurnTranslation>,
 }
 
+/// Version metadata for one projected translation application outcome.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct TranslationVersionMetadata {
+  /// Translation result schema used by this application outcome.
+  pub schema_version: &'static str,
+  /// Request-local normalizer version used before routing.
+  pub normalizer_version: &'static str,
+  /// Deterministic projector version used to select response breadth.
+  pub projection_version: &'static str,
+  /// Requested response breadth applied to the superset.
+  pub response_level: ResponseLevel,
+  /// Ordered, de-duplicated model identifiers that actually served the request.
+  pub model_versions: Vec<String>,
+  /// Ordered, de-duplicated prompt contract versions that actually served the request.
+  pub prompt_versions: Vec<&'static str>,
+  /// Retrieval version, absent until retrieval participates in the request.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub retrieval_version: Option<String>,
+  /// Immutable content release, absent until canonical release-pinned data participates.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub content_release: Option<String>,
+}
+
+/// Transport-independent projected translation plus truthful generation metadata.
+#[derive(Clone, Serialize)]
+pub struct ProjectedTranslationResult {
+  /// Deterministic projection of one complete semantic superset.
+  pub translation: TranslationTurnResult,
+  /// Versions of only the components that participated in this request.
+  pub metadata: TranslationVersionMetadata,
+}
+
 /// One translation with optional meaning-specific generated detail.
 #[derive(Clone, Serialize)]
 pub struct TurnTranslation {
@@ -668,7 +702,8 @@ redacted_debug!(
   LexicalTurnDraft,
   TranslationTurnResult,
   TurnTranslation,
-  TurnDetails
+  TurnDetails,
+  ProjectedTranslationResult
 );
 
 #[cfg(test)]

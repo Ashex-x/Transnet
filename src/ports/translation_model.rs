@@ -7,6 +7,33 @@ use crate::domain::translation_turn::{
   LexicalTurnDraft, TranslationTurn, TranslationUnit, TurnLanguage,
 };
 
+/// Non-sensitive version identifiers for one completed model operation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelOperationVersions {
+  /// Configured model identifier that actually served the operation.
+  pub model_version: String,
+  /// Version of the bounded prompt contract used for the operation.
+  pub prompt_version: &'static str,
+}
+
+/// Result of one connected-text model operation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConnectedTextOutput {
+  /// Translated text returned by the selected model adapter.
+  pub translation: String,
+  /// Actual model and prompt versions used for this operation.
+  pub versions: ModelOperationVersions,
+}
+
+/// Result of one structured lexical-draft model operation.
+#[derive(Clone, Debug)]
+pub struct LexicalDraftOutput {
+  /// Bounded, non-canonical lexical draft.
+  pub draft: LexicalTurnDraft,
+  /// Actual model and prompt versions used for this operation.
+  pub versions: ModelOperationVersions,
+}
+
 /// One connected-text operation with request-local consistency context.
 pub struct ConnectedTextRequest<'a> {
   /// Validated parent turn supplying languages and minimal history.
@@ -38,7 +65,7 @@ pub trait ConnectedTextModel: Send + Sync {
     &self,
     request: ConnectedTextRequest<'_>,
     source_language: TurnLanguage,
-  ) -> Result<String, TranslationModelError>;
+  ) -> Result<ConnectedTextOutput, TranslationModelError>;
 }
 
 /// Produces bounded structured lexical candidates without asserting canonical facts.
@@ -50,5 +77,5 @@ pub trait LexicalDraftModel: Send + Sync {
     turn: &TranslationTurn,
     unit: TranslationUnit,
     source_language: TurnLanguage,
-  ) -> Result<LexicalTurnDraft, TranslationModelError>;
+  ) -> Result<LexicalDraftOutput, TranslationModelError>;
 }

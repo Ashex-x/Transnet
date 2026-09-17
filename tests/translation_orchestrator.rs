@@ -7,10 +7,12 @@ use transnet::{
   application::translation::{TranslationOrchestrationError, TranslationOrchestrator},
   domain::translation_turn::{
     LexicalMeaningDraft, LexicalTurnDraft, TranslationHistory, TranslationTurn,
-    TranslationTurnRequest, TranslationUnit, TurnLanguage,
+    TranslationTurnRequest, TranslationUnit, TurnExample, TurnLanguage, NORMALIZER_VERSION,
+    PROJECTION_VERSION, TRANSLATION_RESULT_SCHEMA_VERSION,
   },
   ports::translation_model::{
-    ConnectedTextModel, ConnectedTextRequest, LexicalDraftModel, TranslationModelError,
+    ConnectedTextModel, ConnectedTextOutput, ConnectedTextRequest, LexicalDraftModel,
+    LexicalDraftOutput, ModelOperationVersions, TranslationModelError,
   },
 };
 
@@ -36,7 +38,7 @@ impl ConnectedTextModel for FakeConnected {
     &self,
     request: ConnectedTextRequest<'_>,
     _source_language: TurnLanguage,
-  ) -> Result<String, TranslationModelError> {
+  ) -> Result<ConnectedTextOutput, TranslationModelError> {
     let mut calls = self.calls.lock().unwrap();
     let call_number = calls.connected.len() + 1;
     calls.connected.push(request.turn.history().len());
@@ -50,9 +52,9 @@ impl ConnectedTextModel for FakeConnected {
       return Err(TranslationModelError::Unavailable);
     }
     if self.echo {
-      return Ok(request.text.to_string());
+      return Ok(connected_output(request.text.to_string()));
     }
-    self.outcome.clone()
+    self.outcome.clone().map(connected_output)
   }
 }
 
@@ -68,14 +70,31 @@ impl LexicalDraftModel for FakeLexical {
     turn: &TranslationTurn,
     unit: TranslationUnit,
     _source_language: TurnLanguage,
-  ) -> Result<LexicalTurnDraft, TranslationModelError> {
+  ) -> Result<LexicalDraftOutput, TranslationModelError> {
     self
       .calls
       .lock()
       .unwrap()
       .lexical
       .push((unit, turn.history().len()));
-    self.outcome.clone()
+    self.outcome.clone().map(|draft| LexicalDraftOutput {
+      draft,
+      versions: versions("fake-lexical-v1", "lexical-draft-prompt-v1"),
+    })
+  }
+}
+
+fn versions(model: &str, prompt: &'static str) -> ModelOperationVersions {
+  ModelOperationVersions {
+    model_version: model.to_string(),
+    prompt_version: prompt,
+  }
+}
+
+fn connected_output(translation: String) -> ConnectedTextOutput {
+  ConnectedTextOutput {
+    translation,
+    versions: versions("fake-connected-v1", "connected-text-prompt-v1"),
   }
 }
 
@@ -95,6 +114,17 @@ fn lexical_draft() -> LexicalTurnDraft {
 
 fn turn(text: &str) -> TranslationTurn {
   turn_with_history(text, Vec::new())
+}
+
+fn turn_at_level(text: &str, response_level: &str) -> TranslationTurn {
+  TranslationTurn::new(TranslationTurnRequest {
+    text: text.to_string(),
+    source_language: "en".to_string(),
+    target_language: "zh-CN".to_string(),
+    response_level: response_level.to_string(),
+    history: Vec::new(),
+  })
+  .unwrap()
 }
 
 fn turn_with_history(text: &str, history: Vec<TranslationHistory>) -> TranslationTurn {
@@ -170,7 +200,7 @@ async fn high_confidence_words_terms_and_phrases_use_only_lexical_model() {
 
   for (text, expected) in cases {
     let result = service.translate(&turn(text)).await.unwrap();
-    assert_eq!(result.unit, expected);
+    assert_eq!(result.translation.unit, expected);
   }
 
   let calls = calls.lock().unwrap();
@@ -190,7 +220,7 @@ async fn clauses_sentences_passages_and_ambiguous_fragments_use_only_connected_m
 
   for text in cases {
     let result = service.translate(&turn(text)).await.unwrap();
-    assert_eq!(result.unit, TranslationUnit::Passage);
+    assert_eq!(result.translation.unit, TranslationUnit::Passage);
   }
 
   let calls = calls.lock().unwrap();
@@ -262,7 +292,7 @@ async fn short_connected_text_uses_one_direct_segment_without_a_ledger() {
 
   let result = service.translate(&turn(source)).await.unwrap();
 
-  assert_eq!(result.translations[0].text, source);
+  assert_eq!(result.translation.translations[0].text, source);
   let calls = calls.lock().unwrap();
   assert_eq!(calls.segments, [source]);
   assert!(calls.terminology[0].is_empty());
@@ -278,7 +308,7 @@ async fn long_text_splits_at_paragraphs_and_reassembles_without_loss_or_reorderi
 
   let result = service.translate(&turn(&source)).await.unwrap();
 
-  assert_eq!(result.translations[0].text, source);
+  assert_eq!(result.translation.translations[0].text, source);
   let calls = calls.lock().unwrap();
   assert_eq!(calls.segments.len(), 2);
   assert!(calls
@@ -377,4 +407,162 @@ async fn auto_detection_rejects_symbol_only_input_without_calling_a_model() {
   let calls = calls.lock().unwrap();
   assert!(calls.connected.is_empty());
   assert!(calls.lexical.is_empty());
+}
+
+#[tokio::test]
+async fn lexical_levels_project_one_superset_without_changing_core_semantics() {
+  let draft = LexicalTurnDraft {
+    translations: vec![
+      LexicalMeaningDraft {
+        text: "热的".to_string(),
+        meaning: "having a high temperature".to_string(),
+        part_of_speech: "adjective".to_string(),
+        phrase_type: "".to_string(),
+        aliases: vec!["高温的".to_string()],
+        examples: vec![
+          TurnExample {
+            source_text: "hot tea".to_string(),
+            translated_text: "热茶".to_string(),
+          },
+          TurnExample {
+            source_text: "a hot day".to_string(),
+            translated_text: "炎热的一天".to_string(),
+          },
+        ],
+        usage_notes: vec![
+          "temperature".to_string(),
+          "literal use".to_string(),
+          "additional full detail".to_string(),
+        ],
+      },
+      LexicalMeaningDraft {
+        text: "热门的".to_string(),
+        meaning: "currently popular".to_string(),
+        part_of_speech: "adjective".to_string(),
+        phrase_type: "".to_string(),
+        aliases: vec!["流行的".to_string()],
+        examples: Vec::new(),
+        usage_notes: vec!["figurative use".to_string()],
+      },
+    ],
+  };
+  let (service, calls) = orchestrator(Ok("unused".to_string()), Ok(draft));
+
+  let brief = service
+    .translate(&turn_at_level("hot", "brief"))
+    .await
+    .unwrap();
+  let standard = service
+    .translate(&turn_at_level("hot", "standard"))
+    .await
+    .unwrap();
+  let full = service
+    .translate(&turn_at_level("hot", "full"))
+    .await
+    .unwrap();
+
+  let core = |result: &transnet::domain::translation_turn::ProjectedTranslationResult| {
+    result
+      .translation
+      .translations
+      .iter()
+      .map(|item| (item.text.clone(), item.meaning.clone()))
+      .collect::<Vec<_>>()
+  };
+  assert_eq!(core(&brief), core(&standard));
+  assert_eq!(core(&standard), core(&full));
+  assert_eq!(core(&full).len(), 2);
+  assert!(brief
+    .translation
+    .translations
+    .iter()
+    .all(|item| item.details.is_none()));
+  let standard_details = standard.translation.translations[0]
+    .details
+    .as_ref()
+    .unwrap();
+  assert!(standard_details.aliases.is_empty());
+  assert_eq!(standard_details.examples.len(), 1);
+  assert_eq!(standard_details.usage_notes.len(), 2);
+  let full_details = full.translation.translations[0].details.as_ref().unwrap();
+  assert_eq!(full_details.aliases.len(), 1);
+  assert_eq!(full_details.examples.len(), 2);
+  assert_eq!(full_details.usage_notes.len(), 3);
+  assert_eq!(calls.lock().unwrap().lexical.len(), 3);
+}
+
+#[tokio::test]
+async fn projected_metadata_reports_only_components_that_participated() {
+  let (service, _) = orchestrator(Ok("连续译文".to_string()), Ok(lexical_draft()));
+  let lexical = service
+    .translate(&turn_at_level("hot", "full"))
+    .await
+    .unwrap();
+  let passage = service
+    .translate(&turn_at_level("This is ready.", "brief"))
+    .await
+    .unwrap();
+
+  for result in [&lexical, &passage] {
+    assert_eq!(
+      result.metadata.schema_version,
+      TRANSLATION_RESULT_SCHEMA_VERSION
+    );
+    assert_eq!(result.metadata.normalizer_version, NORMALIZER_VERSION);
+    assert_eq!(result.metadata.projection_version, PROJECTION_VERSION);
+    assert_eq!(result.metadata.retrieval_version, None);
+    assert_eq!(result.metadata.content_release, None);
+    let json = serde_json::to_value(result).unwrap();
+    assert!(json["metadata"].get("retrieval_version").is_none());
+    assert!(json["metadata"].get("content_release").is_none());
+  }
+  assert_eq!(lexical.metadata.model_versions, ["fake-lexical-v1"]);
+  assert_eq!(
+    lexical.metadata.prompt_versions,
+    ["lexical-draft-prompt-v1"]
+  );
+  assert_eq!(passage.metadata.model_versions, ["fake-connected-v1"]);
+  assert_eq!(
+    passage.metadata.prompt_versions,
+    ["connected-text-prompt-v1"]
+  );
+  assert_eq!(passage.translation.translations[0].text, "连续译文");
+}
+
+#[tokio::test]
+async fn passage_levels_preserve_the_same_translation_without_extra_calls() {
+  let (service, calls) = orchestrator(Ok("同一段落译文".to_string()), Ok(lexical_draft()));
+  let mut translations = Vec::new();
+
+  for level in ["brief", "standard", "full"] {
+    let result = service
+      .translate(&turn_at_level("This is a complete sentence.", level))
+      .await
+      .unwrap();
+    assert_eq!(result.translation.unit, TranslationUnit::Passage);
+    assert_eq!(result.translation.translations.len(), 1);
+    assert!(result.translation.translations[0].details.is_none());
+    translations.push(result.translation.translations[0].text.clone());
+  }
+
+  assert_eq!(translations, ["同一段落译文"; 3]);
+  assert_eq!(calls.lock().unwrap().connected.len(), 3);
+}
+
+#[tokio::test]
+async fn outcome_debug_and_metadata_do_not_expose_request_content() {
+  let secret = "projection-secret-6019";
+  let (service, _) = orchestrator(Ok("安全译文".to_string()), Ok(lexical_draft()));
+  let outcome = service
+    .translate(&turn_at_level(
+      &format!("This contains {secret}."),
+      "standard",
+    ))
+    .await
+    .unwrap();
+
+  let rendered = format!("{outcome:?} {:?}", outcome.metadata);
+  assert!(!rendered.contains(secret));
+  assert!(!rendered.contains("安全译文"));
+  assert!(!rendered.contains("credential"));
 }

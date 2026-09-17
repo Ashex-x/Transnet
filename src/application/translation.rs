@@ -1,17 +1,23 @@
 //! Unified request-local translation orchestration independent of transport and providers.
 
 use std::sync::Arc;
-use std::{collections::BTreeMap, ops::Range};
+use std::{
+  collections::{BTreeMap, BTreeSet},
+  ops::Range,
+};
 
 use thiserror::Error;
 
 use crate::{
   domain::translation_turn::{
-    RoutingConfidence, TranslationIntentClassifier, TranslationNormalizer, TranslationTurn,
-    TranslationTurnResult, TranslationUnit,
+    ProjectedTranslationResult, RoutingConfidence, TranslationIntentClassifier,
+    TranslationNormalizer, TranslationTurn, TranslationTurnResult, TranslationUnit,
+    TranslationVersionMetadata, NORMALIZER_VERSION, PROJECTION_VERSION,
+    TRANSLATION_RESULT_SCHEMA_VERSION,
   },
   ports::translation_model::{
-    ConnectedTextModel, ConnectedTextRequest, LexicalDraftModel, TranslationModelError,
+    ConnectedTextModel, ConnectedTextRequest, LexicalDraftModel, ModelOperationVersions,
+    TranslationModelError,
   },
 };
 
@@ -83,7 +89,7 @@ impl TranslationOrchestrator {
   pub async fn translate(
     &self,
     turn: &TranslationTurn,
-  ) -> Result<TranslationTurnResult, TranslationOrchestrationError> {
+  ) -> Result<ProjectedTranslationResult, TranslationOrchestrationError> {
     let normalized = self
       .normalizer
       .normalize(turn.text(), turn.source_language());
@@ -98,46 +104,51 @@ impl TranslationOrchestrator {
         TranslationUnit::Word | TranslationUnit::Phrase
       )
     {
-      let draft = self
+      let output = self
         .lexical_draft
         .generate_lexical_draft(turn, classification.unit, source_language)
         .await?;
-      if !draft.is_valid(classification.unit) {
+      if !output.draft.is_valid(classification.unit) {
         return Err(TranslationOrchestrationError::InvalidModelOutput);
       }
-      return Ok(TranslationTurnResult::lexical(
-        draft,
+      let superset = TranslationTurnResult::lexical(
+        output.draft,
         classification.unit,
         source_language,
         turn.target_language(),
+      );
+      return Ok(project_outcome(
+        superset,
+        turn.response_level(),
+        std::iter::once(output.versions),
       ));
     }
 
-    let translated = self.translate_connected(turn, source_language).await?;
-    Ok(TranslationTurnResult::passage(
-      translated,
-      source_language,
-      turn.target_language(),
-    ))
+    let (translated, versions) = self.translate_connected(turn, source_language).await?;
+    let superset =
+      TranslationTurnResult::passage(translated, source_language, turn.target_language());
+    Ok(project_outcome(superset, turn.response_level(), versions))
   }
 
   async fn translate_connected(
     &self,
     turn: &TranslationTurn,
     source_language: crate::domain::translation_turn::TurnLanguage,
-  ) -> Result<String, TranslationOrchestrationError> {
+  ) -> Result<(String, Vec<ModelOperationVersions>), TranslationOrchestrationError> {
     if turn.text().chars().count() <= MAX_CONNECTED_CHUNK_CHARS {
-      return self
+      let output = self
         .translate_segment(turn, turn.text(), source_language, &[], None)
-        .await;
+        .await?;
+      return Ok((output.translation, vec![output.versions]));
     }
 
     let chunks = plan_chunks(turn.text())?;
     let terminology = build_terminology_ledger(turn.text());
     let mut assembled = String::new();
+    let mut versions = Vec::new();
     let mut preceding_translation: Option<String> = None;
     for chunk in chunks {
-      let translated = self
+      let output = self
         .translate_segment(
           turn,
           &turn.text()[chunk.text],
@@ -146,11 +157,12 @@ impl TranslationOrchestrator {
           preceding_translation.as_deref(),
         )
         .await?;
-      assembled.push_str(&translated);
+      assembled.push_str(&output.translation);
       assembled.push_str(&turn.text()[chunk.separator]);
-      preceding_translation = Some(translated);
+      preceding_translation = Some(output.translation);
+      versions.push(output.versions);
     }
-    Ok(assembled)
+    Ok((assembled, versions))
   }
 
   async fn translate_segment(
@@ -160,8 +172,9 @@ impl TranslationOrchestrator {
     source_language: crate::domain::translation_turn::TurnLanguage,
     terminology: &[String],
     preceding_translation: Option<&str>,
-  ) -> Result<String, TranslationOrchestrationError> {
-    let translated = self
+  ) -> Result<crate::ports::translation_model::ConnectedTextOutput, TranslationOrchestrationError>
+  {
+    let output = self
       .connected_text
       .translate_connected_text(
         ConnectedTextRequest {
@@ -173,10 +186,38 @@ impl TranslationOrchestrator {
         source_language,
       )
       .await?;
-    if translated.trim().is_empty() || translated.chars().count() > MAX_TRANSLATED_CHUNK_CHARS {
+    if output.translation.trim().is_empty()
+      || output.translation.chars().count() > MAX_TRANSLATED_CHUNK_CHARS
+    {
       return Err(TranslationOrchestrationError::InvalidModelOutput);
     }
-    Ok(translated)
+    Ok(output)
+  }
+}
+
+fn project_outcome(
+  superset: TranslationTurnResult,
+  response_level: crate::domain::translation_turn::ResponseLevel,
+  versions: impl IntoIterator<Item = ModelOperationVersions>,
+) -> ProjectedTranslationResult {
+  let mut model_versions = BTreeSet::new();
+  let mut prompt_versions = BTreeSet::new();
+  for version in versions {
+    model_versions.insert(version.model_version);
+    prompt_versions.insert(version.prompt_version);
+  }
+  ProjectedTranslationResult {
+    translation: superset.project(response_level),
+    metadata: TranslationVersionMetadata {
+      schema_version: TRANSLATION_RESULT_SCHEMA_VERSION,
+      normalizer_version: NORMALIZER_VERSION,
+      projection_version: PROJECTION_VERSION,
+      response_level,
+      model_versions: model_versions.into_iter().collect(),
+      prompt_versions: prompt_versions.into_iter().collect(),
+      retrieval_version: None,
+      content_release: None,
+    },
   }
 }
 
