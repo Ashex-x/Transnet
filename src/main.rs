@@ -4,7 +4,8 @@ use std::{fs, net::IpAddr, path::Path, sync::Arc};
 
 use anyhow::{ensure, Context, Result};
 use transnet::{
-  app_router_with_http_config, logger, AppConfig, AppState, OpenAiLearningModel, TranslationService,
+  app_router_with_http_config, application::translation::TranslationOrchestrator, logger,
+  AppConfig, AppState, OpenAiLearningModel, TranslationService,
 };
 
 #[tokio::main]
@@ -55,13 +56,17 @@ async fn run(config: AppConfig) -> Result<()> {
     config.translate_gemma,
     translate_gemma_policy,
   )?;
+  let orchestrator =
+    TranslationOrchestrator::new(Arc::new(service.clone()), Arc::new(learning_model.clone()));
   let listener = tokio::net::TcpListener::bind(address)
     .await
     .with_context(|| format!("failed to bind to {address}"))?;
 
   tracing::info!(address = %address, "starting transnet");
   let router = app_router_with_http_config(
-    AppState::new(service).with_learning_model(Arc::new(learning_model)),
+    AppState::new(service)
+      .with_learning_model(Arc::new(learning_model))
+      .with_translation_orchestrator(Arc::new(orchestrator)),
     &config.http,
   )
   .context("invalid HTTP configuration")?;

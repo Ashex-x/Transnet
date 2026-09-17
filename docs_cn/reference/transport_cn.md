@@ -6,7 +6,7 @@ English: [Transport and API boundary](../../docs/reference/transport.md)
 
 ## 当前运行时
 
-可执行文件当前绑定回环 TCP 并暴露过渡路由。已有版本化 handler 和 problem response 是基础；只有路由注册、组合与合同测试齐全时才表示实现了目标 UDS 合同。
+可执行文件当前绑定回环 TCP，保留过渡期 `POST /translate`，并以共享 problem response 基础设施暴露统一 `POST /api/v1/translations` handler。这不表示目标 UDS listener 已实现；后者仍是独立的传输工作。
 
 ## 目标 server
 
