@@ -39,6 +39,8 @@ A versioned normalizer derives bounded lookup forms through Unicode normalizatio
 
 Cards use stable sense IDs, not normalized strings, as identity. If a form maps to several materially plausible meanings or parts of speech, Transnet ranks them from the current text and history and may return several meaning-specific translations rather than forcing a false single answer. New cards and aliases are created only by the content-publication workflow, never as a lookup side effect.
 
+Canonical IDs use the versioned `canonical-id-v1` publisher policy and are never derived from normalized queries. Reviewed translations use `translation-source-v1` fingerprints only to retrieve candidates; Transnet must compare the stored source under that same contract before accepting a match. Identity retains sense, part of speech, domain scope, and compositional-versus-phrase-level meaning. Corrections preserve the stable entity ID and create a new immutable revision instead of rewriting a published revision.
+
 ## Words, terms, and lexical phrases
 
 A translation-wiki page begins with the concise MySQL basic card, then enriches it with related knowledge from Qdrant. Distinct meanings and parts of speech remain separate so examples, relationships, grammar, pronunciation, and usage guidance stay attached to the applicable sense.

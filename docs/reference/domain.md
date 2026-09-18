@@ -14,6 +14,12 @@ A translation result separates primary translated text from optional ambiguity, 
 
 A sense or established phrase has a stable canonical ID independent of spelling normalization. Forms, aliases, pronunciation, definitions, grammar, register, morphology, examples, collocations, and restrictions remain attached to the applicable meaning. Different parts of speech or materially different meanings are not collapsed.
 
+Canonical public IDs follow the versioned `canonical-id-v1` policy. Entity-family prefixes distinguish translations, cards, concept roots, and domains, while the remaining opaque value is assigned by the publication workflow rather than derived from a query, normalized form, definition, translation, database row number, or content hash. Corrections retain the stable entity ID and create the next positive immutable revision; published revision content is never changed in place.
+
+A reviewed translation has a stable translation ID, release membership, source and target languages, one positive revision, evidence references, and either an explicit lexical meaning scope or passage scope. Lexical scope retains lexeme ID, independently selectable sense ID, part of speech, compositional-versus-phrase-level status, and an ordered bounded set of canonical domain IDs. These values keep homographs, parts of speech, established phrase meanings, and field-specific senses separate even when their normalized surface forms are equal.
+
+The versioned `translation-source-v1` fingerprint is a private candidate-selection key over NFC source text, source language, and the fingerprint-contract version. Significant symbols and case are preserved, so `C`, `C++`, and `C#` remain different candidates. A fingerprint hit is never identity or proof of equality: application code must compare the returned stored source with the requested source under the same normalization contract before accepting the candidate.
+
 ## Knowledge and relationships
 
 Canonical knowledge consists of immutable, release-scoped nodes and atomic facts. Relationships have explicit type, direction, endpoints, applicability, conditions, provenance, evidence, verification state, and revision. Symmetry, inverse projection, and transitivity are declared properties of a relationship type, never guesses from wording.
