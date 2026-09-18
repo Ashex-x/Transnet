@@ -22,5 +22,7 @@ pub mod metrics;
 pub mod public_id;
 /// Generic ranked-candidate retrieval interface.
 pub mod retriever;
+/// Request-local connected-text and lexical-draft model operations.
+pub mod translation_model;
 /// Versioned vector-retrieval interface.
 pub mod vector_retriever;

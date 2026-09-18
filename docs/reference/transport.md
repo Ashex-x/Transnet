@@ -6,7 +6,7 @@ This module owns request admission and mapping between HTTP/JSON and application
 
 ## Current runtime
 
-The executable currently binds loopback TCP and exposes transitional routes. Existing versioned handlers and problem responses are foundations; they do not implement the target UDS contract unless route registration, composition, and contract tests say so.
+The executable currently binds loopback TCP, preserves the transitional `POST /translate`, and exposes the unified `POST /api/v1/translations` handler with the shared problem-response infrastructure. This does not implement the target UDS listener; that remains separate transport work.
 
 ## Target server
 

@@ -13,6 +13,15 @@ use super::{problem, request_id::RequestId, AppState};
 pub(crate) mod graph;
 pub(crate) mod lookup;
 pub(crate) mod sense;
+pub(crate) mod translation;
+
+/// Builds the target `/api/v1` routes implemented by the current loopback runtime.
+pub(crate) fn target_router() -> Router<AppState> {
+  Router::new()
+    .route("/translations", post(translation::translate))
+    .fallback(not_found)
+    .method_not_allowed_fallback(method_not_allowed)
+}
 
 /// Builds the versioned API router before application state is attached.
 pub(crate) fn router(

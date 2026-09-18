@@ -42,13 +42,15 @@ Repository-side admission, request/result Debug redaction, closed telemetry, and
 - [ ] Implement the simple text, source-language, target-language, response-level, and optional minimal-history request plus the discriminated word, phrase, and passage `TranslationResult` response.
 - [ ] Implement a versioned request-local normalizer with Unicode normalization, language-aware case folding, whitespace and punctuation handling, meaningful-symbol preservation, and bounded derived forms.
 - [ ] Behind one translation entry point, route a confident word, term, idiom, phrasal verb, or established phrase to lexical composition and route clauses, sentences, passages, and ambiguous short fragments to connected-text translation.
-- [ ] Align `POST /api/v1/translations` with the target response: preserve meaning, tone, terminology, register, paragraph structure, protected spans, and formatting; return at most two material one-sentence tips and at most one labeled alternative.
+- [ ] Align `POST /api/v1/translations` with the target response while preserving meaning, tone, terminology, register, paragraph structure, protected spans, and formatting.
 - [ ] Add request-local chunk planning and a disposable terminology ledger for long or difficult text without creating translation memory.
 - [ ] Accept island-port-controlled translation-turn history with no independent item-count cap, use it only for current linguistic context, and prove it is never logged, cached, embedded, queued, or persisted.
 - [ ] Build one release-pinned superset aggregate and deterministic `brief`, `standard`, and `full` projectors; preserve materially different meanings even at lower levels.
 - [ ] Pin response metadata to the applicable schema, normalizer, model, prompt, and retrieval versions.
 
-Exit criteria: contract and routing tests cover lexical units, technical symbols, phrases, ambiguous fragments, sentences, and passages; translation evaluation covers fidelity, naturalness, terminology, structure, register, and tip limits.
+Exit criteria: contract and routing tests cover lexical units, technical symbols, phrases, ambiguous fragments, sentences, and passages; translation evaluation covers fidelity, naturalness, terminology, structure, and register.
+
+Passage tips and labeled alternatives are deferred beyond milestone 1. Their later owning milestone must first add explicit application/domain results and evaluation limits; the milestone 1 transport must not fabricate them.
 
 ## Milestone 2: build canonical identity and MySQL basic cards
 

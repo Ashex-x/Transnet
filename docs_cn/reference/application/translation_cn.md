@@ -10,7 +10,7 @@ English: [Translation application](../../../docs/reference/application/translati
 
 长输入可使用有界请求级分块计划与术语台账。分块尊重语义和段落边界、保持顺序，并在组合时不丢内容。台账只为当前请求跟踪名称、缩写与重复术语；它不是翻译记忆或持久任务。
 
-最多两条精简说明可解释重要歧义、习语、语域或文化语境。上下文不足时可以返回明确标注的备选，而不是伪造确定性。
+段落提示与明确标注的备选仍计划在后续 milestone 实现。在 application 结果模型与编排真正生成这些能力之前，Milestone 1 HTTP handler 不会伪造它们。
 
 ## 边界
 
@@ -18,4 +18,4 @@ English: [Translation application](../../../docs/reference/application/translati
 
 ## 验证
 
-测试 provider 路由边界、语言校验、结构保留、保护片段、分块覆盖与顺序、术语一致性、备选、取消及请求不持久化。
+测试 provider 路由边界、语言校验、结构保留、保护片段、分块覆盖与顺序、术语一致性、取消及请求不持久化。备选与段落提示测试随以后负责该能力的 application 实现一并加入。

@@ -27,6 +27,7 @@ use crate::{
     graph_topology_cache::GraphTopologySnapshotCacheService,
     lookup::LookupService,
     observability::ClosedMetricsDispatcher,
+    translation::TranslationOrchestrator,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
   domain::observability::MetricEvent,
@@ -143,6 +144,7 @@ pub enum GraphCursorProtectionKeyError {
 #[derive(Clone)]
 pub struct AppState {
   service: Arc<TranslationService>,
+  translation_orchestrator: Option<Arc<TranslationOrchestrator>>,
   lookup: Option<Arc<LookupService>>,
   canonical_lookup: Option<Arc<CanonicalLookupService>>,
   canonical_sense_details: Option<Arc<ActiveCanonicalSenseDetailsService>>,
@@ -161,6 +163,7 @@ impl AppState {
   pub fn new(service: TranslationService) -> Self {
     Self {
       service: Arc::new(service),
+      translation_orchestrator: None,
       lookup: None,
       canonical_lookup: None,
       canonical_sense_details: None,
@@ -169,6 +172,15 @@ impl AppState {
       metrics: None,
       readiness: Arc::new(AlwaysReady),
     }
+  }
+
+  /// Adds the unified request-local translation operation used by `/api/v1/translations`.
+  pub fn with_translation_orchestrator(
+    mut self,
+    orchestrator: Arc<TranslationOrchestrator>,
+  ) -> Self {
+    self.translation_orchestrator = Some(orchestrator);
+    self
   }
 
   /// Adds the structured lexical-model dependency used by `/v1/lookups`.
@@ -292,6 +304,10 @@ impl AppState {
     self.canonical_lookup.as_ref()
   }
 
+  pub(crate) fn translation_orchestrator(&self) -> Option<&Arc<TranslationOrchestrator>> {
+    self.translation_orchestrator.as_ref()
+  }
+
   pub(crate) fn canonical_sense_details_service(
     &self,
   ) -> Option<&Arc<ActiveCanonicalSenseDetailsService>> {
@@ -361,6 +377,7 @@ fn build_router(state: AppState, max_request_body_bytes: usize, cors: Option<Cor
         state.has_canonical_sense_details_service(),
       ),
     )
+    .nest("/api/v1", v1::target_router())
     .with_state(state)
     .layer(DefaultBodyLimit::max(max_request_body_bytes))
     .layer(RequestBodyLimitLayer::new(max_request_body_bytes))
@@ -418,7 +435,10 @@ fn cors_layer(config: &HttpConfig) -> Result<Option<CorsLayer>, HttpConfigError>
 }
 
 async fn payload_limit_response(request: Request, next: middleware::Next) -> Response {
-  let is_v1 = request.uri().path() == "/v1" || request.uri().path().starts_with("/v1/");
+  let is_v1 = request.uri().path() == "/v1"
+    || request.uri().path().starts_with("/v1/")
+    || request.uri().path() == "/api/v1"
+    || request.uri().path().starts_with("/api/v1/");
   let request_id = request.extensions().get::<RequestId>().cloned();
   let response = next.run(request).await;
   if response.status() != StatusCode::PAYLOAD_TOO_LARGE {

@@ -6,12 +6,12 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本文档同时定义所有涉及 Transnet 的内部进程边界共享的传输合同，适用于 island-port、Transnet、发布工具和部署工具。
 
-状态：目标合同。当前运行时仍暴露过渡性回环 HTTP，且尚未组合数据服务。
+状态：目标合同，并明确标注当前运行时覆盖范围。当前运行时仍使用过渡性回环 HTTP；统一翻译操作已经组合，而目标 UDS 传输与后续数据能力仍未完成。
 
 
 当前过渡性运行时在处理器分派前强制执行无状态边界。它拒绝 Cookie、Cookie2、Authorization、Proxy-Authorization、X-API-Key、Lookup-Capability、Remote-User、X-Authenticated-User、X-Forwarded-User，以及 X-User-*、X-Learner-*、X-Account-*、X-Owner-*、X-Session-* 请求头，且不回显其值。只有现有图查询路由接受严格解析的查询参数；其他路由拒绝查询字符串。边界错误返回 HTTP 400、`invalid_service_request` 问题码和请求 ID。响应携带 `Cache-Control: no-store`。出站模型 Provider 凭据与入站终端用户凭据保持分离。
 
-当前 `POST /translate` 仅接受 `text`、`source_lang`、`target_lang`。当前 `POST /v1/lookups` 接受 `query`、`source_language`、`target_language`、`context`、`explanation_language`、`english_dialect`、`detail` 和 `include`；目标语言仍限 `en`，详情仍为 `brief` 或 `full`，include 仅接受 `relations` 与 `word_history`。包括 `learner_level` 在内的未知字段会被拒绝，`practice_preview` 也会被拒绝。按时间排序的翻译历史、统一目标请求和 UDS 尚未实现。查询任务轮询路由及可复用的学习者、练习、私有反馈、保存布局、持久请求任务模块已经移除。
+当前 `POST /translate` 仅接受 `text`、`source_lang`、`target_lang`。回环运行时也暴露下文定义的统一 `POST /api/v1/translations` 请求与响应合同；迁移到目标 UDS listener 仍未实现。当前 `POST /v1/lookups` 接受 `query`、`source_language`、`target_language`、`context`、`explanation_language`、`english_dialect`、`detail` 和 `include`；目标语言仍限 `en`，详情仍为 `brief` 或 `full`，include 仅接受 `relations` 与 `word_history`。包括 `learner_level` 在内的未知字段会被拒绝，`practice_preview` 也会被拒绝。查询任务轮询路由及可复用的学习者、练习、私有反馈、保存布局、持久请求任务模块已经移除。
 
 规范查询对每个请求执行发布固定读取，不包含查询快照缓存、查询指纹或持久化依赖。保留的拓扑缓存仅保存按规范节点身份和发布元数据索引的规范图数据。规范发音与用法易错点仍属于词汇内容，不属于语音训练或个人学习者状态。
 
@@ -115,22 +115,23 @@ Transnet 默认仅通过 `/run/transnet/transnet.sock` 上的 HTTP/1.1 提供服
 }
 ```
 
-错误使用统一安全 envelope，绝不回显请求文本、上下文、凭据、provider body、向量或存储内部信息。
+错误使用统一安全的 RFC 9457-style problem envelope，`Content-Type` 为 `application/problem+json`，绝不回显请求文本、上下文、凭据、provider body、向量、prompt 或存储内部信息。`request_id` 与 `X-Request-Id` 响应头一致；没有字段级诊断时，`errors` 为空数组。
 
 ```json
 {
-  "error": {
-    "code": "invalid_request",
-    "message": "The request is invalid.",
-    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-    "retryable": false,
-    "fields": [
-      {
-        "field": "target_language",
-        "message": "A valid BCP 47 language tag is required."
-      }
-    ]
-  }
+  "type": "about:blank",
+  "title": "Invalid translation request",
+  "status": 422,
+  "code": "invalid_translation_request",
+  "detail": "One or more translation fields are invalid.",
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "retryable": false,
+  "errors": [
+    {
+      "field": "target_language",
+      "message": "must be one of `en` or `zh-CN`."
+    }
+  ]
 }
 ```
 
@@ -278,10 +279,12 @@ Standard 短语响应：
           "type": "phrase",
           "phrase_type": "idiom",
           "usage_notes": ["Used for plans or questions whose outcome is uncertain."],
-          "example": {
-            "source_text": "Our travel dates are still up in the air.",
-            "translated_text": "我们的旅行日期仍未确定。"
-          }
+          "examples": [
+            {
+              "source_text": "Our travel dates are still up in the air.",
+              "translated_text": "我们的旅行日期仍未确定。"
+            }
+          ]
         }
       }
     ]
@@ -299,16 +302,7 @@ Standard 段落响应：
     "translations": [
       {
         "text": "那个计划仍然悬而未决。",
-        "language": "zh-CN",
-        "details": {
-          "type": "passage",
-          "tips": [
-            {
-              "kind": "idiom",
-              "message": "“up in the air” means undecided rather than physically airborne."
-            }
-          ]
-        }
+        "language": "zh-CN"
       }
     ]
   }
@@ -323,11 +317,13 @@ Standard 段落响应：
 
 | 级别 | 始终返回 | 其他合格内容 |
 | --- | --- | --- |
-| `brief` | 单元、检测源语言、有序翻译，以及歧义需要时的短含义标签 | 不返回例句、提示或关系展开 |
-| `standard` | `brief` 的全部内容 | 精简定义或短语用法、每个含义最多一个例句、最多两条段落提示，以及仅有实质价值的对比或关系 |
+| `brief` | 单元、检测源语言、有序翻译，以及每个 lexical sense 的一个含义标签 | 不返回例句、提示或关系展开 |
+| `standard` | `brief` 的全部内容 | 精简定义或短语用法、每个含义最多一个例句，以及仅有实质价值的对比或关系 |
 | `full` | `standard` 的全部内容 | 发音、别名、形态、更多例句与用法、领域事实、来源、分类、上位词、下位词、强度尺度及其他有界关系组 |
 
 当省略会造成误导时，多含义优先于简短。每一级别都省略空字段与空关系组。较低级别不会改变有序含义及其译文，只投影更少的支持字段。
+
+段落提示与带标签备选属于计划中的 application 能力，不是 Milestone 1 HTTP 合同字段。后续 milestone 必须先定义其领域语义，transport 投影才能暴露它们。
 
 领域评估使用闭合 `resolution` 值 `existing`、`proposed_new`、`general` 和 `uncertain`。`proposed_new` 没有领域 ID，只可在 `full` 级别包含请求级名称、定义、候选上层领域和理由，且绝不表示为已验证知识。加载已有领域清单失败时必须返回 `uncertain`，不能返回 `proposed_new`。
 
@@ -452,7 +448,7 @@ effective_distance = clamp(base_distance - adjustment, 0, 10000)
 
 ## POST /api/v1/translations
 
-这是新翻译 turn 的唯一入口。它翻译单词、短语、句子或段落，并自动选择词汇查询、领域展开或连续文本翻译。WebUI 和 island-port 都不选择该模式。请求使用上述简单字段；`history` 可省略，默认空数组。
+这是新翻译 turn 的唯一入口。它翻译单词、短语、句子或段落，并自动选择 lexical structured draft 或连续文本翻译。WebUI 和 island-port 都不选择该模式。请求使用上述简单字段；`history` 可省略，默认空数组。
 
 请求：
 
@@ -477,16 +473,7 @@ effective_distance = clamp(base_distance - adjustment, 0, 10000)
       "translations": [
         {
           "text": "那个计划仍然悬而未决。",
-          "language": "zh-CN",
-          "details": {
-            "type": "passage",
-            "tips": [
-              {
-                "kind": "idiom",
-                "message": "“up in the air” means undecided rather than physically airborne."
-              }
-            ]
-          }
+          "language": "zh-CN"
         }
       ]
     }
@@ -494,12 +481,20 @@ effective_distance = clamp(base_distance - adjustment, 0, 10000)
   "meta": {
     "request_id": "req_01K4Z8S1AK6C8D2F0G4H7J9M3N",
     "response_level": "standard",
-    "model_version": "translate-2026-09"
+    "schema_version": "translation-result-v1",
+    "normalizer_version": "translation-lookup-nfc-v1",
+    "projection_version": "translation-projection-v1",
+    "model_versions": ["translate-2026-09"],
+    "prompt_versions": ["connected-text-prompt-v1"]
   }
 }
 ```
 
-Passage 的 `tips` 最多两条，每条一句；没有实质价值时省略。受保护片段、段落结构与格式由服务自动推断并保留。长文处理使用的分块计划或术语台账随请求丢弃。若 Qdrant 不可用但 MySQL 已解析规范单词或短语，Transnet 返回合格词汇字段，省略关系分区并设置 `meta.degraded: true`，不得编造替代关系。
+Milestone 1 HTTP 合同只暴露已组合 translation application 实际生成的字段。纯模型 lexical details 可包含 `type`、`part_of_speech` 或 `phrase_type`、`aliases`、`examples`、`usage_notes`、`generated` 与 `evidence_state`。Passage tips、带标签备选、canonical ID、发音、形态、分类、领域事实、来源和关系分组属于后续 milestone 能力，本 handler 不会伪造。长文处理使用的分块计划或术语台账随请求丢弃。
+
+`meta.model_versions` 和 `meta.prompt_versions` 是有序去重数组，因为一次长文本请求可能包含多个实际模型操作。`schema_version`、`normalizer_version` 与 `projection_version` 分别标识结果、规范化和投影合同。`retrieval_version` 与 `content_release` 只在对应组件真实参与时返回；Milestone 1 的纯模型路径不会伪造它们。
+
+翻译特定失败使用：`invalid_json` 对应 `400`、`payload_too_large` 对应 `413`、`invalid_translation_request` 对应 `422`、`invalid_model_output` 对应 `502`、`translation_model_unavailable` 对应 `503`。容量、内部与 deadline 状态在相应闭合 application outcome 建立前保持预留。
 
 ## POST /api/v1/senses/get
 

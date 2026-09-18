@@ -18,3 +18,5 @@ pub mod lookup;
 pub mod observability;
 /// Canonical hybrid retrieval and lexical-only fallback.
 pub mod retrieval;
+/// Unified request-local translation orchestration and automatic intent routing.
+pub mod translation;

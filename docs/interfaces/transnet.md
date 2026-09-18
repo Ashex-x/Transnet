@@ -6,12 +6,12 @@ This contract defines how island-port requests translation and relationship know
 
 This document also defines the transport shared by every internal process boundary involving Transnet. It is normative for island-port, Transnet, publication tooling, and deployment tooling.
 
-Status: target contract. The current runtime still exposes transitional loopback HTTP and does not yet compose the data services.
+Status: target contract with explicitly noted current-runtime coverage. The current runtime still uses transitional loopback HTTP; the unified translation operation is composed, while target UDS transport and later data capabilities remain incomplete.
 
 
 The current transitional runtime enforces the stateless boundary before handler dispatch. It rejects Cookie, Cookie2, Authorization, Proxy-Authorization, X-API-Key, Lookup-Capability, Remote-User, X-Authenticated-User, X-Forwarded-User, and X-User-*, X-Learner-*, X-Account-*, X-Owner-*, and X-Session-* headers without echoing their values. Only the existing graph routes accept their strictly decoded query parameters; other routes reject query strings. Boundary failures return HTTP 400 with the `invalid_service_request` problem code and a request ID. Responses carry `Cache-Control: no-store`. Outbound model-provider credentials remain separate from incoming end-user credentials.
 
-Current `POST /translate` accepts exactly `text`, `source_lang`, and `target_lang`. Current `POST /v1/lookups` accepts `query`, `source_language`, `target_language`, `context`, `explanation_language`, `english_dialect`, `detail`, and `include`; target language remains `en`, detail remains `brief` or `full`, and include accepts only `relations` and `word_history`. Unknown fields, including `learner_level`, are rejected, as is `practice_preview`. Chronological translation history, the unified target request, and UDS remain unimplemented. There is no lookup-job polling route or reusable learner, practice, private-feedback, saved-layout, or durable request-job module.
+Current `POST /translate` accepts exactly `text`, `source_lang`, and `target_lang`. The loopback runtime also exposes the unified `POST /api/v1/translations` request and response contract defined below; migration to the target UDS listener remains unimplemented. Current `POST /v1/lookups` accepts `query`, `source_language`, `target_language`, `context`, `explanation_language`, `english_dialect`, `detail`, and `include`; target language remains `en`, detail remains `brief` or `full`, and include accepts only `relations` and `word_history`. Unknown fields, including `learner_level`, are rejected, as is `practice_preview`. There is no lookup-job polling route or reusable learner, practice, private-feedback, saved-layout, or durable request-job module.
 
 Canonical lookup performs release-pinned reads for each request with no query snapshot cache, query fingerprint, or persistence dependency. The remaining topology cache contains canonical graph data keyed by canonical node identity and release metadata. Canonical pronunciation and usage-pitfall facts remain lexical content, not speech training or personal learner state.
 
@@ -115,22 +115,23 @@ Successful application responses use `data` and `meta`. `meta.request_id` matche
 }
 ```
 
-Errors use one safe envelope and never echo request text, context, credentials, provider bodies, vectors, or storage internals.
+Errors use one safe RFC 9457-style problem envelope with `Content-Type: application/problem+json` and never echo request text, context, credentials, provider bodies, vectors, prompts, or storage internals. `request_id` matches the `X-Request-Id` response header. `errors` is an empty array when no field-specific diagnostic applies.
 
 ```json
 {
-  "error": {
-    "code": "invalid_request",
-    "message": "The request is invalid.",
-    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-    "retryable": false,
-    "fields": [
-      {
-        "field": "target_language",
-        "message": "A valid BCP 47 language tag is required."
-      }
-    ]
-  }
+  "type": "about:blank",
+  "title": "Invalid translation request",
+  "status": 422,
+  "code": "invalid_translation_request",
+  "detail": "One or more translation fields are invalid.",
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "retryable": false,
+  "errors": [
+    {
+      "field": "target_language",
+      "message": "must be one of `en` or `zh-CN`."
+    }
+  ]
 }
 ```
 
@@ -278,10 +279,12 @@ Standard phrase response:
           "type": "phrase",
           "phrase_type": "idiom",
           "usage_notes": ["Used for plans or questions whose outcome is uncertain."],
-          "example": {
-            "source_text": "Our travel dates are still up in the air.",
-            "translated_text": "我们的旅行日期仍未确定。"
-          }
+          "examples": [
+            {
+              "source_text": "Our travel dates are still up in the air.",
+              "translated_text": "我们的旅行日期仍未确定。"
+            }
+          ]
         }
       }
     ]
@@ -299,16 +302,7 @@ Standard passage response:
     "translations": [
       {
         "text": "那个计划仍然悬而未决。",
-        "language": "zh-CN",
-        "details": {
-          "type": "passage",
-          "tips": [
-            {
-              "kind": "idiom",
-              "message": "“up in the air” means undecided rather than physically airborne."
-            }
-          ]
-        }
+        "language": "zh-CN"
       }
     ]
   }
@@ -323,11 +317,13 @@ All response levels may use the same MySQL card and canonical translation record
 
 | Level | Always returned | Additional eligible content |
 | --- | --- | --- |
-| `brief` | Unit, detected source language, ordered translations, and short meaning labels when ambiguity requires them | No examples, tips, or relationship expansion |
-| `standard` | Everything in `brief` | Concise definition or phrase usage, at most one example per meaning, at most two passage tips, and only a material contrast or relationship |
+| `brief` | Unit, detected source language, ordered translations, and one meaning label per lexical sense | No examples, tips, or relationship expansion |
+| `standard` | Everything in `brief` | Concise definition or phrase usage, at most one example per meaning, and only a material contrast or relationship |
 | `full` | Everything in `standard` | Pronunciation, aliases, morphology, more examples and usage notes, domain facts, provenance, taxonomy, hypernyms, hyponyms, intensity scales, and other bounded relationship groups |
 
 Multiple meanings override brevity when omission would make the translation misleading. Empty fields and empty relationship groups are omitted at every level. A lower level never changes the ranked meanings or their translations; it only projects fewer supporting fields.
+
+Passage tips and labeled alternatives are planned application capabilities, not fields in the milestone 1 HTTP contract. A later milestone must define their domain semantics before a transport projection may expose them.
 
 Domain assessment uses the closed `resolution` values `existing`, `proposed_new`, `general`, and `uncertain`. A `proposed_new` result has no domain ID and may include a request-local label, definition, broader-domain candidates, and reason only at `full` level. It is never represented as verified knowledge. Failure to load the existing-domain inventory always produces `uncertain`, not `proposed_new`.
 
@@ -452,7 +448,7 @@ Response `503` uses the standard error envelope with code `not_ready`. It may na
 
 ## POST /api/v1/translations
 
-This is the single entry point for a new translation turn. It translates a word, phrase, sentence, or passage and automatically chooses lexical lookup, domain expansion, or connected-text translation. The WebUI and island-port never select that mode. The request uses the simple fields above; `history` is optional and defaults to an empty array.
+This is the single entry point for a new translation turn. It translates a word, phrase, sentence, or passage and automatically chooses a lexical structured draft or connected-text translation. The WebUI and island-port never select that mode. The request uses the simple fields above; `history` is optional and defaults to an empty array.
 
 Request:
 
@@ -477,16 +473,7 @@ Response `200`:
       "translations": [
         {
           "text": "那个计划仍然悬而未决。",
-          "language": "zh-CN",
-          "details": {
-            "type": "passage",
-            "tips": [
-              {
-                "kind": "idiom",
-                "message": "“up in the air” means undecided rather than physically airborne."
-              }
-            ]
-          }
+          "language": "zh-CN"
         }
       ]
     }
@@ -494,12 +481,20 @@ Response `200`:
   "meta": {
     "request_id": "req_01K4Z8S1AK6C8D2F0G4H7J9M3N",
     "response_level": "standard",
-    "model_version": "translate-2026-09"
+    "schema_version": "translation-result-v1",
+    "normalizer_version": "translation-lookup-nfc-v1",
+    "projection_version": "translation-projection-v1",
+    "model_versions": ["translate-2026-09"],
+    "prompt_versions": ["connected-text-prompt-v1"]
   }
 }
 ```
 
-Passage `tips` contains at most two one-sentence items and is omitted when it adds no material value. Protected spans, paragraph structure, and formatting are inferred and preserved automatically. Any chunk plan or terminology ledger used for long text is discarded with the request. If Qdrant is unavailable but MySQL resolves a canonical word or phrase, Transnet returns the eligible lexical fields with relationship sections omitted and `meta.degraded: true`; it never invents replacements.
+The milestone 1 HTTP contract exposes only fields produced by the composed translation application. Model-only lexical details may contain `type`, `part_of_speech` or `phrase_type`, `aliases`, `examples`, `usage_notes`, `generated`, and `evidence_state`. Passage tips, labeled alternatives, canonical IDs, pronunciation, morphology, taxonomy, domain facts, provenance, and relationship groups are later-milestone capabilities and are not fabricated by this handler. Any chunk plan or terminology ledger used for long text is discarded with the request.
+
+`meta.model_versions` and `meta.prompt_versions` are ordered, de-duplicated arrays because one long request may involve more than one actual model operation. `schema_version`, `normalizer_version`, and `projection_version` identify the result, normalization, and projection contracts. `retrieval_version` and `content_release` are omitted unless those components actually participated; the milestone 1 model-only path does not invent them.
+
+Translation-specific failures use `invalid_json` with `400`, `payload_too_large` with `413`, `invalid_translation_request` with `422`, `invalid_model_output` with `502`, and `translation_model_unavailable` with `503`. Capacity, internal, and deadline statuses remain reserved until the corresponding closed application outcomes exist.
 
 ## POST /api/v1/senses/get
 
