@@ -110,6 +110,14 @@ Closed error response:
 }
 ```
 
+The Stage 3 Transnet client requires every response to echo `request_id` and `schema_version` at
+the top level. Every successful pinned read also returns `content_release`. The client rejects
+unknown fields, duplicate indexed-lineage keys, oversized bodies, an absent echo, a different
+schema or release, and any response that cannot be reconstructed through the current Rust domain
+constructors. Existing island-port deployments that implement the older examples below must be
+updated before this adapter can be used end to end; Transnet does not infer omitted authoritative
+fields or fall back to an older schema.
+
 ## POST /api/v1/translations/resolve
 
 Resolves an exact reviewed translation from one immutable release. Transnet computes the versioned fingerprint in memory and sends no live source text or disambiguating sentence to the adapter. The adapter returns all eligible same-fingerprint candidates within the limit; Transnet compares the stored source under the named normalizer and applies sense and scope constraints before using one. This read is safe to retry.
@@ -126,27 +134,34 @@ Request `input`:
   "domain_ids": ["domain_weather"],
   "dialect": "en-US",
   "register": "neutral",
-  "content_release": "knowledge-2026-09",
   "limit": 5
 }
 ```
 
-Response:
+Response. Lexical matches require `scope`; reusable passage matches require `scope: null`:
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "matches": [
       {
         "translation_id": "tr_sweltering_zh_cn_01",
+        "revision": 3,
         "unit": "word",
+        "source_fingerprint": "sha256:8bb7a7d7b6d9...",
         "source": {"text": "sweltering", "language": "en"},
         "target": {"text": "酷热的", "language": "zh-CN"},
-        "sense_id": "sense_sweltering_hot_01",
-        "domain_ids": ["domain_weather"],
-        "evidence_ids": ["evidence_dictionary_1042"],
-        "revision": 3
+        "scope": {
+          "lexeme_id": "lexeme_sweltering_en_adj_01",
+          "sense_id": "sense_sweltering_hot_01",
+          "part_of_speech": "adjective",
+          "composition": "compositional",
+          "domain_ids": ["domain_weather"]
+        },
+        "evidence_ids": ["evidence_dictionary_1042"]
       }
     ]
   },
@@ -203,7 +218,7 @@ A repeated idempotency key with the same request fingerprint returns the origina
 
 Normalization belongs to the Transnet runtime. The adapter receives a bounded, ordered set of derived forms; it never receives the raw query, intermediate transformations, or context. Exact canonical and alias forms precede inflection, spelling-correction, and relaxed aliases. Significant symbols remain distinct, so `C`, `C++`, and `C#` cannot collapse into one identity.
 
-Both this operation and `get_sense` return the same compact `BasicCard` shape. It includes the canonical and alias forms, concise definitions and translations, pronunciation and morphology summaries, short canonical examples and usage notes, domain and evidence metadata, knowledge roots, revision, and release. Relationship detail remains in Qdrant.
+This operation returns release-pinned identity and core candidate data, not a finished presentation card. Transnet performs deterministic ranking, deduplication, ambiguity resolution, and coverage calculation. After selecting a sense it calls `senses/get` for typed details and forms the final `CanonicalLookupCard` in the application layer. Rank, fusion score, coverage, and final resolution are never island-port authority. Qdrant and knowledge-root data remain outside Milestone 2.
 
 Request `input`:
 
@@ -220,7 +235,7 @@ Request `input`:
   "source_language": "en",
   "explanation_language": "zh-CN",
   "dialect": "en-US",
-  "content_release": "knowledge-2026-09",
+  "evidence_use": "api_redistribution",
   "limit": 5
 }
 ```
@@ -229,38 +244,26 @@ Response:
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "matches": [
       {
         "matched_form": "sweltering",
         "match_class": "exact_canonical",
-        "card": {
-          "card_id": "card_sweltering_en_adj_01",
-          "sense_id": "sense_sweltering_hot_01",
-          "canonical_form": "sweltering",
-          "aliases": ["oppressively hot"],
-          "language": "en",
-          "part_of_speech": "adjective",
-          "translations": [
-            {
-              "language": "zh-CN",
-              "text": "酷热的"
-            }
-          ],
-          "definitions": ["uncomfortably hot, especially because of the weather"],
-          "pronunciations": [{"dialect": "en-US", "ipa": "/ˈswɛltərɪŋ/"}],
-          "forms": [{"form": "swelteringly", "label": "adverb"}],
-          "examples": [{"text": "We waited until evening to leave the sweltering house.", "translation": "我们一直等到傍晚才离开闷热难耐的房子。"}],
-          "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
-          "knowledge_root_ids": ["node_sweltering_hot_01"],
-          "domain_ids": ["domain_weather"],
-          "evidence_ids": ["evidence_dictionary_1042"],
-          "revision": 3
+        "matched_form_id": "form_sweltering_lemma_01",
+        "lexical_score_basis_points": 10000,
+        "candidate": {
+          "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+          "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": ["evidence_dictionary_1042"], "status": "active"},
+          "forms": [{"id": "form_sweltering_lemma_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "form": "sweltering", "normalized_form": "sweltering", "kind": "lemma", "morphology": null, "evidence_ids": ["evidence_dictionary_1042"], "status": "active"}],
+          "evidence": [{"id": "evidence_dictionary_1042", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:adj:1", "language": "en", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "content_hash": "sha256:4ef760d1...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}]
         }
       }
     ],
-    "alternatives": []
+    "alternatives": [],
+    "truncated": false
   },
   "content_release": "knowledge-2026-09"
 }
@@ -270,7 +273,7 @@ Uniqueness is enforced by stable form, card, and sense IDs plus published canoni
 
 ## POST /api/v1/senses/get
 
-Returns one compact canonical sense revision using the shared `BasicCard` shape.
+Returns independently constructible typed detail data for one canonical sense. `target` contains the complete authoritative lexeme and sense. `lineages` is an object indexed by evidence ID; assertions refer to those IDs. Island-port rejects duplicate or conflicting IDs, and Transnet rejects dangling references, unused lineages, release or target mismatches, permission escalation, invalid lifecycle state, and incompatible evidence kinds before constructing `CanonicalSenseDetails`.
 
 Request:
 
@@ -279,7 +282,7 @@ Request:
   "sense_id": "sense_sweltering_hot_01",
   "explanation_language": "zh-CN",
   "dialect": "en-US",
-  "content_release": "knowledge-2026-09"
+    "evidence_use": "api_redistribution"
 }
 ```
 
@@ -287,46 +290,26 @@ Response:
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
+  "content_release": "knowledge-2026-09",
   "value": {
-    "card_id": "card_sweltering_en_adj_01",
-    "sense_id": "sense_sweltering_hot_01",
-    "canonical_form": "sweltering",
-    "aliases": ["oppressively hot"],
-    "language": "en",
-    "part_of_speech": "adjective",
-    "definitions": ["uncomfortably hot, especially because of the weather"],
-    "translations": [
-      {
-        "language": "zh-CN",
-        "text": "酷热的"
-      }
-    ],
-    "pronunciations": [
-      {
-        "dialect": "en-US",
-        "ipa": "/ˈswɛltərɪŋ/"
-      }
-    ],
-    "forms": [
-      {
-        "form": "swelteringly",
-        "label": "adverb"
-      }
-    ],
-    "examples": [
-      {
-        "text": "We waited until evening to leave the sweltering house.",
-        "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
-      }
-    ],
-    "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
-    "knowledge_root_ids": ["node_sweltering_hot_01"],
-    "domain_ids": ["domain_weather"],
-    "evidence_ids": ["evidence_dictionary_1042"],
-    "revision": 3
-  },
-  "content_release": "knowledge-2026-09"
+    "target": {
+      "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+      "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": [], "status": "active"}
+    },
+    "lineages": {},
+    "localized_glosses": [],
+    "pronunciations": [],
+    "usage_labels": [],
+    "grammar_patterns": [],
+    "collocations": [],
+    "examples": [],
+    "pitfalls": [],
+    "etymologies": [],
+    "history": []
+  }
 }
 ```
 

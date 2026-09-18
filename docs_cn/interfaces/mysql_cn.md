@@ -114,6 +114,8 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 }
 ```
 
+Stage 3 Transnet client 要求每个响应在顶层回显 `request_id` 和 `schema_version`；成功的固定发布读取还必须返回 `content_release`。Client 拒绝 unknown field、重复的 indexed-lineage key、超限 body、缺失回显、不同 schema 或 release，以及任何不能通过当前 Rust domain constructor 重建的响应。仍实现旧示例的 island-port 部署必须先同步本节 contract delta；Transnet 不推导缺失的权威字段，也不回退到旧 schema。
+
 关闭错误响应：
 
 ```json
@@ -143,27 +145,34 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
   "domain_ids": ["domain_weather"],
   "dialect": "en-US",
   "register": "neutral",
-  "content_release": "knowledge-2026-09",
   "limit": 5
 }
 ```
 
-响应：
+响应。词汇候选必须包含 `scope`；可复用 passage 必须使用 `scope: null`：
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "matches": [
       {
         "translation_id": "tr_sweltering_zh_cn_01",
+        "revision": 3,
         "unit": "word",
+        "source_fingerprint": "sha256:8bb7a7d7b6d9...",
         "source": {"text": "sweltering", "language": "en"},
         "target": {"text": "酷热的", "language": "zh-CN"},
-        "sense_id": "sense_sweltering_hot_01",
-        "domain_ids": ["domain_weather"],
-        "evidence_ids": ["evidence_dictionary_1042"],
-        "revision": 3
+        "scope": {
+          "lexeme_id": "lexeme_sweltering_en_adj_01",
+          "sense_id": "sense_sweltering_hot_01",
+          "part_of_speech": "adjective",
+          "composition": "compositional",
+          "domain_ids": ["domain_weather"]
+        },
+        "evidence_ids": ["evidence_dictionary_1042"]
       }
     ]
   },
@@ -220,7 +229,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 输入规范化属于 Transnet 运行时。适配器只接收有界、排序后的派生形式，绝不接收原始查询、中间变换或上下文。精确规范形式和别名优先于屈折、拼写修正和宽松别名；`C`、`C++`、`C#` 等有意义符号不合并。
 
-本操作与 `get_sense` 返回相同的精简 `BasicCard` 结构，包括规范形式与别名、精简定义与翻译、发音与形态摘要、短规范例句与用法说明、领域与证据元数据、知识根、修订和发布；关系详情留在 Qdrant。
+本操作返回固定发布的 identity/core candidate data，而不是最终展示卡。Transnet 负责确定性 ranking、dedup、歧义解析和 coverage；选定 sense 后再调用 `senses/get`，最终 `CanonicalLookupCard` 由 application 层形成。Rank、fusion score、coverage 和最终 resolution 都不是 island-port authority；Qdrant 与 knowledge-root 数据不属于 Milestone 2。
 
 请求：
 
@@ -237,7 +246,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
   "source_language": "en",
   "explanation_language": "zh-CN",
   "dialect": "en-US",
-  "content_release": "knowledge-2026-09",
+  "evidence_use": "api_redistribution",
   "limit": 5
 }
 ```
@@ -246,38 +255,26 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "matches": [
       {
         "matched_form": "sweltering",
         "match_class": "exact_canonical",
-        "card": {
-          "card_id": "card_sweltering_en_adj_01",
-          "sense_id": "sense_sweltering_hot_01",
-          "canonical_form": "sweltering",
-          "aliases": ["oppressively hot"],
-          "language": "en",
-          "part_of_speech": "adjective",
-          "translations": [
-            {
-              "language": "zh-CN",
-              "text": "酷热的"
-            }
-          ],
-          "definitions": ["uncomfortably hot, especially because of the weather"],
-          "pronunciations": [{"dialect": "en-US", "ipa": "/ˈswɛltərɪŋ/"}],
-          "forms": [{"form": "swelteringly", "label": "adverb"}],
-          "examples": [{"text": "We waited until evening to leave the sweltering house.", "translation": "我们一直等到傍晚才离开闷热难耐的房子。"}],
-          "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
-          "knowledge_root_ids": ["node_sweltering_hot_01"],
-          "domain_ids": ["domain_weather"],
-          "evidence_ids": ["evidence_dictionary_1042"],
-          "revision": 3
+        "matched_form_id": "form_sweltering_lemma_01",
+        "lexical_score_basis_points": 10000,
+        "candidate": {
+          "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+          "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": ["evidence_dictionary_1042"], "status": "active"},
+          "forms": [{"id": "form_sweltering_lemma_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "form": "sweltering", "normalized_form": "sweltering", "kind": "lemma", "morphology": null, "evidence_ids": ["evidence_dictionary_1042"], "status": "active"}],
+          "evidence": [{"id": "evidence_dictionary_1042", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:adj:1", "language": "en", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "content_hash": "sha256:4ef760d1...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}]
         }
       }
     ],
-    "alternatives": []
+    "alternatives": [],
+    "truncated": false
   },
   "content_release": "knowledge-2026-09"
 }
@@ -287,7 +284,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 ## POST /api/v1/senses/get
 
-使用共享 `BasicCard` 结构返回一个精简规范词义修订。
+返回可独立构造的 typed canonical sense details。`target` 包含完整权威 Lexeme 与 Sense；`lineages` 是以 evidence ID 为键的对象，assertion 通过 ID 引用。Island-port 拒绝重复或冲突 ID；Transnet 在构造 `CanonicalSenseDetails` 前拒绝 dangling reference、未使用 lineage、release/target mismatch、permission escalation、无效 lifecycle state 与不兼容 evidence kind。
 
 请求：
 
@@ -296,7 +293,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
   "sense_id": "sense_sweltering_hot_01",
   "explanation_language": "zh-CN",
   "dialect": "en-US",
-  "content_release": "knowledge-2026-09"
+  "evidence_use": "api_redistribution"
 }
 ```
 
@@ -304,46 +301,26 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
+  "content_release": "knowledge-2026-09",
   "value": {
-    "card_id": "card_sweltering_en_adj_01",
-    "sense_id": "sense_sweltering_hot_01",
-    "canonical_form": "sweltering",
-    "aliases": ["oppressively hot"],
-    "language": "en",
-    "part_of_speech": "adjective",
-    "definitions": ["uncomfortably hot, especially because of the weather"],
-    "translations": [
-      {
-        "language": "zh-CN",
-        "text": "酷热的"
-      }
-    ],
-    "pronunciations": [
-      {
-        "dialect": "en-US",
-        "ipa": "/ˈswɛltərɪŋ/"
-      }
-    ],
-    "forms": [
-      {
-        "form": "swelteringly",
-        "label": "adverb"
-      }
-    ],
-    "examples": [
-      {
-        "text": "We waited until evening to leave the sweltering house.",
-        "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
-      }
-    ],
-    "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
-    "knowledge_root_ids": ["node_sweltering_hot_01"],
-    "domain_ids": ["domain_weather"],
-    "evidence_ids": ["evidence_dictionary_1042"],
-    "revision": 3
-  },
-  "content_release": "knowledge-2026-09"
+    "target": {
+      "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+      "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": [], "status": "active"}
+    },
+    "lineages": {},
+    "localized_glosses": [],
+    "pronunciations": [],
+    "usage_labels": [],
+    "grammar_patterns": [],
+    "collocations": [],
+    "examples": [],
+    "pitfalls": [],
+    "etymologies": [],
+    "history": []
+  }
 }
 ```
 

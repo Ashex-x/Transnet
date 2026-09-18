@@ -6,6 +6,8 @@ pub mod clock;
 pub mod in_memory;
 /// Test-only deterministic canonical repository and vector adapter.
 pub mod in_memory_retrieval;
+/// Strict outbound island-port canonical-read client.
+pub mod island_port;
 /// OpenAI-compatible structured lexical-model client.
 pub mod learning_model;
 /// ULID-backed and deterministic public-ID implementations.
