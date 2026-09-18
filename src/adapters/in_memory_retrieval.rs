@@ -288,7 +288,7 @@ mod tests {
     assert_eq!(
       outcome.candidates[0]
         .features
-        .morphology
+        .inflection
         .unwrap()
         .basis_points(),
       7_500

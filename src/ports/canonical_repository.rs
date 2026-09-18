@@ -29,10 +29,12 @@ pub trait CanonicalRepository: Send + Sync {
   /// Resolves the one compatible lexical and vector version currently active for new lookups.
   async fn active_content_version(&self) -> Result<ActiveContentVersion, CanonicalRepositoryError>;
 
-  /// Finds exact-form, phrase, lemma, morphology, and full-text canonical candidates.
+  /// Finds canonical candidates under the closed deterministic match classes.
   ///
-  /// Each returned candidate must belong to `request.content.release_id` and expose the signal
-  /// that selected it. Repository order is intentionally not semantically meaningful.
+  /// Exact canonical and exact published-alias matches precede bounded inflection, spelling,
+  /// transliteration, and semantic candidates. Each returned candidate must belong to
+  /// `request.content.release_id` and expose the class and signal that selected it. Repository
+  /// order is intentionally not semantically meaningful.
   async fn search_lexical(
     &self,
     request: &LexicalSearchRequest,

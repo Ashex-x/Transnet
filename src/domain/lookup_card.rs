@@ -43,6 +43,32 @@ pub struct CanonicalLookupCard {
   pub coverage: CanonicalLookupCardCoverage,
 }
 
+impl CanonicalLookupCard {
+  /// Returns the closed deterministic resolution outcome for the retained best-class candidates.
+  ///
+  /// Multiple candidates mean the best applicable match class contains materially distinct
+  /// senses and the caller must preserve the ambiguity or request clarification. This method does
+  /// not expose a new wire field or choose one sense heuristically.
+  pub fn resolution(&self) -> CanonicalLookupResolution {
+    match self.candidates.len() {
+      0 => CanonicalLookupResolution::NotFound,
+      1 => CanonicalLookupResolution::Resolved,
+      _ => CanonicalLookupResolution::ClarificationRequired,
+    }
+  }
+}
+
+/// Closed resolution state derived from the best applicable canonical match class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CanonicalLookupResolution {
+  /// No eligible canonical sense matched the bounded request.
+  NotFound,
+  /// Exactly one independently selectable canonical sense remains.
+  Resolved,
+  /// Multiple equally eligible sense identities must remain separate or be clarified.
+  ClarificationRequired,
+}
+
 /// One ranked lexeme-and-sense result in a canonical lookup card.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CanonicalLookupCardCandidate {

@@ -8,7 +8,7 @@ Status: current canonical lookup uses read-only retrieval ports and assembles ea
 
 ## Resolution and assessment
 
-Normalization creates bounded language-aware lookup forms but never serves as canonical identity. Exact canonical and alias matches outrank inflection, spelling, and semantic candidates. Materially plausible meanings remain separate.
+Normalization creates bounded language-aware lookup forms but never serves as canonical identity. Resolution uses the closed order exact canonical -> exact published alias -> bounded inflection -> bounded spelling correction -> bounded transliteration -> semantic nomination. A score or vector signal cannot promote a lower class above an eligible higher class. Only candidates in the best available class survive; one sense resolves, multiple distinct senses require clarification or preserved ambiguity, and no candidate is an explicit not-found result. Materially plausible homographs, parts of speech, phrase-level meanings, and field-specific senses remain separate.
 
 Domain assessment uses a bounded published inventory and returns `existing`, `proposed_new`, `general`, or `uncertain`. Inventory failure produces `uncertain`; it cannot prove that a domain is new. Proposals are request-local and appear only where the full response permits them.
 
