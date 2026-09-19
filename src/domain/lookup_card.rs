@@ -32,18 +32,18 @@ pub struct CanonicalLookupQueryAnalysis {
 
 /// Bounded deterministic canonical result ready for a future transport adapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CanonicalLookupCard {
+pub struct CanonicalLookupCard<C = ActiveContentVersion> {
   /// Normalized query analysis used to produce this result.
   pub query: CanonicalLookupQueryAnalysis,
-  /// Immutable lexical, vector, schema, and ranking versions selected for the read.
-  pub content: ActiveContentVersion,
+  /// Immutable content selection: a canonical-only pin or the full hybrid version tuple.
+  pub content: C,
   /// Canonical candidates in the exact deterministic order supplied by retrieval.
   pub candidates: Vec<CanonicalLookupCardCandidate>,
   /// Coverage for every material section without conflating absence with policy filtering.
   pub coverage: CanonicalLookupCardCoverage,
 }
 
-impl CanonicalLookupCard {
+impl<C> CanonicalLookupCard<C> {
   /// Returns the closed deterministic resolution outcome for the retained best-class candidates.
   ///
   /// Multiple candidates mean the best applicable match class contains materially distinct

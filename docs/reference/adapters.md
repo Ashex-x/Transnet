@@ -16,6 +16,8 @@ The island-port client maps data-port operations to versioned HTTP/1.1 JSON call
 
 The Stage 3 client implements outbound-only canonical reads for translation candidates, lexical candidate resolution, and sense details. Its private strict DTOs reconstruct the existing `CanonicalTranslationRevision`, `CanonicalCandidate`, and `CanonicalSenseDetails` types. Ranking, fusion, ambiguity resolution, and coverage remain request-local application work. Unix builds provide the production socket transport; tests inject a bounded fake transport without adding an inbound listener or database client.
 
+Stage 4 adds the active canonical release read to the same outbound transport. It maps the strict response into a canonical-only release pin, with no vector collection or local ranking-policy version. The application obtains that pin once and passes it to every later authority read. The existing full hybrid content tuple remains unchanged for vector retrieval and publication compatibility.
+
 The corresponding island-port server is maintained outside this repository and must implement the current delta in `interfaces/mysql.md`. Until that peer is upgraded, incompatible or incomplete responses fail closed and real island-port/MySQL end-to-end operation is not considered verified.
 
 Structured and vector mapping preserves release identifiers and closed outcomes. Island-port owns MySQL and Qdrant drivers, queries, pooling, transactions, collection selection, and credentials. Transnet does not expose SQL or Qdrant-native requests. Filesystem permissions authenticate processes; JSON never forwards end-user identity or credentials.

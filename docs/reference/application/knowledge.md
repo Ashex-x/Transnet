@@ -6,6 +6,8 @@ This module owns sense resolution, domain assessment, release-pinned retrieval, 
 
 Status: current canonical lookup uses read-only retrieval ports and assembles each card within the request. Query-derived snapshot caching and its public cache contracts have been removed. Graph topology caching remains release-pinned canonical content caching. Domain assessment and the complete page composition below are target behavior, not default runtime composition.
 
+The Stage 4 canonical-only service selects one authority-owned release pin, then composes reviewed translation candidates, deterministically ranked lexical candidates, and unambiguous sense details through a read port. It forms the existing lookup-card type with a canonical-only content pin; it does not fabricate a vector collection or treat intentional lexical-only operation as vector degradation. This composition is injectable but not registered as a new public route while the external island-port server remains unupgraded.
+
 ## Resolution and assessment
 
 Normalization creates bounded language-aware lookup forms but never serves as canonical identity. Resolution uses the closed order exact canonical -> exact published alias -> bounded inflection -> bounded spelling correction -> bounded transliteration -> semantic nomination. A score or vector signal cannot promote a lower class above an eligible higher class. Only candidates in the best available class survive; one sense resolves, multiple distinct senses require clarification or preserved ambiguity, and no candidate is an explicit not-found result. Materially plausible homographs, parts of speech, phrase-level meanings, and field-specific senses remain separate.

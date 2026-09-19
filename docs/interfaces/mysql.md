@@ -118,6 +118,39 @@ constructors. Existing island-port deployments that implement the older examples
 updated before this adapter can be used end to end; Transnet does not infer omitted authoritative
 fields or fall back to an older schema.
 
+## POST /api/v1/releases/active
+
+Stage 4 selects the active immutable canonical release once at the start of an application request. This operation is an authoritative island-port read, not a vector or ranking-policy selection. Its context omits `content_release` because the operation selects that value. `schema_version` is the transport contract version; `canonical_schema_version` is the selected release's content schema. Both successful fields are required and bounded. The request carries no source text.
+
+```json
+{
+  "context": {
+    "request_id": "req_example",
+    "deadline_at": "2099-01-01T00:00:00Z",
+    "schema_version": "mysql-adapter-v1"
+  },
+  "input": {}
+}
+```
+
+```json
+{
+  "request_id": "req_example",
+  "schema_version": "mysql-adapter-v1",
+  "outcome": "ok",
+  "value": {
+    "content_release": "release_example",
+    "canonical_schema_version": "canonical_example"
+  }
+}
+```
+
+The closed outcomes are `ok`, `not_found` (no safely servable active release), `version_mismatch`, `unavailable`, and `timeout`. Errors use the existing redacted `error` object, require the request and schema echoes, and must not carry a success value. Unknown, missing, contradictory, or oversized response data fails closed. The `value` has no `vector_collection_id` or `ranking_version`: vector composition is later work, and deterministic ranking policy belongs to Transnet. The release and canonical schema must come from one atomic active-pointer read. Every later canonical read within the request sends the returned `content_release`, and island-port must serve that immutable release even if a newer one becomes active; it must never silently upgrade a pinned read. If the pinned release can no longer be served safely, the entire request fails closed.
+
+The island-port server is not in this repository and still needs to implement this operation, atomic selection, old-release retention for bounded in-flight requests, and the closed error outcomes. Transnet's outbound client and fake-UDS tests alone are not a real MySQL end-to-end deployment.
+
+For the bounded translation and basic-card candidate-list reads below, an eligible zero-hit search is `ok` with an empty `matches` list. A downstream `not_found` is not silently converted into an empty result by the Stage 4 composition: it remains a closed error, so an unavailable pinned release cannot masquerade as a search miss.
+
 ## POST /api/v1/translations/resolve
 
 Resolves an exact reviewed translation from one immutable release. Transnet computes the versioned fingerprint in memory and sends no live source text or disambiguating sentence to the adapter. The adapter returns all eligible same-fingerprint candidates within the limit; Transnet compares the stored source under the named normalizer and applies sense and scope constraints before using one. This read is safe to retry.
@@ -231,7 +264,7 @@ Request `input`:
       "rank": 0
     }
   ],
-  "normalizer_version": "unicode-nfkc-v2",
+  "normalizer_version": "unicode-nfc-lookup-v1",
   "source_language": "en",
   "explanation_language": "zh-CN",
   "dialect": "en-US",
@@ -270,6 +303,8 @@ Response:
 ```
 
 Uniqueness is enforced by stable form, card, and sense IDs plus published canonical-form and alias rows, never by an ad hoc normalized lookup string. All eligible collisions at the best applicable rank are returned for resolution by the service.
+
+The Stage 4 canonical-only caller names its actual baseline NFC/lowercased lookup behavior `unicode-nfc-lookup-v1`; the previous illustrative `unicode-nfkc-v2` value did not describe that implementation. This version is request-local normalization metadata, not canonical authority data or identity.
 
 ## POST /api/v1/senses/get
 

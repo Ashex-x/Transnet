@@ -64,6 +64,111 @@ fn context() -> IslandPortCallContext {
 }
 
 #[tokio::test]
+async fn active_release_has_no_pin_in_request_and_maps_strict_authoritative_value() {
+  let transport = Arc::new(FakeTransport::new(json!({
+    "request_id": "req_stage_3",
+    "schema_version": "mysql-adapter-v1",
+    "outcome": "ok",
+    "value": {
+      "content_release": "knowledge-2026-09",
+      "canonical_schema_version": "canonical-v1"
+    }
+  })));
+  let pin = IslandPortCanonicalClient::new(transport.clone())
+    .active_release(&context())
+    .await
+    .unwrap()
+    .unwrap();
+  assert_eq!(pin.release_id.as_str(), "knowledge-2026-09");
+  assert_eq!(pin.canonical_schema_version, "canonical-v1");
+  let request = transport.request.lock().unwrap();
+  let (path, body, timeout) = request.as_ref().unwrap();
+  assert_eq!(*path, "/api/v1/releases/active");
+  assert_eq!(body["context"]["request_id"], "req_stage_3");
+  assert_eq!(body["context"]["schema_version"], "mysql-adapter-v1");
+  assert!(body["context"].get("content_release").is_none());
+  assert_eq!(body["input"], json!({}));
+  assert_eq!(*timeout, Duration::from_secs(2));
+}
+
+#[tokio::test]
+async fn active_release_missing_or_incompatible_response_fails_closed() {
+  let cases = [
+    (
+      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"not_found","error":{"code":"no_active_release","message":"No active release.","retryable":false}}),
+      None,
+    ),
+    (
+      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"version_mismatch","error":{"code":"schema_version_mismatch","message":"Incompatible schema.","retryable":false}}),
+      Some(IslandPortClientError::VersionMismatch),
+    ),
+    (
+      json!({"request_id":"req_stage_3","schema_version":"old","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1"}}),
+      Some(IslandPortClientError::VersionMismatch),
+    ),
+    (
+      json!({"request_id":"other","schema_version":"mysql-adapter-v1","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1"}}),
+      Some(IslandPortClientError::VersionMismatch),
+    ),
+    (
+      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"ok","value":{"content_release":"release-1"}}),
+      Some(IslandPortClientError::InconsistentData),
+    ),
+    (
+      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1","vector_collection_id":"fake"}}),
+      Some(IslandPortClientError::InconsistentData),
+    ),
+    (
+      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1"},"content_release":"release-1"}),
+      Some(IslandPortClientError::InconsistentData),
+    ),
+  ];
+  for (response, expected_error) in cases {
+    let result = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))
+      .active_release(&context())
+      .await;
+    match expected_error {
+      Some(error) => assert_eq!(result.unwrap_err(), error),
+      None => assert_eq!(result.unwrap(), None),
+    }
+  }
+}
+
+#[tokio::test]
+async fn expired_active_release_deadline_stops_before_transport() {
+  let transport = Arc::new(FakeTransport::new(json!({})));
+  let expired = IslandPortCallContext::new(
+    "req_stage_3",
+    "2000-01-01T00:00:00Z",
+    Duration::from_secs(2),
+  )
+  .unwrap();
+  let error = IslandPortCanonicalClient::new(transport.clone())
+    .active_release(&expired)
+    .await
+    .unwrap_err();
+  assert_eq!(error, IslandPortClientError::Timeout);
+  assert!(transport.request.lock().unwrap().is_none());
+}
+
+#[tokio::test]
+async fn active_release_errors_do_not_expose_peer_detail_or_credentials() {
+  let transport = Arc::new(FakeTransport::new(json!({
+    "request_id":"req_stage_3",
+    "schema_version":"mysql-adapter-v1",
+    "outcome":"unavailable",
+    "error":{"code":"internal_failure","message":"sensitive-source credential-secret","retryable":true}
+  })));
+  let error = IslandPortCanonicalClient::new(transport)
+    .active_release(&context())
+    .await
+    .unwrap_err();
+  assert_eq!(error, IslandPortClientError::Unavailable);
+  assert!(!format!("{error:?} {error}").contains("sensitive-source"));
+  assert!(!format!("{error:?} {error}").contains("credential-secret"));
+}
+
+#[tokio::test]
 async fn translation_response_reconstructs_revision_and_propagates_context() {
   let fingerprint = SourceFingerprint::compute("sweltering", &language("en"));
   let transport = Arc::new(FakeTransport::new(json!({

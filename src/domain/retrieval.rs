@@ -487,6 +487,32 @@ pub fn fuse_candidates(
     );
   }
 
+  rank_accumulated(candidates)
+}
+
+/// Deterministically resolves, deduplicates, and ranks canonical-only lexical matches.
+///
+/// This shares the exact class precedence and ordering used by hybrid fusion without requiring
+/// a vector collection or a fabricated ranking-version identifier.
+pub fn rank_lexical_candidates(
+  release_id: &ReleaseId,
+  evidence_use: EvidenceUse,
+  lexical_matches: impl IntoIterator<Item = RepositoryMatch>,
+) -> Vec<RankedCandidate> {
+  let mut candidates = BTreeMap::<SenseId, CandidateAccumulator>::new();
+  for lexical in lexical_matches {
+    if lexical.candidate.is_eligible_for(release_id, evidence_use) {
+      merge_candidate(
+        &mut candidates,
+        lexical.candidate,
+        CandidateSignal::Lexical(lexical.kind, lexical.score),
+      );
+    }
+  }
+  rank_accumulated(candidates)
+}
+
+fn rank_accumulated(candidates: BTreeMap<SenseId, CandidateAccumulator>) -> Vec<RankedCandidate> {
   let mut ranked = candidates
     .into_values()
     .map(|accumulator| RankedCandidate {

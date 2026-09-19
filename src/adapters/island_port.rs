@@ -20,8 +20,9 @@ use thiserror::Error;
 
 use crate::domain::{
   canonical::{
-    CanonicalId, CanonicalStatus, EvidenceConfidence, EvidenceFragment, EvidenceKind, FormKind,
-    LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource, Sense, SourcePermissions, WordForm,
+    CanonicalId, CanonicalReleasePin, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
+    EvidenceKind, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource, Sense,
+    SourcePermissions, WordForm,
   },
   canonical_content::{
     CanonicalEvidenceLineage, CanonicalEvidenceOrigin, CanonicalExample, CanonicalFactualAssertion,
@@ -37,6 +38,10 @@ use crate::domain::{
     SOURCE_FINGERPRINT_VERSION,
   },
   retrieval::{CanonicalCandidate, LexicalMatchKind, RepositoryMatch, RetrievalScore},
+};
+use crate::ports::canonical_read::{
+  CanonicalCandidateQuery, CanonicalReadContext, CanonicalReadError, CanonicalReadPort,
+  CanonicalSenseQuery, CanonicalTranslationQuery,
 };
 
 /// Internal island-port adapter schema implemented by this client.
@@ -64,7 +69,10 @@ impl IslandPortCallContext {
   ) -> Result<Self, IslandPortClientError> {
     let request_id = request_id.into();
     let deadline_at = deadline_at.into();
-    if request_id.trim().is_empty()
+    if request_id.is_empty()
+      || request_id.len() > 128
+      || !request_id.bytes().all(|byte| byte.is_ascii_graphic())
+      || deadline_at.len() > 64
       || time::OffsetDateTime::parse(&deadline_at, &time::format_description::well_known::Rfc3339)
         .is_err()
       || timeout.is_zero()
@@ -226,6 +234,60 @@ impl IslandPortCanonicalClient {
     Self { transport }
   }
 
+  /// Reads the authoritative active canonical-only release without requesting a vector version.
+  pub async fn active_release(
+    &self,
+    context: &IslandPortCallContext,
+  ) -> Result<Option<CanonicalReleasePin>, IslandPortClientError> {
+    let envelope = RequestEnvelope {
+      context: ActiveReleaseContextDto {
+        request_id: context.request_id.clone(),
+        deadline_at: context.deadline_at.clone(),
+        schema_version: ISLAND_PORT_SCHEMA_VERSION,
+      },
+      input: EmptyInputDto {},
+    };
+    let response: ActiveReleaseResponseDto = self
+      .call("/api/v1/releases/active", context, &envelope)
+      .await?;
+    if response.request_id != context.request_id
+      || response.schema_version != ISLAND_PORT_SCHEMA_VERSION
+    {
+      return Err(IslandPortClientError::VersionMismatch);
+    }
+    let value = match response.outcome {
+      OutcomeDto::Ok if response.error.is_none() => response
+        .value
+        .ok_or(IslandPortClientError::InconsistentData)?,
+      OutcomeDto::NotFound if response.value.is_none() && response.error.is_some() => {
+        return Ok(None)
+      }
+      OutcomeDto::VersionMismatch if response.value.is_none() && response.error.is_some() => {
+        return Err(IslandPortClientError::VersionMismatch)
+      }
+      OutcomeDto::Unavailable if response.value.is_none() && response.error.is_some() => {
+        return Err(IslandPortClientError::Unavailable)
+      }
+      OutcomeDto::Timeout if response.value.is_none() && response.error.is_some() => {
+        return Err(IslandPortClientError::Timeout)
+      }
+      _ => return Err(IslandPortClientError::InconsistentData),
+    };
+    if value.content_release.len() > 128
+      || !value
+        .content_release
+        .bytes()
+        .all(|byte| byte.is_ascii_graphic())
+    {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let release_id = CanonicalId::new(&value.content_release)
+      .map_err(|_| IslandPortClientError::InconsistentData)?;
+    CanonicalReleasePin::new(release_id, value.canonical_schema_version)
+      .ok_or(IslandPortClientError::InconsistentData)
+      .map(Some)
+  }
+
   /// Resolves reviewed translation candidates from one immutable release.
   pub async fn resolve_translations(
     &self,
@@ -375,10 +437,121 @@ pub struct SenseGetInput {
   pub evidence_use: crate::domain::canonical::EvidenceUse,
 }
 
+impl From<IslandPortClientError> for CanonicalReadError {
+  fn from(error: IslandPortClientError) -> Self {
+    match error {
+      IslandPortClientError::InvalidRequest => Self::InvalidRequest,
+      IslandPortClientError::NotFound => Self::NotFound,
+      IslandPortClientError::VersionMismatch => Self::VersionMismatch,
+      IslandPortClientError::Unavailable => Self::Unavailable,
+      IslandPortClientError::Timeout => Self::Timeout,
+      IslandPortClientError::InconsistentData => Self::InconsistentData,
+    }
+  }
+}
+
+fn call_context(
+  context: &CanonicalReadContext,
+) -> Result<IslandPortCallContext, CanonicalReadError> {
+  IslandPortCallContext::new(&context.request_id, &context.deadline_at, context.timeout)
+    .map_err(Into::into)
+}
+
+#[async_trait]
+impl CanonicalReadPort for IslandPortCanonicalClient {
+  async fn active_release(
+    &self,
+    context: &CanonicalReadContext,
+  ) -> Result<Option<CanonicalReleasePin>, CanonicalReadError> {
+    self
+      .active_release(&call_context(context)?)
+      .await
+      .map_err(Into::into)
+  }
+
+  async fn translations(
+    &self,
+    context: &CanonicalReadContext,
+    pin: &CanonicalReleasePin,
+    query: CanonicalTranslationQuery,
+  ) -> Result<Vec<CanonicalTranslationRevision>, CanonicalReadError> {
+    self
+      .resolve_translations(
+        &call_context(context)?,
+        &pin.release_id,
+        TranslationResolveInput {
+          source_fingerprint: query.source_fingerprint,
+          source_language: query.source_language,
+          target_language: query.target_language,
+          sense_id: query.sense_id,
+          domain_ids: query.domain_ids,
+          dialect: query.dialect,
+          register: query.register,
+          limit: query.limit,
+        },
+      )
+      .await
+      .map_err(Into::into)
+  }
+
+  async fn candidates(
+    &self,
+    context: &CanonicalReadContext,
+    pin: &CanonicalReleasePin,
+    query: CanonicalCandidateQuery,
+  ) -> Result<Vec<RepositoryMatch>, CanonicalReadError> {
+    self
+      .resolve_basic_card_candidates(
+        &call_context(context)?,
+        &pin.release_id,
+        BasicCardResolveInput {
+          lookup_forms: query
+            .lookup_forms
+            .into_iter()
+            .map(|form| LookupFormInput {
+              form: form.form,
+              match_class: form.match_class,
+              rank: form.rank,
+            })
+            .collect(),
+          normalizer_version: query.normalizer_version,
+          source_language: query.source_language,
+          explanation_language: query.explanation_language,
+          dialect: query.dialect,
+          evidence_use: query.evidence_use,
+          limit: query.limit,
+        },
+      )
+      .await
+      .map_err(Into::into)
+  }
+
+  async fn sense(
+    &self,
+    context: &CanonicalReadContext,
+    pin: &CanonicalReleasePin,
+    query: CanonicalSenseQuery,
+  ) -> Result<CanonicalSenseDetails, CanonicalReadError> {
+    self
+      .get_sense(
+        &call_context(context)?,
+        &pin.release_id,
+        SenseGetInput {
+          sense_id: query.sense_id,
+          explanation_language: query.explanation_language,
+          dialect: query.dialect,
+          evidence_use: query.evidence_use,
+        },
+      )
+      .await
+      .map_err(Into::into)
+  }
+}
+
 #[derive(Serialize)]
 #[serde(deny_unknown_fields)]
-struct RequestEnvelope<T> {
-  context: RequestContextDto,
+struct RequestEnvelope<C, T> {
+  context: C,
   input: T,
 }
 
@@ -389,6 +562,35 @@ struct RequestContextDto {
   deadline_at: String,
   schema_version: &'static str,
   content_release: String,
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct ActiveReleaseContextDto {
+  request_id: String,
+  deadline_at: String,
+  schema_version: &'static str,
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct EmptyInputDto {}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ActiveReleaseValueDto {
+  content_release: String,
+  canonical_schema_version: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ActiveReleaseResponseDto {
+  request_id: String,
+  schema_version: String,
+  outcome: OutcomeDto,
+  value: Option<ActiveReleaseValueDto>,
+  error: Option<ErrorDto>,
 }
 
 fn context_dto(

@@ -4,6 +4,8 @@
 pub mod canonical_lookup;
 /// Bounded deterministic canonical lookup-card assembly without HTTP or model generation.
 pub mod canonical_lookup_card;
+/// Request-local production canonical-only read composition.
+pub mod canonical_read;
 /// Release-pinned bounded canonical sense-detail reads without HTTP or model generation.
 pub mod canonical_sense_details;
 /// Content-release staging, validation, publication, rollback, and source quarantine.

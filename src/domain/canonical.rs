@@ -7,6 +7,8 @@ use unicode_normalization::UnicodeNormalization;
 
 /// Maximum accepted length of a canonical BCP-47 language tag.
 pub const MAX_LANGUAGE_TAG_LENGTH: usize = 35;
+/// Version of the baseline NFC/lowercased canonical lookup key.
+pub const CANONICAL_LOOKUP_NORMALIZER_VERSION: &str = "unicode-nfc-lookup-v1";
 
 /// Validation failures for canonical lexical values.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -178,6 +180,36 @@ pub struct ActiveContentVersion {
   pub schema_version: String,
   /// Deterministic retrieval-ranking implementation version.
   pub ranking_version: String,
+}
+
+/// Immutable canonical-only release selected once for an application request.
+///
+/// Neither a vector collection nor a local ranking policy belongs to this authority-owned pin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanonicalReleasePin {
+  /// Authoritative immutable canonical content release.
+  pub release_id: ReleaseId,
+  /// Content schema of the selected canonical release, distinct from the adapter wire schema.
+  pub canonical_schema_version: String,
+}
+
+impl CanonicalReleasePin {
+  /// Constructs a canonical-only pin, rejecting an absent content schema version.
+  pub fn new(release_id: ReleaseId, canonical_schema_version: String) -> Option<Self> {
+    if canonical_schema_version.is_empty()
+      || canonical_schema_version.len() > 64
+      || !canonical_schema_version
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+      || canonical_schema_version.trim() != canonical_schema_version
+    {
+      return None;
+    }
+    Some(Self {
+      release_id,
+      canonical_schema_version,
+    })
+  }
 }
 
 /// One operation that source terms may permit independently.

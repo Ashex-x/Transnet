@@ -129,6 +129,39 @@ Stage 3 Transnet client 要求每个响应在顶层回显 `request_id` 和 `sche
 }
 ```
 
+## POST /api/v1/releases/active
+
+Stage 4 在 application 请求开始时只选择一次 active 不可变规范发布版本。这是 island-port 的权威读取，不负责选择向量版本或排序策略。请求 context 不包含 `content_release`，因为本操作正负责选择它。`schema_version` 是 transport 合同版本；`canonical_schema_version` 是所选发布的内容 schema。成功值中的两个字段均为必填且有界。请求不携带源文。
+
+```json
+{
+  "context": {
+    "request_id": "req_example",
+    "deadline_at": "2099-01-01T00:00:00Z",
+    "schema_version": "mysql-adapter-v1"
+  },
+  "input": {}
+}
+```
+
+```json
+{
+  "request_id": "req_example",
+  "schema_version": "mysql-adapter-v1",
+  "outcome": "ok",
+  "value": {
+    "content_release": "release_example",
+    "canonical_schema_version": "canonical_example"
+  }
+}
+```
+
+闭合 outcome 为 `ok`、`not_found`（没有可安全服务的 active 发布）、`version_mismatch`、`unavailable` 与 `timeout`。错误沿用现有脱敏 `error` 对象，必须回显 request ID 和 schema，且不能携带成功值。未知、缺失、矛盾或超限响应全部 fail closed。`value` 不包含 `vector_collection_id` 或 `ranking_version`：向量组合属于后续工作，确定性排序策略由 Transnet 负责。发布 ID 和规范 schema 必须来自同一次原子 active 指针读取。同一请求后续所有规范读取都携带返回的 `content_release`；即使新发布激活，island-port 也必须能读取当前请求已固定的不可变旧发布，绝不能偷偷升级。若固定发布已无法安全服务，整个请求闭合失败。
+
+island-port server 不在当前仓库，仍需实现该 operation、原子选择、在途有界请求所需的旧发布保留，以及闭合错误 outcome。Transnet 的出站 client 和 fake-UDS 测试不代表真实 MySQL 端到端部署已完成。
+
+对于下文有界的翻译及基础卡候选列表读取，合格的零命中搜索使用 `ok` 与空 `matches` 列表。Stage 4 组合不会把下游 `not_found` 悄悄转换为空结果；它仍是闭合错误，避免不可读取的固定发布被伪装成搜索未命中。
+
 ## POST /api/v1/translations/resolve
 
 从一个不可变发布中解析完全匹配的已审核翻译。Transnet 在内存中计算带版本的 fingerprint，不向适配器发送实时源文或消歧句。适配器在限制内返回所有相同 fingerprint 的合格候选；Transnet 使用指定 normalizer 比较已存源文，并在采用候选前应用词义与范围约束。该读取可安全重试。
@@ -242,7 +275,7 @@ Stage 3 Transnet client 要求每个响应在顶层回显 `request_id` 和 `sche
       "rank": 0
     }
   ],
-  "normalizer_version": "unicode-nfkc-v2",
+  "normalizer_version": "unicode-nfc-lookup-v1",
   "source_language": "en",
   "explanation_language": "zh-CN",
   "dialect": "en-US",
@@ -281,6 +314,8 @@ Stage 3 Transnet client 要求每个响应在顶层回显 `request_id` 和 `sche
 ```
 
 唯一性由稳定的词形、卡片和词义 ID 及已发布规范形式/别名行维护，不依赖临时规范化检索字符串。最佳适用层级的所有合格冲突均须返回，由服务解析。
+
+Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的基础 NFC/小写查询行为；先前示意性的 `unicode-nfkc-v2` 值并不描述该实现。此版本是 request-local normalization metadata，不是规范权威数据或身份。
 
 ## POST /api/v1/senses/get
 
