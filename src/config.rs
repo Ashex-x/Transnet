@@ -28,6 +28,98 @@ pub struct AppConfig {
   /// Per-provider timeout, retry, bulkhead, and circuit-breaker policy.
   #[serde(default)]
   pub provider_resilience: ProviderResilienceConfigs,
+  /// Optional canonical-only read capability; disabled for local model-only operation.
+  #[serde(default)]
+  pub canonical: CanonicalRuntimeConfig,
+}
+
+/// Opt-in outbound island-port canonical read configuration.
+#[derive(Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct CanonicalRuntimeConfig {
+  /// Whether the canonical dependency is required for readiness.
+  pub enabled: bool,
+  /// Absolute Unix socket path; required only when enabled.
+  pub socket_path: Option<String>,
+  /// Maximum duration of one canonical authority operation, in milliseconds.
+  pub timeout_ms: Option<u64>,
+}
+
+/// Validated settings for an enabled canonical-only dependency.
+#[derive(Clone, PartialEq, Eq)]
+pub struct EnabledCanonicalRuntimeConfig {
+  /// Absolute Unix socket path, never logged by the runtime.
+  pub socket_path: String,
+  /// Per-operation timeout, also used as the readiness deadline.
+  pub timeout: Duration,
+}
+
+/// Closed configuration failure without echoing a socket path.
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum CanonicalRuntimeConfigError {
+  /// An enabled capability did not name a bounded absolute Unix socket path.
+  #[error("enabled canonical capability requires a valid absolute Unix socket path")]
+  InvalidSocketPath,
+  /// An enabled capability did not configure a safe operation timeout.
+  #[error("enabled canonical capability requires timeout_ms between 1 and 30000")]
+  InvalidTimeout,
+}
+
+impl CanonicalRuntimeConfig {
+  /// Validates only an enabled capability; disabled local operation needs no island-port settings.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed error for a missing or unsafe socket path or timeout.
+  pub fn resolve(
+    &self,
+  ) -> Result<Option<EnabledCanonicalRuntimeConfig>, CanonicalRuntimeConfigError> {
+    if !self.enabled {
+      return Ok(None);
+    }
+    let path = self
+      .socket_path
+      .as_deref()
+      .ok_or(CanonicalRuntimeConfigError::InvalidSocketPath)?;
+    if path.len() < 2
+      || path.len() > 107
+      || !path.starts_with('/')
+      || path.chars().any(char::is_whitespace)
+      || path.bytes().any(|byte| byte == 0)
+      || path.split('/').any(|component| component == "..")
+    {
+      return Err(CanonicalRuntimeConfigError::InvalidSocketPath);
+    }
+    let timeout_ms = self
+      .timeout_ms
+      .filter(|value| (1..=30_000).contains(value))
+      .ok_or(CanonicalRuntimeConfigError::InvalidTimeout)?;
+    Ok(Some(EnabledCanonicalRuntimeConfig {
+      socket_path: path.to_owned(),
+      timeout: Duration::from_millis(timeout_ms),
+    }))
+  }
+}
+
+impl fmt::Debug for CanonicalRuntimeConfig {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter
+      .debug_struct("CanonicalRuntimeConfig")
+      .field("enabled", &self.enabled)
+      .field("socket_path", &"[REDACTED]")
+      .field("timeout_ms", &self.timeout_ms)
+      .finish()
+  }
+}
+
+impl fmt::Debug for EnabledCanonicalRuntimeConfig {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter
+      .debug_struct("EnabledCanonicalRuntimeConfig")
+      .field("socket_path", &"[REDACTED]")
+      .field("timeout", &self.timeout)
+      .finish()
+  }
 }
 
 /// Listener and logging settings.

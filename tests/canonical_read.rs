@@ -37,6 +37,7 @@ struct SwitchingAuthority {
   has_candidate: bool,
   no_active: bool,
   sense_calls: Mutex<usize>,
+  sent_lookup_forms: Mutex<Vec<String>>,
 }
 
 fn candidate(pin: &CanonicalReleasePin) -> CanonicalCandidate {
@@ -137,8 +138,13 @@ impl CanonicalReadPort for SwitchingAuthority {
     &self,
     _: &CanonicalReadContext,
     pin: &CanonicalReleasePin,
-    _: CanonicalCandidateQuery,
+    query: CanonicalCandidateQuery,
   ) -> Result<Vec<RepositoryMatch>, CanonicalReadError> {
+    *self.sent_lookup_forms.lock().unwrap() = query
+      .lookup_forms
+      .into_iter()
+      .map(|form| form.form)
+      .collect();
     self
       .downstream_releases
       .lock()
@@ -169,6 +175,33 @@ impl CanonicalReadPort for SwitchingAuthority {
     ))
     .map_err(|_| CanonicalReadError::InconsistentData)
   }
+}
+
+#[tokio::test]
+async fn request_local_lookup_forms_reach_authority_without_changing_identity() {
+  let authority = Arc::new(SwitchingAuthority::default());
+  let query = RetrievalRequest::new(
+    "  UP  IN  THE  AIR!  ",
+    language("en"),
+    EvidenceUse::ApiRedistribution,
+    5,
+  )
+  .unwrap();
+  assert_eq!(query.query, "up  in  the  air!");
+  let result = CanonicalReadService::new(authority.clone())
+    .resolve(
+      &context(),
+      query,
+      "  UP  IN  THE  AIR!  ",
+      language("zh-CN"),
+    )
+    .await
+    .unwrap();
+  assert!(result.card.candidates.is_empty());
+  assert_eq!(
+    *authority.sent_lookup_forms.lock().unwrap(),
+    ["up  in  the  air!", "up in the air!", "up  in  the  air"]
+  );
 }
 
 fn context() -> CanonicalReadContext {

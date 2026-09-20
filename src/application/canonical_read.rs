@@ -3,7 +3,7 @@
 //! No model, vector index, HTTP handler, or storage implementation participates here. The active
 //! release is selected once and retained even if the authority changes its active pointer.
 
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use crate::{
   application::canonical_lookup_card::CanonicalLookupCardMapper,
@@ -35,6 +35,9 @@ pub struct CanonicalReadOutcome {
   /// Reviewed translations whose stored source exactly matches the request.
   pub translations: Vec<CanonicalTranslationRevision>,
 }
+
+/// Maximum request-local lookup spellings sent to the canonical authority.
+pub const MAX_CANONICAL_LOOKUP_FORMS: usize = 4;
 
 /// Canonical-only application flow backed by a read capability, not a transport client.
 #[derive(Clone)]
@@ -117,11 +120,7 @@ impl CanonicalReadService {
         context,
         &pin,
         CanonicalCandidateQuery {
-          lookup_forms: vec![CanonicalLookupForm {
-            form: request.query.clone(),
-            match_class: LexicalMatchKind::ExactCanonical,
-            rank: 0,
-          }],
+          lookup_forms: plan_lookup_forms(&request.query),
           normalizer_version: CANONICAL_LOOKUP_NORMALIZER_VERSION.to_string(),
           source_language: request.language.clone(),
           explanation_language: request.language.clone(),
@@ -184,5 +183,74 @@ impl CanonicalReadService {
       sense_details,
       translations,
     })
+  }
+}
+
+fn plan_lookup_forms(query: &str) -> Vec<CanonicalLookupForm> {
+  let mut seen = BTreeSet::new();
+  let mut forms = Vec::with_capacity(MAX_CANONICAL_LOOKUP_FORMS);
+  let mut push = |candidate: String, match_class| {
+    if !candidate.is_empty()
+      && candidate.chars().count() <= MAX_CANONICAL_SOURCE_CHARS
+      && forms.len() < MAX_CANONICAL_LOOKUP_FORMS
+      && seen.insert(candidate.clone())
+    {
+      forms.push(CanonicalLookupForm {
+        form: candidate,
+        match_class,
+        rank: forms.len(),
+      });
+    }
+  };
+
+  // The authority owns whether this spelling is a canonical form or a published alias.
+  push(query.to_owned(), LexicalMatchKind::ExactCanonical);
+  let collapsed = normalize_lookup_key(&query.split_whitespace().collect::<Vec<_>>().join(" "));
+  push(collapsed, LexicalMatchKind::SpellingCorrection);
+  let unquoted = query.trim_matches(['\'', '"', '‘', '’', '“', '”']);
+  push(
+    normalize_lookup_key(unquoted),
+    LexicalMatchKind::SpellingCorrection,
+  );
+  let without_sentence_punctuation = query.trim_end_matches(['.', ',', ':', ';', '!', '?']);
+  push(
+    normalize_lookup_key(without_sentence_punctuation),
+    LexicalMatchKind::SpellingCorrection,
+  );
+  forms
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn lookup_forms_are_bounded_deterministic_and_deduplicated() {
+    let first = plan_lookup_forms("‘c++?!’");
+    let second = plan_lookup_forms("‘c++?!’");
+    assert_eq!(first.len(), second.len());
+    assert!(first.len() <= MAX_CANONICAL_LOOKUP_FORMS);
+    for (left, right) in first.iter().zip(second.iter()) {
+      assert_eq!(left.form, right.form);
+      assert_eq!(left.match_class, right.match_class);
+      assert_eq!(left.rank, right.rank);
+    }
+    assert!(first.iter().any(|form| form.form.contains("c++")));
+    assert_eq!(plan_lookup_forms("c#").len(), 1);
+    assert_eq!(plan_lookup_forms("c").len(), 1);
+    assert_eq!(plan_lookup_forms("c++").len(), 1);
+  }
+
+  #[test]
+  fn lookup_forms_only_derive_lower_priority_punctuation_or_whitespace_candidates() {
+    let forms = plan_lookup_forms("up  in  the  air!");
+    assert_eq!(forms[0].form, "up  in  the  air!");
+    assert_eq!(forms[0].match_class, LexicalMatchKind::ExactCanonical);
+    assert!(forms
+      .iter()
+      .skip(1)
+      .all(|form| form.match_class == LexicalMatchKind::SpellingCorrection));
+    assert_eq!(forms[1].form, "up in the air!");
+    assert_eq!(forms[2].form, "up  in  the  air");
   }
 }

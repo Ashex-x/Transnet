@@ -22,6 +22,7 @@ use tracing::Level;
 use crate::{
   application::{
     canonical_lookup::CanonicalLookupService,
+    canonical_read::CanonicalReadService,
     canonical_sense_details::{ActiveCanonicalSenseDetailsService, CanonicalSenseDetailsService},
     graph::GraphService,
     graph_topology_cache::GraphTopologySnapshotCacheService,
@@ -45,7 +46,7 @@ mod request_id;
 mod stateless;
 mod v1;
 
-pub use readiness::{AlwaysReady, Readiness};
+pub use readiness::{AlwaysReady, CanonicalDependencyReadiness, Readiness};
 
 use request_id::RequestId;
 
@@ -147,6 +148,7 @@ pub struct AppState {
   translation_orchestrator: Option<Arc<TranslationOrchestrator>>,
   lookup: Option<Arc<LookupService>>,
   canonical_lookup: Option<Arc<CanonicalLookupService>>,
+  canonical_read: Option<Arc<CanonicalReadService>>,
   canonical_sense_details: Option<Arc<ActiveCanonicalSenseDetailsService>>,
   graph: Option<GraphRouteService>,
   graph_cursor_protection_key: GraphCursorProtectionKey,
@@ -166,6 +168,7 @@ impl AppState {
       translation_orchestrator: None,
       lookup: None,
       canonical_lookup: None,
+      canonical_read: None,
       canonical_sense_details: None,
       graph: None,
       graph_cursor_protection_key: GraphCursorProtectionKey::ephemeral(),
@@ -204,6 +207,19 @@ impl AppState {
     }
     self.canonical_lookup = Some(lookup);
     self
+  }
+
+  /// Retains the opt-in canonical-only application dependency for future BasicCard delivery.
+  ///
+  /// No public route consumes this capability in the current runtime.
+  pub fn with_canonical_read_service(mut self, service: Arc<CanonicalReadService>) -> Self {
+    self.canonical_read = Some(service);
+    self
+  }
+
+  /// Returns the configured canonical-only application dependency, if explicitly enabled.
+  pub fn canonical_read_service(&self) -> Option<&Arc<CanonicalReadService>> {
+    self.canonical_read.as_ref()
   }
 
   /// Adds the public active-release-pinned canonical sense-details composition.

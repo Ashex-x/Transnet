@@ -6,7 +6,7 @@ English: [Knowledge application](../../../docs/reference/application/knowledge.m
 
 状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。下文的领域评估与完整页面组织属于目标行为，尚未接入默认运行时。
 
-Stage 4 canonical-only 服务从权威端选择一次发布 pin，再通过读取 port 组合已审核翻译候选、确定性排序的词汇候选和无歧义的词义详情。它使用带 canonical-only content pin 的现有 lookup-card 类型，不伪造向量集合，也不把有意的纯词法读取误称为向量故障降级。在外部 island-port server 尚未升级时，该组合可注入但未注册为新的公开路由。
+canonical-only 服务从权威端选择一次发布 pin，再通过读取 port 组合已审核翻译候选、确定性排序的词汇候选和无歧义的词义详情。它使用带 canonical-only content pin 的现有 lookup-card 类型，不伪造向量集合，也不把有意的纯词法读取误称为向量故障降级。可执行文件现在只在显式配置时构造并保存该依赖，并用 active-release 只读探针检查就绪；尚无公开 BasicCard 路由使用它。外部 island-port server 仍需实现匹配的内部合同。请求局部查询形式有界且去重：基线规范化形式最强，谨慎的空白或外围标点变体只是较低优先级的拼写候选。已发布别名、形态、转写和语义归属由权威端确定，不从查询字符串猜测。
 
 ## 解析与评估
 

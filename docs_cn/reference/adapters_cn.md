@@ -18,6 +18,8 @@ Stage 3 client 只实现出站 canonical read：翻译候选、词汇候选解�
 
 Stage 4 在同一出站 transport 中增加 active canonical release 读取。严格响应映射成 canonical-only release pin，不包含向量集合或本地排序策略版本。Application 只获取一次 pin，并传给后续每个权威读取。原有完整 hybrid content tuple 继续用于向量检索与发布兼容性。
 
+可执行文件现在可以通过经校验的运行配置按需构造此出站 transport 与 canonical-only read service。canonical 依赖的就绪检查只使用只读 active-release 操作。这不会新增公开 BasicCard 路由或入站 UDS listener。
+
 对应 island-port server 位于本仓库之外，必须同步实现 `interfaces/mysql.md` 中的当前 delta。在 peer 升级之前，不兼容或不完整响应会 fail closed，且不能声称真实 island-port/MySQL E2E 已验证。
 
 结构化与向量映射保留发布标识符与闭合结果。Island-port 负责 MySQL 和 Qdrant driver、查询、连接池、事务、collection 选择与凭据。Transnet 不暴露 SQL 或 Qdrant-native 请求。文件系统权限认证进程；JSON 绝不转发终端用户身份或凭据。

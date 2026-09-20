@@ -9,6 +9,9 @@ max_request_body_bytes = 1048576
 allowed_origins = []
 allow_credentials = false
 
+[canonical]
+enabled = false
+
 [translation]
 long_text_chars = 4000
 timeout_seconds = 60

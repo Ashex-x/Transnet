@@ -38,7 +38,7 @@ The system design is authoritative for product semantics. Interface documents ar
 
 ## Terminology and status
 
-- **Current runtime:** the executable built from this repository today. It provides transitional loopback translation and model-backed structured lookup; it does not yet expose the target UDS paths or compose production structured and vector data service clients.
+- **Current runtime:** the executable built from this repository today. It provides transitional loopback translation and model-backed structured lookup. An opt-in outbound canonical-only island-port client may be composed and checked for readiness, but no public BasicCard route uses it; target inbound UDS and production vector composition are not implemented.
 - **Target service / target contract:** the intended, versioned service behavior described by the design and interface documents. A target route or schema is not evidence that the current runtime enables it.
 - **Canonical content:** reviewed, versioned knowledge that the publication workflow has made authoritative. It is distinct from a model response, a request, or a similarity result.
 - **Basic card:** the concise, release-pinned MySQL record for one independently selectable lexical sense. It remains useful when graph retrieval is unavailable.
