@@ -82,7 +82,7 @@ A semantic scale uses `canonical_entity` with `entity_type = 'semantic_scale'`. 
 
 ## Common operation envelope
 
-Every adapter operation carries a request ID, deadline, expected schema version, and optionally an immutable content release. Publication mutations also require an idempotency key. Reads return `ok`, `not_found`, `version_mismatch`, `unavailable`, or `timeout`; mutations may additionally return `conflict` or `invalid`.
+Every adapter operation carries a request ID, deadline, expected schema version, and optionally an immutable content release. Publication mutations also require an idempotency key. Reads return `ok`, `not_found`, `version_mismatch`, `content_release_unavailable`, `unavailable`, or `timeout`; mutations may additionally return `conflict` or `invalid`. `version_mismatch` requires structured code `schema_incompatible`; `content_release_unavailable` requires the same-named code and applies only to an explicitly pinned release that cannot be served. Neither is inferred from message text.
 
 Errors never expose SQL, credentials, request text, provider bodies, or internal connection details.
 
@@ -101,9 +101,12 @@ Closed error response:
 
 ```json
 {
-  "outcome": "version_mismatch",
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
+  "content_release": "knowledge-2026-09",
+  "outcome": "content_release_unavailable",
   "error": {
-    "code": "content_release_mismatch",
+    "code": "content_release_unavailable",
     "message": "The requested content release is not available.",
     "retryable": false
   }
@@ -291,6 +294,7 @@ Response:
           "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
           "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": ["evidence_dictionary_1042"], "status": "active"},
           "forms": [{"id": "form_sweltering_lemma_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "form": "sweltering", "normalized_form": "sweltering", "kind": "lemma", "morphology": null, "evidence_ids": ["evidence_dictionary_1042"], "status": "active"}],
+          "sources": [{"release_id": "knowledge-2026-09", "source": {"id": "source_dictionary_2026_01", "name": "Reviewed dictionary", "version": "2026-09", "license": "reviewed", "attribution": "Dictionary publisher (2026)", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}}}],
           "evidence": [{"id": "evidence_dictionary_1042", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:adj:1", "language": "en", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "content_hash": "sha256:4ef760d1...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}]
         }
       }
@@ -303,6 +307,8 @@ Response:
 ```
 
 Uniqueness is enforced by stable form, card, and sense IDs plus published canonical-form and alias rows, never by an ad hoc normalized lookup string. All eligible collisions at the best applicable rank are returned for resolution by the service.
+
+Each candidate must carry the authoritative, release-bound source record for every evidence fragment. `source.id` must equal `evidence.source_id`; source and evidence permissions must both authorize the requested use, and evidence permissions cannot exceed source permissions. For public redistribution, `source.attribution` is a nonempty, reviewed human-readable attribution (at most 256 Unicode characters), not a label synthesized from source ID or name. Missing, duplicate, conflicting, unlicensed, or cross-release source/evidence records fail closed. The adapter resolves these strict private DTOs into the existing candidate/source/evidence domain types; island-port must add this source chain before production delivery. Content hash and permission bits remain internal.
 
 The Stage 4 canonical-only caller names its actual baseline NFC/lowercased lookup behavior `unicode-nfc-lookup-v1`; the previous illustrative `unicode-nfkc-v2` value did not describe that implementation. This version is request-local normalization metadata, not canonical authority data or identity.
 
@@ -330,6 +336,7 @@ Response:
   "outcome": "ok",
   "content_release": "knowledge-2026-09",
   "value": {
+    "canonical_schema_version": "canonical-v1",
     "target": {
       "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
       "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": [], "status": "active"}
@@ -347,6 +354,8 @@ Response:
   }
 }
 ```
+
+The required `canonical_schema_version` in a successful sense value must match the caller-supplied immutable `CanonicalReleasePin`; a different schema fails closed. A pinned R1 read remains on R1 after active selection changes to R2. Island-port must retain readable old releases for the supported in-flight/follow-up window. If the explicitly requested R1 is unavailable, return `content_release_unavailable` with code `content_release_unavailable`; adapter/schema incompatibility instead returns `version_mismatch` with code `schema_incompatible`. Never silently select R2 or use an error message to classify these outcomes.
 
 ## POST /api/v1/domains/resolve
 

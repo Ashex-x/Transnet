@@ -161,6 +161,8 @@ pub struct CanonicalLookupCardEvidence {
 pub struct CanonicalLookupCardEvidenceProvenance {
   /// Source-policy identifier governing this evidence version.
   pub source_id: SourceId,
+  /// Reviewed human-readable attribution from the authoritative source-policy record.
+  pub attribution: String,
   /// Source-local identifier used for correction, removal, and attribution lookup.
   pub source_reference: String,
   /// Immutable lexical release containing the evidence fragment.

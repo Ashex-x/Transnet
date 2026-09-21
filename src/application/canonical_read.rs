@@ -102,7 +102,7 @@ impl CanonicalReadService {
       .iter()
       .any(|candidate| candidate.release_id() != &pin.release_id)
     {
-      return Err(CanonicalReadError::VersionMismatch);
+      return Err(CanonicalReadError::InconsistentData);
     }
     let translations = translation_candidates
       .into_iter()
@@ -147,32 +147,23 @@ impl CanonicalReadService {
           .iter()
           .any(|evidence| evidence.release_id != pin.release_id)
     }) {
-      return Err(CanonicalReadError::VersionMismatch);
+      return Err(CanonicalReadError::InconsistentData);
     }
     let ranked = rank_lexical_candidates(&pin.release_id, request.evidence_use, lexical_matches);
     let card = CanonicalLookupCardMapper::assemble_canonical(&request, pin.clone(), ranked);
     let sense_details = if card.candidates.len() == 1 {
       let sense_id = card.candidates[0].sense.id.clone();
-      let details = self
-        .authority
-        .sense(
-          context,
-          &pin,
-          CanonicalSenseQuery {
-            sense_id: sense_id.clone(),
-            explanation_language: request.language.clone(),
-            dialect: None,
-            evidence_use: request.evidence_use,
-          },
-        )
-        .await?;
-      if details.target().release_id() != &pin.release_id
-        || details.target().sense_id() != &sense_id
-        || !details.is_eligible_for(&pin.release_id, &sense_id, request.evidence_use)
-      {
-        return Err(CanonicalReadError::InconsistentData);
-      }
-      Some(details)
+      Some(
+        self
+          .read_pinned_sense(
+            context,
+            &pin,
+            sense_id,
+            request.language.clone(),
+            request.evidence_use,
+          )
+          .await?,
+      )
     } else {
       None
     };
@@ -183,6 +174,47 @@ impl CanonicalReadService {
       sense_details,
       translations,
     })
+  }
+
+  /// Reads one eligible sense under the caller's immutable pin without selecting active content.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed read error for an invalid pin, unavailable release, or mismatched detail.
+  pub async fn read_pinned_sense(
+    &self,
+    context: &CanonicalReadContext,
+    pin: &CanonicalReleasePin,
+    sense_id: crate::domain::canonical::SenseId,
+    explanation_language: LanguageTag,
+    evidence_use: crate::domain::canonical::EvidenceUse,
+  ) -> Result<CanonicalSenseDetails, CanonicalReadError> {
+    if CanonicalReleasePin::new(pin.release_id.clone(), pin.canonical_schema_version.clone())
+      .as_ref()
+      != Some(pin)
+    {
+      return Err(CanonicalReadError::InvalidRequest);
+    }
+    let details = self
+      .authority
+      .sense(
+        context,
+        pin,
+        CanonicalSenseQuery {
+          sense_id: sense_id.clone(),
+          explanation_language,
+          dialect: None,
+          evidence_use,
+        },
+      )
+      .await?;
+    if details.target().release_id() != &pin.release_id
+      || details.target().sense_id() != &sense_id
+      || !details.is_eligible_for(&pin.release_id, &sense_id, evidence_use)
+    {
+      return Err(CanonicalReadError::InconsistentData);
+    }
+    Ok(details)
   }
 }
 

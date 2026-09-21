@@ -116,9 +116,12 @@ pub enum IslandPortClientError {
   /// No canonical value exists in the pinned release.
   #[error("canonical value was not found")]
   NotFound,
-  /// The peer did not implement the required schema or release.
-  #[error("island-port contract version is incompatible")]
-  VersionMismatch,
+  /// The explicitly pinned content release is no longer readable.
+  #[error("island-port content release is unavailable")]
+  ContentReleaseUnavailable,
+  /// The peer did not implement the required adapter or canonical schema.
+  #[error("island-port schema is incompatible")]
+  SchemaIncompatible,
   /// The local dependency could not complete the operation.
   #[error("island-port is unavailable")]
   Unavailable,
@@ -253,7 +256,7 @@ impl IslandPortCanonicalClient {
     if response.request_id != context.request_id
       || response.schema_version != ISLAND_PORT_SCHEMA_VERSION
     {
-      return Err(IslandPortClientError::VersionMismatch);
+      return Err(IslandPortClientError::SchemaIncompatible);
     }
     let value = match response.outcome {
       OutcomeDto::Ok if response.error.is_none() => response
@@ -262,8 +265,16 @@ impl IslandPortCanonicalClient {
       OutcomeDto::NotFound if response.value.is_none() && response.error.is_some() => {
         return Ok(None)
       }
-      OutcomeDto::VersionMismatch if response.value.is_none() && response.error.is_some() => {
-        return Err(IslandPortClientError::VersionMismatch)
+      OutcomeDto::VersionMismatch if response.value.is_none() => {
+        return Err(
+          response
+            .error
+            .as_ref()
+            .filter(|error| error.code == "schema_incompatible")
+            .map_or(IslandPortClientError::InconsistentData, |_| {
+              IslandPortClientError::SchemaIncompatible
+            }),
+        )
       }
       OutcomeDto::Unavailable if response.value.is_none() && response.error.is_some() => {
         return Err(IslandPortClientError::Unavailable)
@@ -349,16 +360,20 @@ impl IslandPortCanonicalClient {
   pub async fn get_sense(
     &self,
     context: &IslandPortCallContext,
-    release_id: &crate::domain::canonical::ReleaseId,
+    pin: &CanonicalReleasePin,
     input: SenseGetInput,
   ) -> Result<CanonicalSenseDetails, IslandPortClientError> {
     let envelope = RequestEnvelope {
-      context: context_dto(context, release_id),
+      context: context_dto(context, &pin.release_id),
       input: SenseGetInputDto::from(input),
     };
     let response: SenseGetResponseDto = self.call("/api/v1/senses/get", context, &envelope).await?;
-    validate_response_context(&response.common, context, release_id)?;
-    response.common.value()?.into_domain(release_id)
+    validate_response_context(&response.common, context, &pin.release_id)?;
+    let value = response.common.value()?;
+    if value.canonical_schema_version.as_deref() != Some(pin.canonical_schema_version.as_str()) {
+      return Err(IslandPortClientError::SchemaIncompatible);
+    }
+    value.into_domain(&pin.release_id)
   }
 
   async fn call<T: Serialize, R: DeserializeOwned>(
@@ -442,7 +457,8 @@ impl From<IslandPortClientError> for CanonicalReadError {
     match error {
       IslandPortClientError::InvalidRequest => Self::InvalidRequest,
       IslandPortClientError::NotFound => Self::NotFound,
-      IslandPortClientError::VersionMismatch => Self::VersionMismatch,
+      IslandPortClientError::ContentReleaseUnavailable => Self::ContentReleaseUnavailable,
+      IslandPortClientError::SchemaIncompatible => Self::SchemaIncompatible,
       IslandPortClientError::Unavailable => Self::Unavailable,
       IslandPortClientError::Timeout => Self::Timeout,
       IslandPortClientError::InconsistentData => Self::InconsistentData,
@@ -535,7 +551,7 @@ impl CanonicalReadPort for IslandPortCanonicalClient {
     self
       .get_sense(
         &call_context(context)?,
-        &pin.release_id,
+        pin,
         SenseGetInput {
           sense_id: query.sense_id,
           explanation_language: query.explanation_language,
@@ -627,7 +643,14 @@ impl<T> CommonResponseDto<T> {
         self.value.ok_or(IslandPortClientError::InconsistentData)
       }
       OutcomeDto::NotFound => self.closed_error(IslandPortClientError::NotFound),
-      OutcomeDto::VersionMismatch => self.closed_error(IslandPortClientError::VersionMismatch),
+      OutcomeDto::VersionMismatch => self.closed_version_error(
+        "schema_incompatible",
+        IslandPortClientError::SchemaIncompatible,
+      ),
+      OutcomeDto::ContentReleaseUnavailable => self.closed_version_error(
+        "content_release_unavailable",
+        IslandPortClientError::ContentReleaseUnavailable,
+      ),
       OutcomeDto::Unavailable => self.closed_error(IslandPortClientError::Unavailable),
       OutcomeDto::Timeout => self.closed_error(IslandPortClientError::Timeout),
     }
@@ -635,6 +658,18 @@ impl<T> CommonResponseDto<T> {
 
   fn closed_error(self, error: IslandPortClientError) -> Result<T, IslandPortClientError> {
     if self.value.is_some() || self.error.is_none() {
+      Err(IslandPortClientError::InconsistentData)
+    } else {
+      Err(error)
+    }
+  }
+
+  fn closed_version_error(
+    self,
+    code: &str,
+    error: IslandPortClientError,
+  ) -> Result<T, IslandPortClientError> {
+    if self.value.is_some() || self.error.as_ref().is_none_or(|value| value.code != code) {
       Err(IslandPortClientError::InconsistentData)
     } else {
       Err(error)
@@ -648,6 +683,7 @@ enum OutcomeDto {
   Ok,
   NotFound,
   VersionMismatch,
+  ContentReleaseUnavailable,
   Unavailable,
   Timeout,
 }
@@ -671,14 +707,14 @@ fn validate_response_context<T>(
   if response.request_id != context.request_id
     || response.schema_version != ISLAND_PORT_SCHEMA_VERSION
   {
-    return Err(IslandPortClientError::VersionMismatch);
+    return Err(IslandPortClientError::SchemaIncompatible);
   }
   match response.content_release.as_deref() {
     Some(value) if value != release_id.as_str() => {
-      return Err(IslandPortClientError::VersionMismatch)
+      return Err(IslandPortClientError::InconsistentData)
     }
     None if response.outcome == OutcomeDto::Ok => {
-      return Err(IslandPortClientError::VersionMismatch)
+      return Err(IslandPortClientError::InconsistentData)
     }
     _ => {}
   }
@@ -1055,6 +1091,7 @@ struct CanonicalCandidateDto {
   sense: SenseDto,
   forms: Vec<WordFormDto>,
   evidence: Vec<EvidenceFragmentDto>,
+  sources: Vec<CandidateSourceDto>,
 }
 
 impl CanonicalCandidateDto {
@@ -1063,6 +1100,18 @@ impl CanonicalCandidateDto {
     release_id: &crate::domain::canonical::ReleaseId,
     evidence_use: crate::domain::canonical::EvidenceUse,
   ) -> Result<CanonicalCandidate, IslandPortClientError> {
+    let sources = self
+      .sources
+      .into_iter()
+      .map(|value| value.into_domain(release_id, evidence_use))
+      .collect::<Result<Vec<_>, _>>()?;
+    let source_ids = sources
+      .iter()
+      .map(|source| &source.id)
+      .collect::<BTreeSet<_>>();
+    if source_ids.len() != sources.len() {
+      return Err(IslandPortClientError::InconsistentData);
+    }
     let candidate = CanonicalCandidate {
       lexeme: self.lexeme.into_domain(release_id)?,
       sense: self.sense.into_domain(release_id)?,
@@ -1076,11 +1125,64 @@ impl CanonicalCandidateDto {
         .into_iter()
         .map(|value| value.into_domain(release_id))
         .collect::<Result<_, _>>()?,
+      sources,
     };
+    let evidence_ids = candidate
+      .evidence
+      .iter()
+      .map(|fragment| &fragment.id)
+      .collect::<BTreeSet<_>>();
+    if evidence_ids.len() != candidate.evidence.len()
+      || candidate.evidence.iter().any(|fragment| {
+        candidate.source_for(fragment).is_none_or(|source| {
+          !source.permissions.allows(evidence_use)
+            || !fragment.permissions.allows(evidence_use)
+            || !fragment.permissions.storage
+            || !source.permissions.storage
+            || !permissions_are_subset(fragment.permissions, source.permissions)
+        })
+      })
+      || candidate.sources.iter().any(|source| {
+        !candidate
+          .evidence
+          .iter()
+          .any(|fragment| fragment.source_id == source.id)
+      })
+    {
+      return Err(IslandPortClientError::InconsistentData);
+    }
     if !candidate.is_eligible_for(release_id, evidence_use) {
       return Err(IslandPortClientError::InconsistentData);
     }
     Ok(candidate)
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CandidateSourceDto {
+  release_id: String,
+  source: SourceDto,
+}
+
+impl CandidateSourceDto {
+  fn into_domain(
+    self,
+    release_id: &crate::domain::canonical::ReleaseId,
+    evidence_use: crate::domain::canonical::EvidenceUse,
+  ) -> Result<LexicalSource, IslandPortClientError> {
+    if self.release_id != release_id.as_str() {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let source = self.source.into_domain()?;
+    if !source.permissions.allows(evidence_use)
+      || source.attribution.as_ref().is_none_or(|attribution| {
+        attribution.trim().is_empty() || attribution.chars().count() > 256
+      })
+    {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    Ok(source)
   }
 }
 
@@ -1244,6 +1346,18 @@ impl PermissionsDto {
   }
 }
 
+fn permissions_are_subset(asset: SourcePermissions, source: SourcePermissions) -> bool {
+  [
+    crate::domain::canonical::EvidenceUse::Storage,
+    crate::domain::canonical::EvidenceUse::Display,
+    crate::domain::canonical::EvidenceUse::Embedding,
+    crate::domain::canonical::EvidenceUse::ModelProcessing,
+    crate::domain::canonical::EvidenceUse::ApiRedistribution,
+  ]
+  .into_iter()
+  .all(|operation| !asset.allows(operation) || source.allows(operation))
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct EvidenceFragmentDto {
@@ -1354,6 +1468,7 @@ struct SenseGetResponseDto {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SenseDetailsDto {
+  canonical_schema_version: Option<String>,
   target: SenseTargetDto,
   lineages: StrictMap<LineageDto>,
   localized_glosses: Vec<LocalizedGlossDto>,

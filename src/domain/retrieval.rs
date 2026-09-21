@@ -6,7 +6,8 @@ use thiserror::Error;
 
 use super::canonical::{
   normalize_lookup_key, ActiveContentVersion, CanonicalStatus, EvidenceFragment, EvidenceId,
-  EvidenceUse, FormKind, LanguageTag, Lexeme, ReleaseId, Sense, SenseId, VectorCollectionId,
+  EvidenceUse, FormKind, LanguageTag, Lexeme, LexicalSource, ReleaseId, Sense, SenseId,
+  VectorCollectionId,
 };
 
 /// Default maximum number of ranked candidates returned by a retrieval request.
@@ -267,9 +268,19 @@ pub struct CanonicalCandidate {
   pub forms: Vec<super::canonical::WordForm>,
   /// Permitted evidence available to support the sense definition.
   pub evidence: Vec<EvidenceFragment>,
+  /// Authoritative source-policy records for evidence carried by this candidate.
+  pub sources: Vec<LexicalSource>,
 }
 
 impl CanonicalCandidate {
+  /// Finds the authoritative source-policy record for one evidence fragment.
+  pub fn source_for(&self, fragment: &EvidenceFragment) -> Option<&LexicalSource> {
+    self
+      .sources
+      .iter()
+      .find(|source| source.id == fragment.source_id)
+  }
+
   /// Returns whether this candidate is active, internally consistent, and fully permitted.
   pub fn is_eligible_for(&self, release_id: &ReleaseId, evidence_use: EvidenceUse) -> bool {
     self.lexeme.release_id == *release_id
@@ -729,6 +740,14 @@ mod tests {
         content_hash: "hash-1".to_string(),
         permissions: permissions(),
         status: CanonicalStatus::Active,
+      }],
+      sources: vec![LexicalSource {
+        id: id("source-1"),
+        name: "Test dictionary".into(),
+        version: "v1".into(),
+        license: "test".into(),
+        attribution: Some("Test dictionary".into()),
+        permissions: permissions(),
       }],
     }
   }

@@ -89,7 +89,7 @@ impl CanonicalReadPort for FakeAuthority {
         .unwrap(),
       )),
       ProbeOutcome::Unavailable => Err(CanonicalReadError::Unavailable),
-      ProbeOutcome::VersionMismatch => Err(CanonicalReadError::VersionMismatch),
+      ProbeOutcome::VersionMismatch => Err(CanonicalReadError::SchemaIncompatible),
       ProbeOutcome::Timeout => std::future::pending().await,
     }
   }

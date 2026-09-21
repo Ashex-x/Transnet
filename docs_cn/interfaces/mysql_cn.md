@@ -101,7 +101,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 ## 通用操作 envelope
 
-每个适配器操作携带请求 ID、deadline、预期 schema 版本，并可携带不可变内容发布。发布变更还要求幂等键。读操作返回 `ok`、`not_found`、`version_mismatch`、`unavailable` 或 `timeout`；变更还可返回 `conflict` 或 `invalid`。错误不得暴露 SQL、凭据、请求文本、provider body 或连接内部信息。
+每个适配器操作携带请求 ID、deadline、预期 schema 版本，并可携带不可变内容发布。发布变更还要求幂等键。读操作返回 `ok`、`not_found`、`version_mismatch`、`content_release_unavailable`、`unavailable` 或 `timeout`；变更还可返回 `conflict` 或 `invalid`。`version_mismatch` 的结构化 code 必须是 `schema_incompatible`；只有明确指定的发布无法服务时，才返回 `content_release_unavailable` 及同名 code。不得从 message 文本推断类型。错误不得暴露 SQL、凭据、请求文本、provider body 或连接内部信息。
 
 精确请求 body 为 `{"context": RequestContext, "input": EndpointInput}`。请求上下文：
 
@@ -120,9 +120,12 @@ Stage 3 Transnet client 要求每个响应在顶层回显 `request_id` 和 `sche
 
 ```json
 {
-  "outcome": "version_mismatch",
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
+  "content_release": "knowledge-2026-09",
+  "outcome": "content_release_unavailable",
   "error": {
-    "code": "content_release_mismatch",
+    "code": "content_release_unavailable",
     "message": "The requested content release is not available.",
     "retryable": false
   }
@@ -302,6 +305,7 @@ island-port server 不在当前仓库，仍需实现该 operation、原子选择
           "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
           "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": ["evidence_dictionary_1042"], "status": "active"},
           "forms": [{"id": "form_sweltering_lemma_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "form": "sweltering", "normalized_form": "sweltering", "kind": "lemma", "morphology": null, "evidence_ids": ["evidence_dictionary_1042"], "status": "active"}],
+          "sources": [{"release_id": "knowledge-2026-09", "source": {"id": "source_dictionary_2026_01", "name": "Reviewed dictionary", "version": "2026-09", "license": "reviewed", "attribution": "Dictionary publisher (2026)", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}}}],
           "evidence": [{"id": "evidence_dictionary_1042", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:adj:1", "language": "en", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "content_hash": "sha256:4ef760d1...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}]
         }
       }
@@ -314,6 +318,8 @@ island-port server 不在当前仓库，仍需实现该 operation、原子选择
 ```
 
 唯一性由稳定的词形、卡片和词义 ID 及已发布规范形式/别名行维护，不依赖临时规范化检索字符串。最佳适用层级的所有合格冲突均须返回，由服务解析。
+
+每个候选必须为每条 evidence 提供权威且固定发布的 source 记录。`source.id` 必须等于 `evidence.source_id`；source 和 evidence 的权限均须允许请求用途，且 evidence 权限不得超过 source 权限。公开再分发所需的 `source.attribution` 必须是非空、经过权利审核的人类可读署名（最多 256 个 Unicode 字符），不能由 source ID 或名称拼接。缺失、重复、冲突、无许可或跨发布的 source/evidence 记录均闭合失败。适配器将严格私有 DTO 映射至已有 candidate/source/evidence domain 类型；真实交付前 island-port 必须补齐此数据链。content hash 和权限位仍仅供内部使用。
 
 Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的基础 NFC/小写查询行为；先前示意性的 `unicode-nfkc-v2` 值并不描述该实现。此版本是 request-local normalization metadata，不是规范权威数据或身份。
 
@@ -341,6 +347,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
   "outcome": "ok",
   "content_release": "knowledge-2026-09",
   "value": {
+    "canonical_schema_version": "canonical-v1",
     "target": {
       "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
       "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": [], "status": "active"}
@@ -358,6 +365,8 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
   }
 }
 ```
+
+成功的 sense value 必须包含 `canonical_schema_version`，并与调用方提供的不可变 `CanonicalReleasePin` 一致，否则闭合失败。active 从 R1 切至 R2 后，固定 R1 的读取仍必须服务 R1；island-port 须在约定的请求中/后续读取窗口内保留旧发布。若明确指定的 R1 无法服务，返回 `content_release_unavailable` 及同名 code；adapter/schema 不兼容则返回 `version_mismatch` 与 `schema_incompatible`。不得偷偷选择 R2，也不得根据错误 message 分类。
 
 ## POST /api/v1/domains/resolve
 

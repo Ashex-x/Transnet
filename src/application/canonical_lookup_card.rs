@@ -304,14 +304,22 @@ fn map_assertion(
 
   let permitted_count = permitted.len();
   let truncated = permitted_count.saturating_sub(MAX_LOOKUP_CARD_EVIDENCE_PER_ASSERTION);
-  evidence_counts.available += permitted_count.min(MAX_LOOKUP_CARD_EVIDENCE_PER_ASSERTION);
-  evidence_counts.truncated += truncated;
   permitted.truncate(MAX_LOOKUP_CARD_EVIDENCE_PER_ASSERTION);
+  let evidence = permitted
+    .into_iter()
+    .map(|fragment| card_evidence(fragment, candidate, evidence_use))
+    .collect::<Option<Vec<_>>>();
+  let Some(evidence) = evidence else {
+    evidence_counts.filtered += permitted_count;
+    return MappedAssertion::filtered();
+  };
+  evidence_counts.available += evidence.len();
+  evidence_counts.truncated += truncated;
 
   MappedAssertion::available(CanonicalLookupCardAssertion {
     kind,
     text: text.to_string(),
-    evidence: permitted.into_iter().map(card_evidence).collect(),
+    evidence,
   })
 }
 
@@ -338,20 +346,30 @@ fn indexed_evidence<'a>(
   indexed
 }
 
-fn card_evidence(fragment: EvidenceFragment) -> CanonicalLookupCardEvidence {
-  CanonicalLookupCardEvidence {
+fn card_evidence(
+  fragment: EvidenceFragment,
+  candidate: &CanonicalCandidate,
+  evidence_use: EvidenceUse,
+) -> Option<CanonicalLookupCardEvidence> {
+  let source = candidate.source_for(&fragment)?;
+  let attribution = source.attribution.as_ref()?;
+  if !source.permissions.allows(evidence_use) || attribution.trim().is_empty() {
+    return None;
+  }
+  Some(CanonicalLookupCardEvidence {
     id: fragment.id,
     kind: fragment.kind,
     confidence: fragment.confidence,
     text: fragment.text,
     provenance: CanonicalLookupCardEvidenceProvenance {
       source_id: fragment.source_id,
+      attribution: attribution.clone(),
       source_reference: fragment.source_reference,
       release_id: fragment.release_id,
       language: fragment.language,
       content_hash: fragment.content_hash,
     },
-  }
+  })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -468,7 +486,7 @@ mod tests {
   use crate::domain::{
     canonical::{
       CanonicalId, EvidenceConfidence, EvidenceKind, FormKind, LanguageTag, Lexeme,
-      LexicalPartOfSpeech, Sense, SourcePermissions,
+      LexicalPartOfSpeech, LexicalSource, Sense, SourcePermissions,
     },
     retrieval::CandidateFeatures,
   };
@@ -549,6 +567,14 @@ mod tests {
         content_hash: format!("hash-{sense_id}"),
         permissions: permissions(),
         status: CanonicalStatus::Active,
+      }],
+      sources: vec![LexicalSource {
+        id: id("source-1"),
+        name: "Test dictionary".into(),
+        version: "v1".into(),
+        license: "test".into(),
+        attribution: Some("Test dictionary".into()),
+        permissions: permissions(),
       }],
     }
   }

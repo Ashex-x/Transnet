@@ -32,9 +32,12 @@ pub enum CanonicalReadError {
   /// The requested pinned value is absent.
   #[error("canonical value was not found")]
   NotFound,
-  /// The peer cannot serve the pinned release or schema.
-  #[error("canonical read version is incompatible")]
-  VersionMismatch,
+  /// An explicitly pinned immutable content release is no longer readable.
+  #[error("canonical content release is unavailable")]
+  ContentReleaseUnavailable,
+  /// The peer does not implement the required adapter or canonical schema.
+  #[error("canonical read schema is incompatible")]
+  SchemaIncompatible,
   /// The canonical authority is unavailable.
   #[error("canonical authority is unavailable")]
   Unavailable,

@@ -10,8 +10,8 @@ use transnet::{
   domain::{
     canonical::{
       ActiveContentVersion, CanonicalId, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
-      EvidenceKind, EvidenceUse, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, Sense,
-      SourcePermissions, WordForm,
+      EvidenceKind, EvidenceUse, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource,
+      Sense, SourcePermissions, WordForm,
     },
     lookup_card::{CanonicalLookupCardCoverageState, CanonicalLookupResolution},
     retrieval::{
@@ -94,6 +94,14 @@ fn candidate(sense_id: &str, sense_key: &str) -> CanonicalCandidate {
       content_hash: format!("hash-{sense_key}"),
       permissions: permissions(),
       status: CanonicalStatus::Active,
+    }],
+    sources: vec![LexicalSource {
+      id: id("source-licensed"),
+      name: "Test dictionary".into(),
+      version: "v1".into(),
+      license: "test".into(),
+      attribution: Some("Test dictionary".into()),
+      permissions: permissions(),
     }],
   }
 }

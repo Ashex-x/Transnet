@@ -16,6 +16,8 @@ The island-port client maps data-port operations to versioned HTTP/1.1 JSON call
 
 The Stage 3 client implements outbound-only canonical reads for translation candidates, lexical candidate resolution, and sense details. Its private strict DTOs reconstruct the existing `CanonicalTranslationRevision`, `CanonicalCandidate`, and `CanonicalSenseDetails` types. Ranking, fusion, ambiguity resolution, and coverage remain request-local application work. Unix builds provide the production socket transport; tests inject a bounded fake transport without adding an inbound listener or database client.
 
+Candidate reads now require release-bound authoritative source records, reviewed nonempty attribution, and matching source/evidence permissions; strict DTO mapping fails closed on missing or conflicting lineage. Structured `content_release_unavailable` is distinct from `schema_incompatible`, and pinned sense reads verify the returned canonical schema against the caller's pin. No error classification reads peer message text.
+
 Stage 4 adds the active canonical release read to the same outbound transport. It maps the strict response into a canonical-only release pin, with no vector collection or local ranking-policy version. The application obtains that pin once and passes it to every later authority read. The existing full hybrid content tuple remains unchanged for vector retrieval and publication compatibility.
 
 The executable now optionally constructs this outbound transport and canonical-only read service from validated runtime configuration. Only the read-only active-release operation participates in canonical dependency readiness. This does not add a public BasicCard route or an inbound UDS listener.

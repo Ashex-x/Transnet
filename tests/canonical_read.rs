@@ -64,6 +64,7 @@ fn candidate(pin: &CanonicalReleasePin) -> CanonicalCandidate {
     sense,
     forms: Vec::new(),
     evidence: Vec::new(),
+    sources: Vec::new(),
   }
 }
 
@@ -233,6 +234,44 @@ async fn active_switch_does_not_repin_within_one_request() {
 }
 
 #[tokio::test]
+async fn caller_pinned_sense_remains_on_r1_after_active_switches_to_r2() {
+  let authority = Arc::new(SwitchingAuthority::default());
+  assert_eq!(
+    authority
+      .active_release(&context())
+      .await
+      .unwrap()
+      .unwrap()
+      .release_id
+      .as_str(),
+    "release-r1"
+  );
+  assert_eq!(
+    authority
+      .active_release(&context())
+      .await
+      .unwrap()
+      .unwrap()
+      .release_id
+      .as_str(),
+    "release-r2"
+  );
+  let details = CanonicalReadService::new(authority.clone())
+    .read_pinned_sense(
+      &context(),
+      &release("release-r1"),
+      CanonicalId::new("sense-hello").unwrap(),
+      language("zh-CN"),
+      EvidenceUse::ApiRedistribution,
+    )
+    .await
+    .unwrap();
+  assert_eq!(details.target().release_id().as_str(), "release-r1");
+  assert_eq!(*authority.active_calls.lock().unwrap(), 2);
+  assert_eq!(*authority.sense_calls.lock().unwrap(), 1);
+}
+
+#[tokio::test]
 async fn contradictory_downstream_release_fails_closed() {
   let authority = Arc::new(SwitchingAuthority {
     wrong_release: true,
@@ -243,7 +282,7 @@ async fn contradictory_downstream_release_fails_closed() {
     .await
     .err()
     .unwrap();
-  assert_eq!(error, CanonicalReadError::VersionMismatch);
+  assert_eq!(error, CanonicalReadError::InconsistentData);
   assert_eq!(*authority.active_calls.lock().unwrap(), 1);
 }
 

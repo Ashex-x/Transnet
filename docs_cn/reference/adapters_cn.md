@@ -16,6 +16,8 @@ Island-port client 把数据 port 操作映射到 island-port 在其所属 Unix 
 
 Stage 3 client 只实现出站 canonical read：翻译候选、词汇候选解析和 sense details。其私有 strict DTO 重建现有 `CanonicalTranslationRevision`、`CanonicalCandidate` 与 `CanonicalSenseDetails`；ranking、fusion、歧义解析和 coverage 仍是 request-local application 工作。Unix build 提供 production socket transport；测试注入有界 fake transport，不增加入站 listener 或数据库 client。
 
+候选读取现在要求固定发布的权威 source 记录、经过审核的非空 attribution，以及一致的 source/evidence 权限；严格 DTO 映射对缺失或冲突 lineage 闭合失败。结构化的 `content_release_unavailable` 与 `schema_incompatible` 分离，固定发布的 sense 读取将返回的规范 schema 与调用方 pin 复核。错误分类不解析 peer message 文本。
+
 Stage 4 在同一出站 transport 中增加 active canonical release 读取。严格响应映射成 canonical-only release pin，不包含向量集合或本地排序策略版本。Application 只获取一次 pin，并传给后续每个权威读取。原有完整 hybrid content tuple 继续用于向量检索与发布兼容性。
 
 可执行文件现在可以通过经校验的运行配置按需构造此出站 transport 与 canonical-only read service。canonical 依赖的就绪检查只使用只读 active-release 操作。这不会新增公开 BasicCard 路由或入站 UDS listener。

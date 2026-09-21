@@ -99,16 +99,16 @@ async fn active_release_missing_or_incompatible_response_fails_closed() {
       None,
     ),
     (
-      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"version_mismatch","error":{"code":"schema_version_mismatch","message":"Incompatible schema.","retryable":false}}),
-      Some(IslandPortClientError::VersionMismatch),
+      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"version_mismatch","error":{"code":"schema_incompatible","message":"Incompatible schema.","retryable":false}}),
+      Some(IslandPortClientError::SchemaIncompatible),
     ),
     (
       json!({"request_id":"req_stage_3","schema_version":"old","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1"}}),
-      Some(IslandPortClientError::VersionMismatch),
+      Some(IslandPortClientError::SchemaIncompatible),
     ),
     (
       json!({"request_id":"other","schema_version":"mysql-adapter-v1","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1"}}),
-      Some(IslandPortClientError::VersionMismatch),
+      Some(IslandPortClientError::SchemaIncompatible),
     ),
     (
       json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"ok","value":{"content_release":"release-1"}}),
@@ -255,12 +255,27 @@ async fn incompatible_or_incomplete_translation_response_fails_closed() {
     )
     .await
     .unwrap_err();
-  assert_eq!(error, IslandPortClientError::VersionMismatch);
+  assert_eq!(error, IslandPortClientError::SchemaIncompatible);
 }
 
 #[tokio::test]
 async fn candidate_response_maps_authoritative_data_without_accepting_rank() {
-  let transport = Arc::new(FakeTransport::new(json!({
+  let transport = Arc::new(FakeTransport::new(candidate_response()));
+  let matches = IslandPortCanonicalClient::new(transport)
+    .resolve_basic_card_candidates(&context(), &id("knowledge-2026-09"), candidate_input())
+    .await
+    .unwrap();
+  assert_eq!(matches.len(), 1);
+  assert_eq!(matches[0].kind, LexicalMatchKind::ExactCanonical);
+  assert_eq!(matches[0].score.basis_points(), 10_000);
+  assert_eq!(
+    matches[0].candidate.sources[0].attribution.as_deref(),
+    Some("Reviewed dictionary attribution")
+  );
+}
+
+fn candidate_response() -> Value {
+  json!({
     "request_id": "req_stage_3",
     "schema_version": "mysql-adapter-v1",
     "outcome": "ok",
@@ -275,36 +290,188 @@ async fn candidate_response_maps_authoritative_data_without_accepting_rank() {
           "lexeme": {"id":"lexeme_sweltering","language":"en","lemma":"sweltering","normalized_lemma":"sweltering","part_of_speech":"adjective","status":"active"},
           "sense": {"id":"sense_sweltering_hot","lexeme_id":"lexeme_sweltering","sense_key":"weather-hot","definition":"uncomfortably hot","definition_evidence_ids":["evidence_dictionary_1042"],"status":"active"},
           "forms": [{"id":"form_sweltering","lexeme_id":"lexeme_sweltering","form":"sweltering","normalized_form":"sweltering","kind":"lemma","morphology":null,"evidence_ids":["evidence_dictionary_1042"],"status":"active"}],
+          "sources": [{"release_id":"knowledge-2026-09","source":{"id":"source_dictionary","name":"Reviewed dictionary","version":"2026-09","license":"internal-reviewed","attribution":"Reviewed dictionary attribution","permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true}}}],
           "evidence": [{"id":"evidence_dictionary_1042","source_id":"source_dictionary","source_reference":"entry:1","language":"en","kind":"definition","confidence":"high","text":"uncomfortably hot","content_hash":"sha256:abc","permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true},"status":"active"}]
         }
       }],
       "alternatives": [],
       "truncated": false
     }
-  })));
-  let matches = IslandPortCanonicalClient::new(transport)
-    .resolve_basic_card_candidates(
+  })
+}
+
+fn candidate_input() -> BasicCardResolveInput {
+  BasicCardResolveInput {
+    lookup_forms: vec![LookupFormInput {
+      form: "sweltering".into(),
+      match_class: LexicalMatchKind::ExactCanonical,
+      rank: 0,
+    }],
+    normalizer_version: "unicode-nfkc-v2".into(),
+    source_language: language("en"),
+    explanation_language: language("zh-CN"),
+    dialect: None,
+    evidence_use: EvidenceUse::ApiRedistribution,
+    limit: 5,
+  }
+}
+
+#[tokio::test]
+async fn candidate_attribution_and_source_policy_fail_closed() {
+  let mut cases = Vec::new();
+  let source = "/value/matches/0/candidate/sources/0";
+  let evidence = "/value/matches/0/candidate/evidence/0";
+  let mut missing = candidate_response();
+  missing
+    .pointer_mut(&format!("{source}/source"))
+    .unwrap()
+    .as_object_mut()
+    .unwrap()
+    .remove("attribution");
+  cases.push(missing);
+  let mut empty = candidate_response();
+  *empty
+    .pointer_mut(&format!("{source}/source/attribution"))
+    .unwrap() = json!("  ");
+  cases.push(empty);
+  let mut conflict = candidate_response();
+  *conflict
+    .pointer_mut(&format!("{source}/source/id"))
+    .unwrap() = json!("another_source");
+  cases.push(conflict);
+  let mut wrong_release = candidate_response();
+  *wrong_release
+    .pointer_mut(&format!("{source}/release_id"))
+    .unwrap() = json!("release-r2");
+  cases.push(wrong_release);
+  let mut permission = candidate_response();
+  *permission
+    .pointer_mut(&format!("{source}/source/permissions/api_redistribution"))
+    .unwrap() = json!(false);
+  cases.push(permission);
+  let mut evidence_permission = candidate_response();
+  *evidence_permission
+    .pointer_mut(&format!("{evidence}/permissions/api_redistribution"))
+    .unwrap() = json!(false);
+  cases.push(evidence_permission);
+  let mut duplicate = candidate_response();
+  let copied = duplicate.pointer(source).unwrap().clone();
+  duplicate
+    .pointer_mut("/value/matches/0/candidate/sources")
+    .unwrap()
+    .as_array_mut()
+    .unwrap()
+    .push(copied);
+  cases.push(duplicate);
+  for response in cases {
+    let error = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))
+      .resolve_basic_card_candidates(&context(), &id("knowledge-2026-09"), candidate_input())
+      .await
+      .unwrap_err();
+    assert_eq!(error, IslandPortClientError::InconsistentData);
+    let output = format!("{error:?} {error}");
+    assert!(!output.contains("Reviewed dictionary attribution"));
+    assert!(!output.contains("uncomfortably hot"));
+  }
+}
+
+#[tokio::test]
+async fn release_unavailable_and_schema_incompatible_are_distinct_closed_outcomes() {
+  for (outcome, code, expected) in [
+    (
+      "content_release_unavailable",
+      "content_release_unavailable",
+      IslandPortClientError::ContentReleaseUnavailable,
+    ),
+    (
+      "version_mismatch",
+      "schema_incompatible",
+      IslandPortClientError::SchemaIncompatible,
+    ),
+  ] {
+    let response = json!({
+      "request_id":"req_stage_3", "schema_version":"mysql-adapter-v1",
+      "content_release":"release-r1", "outcome":outcome,
+      "error":{"code":code,"message":"secret response body and socket path","retryable":false}
+    });
+    let error = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))
+      .get_sense(
+        &context(),
+        &transnet::domain::canonical::CanonicalReleasePin::new(
+          id("release-r1"),
+          "canonical-v1".into(),
+        )
+        .unwrap(),
+        SenseGetInput {
+          sense_id: id("sense_sweltering_hot"),
+          explanation_language: language("zh-CN"),
+          dialect: None,
+          evidence_use: EvidenceUse::ApiRedistribution,
+        },
+      )
+      .await
+      .unwrap_err();
+    assert_eq!(error, expected);
+    assert!(!format!("{error:?} {error}").contains("secret"));
+  }
+  let response = json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","content_release":"release-r1","outcome":"content_release_unavailable","error":{"code":"schema_incompatible","message":"secret","retryable":false}});
+  let error = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))
+    .get_sense(
       &context(),
-      &id("knowledge-2026-09"),
-      BasicCardResolveInput {
-        lookup_forms: vec![LookupFormInput {
-          form: "sweltering".into(),
-          match_class: LexicalMatchKind::ExactCanonical,
-          rank: 0,
-        }],
-        normalizer_version: "unicode-nfkc-v2".into(),
-        source_language: language("en"),
+      &transnet::domain::canonical::CanonicalReleasePin::new(
+        id("release-r1"),
+        "canonical-v1".into(),
+      )
+      .unwrap(),
+      SenseGetInput {
+        sense_id: id("sense_sweltering_hot"),
         explanation_language: language("zh-CN"),
         dialect: None,
         evidence_use: EvidenceUse::ApiRedistribution,
-        limit: 5,
       },
     )
     .await
-    .unwrap();
-  assert_eq!(matches.len(), 1);
-  assert_eq!(matches[0].kind, LexicalMatchKind::ExactCanonical);
-  assert_eq!(matches[0].score.basis_points(), 10_000);
+    .unwrap_err();
+  assert_eq!(error, IslandPortClientError::InconsistentData);
+}
+
+#[tokio::test]
+async fn pinned_sense_rejects_canonical_schema_mismatch() {
+  let response = json!({
+    "request_id":"req_stage_3", "schema_version":"mysql-adapter-v1", "outcome":"ok",
+    "content_release":"release-r1",
+    "value": {"canonical_schema_version":"canonical-v2", "target":{
+      "lexeme":{"id":"lexeme_x","language":"en","lemma":"x","normalized_lemma":"x","part_of_speech":"noun","status":"active"},
+      "sense":{"id":"sense_x","lexeme_id":"lexeme_x","sense_key":"one","definition":"x","definition_evidence_ids":[],"status":"active"}
+    }, "lineages":{},
+      "localized_glosses":[],"pronunciations":[],"usage_labels":[],"grammar_patterns":[],
+      "collocations":[],"examples":[],"pitfalls":[],"etymologies":[],"history":[]}
+  });
+  let mut missing = response.clone();
+  missing["value"]
+    .as_object_mut()
+    .unwrap()
+    .remove("canonical_schema_version");
+  for response in [response, missing] {
+    let error = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))
+      .get_sense(
+        &context(),
+        &transnet::domain::canonical::CanonicalReleasePin::new(
+          id("release-r1"),
+          "canonical-v1".into(),
+        )
+        .unwrap(),
+        SenseGetInput {
+          sense_id: id("sense_x"),
+          explanation_language: language("zh-CN"),
+          dialect: None,
+          evidence_use: EvidenceUse::ApiRedistribution,
+        },
+      )
+      .await
+      .unwrap_err();
+    assert_eq!(error, IslandPortClientError::SchemaIncompatible);
+  }
 }
 
 #[tokio::test]
@@ -315,6 +482,7 @@ async fn sense_response_constructs_target_independently() {
     "outcome": "ok",
     "content_release": "knowledge-2026-09",
     "value": {
+      "canonical_schema_version": "canonical-v1",
       "target": {
         "lexeme": {"id":"lexeme_sweltering","language":"en","lemma":"sweltering","normalized_lemma":"sweltering","part_of_speech":"adjective","status":"active"},
         "sense": {"id":"sense_sweltering_hot","lexeme_id":"lexeme_sweltering","sense_key":"weather-hot","definition":"uncomfortably hot","definition_evidence_ids":[],"status":"active"}
@@ -334,7 +502,11 @@ async fn sense_response_constructs_target_independently() {
   let details = IslandPortCanonicalClient::new(transport)
     .get_sense(
       &context(),
-      &id("knowledge-2026-09"),
+      &transnet::domain::canonical::CanonicalReleasePin::new(
+        id("knowledge-2026-09"),
+        "canonical-v1".into(),
+      )
+      .unwrap(),
       SenseGetInput {
         sense_id: id("sense_sweltering_hot"),
         explanation_language: language("zh-CN"),
@@ -354,6 +526,7 @@ async fn dangling_lineage_reference_and_unknown_fields_fail_closed() {
     "request_id": "req_stage_3", "schema_version": "mysql-adapter-v1", "outcome": "ok",
     "content_release": "knowledge-2026-09",
     "value": {
+      "canonical_schema_version": "canonical-v1",
       "target": {
         "lexeme": {"id":"lexeme_x","language":"en","lemma":"x","normalized_lemma":"x","part_of_speech":"noun","status":"active"},
         "sense": {"id":"sense_x","lexeme_id":"lexeme_x","sense_key":"one","definition":"x","definition_evidence_ids":[],"status":"active"}
@@ -367,7 +540,11 @@ async fn dangling_lineage_reference_and_unknown_fields_fail_closed() {
   let error = IslandPortCanonicalClient::new(transport)
     .get_sense(
       &context(),
-      &id("knowledge-2026-09"),
+      &transnet::domain::canonical::CanonicalReleasePin::new(
+        id("knowledge-2026-09"),
+        "canonical-v1".into(),
+      )
+      .unwrap(),
       SenseGetInput {
         sense_id: id("sense_x"),
         explanation_language: language("zh-CN"),
