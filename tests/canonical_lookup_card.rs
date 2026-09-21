@@ -10,10 +10,10 @@ use transnet::{
   domain::{
     canonical::{
       ActiveContentVersion, CanonicalId, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
-      EvidenceKind, EvidenceUse, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, Sense,
-      SourcePermissions, WordForm,
+      EvidenceKind, EvidenceUse, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource,
+      Sense, SourcePermissions, WordForm,
     },
-    lookup_card::CanonicalLookupCardCoverageState,
+    lookup_card::{CanonicalLookupCardCoverageState, CanonicalLookupResolution},
     retrieval::{
       CanonicalCandidate, RetrievalRequest, RetrievalScore, VectorMatch, VectorPurpose,
       VectorTarget,
@@ -95,6 +95,14 @@ fn candidate(sense_id: &str, sense_key: &str) -> CanonicalCandidate {
       permissions: permissions(),
       status: CanonicalStatus::Active,
     }],
+    sources: vec![LexicalSource {
+      id: id("source-licensed"),
+      name: "Test dictionary".into(),
+      version: "v1".into(),
+      license: "test".into(),
+      attribution: Some("Test dictionary".into()),
+      permissions: permissions(),
+    }],
   }
 }
 
@@ -133,6 +141,10 @@ async fn service_preserves_hybrid_ranking_and_assertion_provenance() {
 
   assert_eq!(card.query.normalized_query, "hot");
   assert_eq!(card.candidates[0].sense.id.as_str(), "sense-heat");
+  assert_eq!(
+    card.resolution(),
+    CanonicalLookupResolution::ClarificationRequired
+  );
   assert_eq!(card.candidates[0].rank, 1);
   assert_eq!(card.candidates[0].forms[0].assertion.text, "hotter");
   assert_eq!(
@@ -165,9 +177,21 @@ async fn service_returns_lexical_card_when_vector_dependency_is_unavailable() {
   .unwrap();
 
   assert_eq!(card.candidates.len(), 1);
+  assert_eq!(card.resolution(), CanonicalLookupResolution::Resolved);
   assert_eq!(
     card.coverage.retrieval.state,
     CanonicalLookupCardCoverageState::VectorDegraded
   );
   assert!(card.candidates[0].sense.definition.is_some());
+}
+
+#[tokio::test]
+async fn service_reports_not_found_without_model_or_vector_fabrication() {
+  let card = service(InMemoryRetrievalAdapter::new(content()))
+    .lookup(request())
+    .await
+    .unwrap();
+
+  assert!(card.candidates.is_empty());
+  assert_eq!(card.resolution(), CanonicalLookupResolution::NotFound);
 }

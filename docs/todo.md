@@ -4,7 +4,7 @@
 
 This plan turns the authoritative [Transnet design](transnet.md) into ordered, verifiable delivery slices. It tracks repository state rather than aspiration: an item is checked only when its code, tests, and applicable contracts agree.
 
-Status: active implementation plan. The checked-in runtime provides loopback translation and model-backed structured lookup. Canonical MySQL/Qdrant grounding, relationship-first page composition, and domain-aware expansion remain target capabilities.
+Status: active implementation plan. The checked-in runtime provides loopback translation, model-backed structured lookup, and opt-in Transnet-side canonical reads with public BasicCard and pinned-sense delivery. The external island-port/MySQL implementation and real Milestone 2 acceptance remain incomplete; Qdrant grounding, relationship-first page composition, and domain-aware expansion remain later target capabilities.
 
 ## Delivery rules
 

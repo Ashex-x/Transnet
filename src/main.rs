@@ -8,6 +8,14 @@ use transnet::{
   AppConfig, AppState, OpenAiLearningModel, TranslationService,
 };
 
+#[cfg(unix)]
+use transnet::{
+  adapters::island_port::{IslandPortCanonicalClient, UnixIslandPortTransport},
+  api::CanonicalDependencyReadiness,
+  application::canonical_read::CanonicalReadService,
+  ports::canonical_read::CanonicalReadPort,
+};
+
 #[tokio::main]
 async fn main() -> Result<()> {
   let config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("config/transnet.toml");
@@ -27,6 +35,10 @@ async fn main() -> Result<()> {
 }
 
 async fn run(config: AppConfig) -> Result<()> {
+  let canonical = config
+    .canonical
+    .resolve()
+    .context("invalid canonical runtime configuration")?;
   let host = config
     .server
     .host
@@ -58,23 +70,56 @@ async fn run(config: AppConfig) -> Result<()> {
   )?;
   let orchestrator =
     TranslationOrchestrator::new(Arc::new(service.clone()), Arc::new(learning_model.clone()));
+  let state = AppState::new(service)
+    .with_learning_model(Arc::new(learning_model))
+    .with_translation_orchestrator(Arc::new(orchestrator));
+  let state = match canonical {
+    Some(canonical) => configure_canonical(state, canonical)?,
+    None => state,
+  };
   let listener = tokio::net::TcpListener::bind(address)
     .await
     .with_context(|| format!("failed to bind to {address}"))?;
 
   tracing::info!(address = %address, "starting transnet");
-  let router = app_router_with_http_config(
-    AppState::new(service)
-      .with_learning_model(Arc::new(learning_model))
-      .with_translation_orchestrator(Arc::new(orchestrator)),
-    &config.http,
-  )
-  .context("invalid HTTP configuration")?;
+  let router =
+    app_router_with_http_config(state, &config.http).context("invalid HTTP configuration")?;
   axum::serve(listener, router)
     .with_graceful_shutdown(shutdown_signal())
     .await
     .context("transnet server failed")?;
   Ok(())
+}
+
+#[cfg(unix)]
+fn configure_canonical(
+  state: AppState,
+  canonical: transnet::config::EnabledCanonicalRuntimeConfig,
+) -> Result<AppState> {
+  let transport = Arc::new(
+    UnixIslandPortTransport::new(&canonical.socket_path)
+      .context("could not construct canonical island-port transport")?,
+  );
+  let authority: Arc<dyn CanonicalReadPort> = Arc::new(IslandPortCanonicalClient::new(transport));
+  Ok(
+    state
+      .with_canonical_read_service_timeout(
+        Arc::new(CanonicalReadService::new(authority.clone())),
+        canonical.timeout,
+      )
+      .with_readiness(Arc::new(CanonicalDependencyReadiness::new(
+        authority,
+        canonical.timeout,
+      ))),
+  )
+}
+
+#[cfg(not(unix))]
+fn configure_canonical(
+  _state: AppState,
+  _canonical: transnet::config::EnabledCanonicalRuntimeConfig,
+) -> Result<AppState> {
+  anyhow::bail!("enabled canonical capability requires Unix domain sockets")
 }
 
 async fn shutdown_signal() {

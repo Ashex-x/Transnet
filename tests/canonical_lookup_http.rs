@@ -19,8 +19,8 @@ use transnet::{
   domain::{
     canonical::{
       ActiveContentVersion, CanonicalId, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
-      EvidenceKind, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, Sense, SourcePermissions,
-      WordForm,
+      EvidenceKind, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource, Sense,
+      SourcePermissions, WordForm,
     },
     observability::{LookupStage, MetricEvent, MetricOutcome, ModelValidationOutcome},
     retrieval::{CanonicalCandidate, RetrievalScore, VectorMatch, VectorPurpose, VectorTarget},
@@ -103,6 +103,20 @@ fn candidate() -> CanonicalCandidate {
         api_redistribution: true,
       },
       status: CanonicalStatus::Active,
+    }],
+    sources: vec![LexicalSource {
+      id: id("source-licensed"),
+      name: "Test dictionary".into(),
+      version: "v1".into(),
+      license: "test".into(),
+      attribution: Some("Test dictionary".into()),
+      permissions: SourcePermissions {
+        storage: true,
+        display: true,
+        embedding: true,
+        model_processing: true,
+        api_redistribution: true,
+      },
     }],
   }
 }

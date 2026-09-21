@@ -1,11 +1,11 @@
-//! Narrow read interface for the active immutable canonical-content tuple.
+//! Narrow read interface for the active immutable canonical-only release pin.
 
 use async_trait::async_trait;
 use thiserror::Error;
 
-use crate::domain::canonical::ActiveContentVersion;
+use crate::domain::canonical::CanonicalReleasePin;
 
-/// Typed failure while resolving the active canonical-content tuple.
+/// Typed failure while resolving the active canonical release.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum ActiveContentReaderError {
   /// The active-content source could not complete its bounded read.
@@ -16,21 +16,21 @@ pub enum ActiveContentReaderError {
   InconsistentData,
 }
 
-/// Resolves the one immutable canonical-content tuple selected for new public reads.
+/// Resolves the one immutable canonical-only release selected for new public reads.
 ///
 /// This intentionally narrow interface does not expose content-release staging, publication,
 /// rollback, source quarantine, storage, or vector operations. Implementations must return the
-/// single active tuple only when it is safe to serve. `Ok(None)` means no canonical release is
+/// single active pin only when it is safe to serve. `Ok(None)` means no canonical release is
 /// active; callers must not substitute a retained, staging, or separately selected release.
 #[async_trait]
 pub trait ActiveContentReader: Send + Sync {
-  /// Returns the active immutable content tuple, when canonical content is safely servable.
+  /// Returns the active canonical release pin, when canonical content is safely servable.
   ///
   /// # Errors
   ///
   /// Returns an error when the active-content source is unavailable or violates its singleton
   /// pointer and source-safety contract.
-  async fn active_content_version(
+  async fn active_release_pin(
     &self,
-  ) -> Result<Option<ActiveContentVersion>, ActiveContentReaderError>;
+  ) -> Result<Option<CanonicalReleasePin>, ActiveContentReaderError>;
 }

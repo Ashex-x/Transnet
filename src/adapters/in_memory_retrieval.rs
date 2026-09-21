@@ -164,8 +164,8 @@ mod tests {
     domain::{
       canonical::{
         CanonicalId, CanonicalStatus, EvidenceConfidence, EvidenceFragment, EvidenceKind,
-        EvidenceUse, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, Sense, SourcePermissions,
-        WordForm,
+        EvidenceUse, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource, Sense,
+        SourcePermissions, WordForm,
       },
       retrieval::{
         RetrievalRequest, RetrievalScore, VectorPurpose, VectorSearchRequest, VectorTarget,
@@ -244,6 +244,20 @@ mod tests {
         },
         status: CanonicalStatus::Active,
       }],
+      sources: vec![LexicalSource {
+        id: id("source-1"),
+        name: "Test dictionary".into(),
+        version: "v1".into(),
+        license: "test".into(),
+        attribution: Some("Test dictionary".into()),
+        permissions: SourcePermissions {
+          storage: true,
+          display: true,
+          embedding: true,
+          model_processing: true,
+          api_redistribution: true,
+        },
+      }],
     }
   }
 
@@ -288,7 +302,7 @@ mod tests {
     assert_eq!(
       outcome.candidates[0]
         .features
-        .morphology
+        .inflection
         .unwrap()
         .basis_points(),
       7_500

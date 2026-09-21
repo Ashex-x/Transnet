@@ -6,7 +6,8 @@ use thiserror::Error;
 
 use super::canonical::{
   normalize_lookup_key, ActiveContentVersion, CanonicalStatus, EvidenceFragment, EvidenceId,
-  EvidenceUse, FormKind, LanguageTag, Lexeme, ReleaseId, Sense, SenseId, VectorCollectionId,
+  EvidenceUse, FormKind, LanguageTag, Lexeme, LexicalSource, ReleaseId, Sense, SenseId,
+  VectorCollectionId,
 };
 
 /// Default maximum number of ranked candidates returned by a retrieval request.
@@ -148,19 +149,38 @@ pub struct CandidateLoadRequest {
   pub sense_ids: Vec<SenseId>,
 }
 
-/// Lexical retrieval signal produced by an exact, morphology, or full-text index.
+/// Closed candidate class ordered by canonical lookup precedence.
+///
+/// The class is semantic, not a score: a lower-precedence candidate cannot outrank an eligible
+/// higher-precedence candidate by accumulating vector or full-text signals.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LexicalMatchKind {
-  /// Query matched an exact stored surface form or spelling variant.
-  ExactForm,
-  /// Query matched a stored multi-token expression.
-  Phrase,
-  /// Query matched a canonical lemma.
-  Lemma,
-  /// Query resolved through an inflection or morphology analysis.
-  Morphology,
-  /// Query matched a language-aware full-text index.
-  FullText,
+  /// Query exactly matched the canonical form owned by this lexeme.
+  ExactCanonical,
+  /// Query exactly matched a published alias, spelling variant, or phrase form.
+  ExactAlias,
+  /// Query resolved through a bounded inflection or morphology rule.
+  Inflection,
+  /// Query resolved through a bounded language-specific spelling correction.
+  SpellingCorrection,
+  /// Query resolved through a bounded published transliteration rule.
+  Transliteration,
+  /// Query was nominated only by full-text or semantic retrieval.
+  Semantic,
+}
+
+impl LexicalMatchKind {
+  /// Returns the strict resolver precedence, where a larger value is preferred.
+  pub const fn precedence(self) -> u8 {
+    match self {
+      Self::ExactCanonical => 6,
+      Self::ExactAlias => 5,
+      Self::Inflection => 4,
+      Self::SpellingCorrection => 3,
+      Self::Transliteration => 2,
+      Self::Semantic => 1,
+    }
+  }
 }
 
 /// Vector record purpose, kept separate to prevent unrelated embeddings from being mixed.
@@ -248,9 +268,19 @@ pub struct CanonicalCandidate {
   pub forms: Vec<super::canonical::WordForm>,
   /// Permitted evidence available to support the sense definition.
   pub evidence: Vec<EvidenceFragment>,
+  /// Authoritative source-policy records for evidence carried by this candidate.
+  pub sources: Vec<LexicalSource>,
 }
 
 impl CanonicalCandidate {
+  /// Finds the authoritative source-policy record for one evidence fragment.
+  pub fn source_for(&self, fragment: &EvidenceFragment) -> Option<&LexicalSource> {
+    self
+      .sources
+      .iter()
+      .find(|source| source.id == fragment.source_id)
+  }
+
   /// Returns whether this candidate is active, internally consistent, and fully permitted.
   pub fn is_eligible_for(&self, release_id: &ReleaseId, evidence_use: EvidenceUse) -> bool {
     self.lexeme.release_id == *release_id
@@ -286,7 +316,7 @@ impl CanonicalCandidate {
   /// Returns the strongest simple in-memory lexical signal for `query`.
   pub fn in_memory_match(&self, query: &str) -> Option<(LexicalMatchKind, RetrievalScore)> {
     if self.lexeme.normalized_lemma == query {
-      return Some((LexicalMatchKind::Lemma, RetrievalScore::exact()));
+      return Some((LexicalMatchKind::ExactCanonical, RetrievalScore::exact()));
     }
 
     self
@@ -298,7 +328,7 @@ impl CanonicalCandidate {
       .or_else(|| {
         normalize_lookup_key(&self.sense.definition)
           .contains(query)
-          .then_some((LexicalMatchKind::FullText, RetrievalScore(2_500)))
+          .then_some((LexicalMatchKind::Semantic, RetrievalScore(2_500)))
       })
   }
 }
@@ -326,16 +356,18 @@ pub struct HydratedVectorMatch {
 /// Independent ranking features retained after hybrid fusion.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CandidateFeatures {
-  /// Strongest exact-form signal.
-  pub exact_form: Option<RetrievalScore>,
-  /// Strongest phrase signal.
-  pub phrase: Option<RetrievalScore>,
-  /// Strongest lemma signal.
-  pub lemma: Option<RetrievalScore>,
-  /// Strongest morphology signal.
-  pub morphology: Option<RetrievalScore>,
-  /// Strongest full-text signal.
-  pub full_text: Option<RetrievalScore>,
+  /// Strongest exact-canonical signal.
+  pub exact_canonical: Option<RetrievalScore>,
+  /// Strongest exact-alias signal.
+  pub exact_alias: Option<RetrievalScore>,
+  /// Strongest bounded inflection signal.
+  pub inflection: Option<RetrievalScore>,
+  /// Strongest bounded spelling-correction signal.
+  pub spelling_correction: Option<RetrievalScore>,
+  /// Strongest bounded transliteration signal.
+  pub transliteration: Option<RetrievalScore>,
+  /// Strongest semantic or full-text signal.
+  pub semantic: Option<RetrievalScore>,
   /// Strongest vector similarity from the pinned collection.
   pub vector_similarity: Option<RetrievalScore>,
   /// Logical vector purposes that corroborated the candidate.
@@ -348,28 +380,52 @@ impl CandidateFeatures {
   /// The value is not a probability or a semantic confidence score. Exact lexical evidence has
   /// the highest weight, while full-text and vector signals add corroborating evidence.
   pub fn fusion_score(&self) -> u64 {
-    const EXACT_FORM_WEIGHT: u64 = 1_000;
-    const PHRASE_WEIGHT: u64 = 900;
-    const LEMMA_WEIGHT: u64 = 800;
-    const MORPHOLOGY_WEIGHT: u64 = 600;
-    const FULL_TEXT_WEIGHT: u64 = 300;
+    const EXACT_CANONICAL_WEIGHT: u64 = 1_000;
+    const EXACT_ALIAS_WEIGHT: u64 = 900;
+    const INFLECTION_WEIGHT: u64 = 700;
+    const SPELLING_WEIGHT: u64 = 500;
+    const TRANSLITERATION_WEIGHT: u64 = 400;
+    const SEMANTIC_WEIGHT: u64 = 300;
     const VECTOR_WEIGHT: u64 = 300;
 
-    weighted(self.exact_form, EXACT_FORM_WEIGHT)
-      + weighted(self.phrase, PHRASE_WEIGHT)
-      + weighted(self.lemma, LEMMA_WEIGHT)
-      + weighted(self.morphology, MORPHOLOGY_WEIGHT)
-      + weighted(self.full_text, FULL_TEXT_WEIGHT)
+    weighted(self.exact_canonical, EXACT_CANONICAL_WEIGHT)
+      + weighted(self.exact_alias, EXACT_ALIAS_WEIGHT)
+      + weighted(self.inflection, INFLECTION_WEIGHT)
+      + weighted(self.spelling_correction, SPELLING_WEIGHT)
+      + weighted(self.transliteration, TRANSLITERATION_WEIGHT)
+      + weighted(self.semantic, SEMANTIC_WEIGHT)
       + weighted(self.vector_similarity, VECTOR_WEIGHT)
+  }
+
+  /// Returns the best deterministic match class carried by this candidate.
+  ///
+  /// Vector-only candidates are semantic nominations and therefore never outrank an exact or
+  /// bounded lexical match.
+  pub fn best_match_kind(&self) -> Option<LexicalMatchKind> {
+    [
+      (LexicalMatchKind::ExactCanonical, self.exact_canonical),
+      (LexicalMatchKind::ExactAlias, self.exact_alias),
+      (LexicalMatchKind::Inflection, self.inflection),
+      (
+        LexicalMatchKind::SpellingCorrection,
+        self.spelling_correction,
+      ),
+      (LexicalMatchKind::Transliteration, self.transliteration),
+      (LexicalMatchKind::Semantic, self.semantic),
+    ]
+    .into_iter()
+    .find_map(|(kind, score)| score.map(|_| kind))
+    .or_else(|| self.vector_similarity.map(|_| LexicalMatchKind::Semantic))
   }
 
   fn record_lexical(&mut self, kind: LexicalMatchKind, score: RetrievalScore) {
     let feature = match kind {
-      LexicalMatchKind::ExactForm => &mut self.exact_form,
-      LexicalMatchKind::Phrase => &mut self.phrase,
-      LexicalMatchKind::Lemma => &mut self.lemma,
-      LexicalMatchKind::Morphology => &mut self.morphology,
-      LexicalMatchKind::FullText => &mut self.full_text,
+      LexicalMatchKind::ExactCanonical => &mut self.exact_canonical,
+      LexicalMatchKind::ExactAlias => &mut self.exact_alias,
+      LexicalMatchKind::Inflection => &mut self.inflection,
+      LexicalMatchKind::SpellingCorrection => &mut self.spelling_correction,
+      LexicalMatchKind::Transliteration => &mut self.transliteration,
+      LexicalMatchKind::Semantic => &mut self.semantic,
     };
     update_highest(feature, score);
   }
@@ -393,11 +449,12 @@ pub struct RankedCandidate {
   pub fusion_score: u64,
 }
 
-/// Fuses exact and vector candidates by sense ID, retaining each strongest independent signal.
+/// Fuses lexical and vector candidates by sense ID, retaining each strongest independent signal.
 ///
 /// Candidates are filtered again for release, lifecycle, lexeme/sense ownership, and source
-/// permissions as defense in depth. Equal scores use complete lexical IDs as a stable tie-break,
-/// so reordering adapter results does not change the ranked output.
+/// permissions as defense in depth. Only candidates in the best available match class survive;
+/// equal-class candidates use scores and complete lexical IDs as stable tie-breaks, so reordering
+/// adapter results does not change the ranked output or collapse genuine ambiguity.
 pub fn fuse_candidates(
   content: &ActiveContentVersion,
   evidence_use: EvidenceUse,
@@ -441,6 +498,32 @@ pub fn fuse_candidates(
     );
   }
 
+  rank_accumulated(candidates)
+}
+
+/// Deterministically resolves, deduplicates, and ranks canonical-only lexical matches.
+///
+/// This shares the exact class precedence and ordering used by hybrid fusion without requiring
+/// a vector collection or a fabricated ranking-version identifier.
+pub fn rank_lexical_candidates(
+  release_id: &ReleaseId,
+  evidence_use: EvidenceUse,
+  lexical_matches: impl IntoIterator<Item = RepositoryMatch>,
+) -> Vec<RankedCandidate> {
+  let mut candidates = BTreeMap::<SenseId, CandidateAccumulator>::new();
+  for lexical in lexical_matches {
+    if lexical.candidate.is_eligible_for(release_id, evidence_use) {
+      merge_candidate(
+        &mut candidates,
+        lexical.candidate,
+        CandidateSignal::Lexical(lexical.kind, lexical.score),
+      );
+    }
+  }
+  rank_accumulated(candidates)
+}
+
+fn rank_accumulated(candidates: BTreeMap<SenseId, CandidateAccumulator>) -> Vec<RankedCandidate> {
   let mut ranked = candidates
     .into_values()
     .map(|accumulator| RankedCandidate {
@@ -452,13 +535,16 @@ pub fn fuse_candidates(
     .collect::<Vec<_>>();
   ranked.sort_by(|left, right| {
     right
-      .fusion_score
-      .cmp(&left.fusion_score)
-      .then_with(|| right.features.exact_form.cmp(&left.features.exact_form))
-      .then_with(|| right.features.phrase.cmp(&left.features.phrase))
-      .then_with(|| right.features.lemma.cmp(&left.features.lemma))
-      .then_with(|| right.features.morphology.cmp(&left.features.morphology))
-      .then_with(|| right.features.full_text.cmp(&left.features.full_text))
+      .features
+      .best_match_kind()
+      .map(LexicalMatchKind::precedence)
+      .cmp(
+        &left
+          .features
+          .best_match_kind()
+          .map(LexicalMatchKind::precedence),
+      )
+      .then_with(|| right.fusion_score.cmp(&left.fusion_score))
       .then_with(|| {
         right
           .features
@@ -468,6 +554,12 @@ pub fn fuse_candidates(
       .then_with(|| left.candidate.sense.id.cmp(&right.candidate.sense.id))
       .then_with(|| left.candidate.lexeme.id.cmp(&right.candidate.lexeme.id))
   });
+  if let Some(best_kind) = ranked
+    .first()
+    .and_then(|candidate| candidate.features.best_match_kind())
+  {
+    ranked.retain(|candidate| candidate.features.best_match_kind() == Some(best_kind));
+  }
   for (index, candidate) in ranked.iter_mut().enumerate() {
     candidate.rank = index + 1;
   }
@@ -530,10 +622,9 @@ fn weighted(score: Option<RetrievalScore>, weight: u64) -> u64 {
 
 fn form_match_kind(kind: FormKind) -> LexicalMatchKind {
   match kind {
-    FormKind::Lemma => LexicalMatchKind::Lemma,
-    FormKind::SpellingVariant | FormKind::Alias => LexicalMatchKind::ExactForm,
-    FormKind::Inflection => LexicalMatchKind::Morphology,
-    FormKind::Phrase => LexicalMatchKind::Phrase,
+    FormKind::Lemma => LexicalMatchKind::ExactCanonical,
+    FormKind::SpellingVariant | FormKind::Alias | FormKind::Phrase => LexicalMatchKind::ExactAlias,
+    FormKind::Inflection => LexicalMatchKind::Inflection,
   }
 }
 
@@ -551,19 +642,10 @@ fn compare_lexical_signals(
   right: (LexicalMatchKind, RetrievalScore),
 ) -> std::cmp::Ordering {
   left
-    .1
-    .cmp(&right.1)
-    .then_with(|| lexical_match_priority(left.0).cmp(&lexical_match_priority(right.0)))
-}
-
-fn lexical_match_priority(kind: LexicalMatchKind) -> u8 {
-  match kind {
-    LexicalMatchKind::ExactForm => 5,
-    LexicalMatchKind::Phrase => 4,
-    LexicalMatchKind::Lemma => 3,
-    LexicalMatchKind::Morphology => 2,
-    LexicalMatchKind::FullText => 1,
-  }
+    .0
+    .precedence()
+    .cmp(&right.0.precedence())
+    .then_with(|| left.1.cmp(&right.1))
 }
 
 impl std::fmt::Debug for RetrievalRequest {
@@ -659,6 +741,14 @@ mod tests {
         permissions: permissions(),
         status: CanonicalStatus::Active,
       }],
+      sources: vec![LexicalSource {
+        id: id("source-1"),
+        name: "Test dictionary".into(),
+        version: "v1".into(),
+        license: "test".into(),
+        attribution: Some("Test dictionary".into()),
+        permissions: permissions(),
+      }],
     }
   }
 
@@ -686,26 +776,26 @@ mod tests {
       [
         RepositoryMatch {
           candidate: hot.clone(),
-          kind: LexicalMatchKind::Morphology,
+          kind: LexicalMatchKind::Inflection,
           score: RetrievalScore::new(7_500).unwrap(),
         },
         RepositoryMatch {
           candidate: hot.clone(),
-          kind: LexicalMatchKind::FullText,
+          kind: LexicalMatchKind::Semantic,
           score: RetrievalScore::new(2_000).unwrap(),
         },
         RepositoryMatch {
           candidate: warm,
-          kind: LexicalMatchKind::FullText,
+          kind: LexicalMatchKind::Semantic,
           score: RetrievalScore::new(9_000).unwrap(),
         },
       ],
       [vector_match(hot, 9_200)],
     );
 
-    assert_eq!(ranked.len(), 2);
+    assert_eq!(ranked.len(), 1);
     assert_eq!(ranked[0].candidate.sense.id.as_str(), "sense-hot");
-    assert_eq!(ranked[0].features.morphology.unwrap().basis_points(), 7_500);
+    assert_eq!(ranked[0].features.inflection.unwrap().basis_points(), 7_500);
     assert_eq!(
       ranked[0].features.vector_similarity.unwrap().basis_points(),
       9_200
@@ -719,7 +809,7 @@ mod tests {
     let second = candidate("sense-b", "b");
     let match_for = |candidate: CanonicalCandidate| RepositoryMatch {
       candidate,
-      kind: LexicalMatchKind::FullText,
+      kind: LexicalMatchKind::Semantic,
       score: RetrievalScore::new(5_000).unwrap(),
     };
     let forward = fuse_candidates(
@@ -740,6 +830,63 @@ mod tests {
   }
 
   #[test]
+  fn exact_matches_exclude_lower_precedence_candidates_regardless_of_score() {
+    let exact = candidate("sense-exact", "exact");
+    let semantic = candidate("sense-semantic", "semantic");
+    let ranked = fuse_candidates(
+      &content(),
+      EvidenceUse::ApiRedistribution,
+      [
+        RepositoryMatch {
+          candidate: semantic,
+          kind: LexicalMatchKind::Semantic,
+          score: RetrievalScore::exact(),
+        },
+        RepositoryMatch {
+          candidate: exact,
+          kind: LexicalMatchKind::ExactAlias,
+          score: RetrievalScore::new(8_000).unwrap(),
+        },
+      ],
+      [],
+    );
+
+    assert_eq!(ranked.len(), 1);
+    assert_eq!(ranked[0].candidate.sense.id.as_str(), "sense-exact");
+    assert_eq!(
+      ranked[0].features.best_match_kind(),
+      Some(LexicalMatchKind::ExactAlias)
+    );
+  }
+
+  #[test]
+  fn collisions_at_the_best_match_class_preserve_distinct_senses() {
+    let noun = candidate("sense-run-noun", "run-noun");
+    let verb = candidate("sense-run-verb", "run-verb");
+    let ranked = fuse_candidates(
+      &content(),
+      EvidenceUse::ApiRedistribution,
+      [
+        RepositoryMatch {
+          candidate: verb,
+          kind: LexicalMatchKind::ExactCanonical,
+          score: RetrievalScore::exact(),
+        },
+        RepositoryMatch {
+          candidate: noun,
+          kind: LexicalMatchKind::ExactCanonical,
+          score: RetrievalScore::exact(),
+        },
+      ],
+      [],
+    );
+
+    assert_eq!(ranked.len(), 2);
+    assert_eq!(ranked[0].candidate.sense.id.as_str(), "sense-run-noun");
+    assert_eq!(ranked[1].candidate.sense.id.as_str(), "sense-run-verb");
+  }
+
+  #[test]
   fn fusion_excludes_evidence_that_cannot_be_redistributed() {
     let mut blocked = candidate("sense-blocked", "blocked");
     blocked.evidence[0].permissions.api_redistribution = false;
@@ -748,7 +895,7 @@ mod tests {
       EvidenceUse::ApiRedistribution,
       [RepositoryMatch {
         candidate: blocked,
-        kind: LexicalMatchKind::ExactForm,
+        kind: LexicalMatchKind::ExactCanonical,
         score: RetrievalScore::exact(),
       }],
       [],
@@ -793,7 +940,39 @@ mod tests {
       .in_memory_match("definition")
       .unwrap();
 
-    assert_eq!(matched.0, LexicalMatchKind::FullText);
+    assert_eq!(matched.0, LexicalMatchKind::Semantic);
     assert_eq!(matched.1.basis_points(), 2_500);
+  }
+
+  #[test]
+  fn match_classes_have_the_documented_closed_precedence() {
+    let ordered = [
+      LexicalMatchKind::ExactCanonical,
+      LexicalMatchKind::ExactAlias,
+      LexicalMatchKind::Inflection,
+      LexicalMatchKind::SpellingCorrection,
+      LexicalMatchKind::Transliteration,
+      LexicalMatchKind::Semantic,
+    ];
+
+    assert!(ordered
+      .windows(2)
+      .all(|pair| { pair[0].precedence() > pair[1].precedence() }));
+  }
+
+  #[test]
+  fn exact_alias_beats_an_inflection_for_the_same_query() {
+    let mut value = candidate("sense-bound", "bound");
+    let mut alias = value.forms[0].clone();
+    alias.id = id("form-bound-alias");
+    alias.form = "bounder".to_string();
+    alias.normalized_form = "bounder".to_string();
+    alias.kind = FormKind::Alias;
+    value.forms.push(alias);
+
+    let matched = value.in_memory_match("bounder").unwrap();
+
+    assert_eq!(matched.0, LexicalMatchKind::ExactAlias);
+    assert_eq!(matched.1, RetrievalScore::exact());
   }
 }

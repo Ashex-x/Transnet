@@ -19,7 +19,7 @@ use transnet::{
   application::canonical_sense_details::CanonicalSenseDetailsService,
   domain::{
     canonical::{
-      ActiveContentVersion, CanonicalId, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
+      CanonicalId, CanonicalReleasePin, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
       EvidenceKind, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource, Sense,
       SourcePermissions,
     },
@@ -51,13 +51,8 @@ fn language(value: &str) -> LanguageTag {
   LanguageTag::parse(value).unwrap()
 }
 
-fn active_content(release_id: &str) -> ActiveContentVersion {
-  ActiveContentVersion {
-    release_id: id(release_id),
-    vector_collection_id: id("vectors-for-tests"),
-    schema_version: "canonical-v1".to_string(),
-    ranking_version: "rank-v1".to_string(),
-  }
+fn active_content(release_id: &str) -> CanonicalReleasePin {
+  CanonicalReleasePin::new(id(release_id), "canonical-v1".to_string()).unwrap()
 }
 
 fn permissions(api_redistribution: bool) -> SourcePermissions {
@@ -433,26 +428,26 @@ async fn json(response: axum::response::Response) -> Value {
 }
 
 #[derive(Debug)]
-struct FixedActiveContentReader(Result<Option<ActiveContentVersion>, ActiveContentReaderError>);
+struct FixedActiveContentReader(Result<Option<CanonicalReleasePin>, ActiveContentReaderError>);
 
 #[async_trait]
 impl ActiveContentReader for FixedActiveContentReader {
-  async fn active_content_version(
+  async fn active_release_pin(
     &self,
-  ) -> Result<Option<ActiveContentVersion>, ActiveContentReaderError> {
+  ) -> Result<Option<CanonicalReleasePin>, ActiveContentReaderError> {
     self.0.clone()
   }
 }
 
 #[derive(Debug)]
 struct CountingActiveContentReader {
-  first: ActiveContentVersion,
-  later: ActiveContentVersion,
+  first: CanonicalReleasePin,
+  later: CanonicalReleasePin,
   calls: AtomicUsize,
 }
 
 impl CountingActiveContentReader {
-  fn new(first: ActiveContentVersion, later: ActiveContentVersion) -> Self {
+  fn new(first: CanonicalReleasePin, later: CanonicalReleasePin) -> Self {
     Self {
       first,
       later,
@@ -463,9 +458,9 @@ impl CountingActiveContentReader {
 
 #[async_trait]
 impl ActiveContentReader for CountingActiveContentReader {
-  async fn active_content_version(
+  async fn active_release_pin(
     &self,
-  ) -> Result<Option<ActiveContentVersion>, ActiveContentReaderError> {
+  ) -> Result<Option<CanonicalReleasePin>, ActiveContentReaderError> {
     if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
       Ok(Some(self.first.clone()))
     } else {

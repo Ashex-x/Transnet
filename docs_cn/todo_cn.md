@@ -4,7 +4,7 @@ English: [Transnet delivery plan](../docs/todo.md)
 
 本计划把权威的 [Transnet 设计](transnet_cn.md)转化为有顺序、可验证的交付切片。它追踪仓库现状而非愿景：只有代码、测试与适用合同一致时，项目才可勾选。
 
-状态：实施中。当前可执行文件提供回环地址上的翻译服务和模型驱动的结构化查询。规范 MySQL/Qdrant 落地、关系优先页面组织及领域感知展开仍是目标能力。
+状态：实施中。当前可执行文件提供回环地址上的翻译、模型驱动的结构化查询，以及按需启用的 Transnet-side canonical 读取、公开 BasicCard 与固定发布 sense 交付。外部 island-port/MySQL 实现与真实 Milestone 2 验收仍未完成；Qdrant 落地、关系优先页面组织及领域感知展开属于后续目标能力。
 
 ## 交付规则
 

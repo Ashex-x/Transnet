@@ -254,7 +254,7 @@ mod tests {
     domain::{
       canonical::{
         ActiveContentVersion, CanonicalId, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
-        EvidenceKind, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, Sense, SourcePermissions,
+        EvidenceKind, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource, Sense, SourcePermissions,
         WordForm,
       },
       canonical_lookup_cache::{
@@ -351,6 +351,20 @@ mod tests {
           api_redistribution: true,
         },
         status: CanonicalStatus::Active,
+      }],
+      sources: vec![LexicalSource {
+        id: id("source-1"),
+        name: "Test dictionary".into(),
+        version: "v1".into(),
+        license: "test".into(),
+        attribution: Some("Test dictionary".into()),
+        permissions: SourcePermissions {
+          storage: true,
+          display: true,
+          embedding: true,
+          model_processing: true,
+          api_redistribution: true,
+        },
       }],
     }
   }

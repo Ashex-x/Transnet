@@ -4,7 +4,7 @@ English: [SQL data endpoint interface](../../docs/interfaces/mysql.md)
 
 本合同定义 island-port 提供的结构化数据 HTTP endpoint，涵盖共享规范翻译、单词、短语、词义、领域、证据元数据和不可变内容发布。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。
 
-状态：目标合同；当前可执行文件尚未组合此服务客户端。
+状态：目标 island-port 服务端合同，Transnet client 边界已经实现。可执行文件可选地组合严格的出站 canonical-read client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留及真实端到端验收仍需在本仓库之外完成。
 
 ## 目录
 
@@ -83,7 +83,7 @@ erDiagram
   CANONICAL_SOURCE ||--o{ EVIDENCE_REVISION : supports
 ```
 
-已发布身份按源语言、带版本的源文 fingerprint、目标语言、词义或范围键及内容发布唯一。存储源文以便 Transnet 在检索后进行精确比较；仅 fingerprint 匹配绝不充分。Passage 条目有配置长度上限，且必须是可复用参考内容，不能是私人通信或任意提交文本。
+规范公共 ID 遵循 `canonical-id-v1`：实体族前缀标识实体种类，其余不透明值由 publisher 分配，绝不能由规范化文本或内容 hash 派生。在一个发布中，已发布翻译修订由源语言、`translation-source-v1` fingerprint、目标语言及其显式词义或范围键唯一选择。稳定 translation ID 在修正时保持不变；每次修正创建新的正数不可变修订及后续发布成员关系，而不是修改已发布内容。存储源文以便 Transnet 在检索后进行精确比较；仅 fingerprint 匹配绝不充分。词汇范围保留 sense、词性、短语级或组合式含义，以及有界规范领域，从而避免同形词与领域特定含义发生碰撞。Passage 条目有配置长度上限，且必须是可复用参考内容，不能是私人通信或任意提交文本。
 
 重要性是带可审计理由的编辑决定，例如已批准术语、固定习语、可复用产品文案或已审核参考段落。不得通过记录请求文本来推断频率。发布激活前必须完成 publisher 认证、来源检查、权利审核和人工批准。运行时翻译路由没有写权限，也没有 `save` 或 `important` 字段。
 
@@ -101,7 +101,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 ## 通用操作 envelope
 
-每个适配器操作携带请求 ID、deadline、预期 schema 版本，并可携带不可变内容发布。发布变更还要求幂等键。读操作返回 `ok`、`not_found`、`version_mismatch`、`unavailable` 或 `timeout`；变更还可返回 `conflict` 或 `invalid`。错误不得暴露 SQL、凭据、请求文本、provider body 或连接内部信息。
+每个适配器操作携带请求 ID、deadline、预期 schema 版本，并可携带不可变内容发布。发布变更还要求幂等键。读操作返回 `ok`、`not_found`、`version_mismatch`、`content_release_unavailable`、`unavailable` 或 `timeout`；变更还可返回 `conflict` 或 `invalid`。`version_mismatch` 的结构化 code 必须是 `schema_incompatible`；只有明确指定的发布无法服务时，才返回 `content_release_unavailable` 及同名 code。不得从 message 文本推断类型。错误不得暴露 SQL、凭据、请求文本、provider body 或连接内部信息。
 
 精确请求 body 为 `{"context": RequestContext, "input": EndpointInput}`。请求上下文：
 
@@ -114,18 +114,56 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 }
 ```
 
+Stage 3 Transnet client 要求每个响应在顶层回显 `request_id` 和 `schema_version`；成功的固定发布读取还必须返回 `content_release`。Client 拒绝 unknown field、重复的 indexed-lineage key、超限 body、缺失回显、不同 schema 或 release，以及任何不能通过当前 Rust domain constructor 重建的响应。仍实现旧示例的 island-port 部署必须先同步本节 contract delta；Transnet 不推导缺失的权威字段，也不回退到旧 schema。
+
 关闭错误响应：
 
 ```json
 {
-  "outcome": "version_mismatch",
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
+  "content_release": "knowledge-2026-09",
+  "outcome": "content_release_unavailable",
   "error": {
-    "code": "content_release_mismatch",
+    "code": "content_release_unavailable",
     "message": "The requested content release is not available.",
     "retryable": false
   }
 }
 ```
+
+## POST /api/v1/releases/active
+
+Stage 4 在 application 请求开始时只选择一次 active 不可变规范发布版本。这是 island-port 的权威读取，不负责选择向量版本或排序策略。请求 context 不包含 `content_release`，因为本操作正负责选择它。`schema_version` 是 transport 合同版本；`canonical_schema_version` 是所选发布的内容 schema。成功值中的两个字段均为必填且有界。请求不携带源文。
+
+```json
+{
+  "context": {
+    "request_id": "req_example",
+    "deadline_at": "2099-01-01T00:00:00Z",
+    "schema_version": "mysql-adapter-v1"
+  },
+  "input": {}
+}
+```
+
+```json
+{
+  "request_id": "req_example",
+  "schema_version": "mysql-adapter-v1",
+  "outcome": "ok",
+  "value": {
+    "content_release": "release_example",
+    "canonical_schema_version": "canonical_example"
+  }
+}
+```
+
+闭合 outcome 为 `ok`、`not_found`（没有可安全服务的 active 发布）、`version_mismatch`、`unavailable` 与 `timeout`。错误沿用现有脱敏 `error` 对象，必须回显 request ID 和 schema，且不能携带成功值。未知、缺失、矛盾或超限响应全部 fail closed。`value` 不包含 `vector_collection_id` 或 `ranking_version`：向量组合属于后续工作，确定性排序策略由 Transnet 负责。发布 ID 和规范 schema 必须来自同一次原子 active 指针读取。同一请求后续所有规范读取都携带返回的 `content_release`；即使新发布激活，island-port 也必须能读取当前请求已固定的不可变旧发布，绝不能偷偷升级。若固定发布已无法安全服务，整个请求闭合失败。
+
+island-port server 不在当前仓库，仍需实现该 operation、原子选择、在途有界请求所需的旧发布保留，以及闭合错误 outcome。Transnet 的出站 client 和 fake-UDS 测试不代表真实 MySQL 端到端部署已完成。
+
+对于下文有界的翻译及基础卡候选列表读取，合格的零命中搜索使用 `ok` 与空 `matches` 列表。Stage 4 组合不会把下游 `not_found` 悄悄转换为空结果；它仍是闭合错误，避免不可读取的固定发布被伪装成搜索未命中。
 
 ## POST /api/v1/translations/resolve
 
@@ -143,27 +181,34 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
   "domain_ids": ["domain_weather"],
   "dialect": "en-US",
   "register": "neutral",
-  "content_release": "knowledge-2026-09",
   "limit": 5
 }
 ```
 
-响应：
+响应。词汇候选必须包含 `scope`；可复用 passage 必须使用 `scope: null`：
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "matches": [
       {
         "translation_id": "tr_sweltering_zh_cn_01",
+        "revision": 3,
         "unit": "word",
+        "source_fingerprint": "sha256:8bb7a7d7b6d9...",
         "source": {"text": "sweltering", "language": "en"},
         "target": {"text": "酷热的", "language": "zh-CN"},
-        "sense_id": "sense_sweltering_hot_01",
-        "domain_ids": ["domain_weather"],
-        "evidence_ids": ["evidence_dictionary_1042"],
-        "revision": 3
+        "scope": {
+          "lexeme_id": "lexeme_sweltering_en_adj_01",
+          "sense_id": "sense_sweltering_hot_01",
+          "part_of_speech": "adjective",
+          "composition": "compositional",
+          "domain_ids": ["domain_weather"]
+        },
+        "evidence_ids": ["evidence_dictionary_1042"]
       }
     ]
   },
@@ -220,7 +265,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 输入规范化属于 Transnet 运行时。适配器只接收有界、排序后的派生形式，绝不接收原始查询、中间变换或上下文。精确规范形式和别名优先于屈折、拼写修正和宽松别名；`C`、`C++`、`C#` 等有意义符号不合并。
 
-本操作与 `get_sense` 返回相同的精简 `BasicCard` 结构，包括规范形式与别名、精简定义与翻译、发音与形态摘要、短规范例句与用法说明、领域与证据元数据、知识根、修订和发布；关系详情留在 Qdrant。
+本操作返回固定发布的 identity/core candidate data，而不是最终展示卡。Transnet 负责确定性 ranking、dedup、歧义解析和 coverage；选定 sense 后再调用 `senses/get`，最终 `CanonicalLookupCard` 由 application 层形成。Rank、fusion score、coverage 和最终 resolution 都不是 island-port authority；Qdrant 与 knowledge-root 数据不属于 Milestone 2。
 
 请求：
 
@@ -233,11 +278,11 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
       "rank": 0
     }
   ],
-  "normalizer_version": "unicode-nfkc-v2",
+  "normalizer_version": "unicode-nfc-lookup-v1",
   "source_language": "en",
   "explanation_language": "zh-CN",
   "dialect": "en-US",
-  "content_release": "knowledge-2026-09",
+  "evidence_use": "api_redistribution",
   "limit": 5
 }
 ```
@@ -246,38 +291,27 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "matches": [
       {
         "matched_form": "sweltering",
         "match_class": "exact_canonical",
-        "card": {
-          "card_id": "card_sweltering_en_adj_01",
-          "sense_id": "sense_sweltering_hot_01",
-          "canonical_form": "sweltering",
-          "aliases": ["oppressively hot"],
-          "language": "en",
-          "part_of_speech": "adjective",
-          "translations": [
-            {
-              "language": "zh-CN",
-              "text": "酷热的"
-            }
-          ],
-          "definitions": ["uncomfortably hot, especially because of the weather"],
-          "pronunciations": [{"dialect": "en-US", "ipa": "/ˈswɛltərɪŋ/"}],
-          "forms": [{"form": "swelteringly", "label": "adverb"}],
-          "examples": [{"text": "We waited until evening to leave the sweltering house.", "translation": "我们一直等到傍晚才离开闷热难耐的房子。"}],
-          "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
-          "knowledge_root_ids": ["node_sweltering_hot_01"],
-          "domain_ids": ["domain_weather"],
-          "evidence_ids": ["evidence_dictionary_1042"],
-          "revision": 3
+        "matched_form_id": "form_sweltering_lemma_01",
+        "lexical_score_basis_points": 10000,
+        "candidate": {
+          "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+          "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": ["evidence_dictionary_1042"], "status": "active"},
+          "forms": [{"id": "form_sweltering_lemma_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "form": "sweltering", "normalized_form": "sweltering", "kind": "lemma", "morphology": null, "evidence_ids": ["evidence_dictionary_1042"], "status": "active"}],
+          "sources": [{"release_id": "knowledge-2026-09", "source": {"id": "source_dictionary_2026_01", "name": "Reviewed dictionary", "version": "2026-09", "license": "reviewed", "attribution": "Dictionary publisher (2026)", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}}}],
+          "evidence": [{"id": "evidence_dictionary_1042", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:adj:1", "language": "en", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "content_hash": "sha256:4ef760d1...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}]
         }
       }
     ],
-    "alternatives": []
+    "alternatives": [],
+    "truncated": false
   },
   "content_release": "knowledge-2026-09"
 }
@@ -285,9 +319,13 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 唯一性由稳定的词形、卡片和词义 ID 及已发布规范形式/别名行维护，不依赖临时规范化检索字符串。最佳适用层级的所有合格冲突均须返回，由服务解析。
 
+每个候选必须为每条 evidence 提供权威且固定发布的 source 记录。`source.id` 必须等于 `evidence.source_id`；source 和 evidence 的权限均须允许请求用途，且 evidence 权限不得超过 source 权限。公开再分发所需的 `source.attribution` 必须是非空、经过权利审核的人类可读署名（最多 256 个 Unicode 字符），不能由 source ID 或名称拼接。缺失、重复、冲突、无许可或跨发布的 source/evidence 记录均闭合失败。适配器将严格私有 DTO 映射至已有 candidate/source/evidence domain 类型；真实交付前 island-port 必须补齐此数据链。content hash 和权限位仍仅供内部使用。
+
+Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的基础 NFC/小写查询行为；先前示意性的 `unicode-nfkc-v2` 值并不描述该实现。此版本是 request-local normalization metadata，不是规范权威数据或身份。
+
 ## POST /api/v1/senses/get
 
-使用共享 `BasicCard` 结构返回一个精简规范词义修订。
+返回可独立构造的 typed canonical sense details。`target` 包含完整权威 Lexeme 与 Sense；`lineages` 是以 evidence ID 为键的对象，assertion 通过 ID 引用。Island-port 拒绝重复或冲突 ID；Transnet 在构造 `CanonicalSenseDetails` 前拒绝 dangling reference、未使用 lineage、release/target mismatch、permission escalation、无效 lifecycle state 与不兼容 evidence kind。
 
 请求：
 
@@ -296,7 +334,7 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
   "sense_id": "sense_sweltering_hot_01",
   "explanation_language": "zh-CN",
   "dialect": "en-US",
-  "content_release": "knowledge-2026-09"
+  "evidence_use": "api_redistribution"
 }
 ```
 
@@ -304,48 +342,31 @@ MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
+  "content_release": "knowledge-2026-09",
   "value": {
-    "card_id": "card_sweltering_en_adj_01",
-    "sense_id": "sense_sweltering_hot_01",
-    "canonical_form": "sweltering",
-    "aliases": ["oppressively hot"],
-    "language": "en",
-    "part_of_speech": "adjective",
-    "definitions": ["uncomfortably hot, especially because of the weather"],
-    "translations": [
-      {
-        "language": "zh-CN",
-        "text": "酷热的"
-      }
-    ],
-    "pronunciations": [
-      {
-        "dialect": "en-US",
-        "ipa": "/ˈswɛltərɪŋ/"
-      }
-    ],
-    "forms": [
-      {
-        "form": "swelteringly",
-        "label": "adverb"
-      }
-    ],
-    "examples": [
-      {
-        "text": "We waited until evening to leave the sweltering house.",
-        "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
-      }
-    ],
-    "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
-    "knowledge_root_ids": ["node_sweltering_hot_01"],
-    "domain_ids": ["domain_weather"],
-    "evidence_ids": ["evidence_dictionary_1042"],
-    "revision": 3
-  },
-  "content_release": "knowledge-2026-09"
+    "canonical_schema_version": "canonical-v1",
+    "target": {
+      "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+      "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": [], "status": "active"}
+    },
+    "lineages": {},
+    "localized_glosses": [],
+    "pronunciations": [],
+    "usage_labels": [],
+    "grammar_patterns": [],
+    "collocations": [],
+    "examples": [],
+    "pitfalls": [],
+    "etymologies": [],
+    "history": []
+  }
 }
 ```
+
+成功的 sense value 必须包含 `canonical_schema_version`，并与调用方提供的不可变 `CanonicalReleasePin` 一致，否则闭合失败。active 从 R1 切至 R2 后，固定 R1 的读取仍必须服务 R1；island-port 须在约定的请求中/后续读取窗口内保留旧发布。若明确指定的 R1 无法服务，返回 `content_release_unavailable` 及同名 code；adapter/schema 不兼容则返回 `version_mismatch` 与 `schema_incompatible`。不得偷偷选择 R2，也不得根据错误 message 分类。
 
 ## POST /api/v1/domains/resolve
 

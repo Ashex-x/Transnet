@@ -6,7 +6,7 @@ This contract defines how island-port requests translation and relationship know
 
 This document also defines the transport shared by every internal process boundary involving Transnet. It is normative for island-port, Transnet, publication tooling, and deployment tooling.
 
-Status: target contract with explicitly noted current-runtime coverage. The current runtime still uses transitional loopback HTTP; the unified translation operation is composed, while target UDS transport and later data capabilities remain incomplete.
+Status: target contract with explicitly noted current-runtime coverage. The current runtime still uses transitional loopback HTTP; unified translation, BasicCard lookup, and release-pinned sense follow-up are composed. Target inbound UDS, the external island-port/MySQL implementation and production acceptance, and later vector/relationship capabilities remain incomplete.
 
 
 The current transitional runtime enforces the stateless boundary before handler dispatch. It rejects Cookie, Cookie2, Authorization, Proxy-Authorization, X-API-Key, Lookup-Capability, Remote-User, X-Authenticated-User, X-Forwarded-User, and X-User-*, X-Learner-*, X-Account-*, X-Owner-*, and X-Session-* headers without echoing their values. Only the existing graph routes accept their strictly decoded query parameters; other routes reject query strings. Boundary failures return HTTP 400 with the `invalid_service_request` problem code and a request ID. Responses carry `Cache-Control: no-store`. Outbound model-provider credentials remain separate from incoming end-user credentials.
@@ -35,6 +35,7 @@ Canonical lookup performs release-pinned reads for each request with no query sn
   - [POST /api/v1/livez](#post-apiv1livez)
   - [POST /api/v1/readyz](#post-apiv1readyz)
   - [POST /api/v1/translations](#post-apiv1translations)
+  - [POST /api/v1/basic-cards/lookup](#post-apiv1basic-cardslookup)
   - [POST /api/v1/senses/get](#post-apiv1sensesget)
   - [POST /api/v1/graph/get](#post-apiv1graphget)
   - [POST /api/v1/graph/neighbors](#post-apiv1graphneighbors)
@@ -496,9 +497,51 @@ The milestone 1 HTTP contract exposes only fields produced by the composed trans
 
 Translation-specific failures use `invalid_json` with `400`, `payload_too_large` with `413`, `invalid_translation_request` with `422`, `invalid_model_output` with `502`, and `translation_model_unavailable` with `503`. Capacity, internal, and deadline statuses remain reserved until the corresponding closed application outcomes exist.
 
+## POST /api/v1/basic-cards/lookup
+
+Performs a MySQL-only, release-pinned canonical lookup. The request is closed and accepts no release, derived form, ranking, index, or vector selector. `query` is limited to 100 Unicode characters; Transnet derives at most four deterministic lookup forms internally.
+
+```json
+{
+  "query": "sweltering",
+  "source_language": "en",
+  "target_language": "zh-CN"
+}
+```
+
+All normal business outcomes return `200`; clients branch on `data.resolution`, whose closed values are `resolved`, `clarification_required`, and `not_found`. A resolved result has exactly one usable match. Ambiguity retains all equally ranked usable matches without silently selecting a sense. Not found returns an empty `matches` array.
+
+```json
+{
+  "data": {
+    "resolution": "resolved",
+    "matches": [{
+      "rank": 1,
+      "lexeme": {"id": "lexeme_sweltering", "lemma": "sweltering", "language": "en", "part_of_speech": "adjective"},
+      "sense": {"id": "sense_sweltering_hot", "sense_key": "weather-hot", "definition": {"text": "uncomfortably hot", "evidence": []}},
+      "translations": [],
+      "forms": [],
+      "evidence": [{"id": "evidence_dictionary_1042", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "source": {"source_id": "source_dictionary", "attribution": "Dictionary publisher (2026)", "source_reference": "entry:1", "language": "en"}}]
+    }],
+    "coverage": {
+      "retrieval": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "lexemes": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "parts_of_speech": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "senses": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "definitions": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "forms": {"state": "missing", "available_items": 0, "missing_items": 1, "filtered_items": 0, "truncated_items": 0},
+      "evidence": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0}
+    }
+  },
+  "meta": {"request_id": "req_example", "content_release": "knowledge-2026-09", "canonical_schema_version": "canonical-v1"}
+}
+```
+
+Matches are limited to 12, forms per match to 24, reviewed translations per match to 8, and evidence per assertion to 8. Evidence text is limited to 4,096 characters, source reference to 256 characters, and the complete JSON response to 1 MiB. A resolved card requires a permitted evidence-backed definition or a reviewed translation. Attribution is authority-supplied human-readable text; internal hashes, permission bits, fingerprints, fusion scores, ranking/index/vector versions, socket paths, and transport metadata are never exposed.
+
 ## POST /api/v1/senses/get
 
-Reads one canonical sense and projects it with the same response-level rules as a translation result. It is a port-driven follow-up using an ID previously returned by Transnet, not a second user-selected translation mode. The service keeps no access or saved-item records.
+Reads one canonical sense under the exact immutable pin returned by BasicCard lookup. It never selects the active release again and never upgrades an R1 request to R2.
 
 Request:
 
@@ -506,8 +549,8 @@ Request:
 {
   "sense_id": "sense_sweltering_hot_01",
   "target_language": "zh-CN",
-  "response_level": "full",
-  "release": "knowledge-2026-09"
+  "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1"
 }
 ```
 
@@ -516,43 +559,22 @@ Response `200`:
 ```json
 {
   "data": {
-    "card_id": "card_sweltering_en_adj_01",
-    "sense_id": "sense_sweltering_hot_01",
-    "canonical_form": "sweltering",
-    "aliases": ["oppressively hot"],
-    "language": "en",
-    "part_of_speech": "adjective",
-    "definitions": ["uncomfortably hot, especially because of the weather"],
-    "translations": [
-      {
-        "language": "zh-CN",
-        "text": "酷热的"
-      }
-    ],
-    "forms": [
-      {
-        "form": "swelteringly",
-        "label": "adverb"
-      }
-    ],
-    "examples": [
-      {
-        "text": "We waited until evening to leave the sweltering house.",
-        "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
-      }
-    ],
-    "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
-    "knowledge_root_ids": ["node_sweltering_hot_01"],
-    "domain_ids": ["domain_weather"],
-    "evidence_ids": ["evidence_dictionary_1042"]
+    "sense": {
+      "schema_version": "1.0",
+      "target": {"lexeme_id": "lexeme_sweltering", "sense_id": "sense_sweltering_hot_01", "release_id": "knowledge-2026-09", "language": "en"},
+      "localized_glosses": [], "pronunciations": [], "usage_labels": [], "grammar_patterns": [], "collocations": [], "examples": [], "pitfalls": [], "etymologies": [], "history": [],
+      "provenance": {"release_id": "knowledge-2026-09", "evidence_use": "api_redistribution", "evidence_backed": true}
+    }
   },
   "meta": {
     "request_id": "req_01K4Z8V2DE5F7G9H1J3K6M8NPQ",
     "content_release": "knowledge-2026-09",
-    "response_level": "full"
+    "canonical_schema_version": "canonical-v1"
   }
 }
 ```
+
+Both requests reject unknown fields. Malformed JSON uses `400 invalid_json`; oversized request bodies use `413 payload_too_large`; invalid fields use `422 invalid_canonical_request`; an unavailable pinned release uses `409 content_release_unavailable`; schema incompatibility and malformed authority data use `502 canonical_schema_incompatible` or `502 invalid_canonical_response`; disabled/unavailable capability and deadline expiry use `503 canonical_dependency_unavailable` or `503 canonical_dependency_timeout`. `clarification_required` and `not_found` are never problems. Responses use the existing request-ID header and `Cache-Control: no-store`. The capability remains unavailable until the external island-port server implements the matching internal contract.
 
 ## POST /api/v1/graph/get
 

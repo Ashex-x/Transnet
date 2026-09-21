@@ -1,9 +1,11 @@
 //! Interfaces between application logic and external systems.
 
-/// Narrow reader for the active immutable canonical-content tuple.
+/// Narrow reader for the active immutable canonical-only release pin.
 pub mod active_content_reader;
 /// Shared cache interface for rebuildable application results.
 pub mod cache;
+/// Request-scoped canonical-only release and read capability.
+pub mod canonical_read;
 /// Canonical lexical repository interface.
 pub mod canonical_repository;
 /// Release-pinned canonical sense-details repository interface.

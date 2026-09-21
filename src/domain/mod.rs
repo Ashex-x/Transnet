@@ -4,6 +4,8 @@
 pub mod canonical;
 /// Bounded canonical lexical details with reviewed factual-evidence lineage.
 pub mod canonical_content;
+/// Reviewed canonical translation identity, fingerprint, scope, and revision invariants.
+pub mod canonical_translation;
 /// Immutable content-release staging, validation, publication, and rollback invariants.
 pub mod content_release;
 /// Typed, evidence-backed graph topology and traversal limits.

@@ -9,7 +9,7 @@ use thiserror::Error;
 
 use crate::{
   domain::{
-    canonical::{ActiveContentVersion, EvidenceUse, SenseId},
+    canonical::{CanonicalReleasePin, EvidenceUse, SenseId},
     canonical_content::CanonicalSenseDetails,
   },
   ports::{
@@ -92,20 +92,20 @@ impl CanonicalSenseDetailsService {
   }
 }
 
-/// A bounded canonical-detail aggregate paired with the one active tuple that selected it.
+/// A bounded canonical-detail aggregate paired with the one active release pin that selected it.
 ///
-/// The returned `content` is the exact active tuple read before the detail request. It is not
+/// The returned `content` is the exact active pin read before the detail request. It is not
 /// refreshed after the detail repository completes, so callers can describe one coherent release
 /// boundary without selecting a later active release.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveCanonicalSenseDetails {
-  content: ActiveContentVersion,
+  content: CanonicalReleasePin,
   details: CanonicalSenseDetails,
 }
 
 impl ActiveCanonicalSenseDetails {
-  /// Returns the immutable active-content tuple that pinned this detail read.
-  pub fn content(&self) -> &ActiveContentVersion {
+  /// Returns the immutable canonical release pin that selected this detail read.
+  pub fn content(&self) -> &CanonicalReleasePin {
     &self.content
   }
 
@@ -143,7 +143,7 @@ impl ActiveCanonicalSenseDetailsError {
 ///
 /// This composition is deliberately separate from canonical lexical retrieval: a detail read
 /// neither searches lexical content nor chooses a vector collection. It asks the narrow
-/// [`ActiveContentReader`] for a safe active tuple exactly once, then requests
+/// [`ActiveContentReader`] for a safe active release pin exactly once, then requests
 /// [`EvidenceUse::ApiRedistribution`] from the dedicated details service for that tuple's exact
 /// release.
 #[derive(Clone)]
@@ -178,7 +178,7 @@ impl ActiveCanonicalSenseDetailsService {
     &self,
     sense_id: SenseId,
   ) -> Result<Option<ActiveCanonicalSenseDetails>, ActiveCanonicalSenseDetailsError> {
-    let Some(content) = self.active_content.active_content_version().await? else {
+    let Some(content) = self.active_content.active_release_pin().await? else {
       return Ok(None);
     };
     let details = self

@@ -2,7 +2,7 @@
 
 中文：[Transnet：LLM 翻译与关系知识设计](../docs_cn/transnet_cn.md)
 
-Status: authoritative target design. The checked-in runtime currently implements loopback translation and a structured-lookup subset. Canonical MySQL/Qdrant grounding and advanced orchestration remain target capabilities unless their interface documents say otherwise.
+Status: authoritative target design. The checked-in runtime implements loopback translation, model-backed structured lookup, and opt-in Transnet-side canonical BasicCard and pinned-sense reads. The corresponding island-port/MySQL server and production acceptance, Qdrant grounding, and advanced orchestration remain target capabilities unless their interface documents say otherwise.
 
 ## Product focus
 
@@ -38,6 +38,8 @@ History may change reference resolution, terminology continuity, sense ranking, 
 A versioned normalizer derives bounded lookup forms through Unicode normalization, language-aware case folding, whitespace handling, and punctuation equivalents. Exact canonical and alias matches precede inflection, spelling correction, and semantic retrieval. Meaningful symbols remain distinct: `C`, `C++`, and `C#` must not collapse into one entry.
 
 Cards use stable sense IDs, not normalized strings, as identity. If a form maps to several materially plausible meanings or parts of speech, Transnet ranks them from the current text and history and may return several meaning-specific translations rather than forcing a false single answer. New cards and aliases are created only by the content-publication workflow, never as a lookup side effect.
+
+Canonical IDs use the versioned `canonical-id-v1` publisher policy and are never derived from normalized queries. Reviewed translations use `translation-source-v1` fingerprints only to retrieve candidates; Transnet must compare the stored source under that same contract before accepting a match. Identity retains sense, part of speech, domain scope, and compositional-versus-phrase-level meaning. Corrections preserve the stable entity ID and create a new immutable revision instead of rewriting a published revision.
 
 ## Words, terms, and lexical phrases
 

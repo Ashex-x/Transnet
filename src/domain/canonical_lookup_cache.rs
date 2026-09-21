@@ -453,7 +453,7 @@ mod tests {
   use crate::domain::{
     canonical::{
       CanonicalId, CanonicalStatus, EvidenceConfidence, EvidenceFragment, EvidenceKind, FormKind,
-      Lexeme, LexicalPartOfSpeech, Sense, SourcePermissions, WordForm,
+      Lexeme, LexicalPartOfSpeech, LexicalSource, Sense, SourcePermissions, WordForm,
     },
     retrieval::{CandidateFeatures, RankedCandidate},
   };
@@ -556,6 +556,36 @@ mod tests {
               api_redistribution: false,
             },
             status: CanonicalStatus::Active,
+          },
+        ],
+        sources: vec![
+          LexicalSource {
+            id: id("source-public"),
+            name: "Test dictionary".into(),
+            version: "v1".into(),
+            license: "test".into(),
+            attribution: Some("Test dictionary".into()),
+            permissions: SourcePermissions {
+              storage: true,
+              display: true,
+              embedding: true,
+              model_processing: true,
+              api_redistribution: true,
+            },
+          },
+          LexicalSource {
+            id: id("source-private"),
+            name: "Private source".into(),
+            version: "v1".into(),
+            license: "test".into(),
+            attribution: None,
+            permissions: SourcePermissions {
+              storage: true,
+              display: true,
+              embedding: false,
+              model_processing: false,
+              api_redistribution: false,
+            },
           },
         ],
       },

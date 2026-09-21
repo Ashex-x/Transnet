@@ -32,15 +32,41 @@ pub struct CanonicalLookupQueryAnalysis {
 
 /// Bounded deterministic canonical result ready for a future transport adapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CanonicalLookupCard {
+pub struct CanonicalLookupCard<C = ActiveContentVersion> {
   /// Normalized query analysis used to produce this result.
   pub query: CanonicalLookupQueryAnalysis,
-  /// Immutable lexical, vector, schema, and ranking versions selected for the read.
-  pub content: ActiveContentVersion,
+  /// Immutable content selection: a canonical-only pin or the full hybrid version tuple.
+  pub content: C,
   /// Canonical candidates in the exact deterministic order supplied by retrieval.
   pub candidates: Vec<CanonicalLookupCardCandidate>,
   /// Coverage for every material section without conflating absence with policy filtering.
   pub coverage: CanonicalLookupCardCoverage,
+}
+
+impl<C> CanonicalLookupCard<C> {
+  /// Returns the closed deterministic resolution outcome for the retained best-class candidates.
+  ///
+  /// Multiple candidates mean the best applicable match class contains materially distinct
+  /// senses and the caller must preserve the ambiguity or request clarification. This method does
+  /// not expose a new wire field or choose one sense heuristically.
+  pub fn resolution(&self) -> CanonicalLookupResolution {
+    match self.candidates.len() {
+      0 => CanonicalLookupResolution::NotFound,
+      1 => CanonicalLookupResolution::Resolved,
+      _ => CanonicalLookupResolution::ClarificationRequired,
+    }
+  }
+}
+
+/// Closed resolution state derived from the best applicable canonical match class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CanonicalLookupResolution {
+  /// No eligible canonical sense matched the bounded request.
+  NotFound,
+  /// Exactly one independently selectable canonical sense remains.
+  Resolved,
+  /// Multiple equally eligible sense identities must remain separate or be clarified.
+  ClarificationRequired,
 }
 
 /// One ranked lexeme-and-sense result in a canonical lookup card.
@@ -135,6 +161,8 @@ pub struct CanonicalLookupCardEvidence {
 pub struct CanonicalLookupCardEvidenceProvenance {
   /// Source-policy identifier governing this evidence version.
   pub source_id: SourceId,
+  /// Reviewed human-readable attribution from the authoritative source-policy record.
+  pub attribution: String,
   /// Source-local identifier used for correction, removal, and attribution lookup.
   pub source_reference: String,
   /// Immutable lexical release containing the evidence fragment.

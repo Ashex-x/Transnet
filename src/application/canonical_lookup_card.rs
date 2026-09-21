@@ -82,13 +82,40 @@ impl CanonicalLookupCardMapper {
   /// This method defensively reapplies release, lifecycle, ownership, and source-permission
   /// checks before exposing an assertion. It never creates, rewrites, or ranks factual text.
   pub fn assemble(request: &RetrievalRequest, outcome: RetrievalOutcome) -> CanonicalLookupCard {
+    let release_id = outcome.content.release_id.clone();
+    Self::assemble_with_content(
+      request,
+      outcome.candidates,
+      Some(outcome.path),
+      outcome.content,
+      &release_id,
+    )
+  }
+
+  /// Assembles the same bounded card from a canonical-only pin and ranked lexical candidates.
+  pub fn assemble_canonical(
+    request: &RetrievalRequest,
+    pin: crate::domain::canonical::CanonicalReleasePin,
+    candidates: Vec<RankedCandidate>,
+  ) -> CanonicalLookupCard<crate::domain::canonical::CanonicalReleasePin> {
+    let release_id = pin.release_id.clone();
+    Self::assemble_with_content(request, candidates, None, pin, &release_id)
+  }
+
+  fn assemble_with_content<C>(
+    request: &RetrievalRequest,
+    ranked_candidates: Vec<RankedCandidate>,
+    path: Option<RetrievalPath>,
+    content: C,
+    release_id: &crate::domain::canonical::ReleaseId,
+  ) -> CanonicalLookupCard<C> {
     let candidate_limit = request.limit.min(MAX_LOOKUP_CARD_CANDIDATES);
-    let source_candidate_count = outcome.candidates.len();
+    let source_candidate_count = ranked_candidates.len();
     let mut counts = CardCounts::default();
     let mut candidates = Vec::with_capacity(candidate_limit);
 
-    for ranked in outcome.candidates.into_iter().take(candidate_limit) {
-      if let Some(candidate) = map_candidate(&ranked, request, &outcome.content, &mut counts) {
+    for ranked in ranked_candidates.into_iter().take(candidate_limit) {
+      if let Some(candidate) = map_candidate(&ranked, request, release_id, &mut counts) {
         candidates.push(candidate);
       } else {
         counts.record_filtered_candidate();
@@ -100,9 +127,9 @@ impl CanonicalLookupCardMapper {
     counts.senses.truncated += source_candidate_count.saturating_sub(candidate_limit);
 
     let candidate_coverage = counts.candidate_section();
-    let retrieval = match outcome.path {
-      RetrievalPath::Hybrid => candidate_coverage.clone(),
-      RetrievalPath::LexicalFallback => CanonicalLookupCardSectionCoverage {
+    let retrieval = match path {
+      None | Some(RetrievalPath::Hybrid) => candidate_coverage.clone(),
+      Some(RetrievalPath::LexicalFallback) => CanonicalLookupCardSectionCoverage {
         state: CanonicalLookupCardCoverageState::VectorDegraded,
         ..candidate_coverage
       },
@@ -114,7 +141,7 @@ impl CanonicalLookupCardMapper {
         language: request.language.clone(),
         evidence_use: request.evidence_use,
       },
-      content: outcome.content,
+      content,
       candidates,
       coverage: CanonicalLookupCardCoverage {
         retrieval,
@@ -132,11 +159,11 @@ impl CanonicalLookupCardMapper {
 fn map_candidate(
   ranked: &RankedCandidate,
   request: &RetrievalRequest,
-  content: &crate::domain::canonical::ActiveContentVersion,
+  release_id: &crate::domain::canonical::ReleaseId,
   counts: &mut CardCounts,
 ) -> Option<CanonicalLookupCardCandidate> {
   let candidate = &ranked.candidate;
-  if !candidate_is_visible(candidate, request, content) {
+  if !candidate_is_visible(candidate, request, release_id) {
     return None;
   }
 
@@ -146,13 +173,13 @@ fn map_candidate(
     &candidate.sense.definition,
     &candidate.sense.definition_evidence_ids,
     candidate,
-    &content.release_id,
+    release_id,
     request.evidence_use,
     &mut counts.evidence,
   );
   counts.definitions.record(definition.state);
 
-  let forms = map_forms(candidate, content, request.evidence_use, counts);
+  let forms = map_forms(candidate, release_id, request.evidence_use, counts);
   Some(CanonicalLookupCardCandidate {
     rank: ranked.rank,
     fusion_score: ranked.fusion_score,
@@ -174,10 +201,10 @@ fn map_candidate(
 fn candidate_is_visible(
   candidate: &CanonicalCandidate,
   request: &RetrievalRequest,
-  content: &crate::domain::canonical::ActiveContentVersion,
+  release_id: &crate::domain::canonical::ReleaseId,
 ) -> bool {
-  candidate.lexeme.release_id == content.release_id
-    && candidate.sense.release_id == content.release_id
+  candidate.lexeme.release_id == *release_id
+    && candidate.sense.release_id == *release_id
     && candidate.lexeme.id == candidate.sense.lexeme_id
     && candidate.lexeme.language == request.language
     && candidate.lexeme.status == CanonicalStatus::Active
@@ -186,7 +213,7 @@ fn candidate_is_visible(
 
 fn map_forms(
   candidate: &CanonicalCandidate,
-  content: &crate::domain::canonical::ActiveContentVersion,
+  release_id: &crate::domain::canonical::ReleaseId,
   evidence_use: EvidenceUse,
   counts: &mut CardCounts,
 ) -> Vec<CanonicalLookupCardForm> {
@@ -203,7 +230,7 @@ fn map_forms(
 
   let mut card_forms = Vec::with_capacity(forms.len().min(MAX_LOOKUP_CARD_FORMS_PER_CANDIDATE));
   for form in forms.into_iter().take(MAX_LOOKUP_CARD_FORMS_PER_CANDIDATE) {
-    if !form_is_visible(form, candidate, content) {
+    if !form_is_visible(form, candidate, release_id) {
       counts.forms.filtered += 1;
       continue;
     }
@@ -212,7 +239,7 @@ fn map_forms(
       &form.form,
       &form.evidence_ids,
       candidate,
-      &content.release_id,
+      release_id,
       evidence_use,
       &mut counts.evidence,
     );
@@ -235,10 +262,10 @@ fn map_forms(
 fn form_is_visible(
   form: &WordForm,
   candidate: &CanonicalCandidate,
-  content: &crate::domain::canonical::ActiveContentVersion,
+  release_id: &crate::domain::canonical::ReleaseId,
 ) -> bool {
   form.lexeme_id == candidate.lexeme.id
-    && form.release_id == content.release_id
+    && form.release_id == *release_id
     && form.status == CanonicalStatus::Active
 }
 
@@ -277,14 +304,22 @@ fn map_assertion(
 
   let permitted_count = permitted.len();
   let truncated = permitted_count.saturating_sub(MAX_LOOKUP_CARD_EVIDENCE_PER_ASSERTION);
-  evidence_counts.available += permitted_count.min(MAX_LOOKUP_CARD_EVIDENCE_PER_ASSERTION);
-  evidence_counts.truncated += truncated;
   permitted.truncate(MAX_LOOKUP_CARD_EVIDENCE_PER_ASSERTION);
+  let evidence = permitted
+    .into_iter()
+    .map(|fragment| card_evidence(fragment, candidate, evidence_use))
+    .collect::<Option<Vec<_>>>();
+  let Some(evidence) = evidence else {
+    evidence_counts.filtered += permitted_count;
+    return MappedAssertion::filtered();
+  };
+  evidence_counts.available += evidence.len();
+  evidence_counts.truncated += truncated;
 
   MappedAssertion::available(CanonicalLookupCardAssertion {
     kind,
     text: text.to_string(),
-    evidence: permitted.into_iter().map(card_evidence).collect(),
+    evidence,
   })
 }
 
@@ -311,20 +346,30 @@ fn indexed_evidence<'a>(
   indexed
 }
 
-fn card_evidence(fragment: EvidenceFragment) -> CanonicalLookupCardEvidence {
-  CanonicalLookupCardEvidence {
+fn card_evidence(
+  fragment: EvidenceFragment,
+  candidate: &CanonicalCandidate,
+  evidence_use: EvidenceUse,
+) -> Option<CanonicalLookupCardEvidence> {
+  let source = candidate.source_for(&fragment)?;
+  let attribution = source.attribution.as_ref()?;
+  if !source.permissions.allows(evidence_use) || attribution.trim().is_empty() {
+    return None;
+  }
+  Some(CanonicalLookupCardEvidence {
     id: fragment.id,
     kind: fragment.kind,
     confidence: fragment.confidence,
     text: fragment.text,
     provenance: CanonicalLookupCardEvidenceProvenance {
       source_id: fragment.source_id,
+      attribution: attribution.clone(),
       source_reference: fragment.source_reference,
       release_id: fragment.release_id,
       language: fragment.language,
       content_hash: fragment.content_hash,
     },
-  }
+  })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -441,7 +486,7 @@ mod tests {
   use crate::domain::{
     canonical::{
       CanonicalId, EvidenceConfidence, EvidenceKind, FormKind, LanguageTag, Lexeme,
-      LexicalPartOfSpeech, Sense, SourcePermissions,
+      LexicalPartOfSpeech, LexicalSource, Sense, SourcePermissions,
     },
     retrieval::CandidateFeatures,
   };
@@ -522,6 +567,14 @@ mod tests {
         content_hash: format!("hash-{sense_id}"),
         permissions: permissions(),
         status: CanonicalStatus::Active,
+      }],
+      sources: vec![LexicalSource {
+        id: id("source-1"),
+        name: "Test dictionary".into(),
+        version: "v1".into(),
+        license: "test".into(),
+        attribution: Some("Test dictionary".into()),
+        permissions: permissions(),
       }],
     }
   }
