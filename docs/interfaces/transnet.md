@@ -6,7 +6,7 @@ This contract defines how island-port requests translation and relationship know
 
 This document also defines the transport shared by every internal process boundary involving Transnet. It is normative for island-port, Transnet, publication tooling, and deployment tooling.
 
-Status: target contract with explicitly noted current-runtime coverage. The current runtime still uses transitional loopback HTTP; the unified translation operation is composed, while target UDS transport and later data capabilities remain incomplete.
+Status: target contract with explicitly noted current-runtime coverage. The current runtime still uses transitional loopback HTTP; unified translation, BasicCard lookup, and release-pinned sense follow-up are composed. Target inbound UDS, the external island-port/MySQL implementation and production acceptance, and later vector/relationship capabilities remain incomplete.
 
 
 The current transitional runtime enforces the stateless boundary before handler dispatch. It rejects Cookie, Cookie2, Authorization, Proxy-Authorization, X-API-Key, Lookup-Capability, Remote-User, X-Authenticated-User, X-Forwarded-User, and X-User-*, X-Learner-*, X-Account-*, X-Owner-*, and X-Session-* headers without echoing their values. Only the existing graph routes accept their strictly decoded query parameters; other routes reject query strings. Boundary failures return HTTP 400 with the `invalid_service_request` problem code and a request ID. Responses carry `Cache-Control: no-store`. Outbound model-provider credentials remain separate from incoming end-user credentials.

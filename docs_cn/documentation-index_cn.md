@@ -32,7 +32,7 @@ English: [Transnet documentation](../docs/documentation-index.md)
 
 ## 术语与实现状态
 
-- **当前运行时：**今天可由本仓库构建的可执行文件。它提供回环地址上的翻译和模型驱动的结构化查询。可按配置组合 canonical-only 的出站 island-port client 并检查其就绪状态，但尚无公开 BasicCard 路由使用它；目标入站 UDS 和生产向量组合尚未实现。
+- **当前运行时：**今天可由本仓库构建的可执行文件。它提供回环地址上的翻译、模型驱动的结构化查询，以及通过出站 island-port UDS client 按需启用的 canonical-only 读取。启用 canonical 读取后，运行时固定一次 active release、检查该依赖的 readiness，并通过 `POST /api/v1/basic-cards/lookup` 与固定发布的 `POST /api/v1/senses/get` 提供结构化的发布/schema 失败及带证据 attribution 的响应。本仓库尚未实现或验证 island-port canonical server、生产 MySQL migration 与发布工作流、真实旧发布保留、MySQL 端到端验收、目标 Transnet 入站 UDS 及生产向量组合。
 - **目标服务 / 目标合同：**设计和接口文档所定义的预期且版本化的服务行为。目标路由或 Schema 并不表示当前运行时已经启用它。
 - **规范内容：**经发布工作流审查、版本化并确认为权威的知识。它不同于模型响应、请求内容或相似度结果。
 - **基础卡（`BasicCard`）：**一个可独立选择的词汇词义对应的精简、发布版本固定的 MySQL 记录；即使图检索不可用，它仍应有用。

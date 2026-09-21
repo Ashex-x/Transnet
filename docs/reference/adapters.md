@@ -20,7 +20,7 @@ Candidate reads now require release-bound authoritative source records, reviewed
 
 Stage 4 adds the active canonical release read to the same outbound transport. It maps the strict response into a canonical-only release pin, with no vector collection or local ranking-policy version. The application obtains that pin once and passes it to every later authority read. The existing full hybrid content tuple remains unchanged for vector retrieval and publication compatibility.
 
-The executable now optionally constructs this outbound transport and canonical-only read service from validated runtime configuration. Only the read-only active-release operation participates in canonical dependency readiness. This does not add a public BasicCard route or an inbound UDS listener.
+The executable optionally constructs this outbound transport and canonical-only read service from validated runtime configuration. Only the read-only active-release operation participates in canonical dependency readiness. Public BasicCard lookup and release-pinned sense follow-up consume the service through the application boundary; no inbound UDS listener or database client is added.
 
 The corresponding island-port server is maintained outside this repository and must implement the current delta in `interfaces/mysql.md`. Until that peer is upgraded, incompatible or incomplete responses fail closed and real island-port/MySQL end-to-end operation is not considered verified.
 

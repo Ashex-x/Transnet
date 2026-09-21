@@ -8,4 +8,4 @@ English: [Development and operations](../../docs/guides/development.md)
 
 Release 二进制为 `target/release/transnet`，应由 Supervisor 运行。保留 `logs/debug/transnet.log` 或 `logs/release/transnet.log`；适用日志文件在每次启动时替换。Ctrl-C 和 Unix 终止信号会触发优雅停机。结构化事件记录请求 ID、路由或适配器边界、结果类别和耗时，不记录请求内容、响应内容、上下文、凭据或身份。
 
-默认可执行文件尚未组合目标生产 island-port 数据 endpoint。条件式词义与图 HTTP 切片以及进程内测试适配器不代表生产规范存储已经可用；以 [Transnet 服务接口](../interfaces/transnet_cn.md)中的状态为准。
+当前可执行文件可按配置组合仅出站的 island-port canonical-read client、active-release pin、canonical readiness、公开 BasicCard lookup 与固定发布 sense follow-up。这只是 Transnet client-side 能力：island-port canonical server、生产 MySQL migration 与 publisher、真实 activation/rollback、旧发布保留验证及 island-port/MySQL 端到端验收仍属外部工作。Qdrant 知识检索与目标 Transnet 入站 UDS listener 也尚未实现；以 [配置指南](configuration_cn.md)和 [Transnet 服务接口](../interfaces/transnet_cn.md)中的状态为准。

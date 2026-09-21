@@ -2,7 +2,7 @@
 
 中文：[Transnet：LLM 翻译与关系知识设计](../docs_cn/transnet_cn.md)
 
-Status: authoritative target design. The checked-in runtime currently implements loopback translation and a structured-lookup subset. Canonical MySQL/Qdrant grounding and advanced orchestration remain target capabilities unless their interface documents say otherwise.
+Status: authoritative target design. The checked-in runtime implements loopback translation, model-backed structured lookup, and opt-in Transnet-side canonical BasicCard and pinned-sense reads. The corresponding island-port/MySQL server and production acceptance, Qdrant grounding, and advanced orchestration remain target capabilities unless their interface documents say otherwise.
 
 ## Product focus
 

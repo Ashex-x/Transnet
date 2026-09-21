@@ -6,7 +6,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本文档同时定义所有涉及 Transnet 的内部进程边界共享的传输合同，适用于 island-port、Transnet、发布工具和部署工具。
 
-状态：目标合同，并明确标注当前运行时覆盖范围。当前运行时仍使用过渡性回环 HTTP；统一翻译操作已经组合，而目标 UDS 传输与后续数据能力仍未完成。
+状态：目标合同，并明确标注当前运行时覆盖范围。当前运行时仍使用过渡性回环 HTTP；统一翻译、BasicCard lookup 与固定发布 sense follow-up 已完成组合。目标入站 UDS、外部 island-port/MySQL 实现与生产验收，以及后续向量/关系能力仍未完成。
 
 
 当前过渡性运行时在处理器分派前强制执行无状态边界。它拒绝 Cookie、Cookie2、Authorization、Proxy-Authorization、X-API-Key、Lookup-Capability、Remote-User、X-Authenticated-User、X-Forwarded-User，以及 X-User-*、X-Learner-*、X-Account-*、X-Owner-*、X-Session-* 请求头，且不回显其值。只有现有图查询路由接受严格解析的查询参数；其他路由拒绝查询字符串。边界错误返回 HTTP 400、`invalid_service_request` 问题码和请求 ID。响应携带 `Cache-Control: no-store`。出站模型 Provider 凭据与入站终端用户凭据保持分离。

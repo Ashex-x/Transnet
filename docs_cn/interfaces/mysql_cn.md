@@ -4,7 +4,7 @@ English: [SQL data endpoint interface](../../docs/interfaces/mysql.md)
 
 本合同定义 island-port 提供的结构化数据 HTTP endpoint，涵盖共享规范翻译、单词、短语、词义、领域、证据元数据和不可变内容发布。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。
 
-状态：目标服务端合同；可执行文件可选地组合严格的出站 canonical-read client 和 active-release 就绪探针，但尚无公开 BasicCard 路由使用它们，也未验证外部 island-port server 符合本合同。Publisher 和生产 MySQL 操作在本仓库仍未实现。
+状态：目标 island-port 服务端合同，Transnet client 边界已经实现。可执行文件可选地组合严格的出站 canonical-read client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留及真实端到端验收仍需在本仓库之外完成。
 
 ## 目录
 

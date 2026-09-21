@@ -4,7 +4,7 @@
 
 This contract defines island-port's structured-data HTTP endpoints for shared canonical translations, words, phrases, senses, domains, evidence metadata, and immutable content releases. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies.
 
-Status: target server contract; the executable can optionally compose the strict outbound canonical-read client and active-release readiness probe, but no public BasicCard route consumes them and the external island-port server has not been verified against this contract. Publisher and production MySQL operations remain unimplemented here.
+Status: target island-port server contract with an implemented Transnet client boundary. The executable can optionally compose the strict outbound canonical-read client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, and real end-to-end acceptance remain unimplemented outside this repository.
 
 ## Contents
 
