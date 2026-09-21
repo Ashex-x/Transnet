@@ -169,7 +169,7 @@ fn sense_details_error_category(error: &ActiveCanonicalSenseDetailsError) -> &'s
 }
 
 #[derive(Debug, Serialize)]
-struct CanonicalSenseDetailsResponse {
+pub(super) struct CanonicalSenseDetailsResponse {
   schema_version: &'static str,
   target: CanonicalSenseTargetResponse,
   localized_glosses: Vec<LocalizedGlossResponse>,
@@ -188,6 +188,20 @@ impl CanonicalSenseDetailsResponse {
   fn from_outcome(outcome: ActiveCanonicalSenseDetails) -> Self {
     let content = outcome.content();
     let details = outcome.details();
+    Self::from_details(details, content.release_id.as_str())
+  }
+
+  pub(super) fn pinned_value(details: &CanonicalSenseDetails) -> serde_json::Value {
+    let mut value = serde_json::to_value(Self::from_details(
+      details,
+      details.target().release_id().as_str(),
+    ))
+    .expect("canonical sense response serialization is infallible");
+    remove_internal_content_hashes(&mut value);
+    value
+  }
+
+  fn from_details(details: &CanonicalSenseDetails, release_id: &str) -> Self {
     Self {
       schema_version: "1.0",
       target: CanonicalSenseTargetResponse::from(details),
@@ -237,11 +251,28 @@ impl CanonicalSenseDetailsResponse {
         .map(SenseHistoryResponse::from)
         .collect(),
       provenance: CanonicalSenseDetailsProvenanceResponse {
-        release_id: content.release_id.to_string(),
+        release_id: release_id.to_string(),
         evidence_use: "api_redistribution",
         evidence_backed: true,
       },
     }
+  }
+}
+
+fn remove_internal_content_hashes(value: &mut serde_json::Value) {
+  match value {
+    serde_json::Value::Object(object) => {
+      object.remove("content_hash");
+      for child in object.values_mut() {
+        remove_internal_content_hashes(child);
+      }
+    }
+    serde_json::Value::Array(values) => {
+      for child in values {
+        remove_internal_content_hashes(child);
+      }
+    }
+    _ => {}
   }
 }
 

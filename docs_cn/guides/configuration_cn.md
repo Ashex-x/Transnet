@@ -26,7 +26,7 @@ Provider Trace 只包含静态 Provider 边界、操作名、尝试次数、结�
 
 `[canonical]` 是可选启用的生产 canonical-only 读取依赖。仓库配置为 `enabled = false`：进程不构造 island-port client，模型翻译保持原行为，readiness 也不声称 canonical 可用。在 Unix 主机启用时，设置 `enabled = true`、island-port 的绝对 `socket_path`（例如 `/run/island-port/island-port.sock`），以及 1 至 30,000 的 `timeout_ms`。Unix socket 路径不得超过 107 字节，不得含空白或 `..` 路径组件；配置 Debug 与错误不会输出该路径。启用时缺失或无效配置会拒绝启动；非 Unix 主机启用会因没有生产 UDS transport 而拒绝启动。
 
-启用后，进程构造严格的出站 island-port client 与请求局部的 `CanonicalReadService`，但不新增 BasicCard HTTP 路由，也不改变翻译或 lookup 响应。`GET /readyz` 保持现有响应合同，只执行有界的 `/api/v1/releases/active` 只读调用：没有 active release、transport 故障、schema 不兼容、畸形响应或超时都表示未就绪。island-port 服务端缺失或尚未升级时，进程可以继续存活，但 `/readyz` 返回 `503`；不得把这种情况当作 canonical miss 或可用能力。socket 不是 MySQL 直连，也不会捏造 vector/ranking 版本。Adapter wire schema 和响应大小边界保持 Stage 3 的固定严格合同，不开放调用方配置伪版本。
+启用后，进程构造严格的出站 island-port client 与请求局部的 `CanonicalReadService`，供 `POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用；现有翻译与 lookup 响应保持不变。`GET /readyz` 保持现有响应合同，只执行有界的 `/api/v1/releases/active` 只读调用：没有 active release、transport 故障、schema 不兼容、畸形响应或超时都表示未就绪。island-port 服务端缺失或尚未升级时，进程可以继续存活，但 `/readyz` 返回 `503`；不得把这种情况当作 canonical miss 或可用能力。socket 不是 MySQL 直连，也不会捏造 vector/ranking 版本。Adapter wire schema 和响应大小边界保持 Stage 3 的固定严格合同，不开放调用方配置伪版本。
 
 MySQL 迁移、publisher 操作、完整 canonical 公开交付、嵌入、向量检索与评估仍属目标能力；见 [SQL endpoint](../interfaces/mysql_cn.md)、[向量 endpoint](../interfaces/qdrant_cn.md)和 [Transnet](../transnet_cn.md)合同。不得把凭据或请求内容写入仓库配置。
 

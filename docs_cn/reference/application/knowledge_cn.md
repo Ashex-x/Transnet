@@ -6,7 +6,7 @@ English: [Knowledge application](../../../docs/reference/application/knowledge.m
 
 状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。下文的领域评估与完整页面组织属于目标行为，尚未接入默认运行时。
 
-canonical-only 服务从权威端选择一次发布 pin，再通过读取 port 组合已审核翻译候选、确定性排序的词汇候选和无歧义的词义详情。它使用带 canonical-only content pin 的现有 lookup-card 类型，不伪造向量集合，也不把有意的纯词法读取误称为向量故障降级。可执行文件现在只在显式配置时构造并保存该依赖，并用 active-release 只读探针检查就绪；尚无公开 BasicCard 路由使用它。外部 island-port server 仍需实现匹配的内部合同。请求局部查询形式有界且去重：基线规范化形式最强，谨慎的空白或外围标点变体只是较低优先级的拼写候选。已发布别名、形态、转写和语义归属由权威端确定，不从查询字符串猜测。
+canonical-only 服务从权威端选择一次发布 pin，再通过读取 port 组合已审核翻译候选、确定性排序的词汇候选和无歧义的词义详情。它使用带 canonical-only content pin 的现有 lookup-card 类型，不伪造向量集合，也不把有意的纯词法读取误称为向量故障降级。可执行文件只在显式配置时构造并保存该依赖，用 active-release 只读探针检查就绪，并通过冻结的 BasicCard lookup 与固定发布 sense 路由提供该能力。外部 island-port server 仍需实现匹配的内部合同。请求局部查询形式有界且去重：基线规范化形式最强，谨慎的空白或外围标点变体只是较低优先级的拼写候选。已发布别名、形态、转写和语义归属由权威端确定，不从查询字符串猜测。
 
 为后续固定发布的 sense follow-up，application 提供使用调用方 `CanonicalReleasePin` 与 sense ID 的读取，不再重新选择 active 内容。现有候选/证据类型携带的 source attribution 来自权威发布的权利审核 metadata，绝不由 source ID 推导。此处不增加公开路由。
 

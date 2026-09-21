@@ -1134,13 +1134,15 @@ impl CanonicalCandidateDto {
       .collect::<BTreeSet<_>>();
     if evidence_ids.len() != candidate.evidence.len()
       || candidate.evidence.iter().any(|fragment| {
-        candidate.source_for(fragment).is_none_or(|source| {
-          !source.permissions.allows(evidence_use)
-            || !fragment.permissions.allows(evidence_use)
-            || !fragment.permissions.storage
-            || !source.permissions.storage
-            || !permissions_are_subset(fragment.permissions, source.permissions)
-        })
+        fragment.text.chars().count() > 4_096
+          || fragment.source_reference.chars().count() > 256
+          || candidate.source_for(fragment).is_none_or(|source| {
+            !source.permissions.allows(evidence_use)
+              || !fragment.permissions.allows(evidence_use)
+              || !fragment.permissions.storage
+              || !source.permissions.storage
+              || !permissions_are_subset(fragment.permissions, source.permissions)
+          })
       })
       || candidate.sources.iter().any(|source| {
         !candidate

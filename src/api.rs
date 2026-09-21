@@ -1,6 +1,6 @@
 //! HTTP boundary, platform middleware, and versioned API routing.
 
-use std::{fmt, sync::Arc};
+use std::{fmt, sync::Arc, time::Duration};
 
 use axum::{
   extract::{rejection::JsonRejection, DefaultBodyLimit, MatchedPath, Request, State},
@@ -149,6 +149,7 @@ pub struct AppState {
   lookup: Option<Arc<LookupService>>,
   canonical_lookup: Option<Arc<CanonicalLookupService>>,
   canonical_read: Option<Arc<CanonicalReadService>>,
+  canonical_read_timeout: Option<Duration>,
   canonical_sense_details: Option<Arc<ActiveCanonicalSenseDetailsService>>,
   graph: Option<GraphRouteService>,
   graph_cursor_protection_key: GraphCursorProtectionKey,
@@ -169,6 +170,7 @@ impl AppState {
       lookup: None,
       canonical_lookup: None,
       canonical_read: None,
+      canonical_read_timeout: None,
       canonical_sense_details: None,
       graph: None,
       graph_cursor_protection_key: GraphCursorProtectionKey::ephemeral(),
@@ -209,17 +211,32 @@ impl AppState {
     self
   }
 
-  /// Retains the opt-in canonical-only application dependency for future BasicCard delivery.
-  ///
-  /// No public route consumes this capability in the current runtime.
+  /// Retains the opt-in canonical-only application dependency for BasicCard delivery.
   pub fn with_canonical_read_service(mut self, service: Arc<CanonicalReadService>) -> Self {
     self.canonical_read = Some(service);
+    self.canonical_read_timeout = Some(Duration::from_secs(2));
+    self
+  }
+
+  /// Adds the canonical-only service with its validated per-request deadline bound.
+  pub fn with_canonical_read_service_timeout(
+    mut self,
+    service: Arc<CanonicalReadService>,
+    timeout: Duration,
+  ) -> Self {
+    self.canonical_read = Some(service);
+    self.canonical_read_timeout = Some(timeout);
     self
   }
 
   /// Returns the configured canonical-only application dependency, if explicitly enabled.
   pub fn canonical_read_service(&self) -> Option<&Arc<CanonicalReadService>> {
     self.canonical_read.as_ref()
+  }
+
+  /// Returns the configured deadline bound for canonical HTTP requests.
+  pub(crate) fn canonical_read_timeout(&self) -> Option<Duration> {
+    self.canonical_read_timeout
   }
 
   /// Adds the public active-release-pinned canonical sense-details composition.

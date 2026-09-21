@@ -38,6 +38,8 @@ pub struct CanonicalReadOutcome {
 
 /// Maximum request-local lookup spellings sent to the canonical authority.
 pub const MAX_CANONICAL_LOOKUP_FORMS: usize = 4;
+/// Largest reviewed translation list exposed for one canonical lookup flow.
+pub const MAX_CANONICAL_TRANSLATIONS: usize = 8;
 
 /// Canonical-only application flow backed by a read capability, not a transport client.
 #[derive(Clone)]
@@ -91,11 +93,11 @@ impl CanonicalReadService {
           domain_ids: Vec::new(),
           dialect: None,
           register: None,
-          limit: request.limit,
+          limit: request.limit.min(MAX_CANONICAL_TRANSLATIONS),
         },
       )
       .await?;
-    if translation_candidates.len() > request.limit {
+    if translation_candidates.len() > request.limit.min(MAX_CANONICAL_TRANSLATIONS) {
       return Err(CanonicalReadError::InconsistentData);
     }
     if translation_candidates

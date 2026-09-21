@@ -35,6 +35,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
   - [POST /api/v1/livez](#post-apiv1livez)
   - [POST /api/v1/readyz](#post-apiv1readyz)
   - [POST /api/v1/translations](#post-apiv1translations)
+  - [POST /api/v1/basic-cards/lookup](#post-apiv1basic-cardslookup)
   - [POST /api/v1/senses/get](#post-apiv1sensesget)
   - [POST /api/v1/graph/get](#post-apiv1graphget)
   - [POST /api/v1/graph/neighbors](#post-apiv1graphneighbors)
@@ -496,9 +497,50 @@ Milestone 1 HTTP 合同只暴露已组合 translation application 实际生成�
 
 翻译特定失败使用：`invalid_json` 对应 `400`、`payload_too_large` 对应 `413`、`invalid_translation_request` 对应 `422`、`invalid_model_output` 对应 `502`、`translation_model_unavailable` 对应 `503`。容量、内部与 deadline 状态在相应闭合 application outcome 建立前保持预留。
 
+## POST /api/v1/basic-cards/lookup
+
+执行 MySQL-only、固定发布的规范查询。请求为闭合结构，不接受发布、派生形式、ranking、index 或 vector selector。`query` 最多 100 个 Unicode 字符；Transnet 在内部确定性派生最多四个查询形式。
+
+```json
+{
+  "query": "sweltering",
+  "source_language": "en",
+  "target_language": "zh-CN"
+}
+```
+
+`resolved`、`clarification_required` 与 `not_found` 均返回 HTTP 200，并通过 `data.resolution` 区分。`data` 同时包含稳定排序的 `matches` 和逐节 `coverage`；`meta` 包含 `request_id`、`content_release` 与 `canonical_schema_version`。歧义不会静默选择 sense，not found 返回空 `matches`。
+
+```json
+{
+  "data": {
+    "resolution": "resolved",
+    "matches": [{
+      "rank": 1,
+      "lexeme": {"id": "lexeme_sweltering", "lemma": "sweltering", "language": "en", "part_of_speech": "adjective"},
+      "sense": {"id": "sense_sweltering_hot", "sense_key": "weather-hot", "definition": {"text": "uncomfortably hot", "evidence": []}},
+      "translations": [], "forms": [],
+      "evidence": [{"id": "evidence_dictionary_1042", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "source": {"source_id": "source_dictionary", "attribution": "Dictionary publisher (2026)", "source_reference": "entry:1", "language": "en"}}]
+    }],
+    "coverage": {
+      "retrieval": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "lexemes": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "parts_of_speech": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "senses": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "definitions": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "forms": {"state": "missing", "available_items": 0, "missing_items": 1, "filtered_items": 0, "truncated_items": 0},
+      "evidence": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0}
+    }
+  },
+  "meta": {"request_id": "req_example", "content_release": "knowledge-2026-09", "canonical_schema_version": "canonical-v1"}
+}
+```
+
+Matches 最多 12；每 match 的 forms 最多 24、已审核 translations 最多 8；每 assertion 的 evidence 最多 8。Evidence text 最多 4096 字符，source reference 最多 256 字符，完整 JSON response 最多 1 MiB。Resolved card 至少具有许可支持的 definition 或已审核 translation。Attribution 是权威端提供的人类可读文字；内部 hash、permission bits、fingerprint、fusion score、ranking/index/vector version、socket path 与 transport metadata 均不公开。
+
 ## POST /api/v1/senses/get
 
-读取一个规范词义，并使用与翻译结果相同的响应级别规则进行投影。这是 port 使用 Transnet 先前返回的 ID 发起的后续读取，不是第二种由用户选择的翻译模式。服务不保存访问或已保存项目记录。
+在 BasicCard lookup 返回的同一不可变 pin 下读取一个规范词义。它不重新选择 active release，也绝不把 R1 请求升级到 R2。
 
 请求：
 
@@ -506,8 +548,8 @@ Milestone 1 HTTP 合同只暴露已组合 translation application 实际生成�
 {
   "sense_id": "sense_sweltering_hot_01",
   "target_language": "zh-CN",
-  "response_level": "full",
-  "release": "knowledge-2026-09"
+  "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1"
 }
 ```
 
@@ -516,43 +558,22 @@ Milestone 1 HTTP 合同只暴露已组合 translation application 实际生成�
 ```json
 {
   "data": {
-    "card_id": "card_sweltering_en_adj_01",
-    "sense_id": "sense_sweltering_hot_01",
-    "canonical_form": "sweltering",
-    "aliases": ["oppressively hot"],
-    "language": "en",
-    "part_of_speech": "adjective",
-    "definitions": ["uncomfortably hot, especially because of the weather"],
-    "translations": [
-      {
-        "language": "zh-CN",
-        "text": "酷热的"
-      }
-    ],
-    "forms": [
-      {
-        "form": "swelteringly",
-        "label": "adverb"
-      }
-    ],
-    "examples": [
-      {
-        "text": "We waited until evening to leave the sweltering house.",
-        "translation": "我们一直等到傍晚才离开闷热难耐的房子。"
-      }
-    ],
-    "usage_notes": ["Usually describes weather or an uncomfortably hot place."],
-    "knowledge_root_ids": ["node_sweltering_hot_01"],
-    "domain_ids": ["domain_weather"],
-    "evidence_ids": ["evidence_dictionary_1042"]
+    "sense": {
+      "schema_version": "1.0",
+      "target": {"lexeme_id": "lexeme_sweltering", "sense_id": "sense_sweltering_hot_01", "release_id": "knowledge-2026-09", "language": "en"},
+      "localized_glosses": [], "pronunciations": [], "usage_labels": [], "grammar_patterns": [], "collocations": [], "examples": [], "pitfalls": [], "etymologies": [], "history": [],
+      "provenance": {"release_id": "knowledge-2026-09", "evidence_use": "api_redistribution", "evidence_backed": true}
+    }
   },
   "meta": {
     "request_id": "req_01K4Z8V2DE5F7G9H1J3K6M8NPQ",
     "content_release": "knowledge-2026-09",
-    "response_level": "full"
+    "canonical_schema_version": "canonical-v1"
   }
 }
 ```
+
+两个请求都拒绝 unknown fields。畸形 JSON 使用 `400 invalid_json`，超限请求 body 使用 `413 payload_too_large`，字段无效使用 `422 invalid_canonical_request`，固定发布不可用使用 `409 content_release_unavailable`，schema 不兼容与权威响应畸形分别使用 `502 canonical_schema_incompatible` 或 `502 invalid_canonical_response`，能力未启用/不可用及 deadline 超时分别使用 `503 canonical_dependency_unavailable` 或 `503 canonical_dependency_timeout`。`clarification_required` 与 `not_found` 从不返回 problem。响应沿用 request-ID header 与 `Cache-Control: no-store`。在外部 island-port server 完成对应内部合同前，该能力仍不可用。
 
 ## POST /api/v1/graph/get
 

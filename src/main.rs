@@ -103,7 +103,10 @@ fn configure_canonical(
   let authority: Arc<dyn CanonicalReadPort> = Arc::new(IslandPortCanonicalClient::new(transport));
   Ok(
     state
-      .with_canonical_read_service(Arc::new(CanonicalReadService::new(authority.clone())))
+      .with_canonical_read_service_timeout(
+        Arc::new(CanonicalReadService::new(authority.clone())),
+        canonical.timeout,
+      )
       .with_readiness(Arc::new(CanonicalDependencyReadiness::new(
         authority,
         canonical.timeout,
