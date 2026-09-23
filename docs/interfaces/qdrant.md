@@ -4,7 +4,7 @@
 
 This contract defines island-port's vector and graph HTTP endpoints for versioned canonical nodes and edges. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. Point examples document island-port's internal projection.
 
-Status: target contract; the current executable does not compose this service client.
+Status: target island-port contract. Transnet contains the typed release-trio and relationship-rule foundation, but the current executable does not compose a vector client or publisher. Island-port/Qdrant build, reconciliation, activation, rollback, and production acceptance remain external work.
 
 ## Contents
 
@@ -48,18 +48,39 @@ Release manifest example:
 ```json
 {
   "release_id": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1",
   "collections": {
-    "nodes": "knowledge_nodes__knowledge_2026_09",
-    "edges": "knowledge_edges__knowledge_2026_09"
+    "nodes": {
+      "collection_id": "knowledge_nodes__knowledge_2026_09",
+      "payload_schema_version": "knowledge-graph-v1",
+      "content_hash": "sha256:63af5c1e...",
+      "point_count": 184220,
+      "state": "verified"
+    },
+    "edges": {
+      "collection_id": "knowledge_edges__knowledge_2026_09",
+      "payload_schema_version": "knowledge-graph-v1",
+      "content_hash": "sha256:b19d28a7...",
+      "point_count": 612840,
+      "verified_node_content_hash": "sha256:63af5c1e...",
+      "state": "verified"
+    }
   },
-  "dense_model": "multilingual-embedding-v4",
-  "dense_dimensions": 1536,
-  "sparse_model": "lexical-sparse-v2",
-  "payload_schema_version": "knowledge-graph-v1",
-  "node_content_hash": "sha256:63af5c1e...",
-  "edge_content_hash": "sha256:b19d28a7..."
+  "embeddings": {
+    "dense_model_version": "multilingual-embedding-v4",
+    "dense_dimensions": 1536,
+    "sparse_model_version": "lexical-sparse-v2"
+  },
+  "endpoint_coverage": {
+    "expected": 1225680,
+    "resolved": 1225680
+  }
 }
 ```
+
+The physical node and edge collection identifiers are different typed members; an active alias is never accepted as either immutable identifier. The canonical release, both collection manifests, both embedding revisions, and endpoint coverage form one activation candidate. Both collections must be verified, the payload schemas must match, the edge manifest must name the exact verified node hash, and every edge endpoint must resolve in that node collection. A Transnet ranking version is request-time policy and is not part of this authority-owned manifest.
+
+Node projection completes and verifies before edge construction starts. Island-port rejects a missing member, cross-release member, schema or embedding mismatch, count or hash mismatch, incomplete endpoint coverage, or unverified build; no placeholder collection identifier is permitted.
 
 ## Knowledge node point
 
@@ -165,6 +186,8 @@ An edge is both a typed connection and a searchable explanation of why two nodes
 ```
 
 Supported families cover lexical naming and translation equivalence; taxonomy and part-whole structure; synonymy, antonymy, contrast, and named intensity dimensions; valency, grammar, collocation, and fixed expressions; morphology; suitability by register, dialect, region, period, scene, and domain; cultural extension; and domain mechanism, causation, dependency, implementation, application, measurement, standardization, and terminology. Exploratory associations remain a separate family. A versioned relation-type registry defines direction, inverse, symmetry, transitivity, and causality; neither the UI nor the LLM infers those properties from wording. Payload indexes cover both endpoints, relation type and version, assessment eligibility, publication and verification state, release, applicable sense, language, dialect, region, period, domain, and evidence ID. Qdrant stores no judgment or aggregate value.
+
+The current Transnet registry freezes only mappings whose exact direction is already normative here: internal `Hypernym` stores broader to narrower and publishes as `has_subtype`; internal `Hyponym` stores narrower to broader and publishes as `is_a`; `LowerDegree` and `HigherDegree` publish as `lower_degree_than` and `higher_degree_than`. Existing graph identities for synonymy, antonymy, translation equivalence, morphology, construction, etymology, and weak association retain their internal direction and inverse rules, but their Qdrant wire names, transitivity, and causality remain unresolved contract gaps. Publication fails closed rather than deriving names from Rust variants or English labels.
 
 `is_a` points from a narrower sense to a broader category and `has_subtype` is its inverse. `lower_degree_than` and `higher_degree_than` compare members only within a named compatible dimension. No degree edge implies taxonomy, synonymy, or interchangeability.
 
@@ -415,14 +438,33 @@ Request:
 {
   "manifest": {
     "release_id": "knowledge-2026-10",
-    "payload_schema_version": "knowledge-graph-v1",
-    "dense_model": "multilingual-embedding-v4",
-    "dense_dimensions": 1536,
-    "sparse_model": "lexical-sparse-v2",
-    "expected_node_count": 184220,
-    "expected_edge_count": 612840,
-    "node_content_hash": "sha256:dd401f2a...",
-    "edge_content_hash": "sha256:98d3a647..."
+    "canonical_schema_version": "canonical-v1",
+    "collections": {
+      "nodes": {
+        "collection_id": "knowledge_nodes__knowledge_2026_10",
+        "payload_schema_version": "knowledge-graph-v1",
+        "content_hash": "sha256:dd401f2a...",
+        "point_count": 184220,
+        "state": "verified"
+      },
+      "edges": {
+        "collection_id": "knowledge_edges__knowledge_2026_10",
+        "payload_schema_version": "knowledge-graph-v1",
+        "content_hash": "sha256:98d3a647...",
+        "point_count": 612840,
+        "verified_node_content_hash": "sha256:dd401f2a...",
+        "state": "verified"
+      }
+    },
+    "embeddings": {
+      "dense_model_version": "multilingual-embedding-v4",
+      "dense_dimensions": 1536,
+      "sparse_model_version": "lexical-sparse-v2"
+    },
+    "endpoint_coverage": {
+      "expected": 1225680,
+      "resolved": 1225680
+    }
   },
   "idempotency_key": "publish-qdrant-knowledge-2026-10"
 }
@@ -432,6 +474,8 @@ Response:
 
 ```json
 {
+  "request_id": "req_publish_01",
+  "schema_version": "vector-data-v1",
   "outcome": "ok",
   "value": {
     "release_id": "knowledge-2026-10",
@@ -439,15 +483,34 @@ Response:
     "edge_collection": "knowledge_edges__knowledge_2026_10",
     "node_count": 184220,
     "edge_count": 612840,
+    "manifest_hash": "sha256:manifest-771e...",
     "endpoint_coverage": 1.0,
     "validation_state": "ready_for_activation"
-  }
+  },
+  "release_id": "knowledge-2026-10"
 }
 ```
 
 Build reconciliation compares counts, endpoint coverage, content hashes, embedding versions, and release metadata with an authenticated manifest. A partial or mismatched pair never activates. Correction creates a new immutable release; rollback selects an unchanged retained pair.
 
-Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`. Logs omit credentials, vectors, canonical source text, request content, and raw Qdrant bodies.
+Publication failures use the closed structured codes `canonical_release_unavailable`, `node_build_unavailable`, `edge_build_unavailable`, `schema_incompatible`, `embedding_metadata_incompatible`, `endpoint_reconciliation_failed`, `hash_or_count_reconciliation_failed`, `incomplete_trio`, `activation_conflict`, `immutable_release_unavailable`, `timeout`, and `dependency_unavailable`. Island-port maps these from build and reconciliation state; callers never classify a message string. A successful publish response is an immutable activation candidate and does not switch the active release.
+
+```json
+{
+  "request_id": "req_publish_01",
+  "schema_version": "vector-data-v1",
+  "outcome": "conflict",
+  "error": {
+    "code": "endpoint_reconciliation_failed",
+    "message": "release projection did not pass reconciliation"
+  },
+  "release_id": "knowledge-2026-10"
+}
+```
+
+An error has no `value`; success has no `error`. `request_id`, transport `schema_version`, and the selected `release_id` echo the request context and never substitute for the canonical schema or collection payload schema inside the manifest.
+
+General closed outcomes remain `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`; publication may also return `conflict` with one of the publication failure codes. Logs omit credentials, vectors, canonical source text, request content, and raw Qdrant bodies.
 
 ## Related documents
 

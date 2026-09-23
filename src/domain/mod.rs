@@ -10,6 +10,8 @@ pub mod canonical_translation;
 pub mod content_release;
 /// Typed, evidence-backed graph topology and traversal limits.
 pub mod graph;
+/// Immutable canonical, node-collection, and edge-collection release-trio invariants.
+pub mod knowledge_release;
 /// Bounded canonical lookup-card presentation values with assertion-level provenance.
 pub mod lookup_card;
 /// Closed, redacted metric names and categorical event dimensions.

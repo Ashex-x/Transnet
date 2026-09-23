@@ -32,6 +32,10 @@ Verified content is published canonical knowledge. Inferred explanations and exp
 
 One content view consists of a MySQL card release plus paired immutable Qdrant node and edge collections. A request pins the trio once, and every structured and vector read uses it. MySQL or a signed publication artifact is authoritative; Qdrant is a rebuildable projection whose candidates require same-release hydration.
 
+The implemented M3 foundation represents that activation candidate as a `KnowledgeReleaseTrio`: the existing canonical-only `CanonicalReleasePin`, one typed immutable node-collection manifest, one typed immutable edge-collection manifest, and shared dense/sparse embedding revisions. The edge manifest binds to the verified node content hash and carries complete endpoint counts. `ActiveContentVersion` remains only for the older process-local single-index retrieval foundation and is not publication authority; its one `vector_collection_id` must never stand in for the two M3 collections.
+
+The implemented relationship registry retains existing graph identities and validates endpoint families, inverse and symmetry rules, evidence, verified lifecycle, and same-release ownership. Exact Qdrant mapping currently exists only for the contract-frozen taxonomy and named-degree directions. Other M3 relationship wire names and per-type transitivity/causality remain target-contract gaps and therefore fail closed during future projection. The target node catalog is broader than the implemented `Sense`, `Lexeme`, `Construction`, and `Scale` read-model families; phrase, term, concept, entity, and specialist node identities require a publisher-owned canonical entity mapping before they can be added without synthetic IDs.
+
 Vector failure may yield an explicitly degraded MySQL-backed basic card, but never invented relationships or hidden missing knowledge families. Missing authoritative content or incompatible releases fail safely. Live requests cannot create aliases, cards, facts, domains, edges, revisions, or releases.
 
 Exact persisted payloads belong to the [SQL](../interfaces/mysql.md) and [vector](../interfaces/qdrant.md) interfaces.

@@ -4,7 +4,7 @@ English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
 
 本合同定义 island-port 提供的向量与图 HTTP endpoint，用于版本化规范节点与边。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。Point 示例描述 island-port 的内部投影。
 
-状态：目标合同；当前可执行文件尚未组合此服务客户端。
+状态：目标 island-port 合同。Transnet 已包含强类型发布三件套与关系规则基础，但当前可执行文件尚未组合向量客户端或 publisher。Island-port/Qdrant 构建、对账、激活、回滚及生产验收仍是外部工作。
 
 ## 目录
 
@@ -63,18 +63,39 @@ Point ID 必须确定。先构建节点再构建边。发布拒绝缺失端点�
 ```json
 {
   "release_id": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1",
   "collections": {
-    "nodes": "knowledge_nodes__knowledge_2026_09",
-    "edges": "knowledge_edges__knowledge_2026_09"
+    "nodes": {
+      "collection_id": "knowledge_nodes__knowledge_2026_09",
+      "payload_schema_version": "knowledge-graph-v1",
+      "content_hash": "sha256:63af5c1e...",
+      "point_count": 184220,
+      "state": "verified"
+    },
+    "edges": {
+      "collection_id": "knowledge_edges__knowledge_2026_09",
+      "payload_schema_version": "knowledge-graph-v1",
+      "content_hash": "sha256:b19d28a7...",
+      "point_count": 612840,
+      "verified_node_content_hash": "sha256:63af5c1e...",
+      "state": "verified"
+    }
   },
-  "dense_model": "multilingual-embedding-v4",
-  "dense_dimensions": 1536,
-  "sparse_model": "lexical-sparse-v2",
-  "payload_schema_version": "knowledge-graph-v1",
-  "node_content_hash": "sha256:63af5c1e...",
-  "edge_content_hash": "sha256:b19d28a7..."
+  "embeddings": {
+    "dense_model_version": "multilingual-embedding-v4",
+    "dense_dimensions": 1536,
+    "sparse_model_version": "lexical-sparse-v2"
+  },
+  "endpoint_coverage": {
+    "expected": 1225680,
+    "resolved": 1225680
+  }
 }
 ```
+
+物理节点与边 collection ID 是不同的强类型成员；活动 alias 不能作为任一不可变 ID。规范发布、两个 collection manifest、两种嵌入修订与端点覆盖共同形成一个激活候选。两个 collection 均须已验证，payload schema 必须匹配，边 manifest 必须指向精确的已验证节点哈希，且所有边端点都必须在该节点 collection 中解析。Transnet 本地 ranking version 属于请求时策略，不进入此权威 manifest。
+
+节点投影必须先完成并验证，之后才开始边构建。Island-port 拒绝成员缺失、跨发布成员、schema 或嵌入不匹配、数量或哈希不匹配、端点覆盖不完整以及未验证构建；不得使用占位 collection ID。
 
 ## 知识节点 point
 
@@ -180,6 +201,8 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 ```
 
 关系族覆盖词汇命名与翻译等价、分类与整体—部分、同义/反义/对比/明确命名的强度、配价/语法/搭配/固定表达、形态、语域/方言/地区/时期/场景/领域适用性、文化延伸，以及领域机理、因果、依赖、实现、应用、测量、标准化和术语。探索关系保持独立。版本化关系类型注册表定义方向、逆关系、对称性、传递性和因果性；UI 与 LLM 不从措辞猜测。Payload 索引覆盖两端、关系类型与版本、评估资格、发布与验证状态、发布版本、适用词义、语言、方言、地区、时期、领域和证据 ID。Qdrant 不存储任何判断或聚合值。
+
+当前 Transnet registry 只冻结此处已有规范方向的映射：内部 `Hypernym` 以宽义指向窄义并发布为 `has_subtype`；内部 `Hyponym` 以窄义指向宽义并发布为 `is_a`；`LowerDegree` 与 `HigherDegree` 分别发布为 `lower_degree_than` 与 `higher_degree_than`。同义、反义、翻译等价、形态、构式、词源及弱关联保留已有内部方向与逆关系规则，但其 Qdrant wire 名、传递性与因果性仍是未解决的 contract gap。发布必须闭合失败，不能从 Rust variant 或英文标签推导名称。
 
 `is_a` 从较窄词义指向较宽类别，`has_subtype` 是其逆关系。`lower_degree_than` 与 `higher_degree_than` 只在命名且兼容的维度内比较成员。程度边不暗示分类、同义或可互换。
 
@@ -430,14 +453,33 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 {
   "manifest": {
     "release_id": "knowledge-2026-10",
-    "payload_schema_version": "knowledge-graph-v1",
-    "dense_model": "multilingual-embedding-v4",
-    "dense_dimensions": 1536,
-    "sparse_model": "lexical-sparse-v2",
-    "expected_node_count": 184220,
-    "expected_edge_count": 612840,
-    "node_content_hash": "sha256:dd401f2a...",
-    "edge_content_hash": "sha256:98d3a647..."
+    "canonical_schema_version": "canonical-v1",
+    "collections": {
+      "nodes": {
+        "collection_id": "knowledge_nodes__knowledge_2026_10",
+        "payload_schema_version": "knowledge-graph-v1",
+        "content_hash": "sha256:dd401f2a...",
+        "point_count": 184220,
+        "state": "verified"
+      },
+      "edges": {
+        "collection_id": "knowledge_edges__knowledge_2026_10",
+        "payload_schema_version": "knowledge-graph-v1",
+        "content_hash": "sha256:98d3a647...",
+        "point_count": 612840,
+        "verified_node_content_hash": "sha256:dd401f2a...",
+        "state": "verified"
+      }
+    },
+    "embeddings": {
+      "dense_model_version": "multilingual-embedding-v4",
+      "dense_dimensions": 1536,
+      "sparse_model_version": "lexical-sparse-v2"
+    },
+    "endpoint_coverage": {
+      "expected": 1225680,
+      "resolved": 1225680
+    }
   },
   "idempotency_key": "publish-qdrant-knowledge-2026-10"
 }
@@ -447,6 +489,8 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 ```json
 {
+  "request_id": "req_publish_01",
+  "schema_version": "vector-data-v1",
   "outcome": "ok",
   "value": {
     "release_id": "knowledge-2026-10",
@@ -454,15 +498,34 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
     "edge_collection": "knowledge_edges__knowledge_2026_10",
     "node_count": 184220,
     "edge_count": 612840,
+    "manifest_hash": "sha256:manifest-771e...",
     "endpoint_coverage": 1.0,
     "validation_state": "ready_for_activation"
-  }
+  },
+  "release_id": "knowledge-2026-10"
 }
 ```
 
 构建对账将数量、端点覆盖、内容哈希、嵌入版本和发布元数据与经认证 manifest 比较。不完整或不匹配的集合对绝不激活。修正创建新不可变发布；回滚选择未变更的保留集合对。
 
-关闭结果为 `ok`、`missing`、`invalid_payload`、`version_mismatch`、`unavailable` 和 `timeout`。日志不得包含凭据、向量、规范源文本、请求内容或原始 Qdrant body。
+发布失败使用闭合结构化 code：`canonical_release_unavailable`、`node_build_unavailable`、`edge_build_unavailable`、`schema_incompatible`、`embedding_metadata_incompatible`、`endpoint_reconciliation_failed`、`hash_or_count_reconciliation_failed`、`incomplete_trio`、`activation_conflict`、`immutable_release_unavailable`、`timeout` 和 `dependency_unavailable`。Island-port 从构建与对账状态映射这些 code；调用方不得解析 message 字符串。成功发布只产生不可变激活候选，不切换活动发布。
+
+```json
+{
+  "request_id": "req_publish_01",
+  "schema_version": "vector-data-v1",
+  "outcome": "conflict",
+  "error": {
+    "code": "endpoint_reconciliation_failed",
+    "message": "release projection did not pass reconciliation"
+  },
+  "release_id": "knowledge-2026-10"
+}
+```
+
+错误响应不含 `value`；成功响应不含 `error`。`request_id`、传输层 `schema_version` 与所选 `release_id` 回显请求 context，不能替代 manifest 中的 canonical schema 或 collection payload schema。
+
+通用闭合 outcome 仍为 `ok`、`missing`、`invalid_payload`、`version_mismatch`、`unavailable` 和 `timeout`；发布还可返回带上述发布失败 code 的 `conflict`。日志不得包含凭据、向量、规范源文本、请求内容或原始 Qdrant body。
 
 ## 相关文档
 

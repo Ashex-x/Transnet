@@ -558,6 +558,8 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 激活是原子的，必须引用兼容的不可变 Qdrant 节点/边发布。若任一卡片根、领域、证据记录、内容哈希或 Qdrant manifest 缺失或不兼容，激活失败。
 
+引用的 Qdrant manifest 是向量合同定义的完整强类型发布三件套：一个规范发布及 schema、一个已验证不可变节点 collection，以及一个针对该精确节点哈希构建的已验证不可变边 collection。激活不接受单个通用 vector collection ID、活动 alias、不完整 collection 对或 Transnet 本地 ranking version。所提供的 manifest hash 覆盖 collection ID、schema、嵌入修订、数量、哈希与完整端点覆盖。
+
 请求：
 
 ```json

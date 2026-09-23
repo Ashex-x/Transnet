@@ -62,6 +62,8 @@ Validation rejects orphan endpoints, cross-release references, invalid direction
 
 Create one immutable node collection and one immutable edge collection for the release. Both use named dense and sparse vectors and payload indexes required by the [Qdrant contract](../interfaces/qdrant.md). Record dimensions, normalization, embedding models, hashes, schema, counts, and endpoint coverage in the release manifest.
 
+The publisher completes and verifies the deterministic node projection first. It then freezes the node manifest and builds edges against that exact node hash. Reconciliation compares the canonical roots, canonical schema, typed physical collection IDs, payload schemas, embedding revisions and dimensions, node and edge hashes and counts, and complete endpoint coverage. A partial member, active alias, cross-release reference, unresolved relationship wire mapping, or unverified collection blocks activation.
+
 The edge dense vector embeds the complete source–relation–target explanation rather than either endpoint alone. Rebuilding derived exploratory neighbors does not modify verified content.
 
 ## Reconcile and evaluate
@@ -73,6 +75,8 @@ Run the [quality-assurance guide](quality-assurance.md) against the exact staged
 ## Activate and roll back
 
 Activate the MySQL card and canonical-translation release plus paired Qdrant node and edge versions as one logical release. Every request pins the same release identity across both stores. A partial build is never visible, and an alias is never the source of version authority.
+
+Transnet's online request path has read-only authority. Authenticated publisher tooling prepares deterministic projections; island-port owns MySQL/Qdrant credentials, collection mutation, reconciliation persistence, and the atomic active pointer. Activation selects only a completely reconciled immutable trio. Rollback selects a previously validated retained trio without rewriting it, and retention keeps every selected old collection addressable for its supported lifetime.
 
 Rollback selects one unchanged retained trio. Published canonical records are never silently rewritten.
 

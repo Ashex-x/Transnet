@@ -32,6 +32,10 @@ Verified 内容是已发布规范知识；inferred 解释与 exploratory 候选�
 
 一个内容视图由 MySQL 卡片发布及配对的不可变 Qdrant 节点与边 collection 构成。请求只固定三元组一次，每次结构化与向量读取都使用它。MySQL 或签名发布工件是权威来源；Qdrant 是可重建投影，其候选需要同一发布补全。
 
+已实现的 M3 foundation 通过 `KnowledgeReleaseTrio` 表示该激活候选：现有 canonical-only `CanonicalReleasePin`、一个强类型不可变节点 collection manifest、一个强类型不可变边 collection manifest，以及共享的 dense/sparse embedding 修订。边 manifest 绑定已验证节点内容哈希并携带完整端点数量。`ActiveContentVersion` 只保留给较早的进程内单索引检索基础，不是发布权威；其中单个 `vector_collection_id` 绝不能代替两个 M3 collection。
+
+已实现的关系 registry 保留现有图身份，并校验端点 family、逆关系和对称性、证据、已验证生命周期及同发布所有权。精确 Qdrant 映射目前只覆盖合同已冻结的分类与具名强度方向。其他 M3 关系 wire 名及逐类型传递性/因果性仍是目标合同缺口，因此未来投影必须闭合失败。目标节点目录比已实现的 `Sense`、`Lexeme`、`Construction` 和 `Scale` 读取模型 family 更广；phrase、term、concept、entity 及专业节点必须先具备 publisher 所有的 canonical entity 映射，才能在不使用合成 ID 的情况下加入。
+
 向量失败时可返回带显式降级的 MySQL 基础卡，但不得虚构关系或隐藏缺失知识族。权威内容缺失或发布不兼容必须安全失败。实时请求不能创建别名、卡片、事实、领域、边、修订或发布。
 
 精确持久 payload 由 [SQL](../interfaces/mysql_cn.md) 与[向量](../interfaces/qdrant_cn.md)接口负责。

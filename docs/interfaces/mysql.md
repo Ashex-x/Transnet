@@ -547,6 +547,8 @@ Response:
 
 Activation is atomic and references a compatible immutable Qdrant node/edge release. It fails if any card root, domain, evidence record, content hash, or Qdrant manifest is missing or incompatible.
 
+The referenced Qdrant manifest is the complete typed release trio defined by the vector contract: one canonical release and schema, one verified immutable node collection, and one verified immutable edge collection built against the exact node hash. Activation never accepts one generic vector collection identifier, an active alias, an incomplete pair, or a local Transnet ranking version. The supplied manifest hash commits to collection identities, schemas, embedding revisions, counts, hashes, and complete endpoint coverage.
+
 Request:
 
 ```json
