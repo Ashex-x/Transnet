@@ -56,6 +56,8 @@ Model output is provenance, not evidence. A candidate advances only after domain
 
 Build nodes before edges. Each edge names its source and target, relation type and direction, complete relationship explanation, applicable sense and domain, conditions, language, dialect, region, period, evidence state, confidence, provenance, verification state, and release. A versioned relation registry defines inverse, symmetric, transitive, and causal properties; publication does not infer them from labels.
 
+The implemented admission foundation additionally requires an exact frozen Qdrant wire mapping, exact inverse declaration, canonical endpoint kinds and release ownership, verified lifecycle, and a one-to-one resolution of evidence IDs to active source-qualified lineage with storage and embedding permission. Symmetric input is canonicalized for identity only; the publisher does not synthesize an inverse record. Duplicate typed assertions are rejected deterministically regardless of input order or alternate edge IDs. Until canonical domain IDs and condition schemas are frozen, string domain scope and free-text conditions fail closed rather than entering projection payloads.
+
 Validation rejects orphan endpoints, cross-release references, invalid direction, duplicate typed edges, missing evidence, incompatible senses, and unsupported language or domain claims. Intensity gradients name their dimension and never masquerade as taxonomy. Embedding neighbors remain exploratory and separate from verified edges.
 
 ## Build immutable Qdrant collections

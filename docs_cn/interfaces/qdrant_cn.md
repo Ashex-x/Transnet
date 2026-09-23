@@ -204,6 +204,10 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 当前 Transnet registry 只冻结此处已有规范方向的映射：内部 `Hypernym` 以宽义指向窄义并发布为 `has_subtype`；内部 `Hyponym` 以窄义指向宽义并发布为 `is_a`；`LowerDegree` 与 `HigherDegree` 分别发布为 `lower_degree_than` 与 `higher_degree_than`。同义、反义、翻译等价、形态、构式、词源及弱关联保留已有内部方向与逆关系规则，但其 Qdrant wire 名、传递性与因果性仍是未解决的 contract gap。发布必须闭合失败，不能从 Rust variant 或英文标签推导名称。
 
+投影前，已实现的 Transnet admission boundary 要求声明的 wire relation 与 inverse 精确匹配 registry，验证允许的端点 kind，并为 identity 确定性规范化对称端点，但不生成第二条 inverse edge。一个稳定 edge identity 包含不可变发布、publisher 分配的 relationship ID 与 revision、规范端点、内部关系类型和已接纳 scope；runtime rank、插入顺序、request ID、时间戳及 Qdrant 生成 ID 均不参与。重复 typed assertion 另行按发布、规范化端点、关系类型和 scope 拒绝，即使 publisher 提供了不同 relationship ID。Evidence revision 是否进入 edge identity 仍未冻结，因此不会猜测。
+
+Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精确 ID 集必须匹配，每个 fragment 必须属于关系发布，source 与 fragment permission 都必须允许 storage 和 embedding，fragment 必须 active，generated evidence 必须已完成审核提升。Evidence confidence 使用现有闭合 `High`、`Medium`、`Low` domain 值，因此缺失或越界的数值无法进入该 domain boundary。当前 `GraphScope` 可安全携带强类型 dialect 与有界非空 register。自由文本 condition 与字符串 domain scope 在 canonical condition 和 domain-ID 语义冻结前一律拒绝进入 M3 投影。
+
 `is_a` 从较窄词义指向较宽类别，`has_subtype` 是其逆关系。`lower_degree_than` 与 `higher_degree_than` 只在命名且兼容的维度内比较成员。程度边不暗示分类、同义或可互换。
 
 ## 语义尺度 point
