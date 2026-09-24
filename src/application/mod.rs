@@ -14,6 +14,8 @@ pub mod content_release;
 pub mod graph;
 /// Public bounded graph-topology snapshot caching with version-pinned cache keys.
 pub mod graph_topology_cache;
+/// Deterministic release-pinned knowledge projection preparation.
+pub mod knowledge_projection;
 /// Structured lookup orchestration.
 pub mod lookup;
 /// Bounded response-neutral delivery of closed metric events.

@@ -4,7 +4,7 @@
 
 This contract defines island-port's vector and graph HTTP endpoints for versioned canonical nodes and edges. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. Point examples document island-port's internal projection.
 
-Status: target island-port contract. Transnet contains the typed release-trio and relationship-rule foundation, but the current executable does not compose a vector client or publisher. Island-port/Qdrant build, reconciliation, activation, rollback, and production acceptance remain external work.
+Status: target island-port contract. Transnet contains the typed release-trio and relationship admission foundation plus deterministic pre-publication node/edge build artifacts, but the current executable does not compose a vector client or publisher. Preparation currently projects only authoritative active `Lexeme` and `Sense` records, records the named `semantic` and `lexical` embedding requirements without generating vectors, and builds edges only after every endpoint resolves in the exact node artifact. Construction, scale, and the broader target catalog remain closed until publisher-owned canonical sources are frozen. Island-port/Qdrant collection build, reconciliation, activation, rollback, and production acceptance remain external work.
 
 ## Contents
 
@@ -81,6 +81,8 @@ Release manifest example:
 The physical node and edge collection identifiers are different typed members; an active alias is never accepted as either immutable identifier. The canonical release, both collection manifests, both embedding revisions, and endpoint coverage form one activation candidate. Both collections must be verified, the payload schemas must match, the edge manifest must name the exact verified node hash, and every edge endpoint must resolve in that node collection. A Transnet ranking version is request-time policy and is not part of this authority-owned manifest.
 
 Node projection completes and verifies before edge construction starts. Island-port rejects a missing member, cross-release member, schema or embedding mismatch, count or hash mismatch, incomplete endpoint coverage, or unverified build; no placeholder collection identifier is permitted.
+
+Transnet's pre-publication artifact is intentionally not a collection manifest. It has no physical collection ID and never claims the `verified` collection lifecycle state. Stable point IDs are SHA-256 values over a length-prefixed, versioned canonical serialization of the release, payload schema, typed canonical identity, and point family. Point and build content hashes use the same explicit serialization, sorted typed identities, sorted evidence references, and fixed field order; insertion order, request IDs, timestamps, ranking scores, Debug output, and Qdrant-generated values do not participate. Exact duplicate nodes are collapsed, conflicting duplicates fail closed, Stage 2 rejects duplicate typed relationships, and the edge artifact binds the exact node build hash together with expected and resolved endpoint counts.
 
 ## Knowledge node point
 

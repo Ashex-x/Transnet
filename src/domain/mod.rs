@@ -10,6 +10,8 @@ pub mod canonical_translation;
 pub mod content_release;
 /// Typed, evidence-backed graph topology and traversal limits.
 pub mod graph;
+/// Deterministic pre-publication node and edge projection artifacts.
+pub mod knowledge_projection;
 /// Immutable canonical, node-collection, and edge-collection release-trio invariants.
 pub mod knowledge_release;
 /// Bounded canonical lookup-card presentation values with assertion-level provenance.

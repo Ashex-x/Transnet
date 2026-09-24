@@ -4,7 +4,7 @@ English: [Publish canonical knowledge content](../../docs/guides/content-publish
 
 本指南定义 MySQL 基础卡、规范翻译以及配对 Qdrant 知识节点/知识边集合的拟议发布流程，面向内容工程师和发布运维人员。
 
-状态：拟议；当前运行时没有摄取或发布流水线。
+状态：拟议；当前运行时没有摄取或发布流水线。Transnet 目前具有离线、确定性的准备基础，可建立钉住发布的 node-first、edge-second 构建工件，但不生成嵌入、不分配 collection ID、不写入 Qdrant，也不把 production collection 标为 verified。
 
 ## 前置条件
 
@@ -33,6 +33,8 @@ flowchart LR
 规范化 Unicode、语言/文字标签、语言感知的规范形式和查询形式、词性、词义、翻译、转写、发音、形态、领域、方言、地区、时代和证据范围，并在嵌入前生成确定性 ID。
 
 每个可独立选择的词义创建一个无 Qdrant 仍可用的精简 MySQL `BasicCard`，包含规范形式与别名、精简翻译与定义、发音与形态摘要、例句、用法说明、领域、证据元数据、发布状态和知识根 ID。Qdrant 节点表示可独立解释的词义、短语、术语、概念、实体、现象、机理、过程、方程、物理量、材料、仪器、方法、技术、应用、标准、组织、人物、地点、习语、隐喻、语法模式、搭配、误解和领域。
+
+已实现的准备 builder 当前只接纳 active 的权威 lexeme 与 sense，因为只有这些 node family 能在不合成 publisher identity 的前提下无损重建。它先确定性排序并 hash node point，再只接纳 Stage 2 已验证且两个端点都存在于该精确 node 工件中的 relationship。缺失端点、跨发布内容、未解析 wire mapping、不兼容 embedding specification、inactive 内容与冲突重复节点全部闭合失败。生成的 summary 携带 release、schema、embedding requirement、hash、count、node-hash binding 与 endpoint coverage，但有意不携带物理 collection ID 或 production verification state。
 
 仅为已审核、可复用的共享内容创建规范翻译修订。记录其单词、短语或段落单元，带语言标签的精确源文与译文，适用词义、方言、语域和领域范围，来源与证据，发布权利声明，选择理由，审核决定，normalizer 版本及内容 hash。绝不从请求日志产生候选，也绝不摄取私有用户保存内容。基础卡引用与精确翻译解析相同的已发布翻译身份。
 

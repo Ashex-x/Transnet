@@ -36,7 +36,9 @@ Verified 内容是已发布规范知识；inferred 解释与 exploratory 候选�
 
 已实现的关系 registry 保留现有图身份，并校验端点 family、逆关系和对称性、证据、已验证生命周期及同发布所有权。精确 Qdrant 映射目前只覆盖合同已冻结的分类与具名强度方向。其他 M3 关系 wire 名及逐类型传递性/因果性仍是目标合同缺口，因此未来投影必须闭合失败。目标节点目录比已实现的 `Sense`、`Lexeme`、`Construction` 和 `Scale` 读取模型 family 更广；phrase、term、concept、entity 及专业节点必须先具备 publisher 所有的 canonical entity 映射，才能在不使用合成 ID 的情况下加入。
 
-`PublishedRelationship` 是已实现的 Stage 2 admission aggregate。它将 stored relation 与两个端点的发布所有权、精确声明的 wire 方向和 inverse、经审核的 M2 evidence lineage 以及 verified lifecycle state 绑定。稳定 `PublishedEdgeIdentity` 包含 canonical relationship ID 与 revision，但在合同决策前排除 evidence revision。批量校验先按该 identity 排序，再验证候选，并使用独立的 scope-aware semantic key 拒绝重复 typed assertion，不受输入顺序或所提供 edge ID 影响。这只是 domain/contract boundary；生产 projection builder 或 Qdrant mutation path 尚不存在。
+`PublishedRelationship` 是已实现的 Stage 2 admission aggregate。它将 stored relation 与两个端点的发布所有权、精确声明的 wire 方向和 inverse、经审核的 M2 evidence lineage 以及 verified lifecycle state 绑定。稳定 `PublishedEdgeIdentity` 包含 canonical relationship ID 与 revision，但在合同决策前排除 evidence revision。批量校验先按该 identity 排序，再验证候选，并使用独立的 scope-aware semantic key 拒绝重复 typed assertion，不受输入顺序或所提供 edge ID 影响。
+
+Stage 3 preparation foundation 将 active 的权威 lexeme 与 sense 转换为确定性 node 工件，然后仅在两个端点都能从精确 node set 解析后，把已 admission 的 relationship 转换为 edge 工件。稳定 point ID 与内容 hash 使用带版本的 `knowledge-projection-hash-v1` 长度前缀规范序列化，而不依赖 JSON map 顺序或 Debug 输出。Build summary 绑定 release、payload schema、具名 dense/sparse embedding requirement、有序内容 hash、count、node-build hash 与完整 endpoint coverage。它们是不含 collection ID、也不声明 production `Verified` 的预发布值；当前不存在 Qdrant client、embedding generation、mutation、reconciliation 或 activation 路径。
 
 向量失败时可返回带显式降级的 MySQL 基础卡，但不得虚构关系或隐藏缺失知识族。权威内容缺失或发布不兼容必须安全失败。实时请求不能创建别名、卡片、事实、领域、边、修订或发布。
 

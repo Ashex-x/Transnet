@@ -4,7 +4,7 @@ English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
 
 本合同定义 island-port 提供的向量与图 HTTP endpoint，用于版本化规范节点与边。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。Point 示例描述 island-port 的内部投影。
 
-状态：目标 island-port 合同。Transnet 已包含强类型发布三件套与关系规则基础，但当前可执行文件尚未组合向量客户端或 publisher。Island-port/Qdrant 构建、对账、激活、回滚及生产验收仍是外部工作。
+状态：目标 island-port 合同。Transnet 已包含强类型发布三件套、关系 admission 基础以及确定性的预发布节点/边构建工件，但当前可执行文件尚未组合向量客户端或 publisher。准备步骤当前只投影权威且 active 的 `Lexeme` 与 `Sense` 记录，记录具名 `semantic` 和 `lexical` 嵌入要求但不生成向量，并且仅在所有端点都能从同一精确节点工件解析后构建边。Construction、scale 与更广泛的目标目录在 publisher-owned 规范来源冻结前保持闭合。Island-port/Qdrant collection 构建、对账、激活、回滚及生产验收仍是外部工作。
 
 ## 目录
 
@@ -96,6 +96,8 @@ Point ID 必须确定。先构建节点再构建边。发布拒绝缺失端点�
 物理节点与边 collection ID 是不同的强类型成员；活动 alias 不能作为任一不可变 ID。规范发布、两个 collection manifest、两种嵌入修订与端点覆盖共同形成一个激活候选。两个 collection 均须已验证，payload schema 必须匹配，边 manifest 必须指向精确的已验证节点哈希，且所有边端点都必须在该节点 collection 中解析。Transnet 本地 ranking version 属于请求时策略，不进入此权威 manifest。
 
 节点投影必须先完成并验证，之后才开始边构建。Island-port 拒绝成员缺失、跨发布成员、schema 或嵌入不匹配、数量或哈希不匹配、端点覆盖不完整以及未验证构建；不得使用占位 collection ID。
+
+Transnet 的预发布工件明确不是 collection manifest。它没有物理 collection ID，也绝不声明 `verified` collection 生命周期状态。稳定 point ID 是对发布、payload schema、强类型规范身份和 point family 的带长度前缀、版本化规范序列化取 SHA-256 得到的值。Point 与 build 内容 hash 使用相同的显式序列化、排序后的强类型身份与 evidence 引用以及固定字段顺序；输入顺序、request ID、时间戳、ranking score、Debug 输出和 Qdrant 生成值均不参与。完全相同的重复节点会折叠，冲突重复节点闭合失败，Stage 2 拒绝重复 typed relationship；edge 工件绑定精确 node build hash 以及 expected/resolved endpoint 数量。
 
 ## 知识节点 point
 

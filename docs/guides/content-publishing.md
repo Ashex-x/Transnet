@@ -4,7 +4,7 @@
 
 This guide defines the proposed release workflow for MySQL basic cards and canonical translations plus paired Qdrant knowledge-node and knowledge-edge collections. It is intended for content engineers and release operators.
 
-Status: proposed; the current runtime has no ingestion or publication pipeline.
+Status: proposed; the current runtime has no ingestion or publication pipeline. Transnet now has an offline deterministic preparation foundation that creates release-pinned node-first and edge-second build artifacts without generating embeddings, allocating collection IDs, writing Qdrant, or marking a production collection verified.
 
 ## Preconditions
 
@@ -45,6 +45,8 @@ Create domain knowledge profiles and atomic facts before building their vector p
 Create semantic scales independently from taxonomy. A scale names its dimension, direction, conditions, domains, evidence, and ordered sense-qualified members. Positions establish order but not equal distance. Validators reject cycles in taxonomy, inconsistent inverse edges, duplicated scale positions, incompatible member senses, missing evidence, and any conversion between `is_a` and degree relations.
 
 Create Qdrant nodes for independently explainable lexical senses, phrases, terms, concepts, entities, phenomena, mechanisms, processes, equations, quantities, materials, instruments, methods, technologies, applications, standards, organizations, people, places, idioms, metaphors, grammar patterns, collocations, misconceptions, and domains. Aliases, translations, transliterations, romanizations, abbreviations, formulas, and exact technical forms feed the sparse representation; the scoped retrieval description feeds the dense vector.
+
+The implemented preparation builder currently accepts only active authoritative lexemes and senses because those are the node families that can be reconstructed without synthetic publisher identities. It deterministically orders and hashes node points, then admits only Stage 2-validated relationships whose endpoints both exist in that exact node artifact. Missing endpoints, cross-release content, unresolved wire mappings, incompatible embedding specifications, inactive content, and conflicting duplicate nodes fail closed. The resulting summaries carry release, schema, embedding requirements, hashes, counts, node-hash binding, and endpoint coverage, but deliberately carry no physical collection ID or production verification state.
 
 ## Bootstrap with generated candidates
 
