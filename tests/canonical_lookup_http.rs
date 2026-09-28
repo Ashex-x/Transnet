@@ -61,6 +61,7 @@ fn candidate() -> CanonicalCandidate {
       release_id: release_id.clone(),
       language: language(),
       lemma: "hot".to_string(),
+      lemma_evidence_ids: vec![evidence_id.clone()],
       normalized_lemma: "hot".to_string(),
       part_of_speech: LexicalPartOfSpeech::Adjective,
       status: CanonicalStatus::Active,

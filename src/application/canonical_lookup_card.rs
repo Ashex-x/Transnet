@@ -531,6 +531,7 @@ mod tests {
         release_id: id("release-1"),
         language: language(),
         lemma: lemma.to_string(),
+        lemma_evidence_ids: vec![evidence_id.clone()],
         normalized_lemma: lemma.to_string(),
         part_of_speech: LexicalPartOfSpeech::Adjective,
         status: CanonicalStatus::Active,

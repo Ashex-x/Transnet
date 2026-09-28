@@ -76,6 +76,7 @@ fn candidate(release: &CanonicalReleasePin, suffix: &str) -> CanonicalCandidate 
       release_id: release.release_id.clone(),
       language: language("en"),
       lemma: "sweltering".into(),
+      lemma_evidence_ids: vec![evidence_id.clone()],
       normalized_lemma: "sweltering".into(),
       part_of_speech: LexicalPartOfSpeech::Adjective,
       status: CanonicalStatus::Active,

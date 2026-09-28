@@ -52,13 +52,13 @@ flowchart LR
 
 ## 构建与校验边
 
-节点先于边构建。每条边指定两端、类型、方向、完整解释、适用词义与领域、条件、语言、方言、地区、时代、证据状态、置信度、来源、验证状态和发布。版本化关系注册表定义逆关系、对称性、传递性和因果性，不从标签猜测。校验拒绝孤立端点、跨发布引用、无效方向、重复边、缺失证据与不兼容词义。强度不得冒充分类，探索邻居与已验证边分开。
+节点先于边构建。每条边指定两端、类型、方向、适用词义与领域、条件、语言、方言、地区、时代、证据状态、置信度、来源、验证状态和发布。不存在新的权威关系解释 prose：带版本的 edge input 由冻结 endpoint lexical input、typed wire relation、已接纳 structured scope 与 verified evidence metadata 确定性组装。版本化关系注册表定义逆关系、对称性、传递性和因果性，不从标签猜测。校验拒绝孤立端点、跨发布引用、无效方向、重复边、缺失证据与不兼容词义。强度不得冒充分类，探索邻居与已验证边分开。
 
 已实现的 admission foundation 还要求精确且已冻结的 Qdrant wire 映射、精确 inverse 声明、规范端点 kind 与发布所有权、verified lifecycle，以及 evidence ID 到具有 storage/embedding permission 的 active、source-qualified lineage 的一对一解析。对称输入只为 identity 进行规范化；publisher 不合成 inverse record。重复 typed assertion 不受输入顺序或替代 edge ID 影响，均被确定性拒绝。在 canonical domain ID 和 condition schema 冻结前，字符串 domain scope 与自由文本 condition 闭合失败，不进入投影 payload。
 
 ## 构建不可变 Qdrant 集合
 
-为发布创建一个不可变节点集合和一个不可变边集合，同时使用具名稠密/稀疏向量和 [Qdrant 合同](../interfaces/qdrant_cn.md)的 Payload 索引。在 Manifest 中记录维度、规范化、嵌入模型、哈希、Schema、数量和端点覆盖率。边稠密向量嵌入完整的源–关系–目标解释；重建探索邻居不会修改已验证内容。
+为发布创建一个不可变节点集合和一个不可变边集合，同时使用具名稠密/稀疏向量和 [Qdrant 合同](../interfaces/qdrant_cn.md)的 Payload 索引。在 Manifest 中记录维度、规范化、嵌入模型、哈希、Schema、数量和端点覆盖率。Edge dense/lexical input 绑定两端冻结 input hash 与完整的已接纳结构化关系；island-port 解析端点输入并应用精确批准的 compatibility-registry entry。重建探索邻居不会修改已验证内容。
 
 Publisher 必须先完成并验证确定性节点投影，再冻结节点 manifest，并针对该精确节点哈希构建边。对账比较规范根、规范 schema、强类型物理 collection ID、payload schema、嵌入修订与维度、节点/边哈希和数量以及完整端点覆盖。成员缺失、活动 alias、跨发布引用、未解析的关系 wire 映射或未验证 collection 均阻止激活。
 

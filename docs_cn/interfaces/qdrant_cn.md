@@ -4,7 +4,7 @@ English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
 
 本合同定义 island-port 提供的向量与图 HTTP endpoint，用于版本化规范节点与边。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。Point 示例描述 island-port 的内部投影。
 
-状态：目标 island-port 合同。Transnet 已包含强类型发布三件套、关系 admission 基础以及确定性的预发布节点/边构建工件，但当前可执行文件尚未组合向量客户端或 publisher。准备步骤当前只投影权威且 active 的 `Lexeme` 与 `Sense` 记录，记录具名 `semantic` 和 `lexical` 嵌入要求但不生成向量，并且仅在所有端点都能从同一精确节点工件解析后构建边。Construction、scale 与更广泛的目标目录在 publisher-owned 规范来源冻结前保持闭合。Island-port/Qdrant collection 构建、对账、激活、回滚及生产验收仍是外部工作。
+状态：目标 island-port 合同。Transnet 已包含强类型发布三件套、关系 admission 基础以及确定性的预发布节点/边构建工件，但当前可执行文件尚未组合向量客户端或 publisher。准备步骤当前只投影权威且 active 的 `Lexeme` 与 `Sense` 记录，解析其具备 embedding 权限的词汇 evidence，冻结独立 dense/lexical 规范输入但不生成向量，并且仅在所有端点都能从同一精确节点工件解析后构建边。Construction、scale 与更广泛的目标目录在 publisher-owned 规范来源冻结前保持闭合。Island-port/Qdrant collection 构建、对账、激活、回滚及生产验收仍是外部工作。
 
 ## 目录
 
@@ -48,9 +48,19 @@ Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 
 
 ## 存储边界
 
-Qdrant 存储规范 Transnet 概念之间的关系。它是可重建的只读投影，MySQL 与经认证的发布工件仍是权威来源。
+Qdrant 存储规范 Transnet 概念之间的关系。它是可重建的只读投影，MySQL 与经认证的发布工件仍是权威来源。向量只从已发布规范内容与已接纳的结构化关系生成，绝不嵌入或保存运行时请求文本。
 
-Qdrant 不包含用户、学习者、账户、画像、偏好、查询、上下文、源段落、历史、保存项目、书签、练习、答案、掌握度、日程、布局、反馈、录音或隐私流程数据。向量只能由已发布规范内容及关系解释生成；运行时请求文本绝不嵌入或存储。
+## 规范 embedding 输入
+
+冻结的输入合同为 `node-dense-input-v1`、`node-lexical-input-v1`、`edge-dense-input-v1` 与 `edge-lexical-input-v1`。每种合同使用结构化 UTF-8 规范字节、NFC（不使用 NFKC）、保留大小写与技术符号、固定字段 tag/顺序、无符号大端字节长度前缀、显式单字节 optional presence marker，以及确定性排序的有界列表。Release、typed identity、input family 与 input-spec version 都进入序列化。Dense 与 lexical 使用独立的带版本 hash domain；二者都不是 Stage 3 projection content hash，也不是未来 persisted collection hash。
+
+Node material 仅允许 active 且归属同一发布的 lexeme、lemma 专属 evidence、可选 active 且归属一致的 sense 与 definition evidence、active word form、具备来源的 localized gloss、meaning scope 与节点匹配的已审核非 passage translation，以及允许 `embedding` 的精确 source/evidence lineage。空 optional list 明确编码 absence。禁止 query-derived alias、heuristic form、模型输出及未经审核的 translation。
+
+Edge input 不包含 publisher 编写或生成式 explanation prose。它绑定冻结的 source/target node input hash、规范 relationship identity 与 revision、精确 typed/wire relation、已接纳 structured scope，以及 verified evidence identity、source、content hash 与 confidence。Island-port 在编码向量前必须通过 endpoint hash 解析已冻结 node input。
+
+Island-port 是 embedding authority。`semantic` 使用受控 dense model；`lexical` 使用带版本的确定性 lexical encoder。闭合 compatibility registry 将精确 model/encoder identity 与 revision 映射到允许的 dimensions 和 input-spec version。Registry entry 缺失、dimension 漂移、model revision 漂移或 input-spec 不匹配均闭合失败。在生产 registry entry 获批前，本合同不虚构实际 model revision 或 dimensions。
+
+Qdrant 不包含用户、学习者、账户、画像、偏好、查询、上下文、源段落、历史、保存项目、书签、练习、答案、掌握度、日程、布局、反馈、录音或隐私流程数据。向量只能由已发布规范内容及已接纳的结构化关系生成；运行时请求文本绝不嵌入或存储。
 
 ## 发布与集合合同
 
@@ -182,7 +192,6 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
     "source_node_id": "node_sweltering_hot_01",
     "target_node_id": "node_scorching_heat_01",
     "relation_type": "higher_degree",
-    "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
     "applicable_sense_ids": ["sense_sweltering_hot_01"],
     "conditions": ["temperature describes weather or an environment"],
     "restrictions": {
@@ -344,7 +353,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 
 ## POST /api/v1/edges/search
 
-检索规范关系解释。先应用资格过滤条件再限制数量，已验证和探索性结果必须分开。
+检索规范结构化关系。先应用资格过滤条件再限制数量，已验证和探索性结果必须分开。
 
 请求：
 
@@ -385,7 +394,6 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
         "source_node_id": "node_sweltering_hot_01",
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree",
-        "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
         "fact_id": "fact_sweltering_degree_scorching_01",
         "fact_revision": 2,
         "verification_state": "verified"

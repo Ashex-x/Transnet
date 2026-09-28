@@ -287,11 +287,11 @@ fn candidate_response() -> Value {
         "match_class": "exact_canonical",
         "lexical_score_basis_points": 10000,
         "candidate": {
-          "lexeme": {"id":"lexeme_sweltering","language":"en","lemma":"sweltering","normalized_lemma":"sweltering","part_of_speech":"adjective","status":"active"},
+          "lexeme": {"id":"lexeme_sweltering","language":"en","lemma":"sweltering","lemma_evidence_ids":["evidence_lemma"],"normalized_lemma":"sweltering","part_of_speech":"adjective","status":"active"},
           "sense": {"id":"sense_sweltering_hot","lexeme_id":"lexeme_sweltering","sense_key":"weather-hot","definition":"uncomfortably hot","definition_evidence_ids":["evidence_dictionary_1042"],"status":"active"},
           "forms": [{"id":"form_sweltering","lexeme_id":"lexeme_sweltering","form":"sweltering","normalized_form":"sweltering","kind":"lemma","morphology":null,"evidence_ids":["evidence_dictionary_1042"],"status":"active"}],
           "sources": [{"release_id":"knowledge-2026-09","source":{"id":"source_dictionary","name":"Reviewed dictionary","version":"2026-09","license":"internal-reviewed","attribution":"Reviewed dictionary attribution","permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true}}}],
-          "evidence": [{"id":"evidence_dictionary_1042","source_id":"source_dictionary","source_reference":"entry:1","language":"en","kind":"definition","confidence":"high","text":"uncomfortably hot","content_hash":"sha256:abc","permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true},"status":"active"}]
+          "evidence": [{"id":"evidence_dictionary_1042","source_id":"source_dictionary","source_reference":"entry:1","language":"en","kind":"definition","confidence":"high","text":"uncomfortably hot","content_hash":"sha256:abc","permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true},"status":"active"},{"id":"evidence_lemma","source_id":"source_dictionary","source_reference":"entry:lemma","language":"en","kind":"other","confidence":"high","text":"sweltering","content_hash":"sha256:lemma","permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true},"status":"active"}]
         }
       }],
       "alternatives": [],
@@ -441,7 +441,7 @@ async fn pinned_sense_rejects_canonical_schema_mismatch() {
     "request_id":"req_stage_3", "schema_version":"mysql-adapter-v1", "outcome":"ok",
     "content_release":"release-r1",
     "value": {"canonical_schema_version":"canonical-v2", "target":{
-      "lexeme":{"id":"lexeme_x","language":"en","lemma":"x","normalized_lemma":"x","part_of_speech":"noun","status":"active"},
+      "lexeme":{"id":"lexeme_x","language":"en","lemma":"x","lemma_evidence_ids":["evidence_x"],"normalized_lemma":"x","part_of_speech":"noun","status":"active"},
       "sense":{"id":"sense_x","lexeme_id":"lexeme_x","sense_key":"one","definition":"x","definition_evidence_ids":[],"status":"active"}
     }, "lineages":{},
       "localized_glosses":[],"pronunciations":[],"usage_labels":[],"grammar_patterns":[],
@@ -484,10 +484,15 @@ async fn sense_response_constructs_target_independently() {
     "value": {
       "canonical_schema_version": "canonical-v1",
       "target": {
-        "lexeme": {"id":"lexeme_sweltering","language":"en","lemma":"sweltering","normalized_lemma":"sweltering","part_of_speech":"adjective","status":"active"},
+        "lexeme": {"id":"lexeme_sweltering","language":"en","lemma":"sweltering","lemma_evidence_ids":["evidence_definition"],"normalized_lemma":"sweltering","part_of_speech":"adjective","status":"active"},
         "sense": {"id":"sense_sweltering_hot","lexeme_id":"lexeme_sweltering","sense_key":"weather-hot","definition":"uncomfortably hot","definition_evidence_ids":[],"status":"active"}
       },
       "lineages": {
+        "evidence_definition": {
+          "source": {"id":"source_dictionary","name":"Reviewed dictionary","version":"2026-09","license":"internal-reviewed","attribution":null,"permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true}},
+          "fragment": {"id":"evidence_definition","source_id":"source_dictionary","source_reference":"entry:lemma","language":"en","kind":"other","confidence":"high","text":"sweltering","content_hash":"sha256:lemma","permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true},"status":"active"},
+          "origin": {"kind":"licensed_source"}
+        },
         "evidence_gloss": {
           "source": {"id":"source_dictionary","name":"Reviewed dictionary","version":"2026-09","license":"internal-reviewed","attribution":null,"permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true}},
           "fragment": {"id":"evidence_gloss","source_id":"source_dictionary","source_reference":"entry:gloss","language":"zh-CN","kind":"localized_gloss","confidence":"high","text":"酷热的","content_hash":"sha256:gloss","permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true},"status":"active"},
@@ -528,7 +533,7 @@ async fn dangling_lineage_reference_and_unknown_fields_fail_closed() {
     "value": {
       "canonical_schema_version": "canonical-v1",
       "target": {
-        "lexeme": {"id":"lexeme_x","language":"en","lemma":"x","normalized_lemma":"x","part_of_speech":"noun","status":"active"},
+        "lexeme": {"id":"lexeme_x","language":"en","lemma":"x","lemma_evidence_ids":["evidence_x"],"normalized_lemma":"x","part_of_speech":"noun","status":"active"},
         "sense": {"id":"sense_x","lexeme_id":"lexeme_x","sense_key":"one","definition":"x","definition_evidence_ids":[],"status":"active"}
       },
       "lineages": {},

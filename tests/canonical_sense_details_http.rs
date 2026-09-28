@@ -91,6 +91,7 @@ fn target(release_id: &str, sense_id: &str, status: CanonicalStatus) -> SenseCon
     release_id: release_id.clone(),
     language: language("en-US"),
     lemma: "run".to_string(),
+    lemma_evidence_ids: Vec::new(),
     normalized_lemma: "run".to_string(),
     part_of_speech: LexicalPartOfSpeech::Verb,
     status,

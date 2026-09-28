@@ -56,7 +56,7 @@ Model output is provenance, not evidence. A candidate advances only after domain
 
 ## Build and validate edges
 
-Build nodes before edges. Each edge names its source and target, relation type and direction, complete relationship explanation, applicable sense and domain, conditions, language, dialect, region, period, evidence state, confidence, provenance, verification state, and release. A versioned relation registry defines inverse, symmetric, transitive, and causal properties; publication does not infer them from labels.
+Build nodes before edges. Each edge names its source and target, relation type and direction, applicable sense and domain, conditions, language, dialect, region, period, evidence state, confidence, provenance, verification state, and release. No new relationship-explanation prose is authoritative: the versioned edge input is deterministically assembled from the frozen endpoint lexical inputs, typed wire relation, admitted structured scope, and verified evidence metadata. A versioned relation registry defines inverse, symmetric, transitive, and causal properties; publication does not infer them from labels.
 
 The implemented admission foundation additionally requires an exact frozen Qdrant wire mapping, exact inverse declaration, canonical endpoint kinds and release ownership, verified lifecycle, and a one-to-one resolution of evidence IDs to active source-qualified lineage with storage and embedding permission. Symmetric input is canonicalized for identity only; the publisher does not synthesize an inverse record. Duplicate typed assertions are rejected deterministically regardless of input order or alternate edge IDs. Until canonical domain IDs and condition schemas are frozen, string domain scope and free-text conditions fail closed rather than entering projection payloads.
 
@@ -68,7 +68,7 @@ Create one immutable node collection and one immutable edge collection for the r
 
 The publisher completes and verifies the deterministic node projection first. It then freezes the node manifest and builds edges against that exact node hash. Reconciliation compares the canonical roots, canonical schema, typed physical collection IDs, payload schemas, embedding revisions and dimensions, node and edge hashes and counts, and complete endpoint coverage. A partial member, active alias, cross-release reference, unresolved relationship wire mapping, or unverified collection blocks activation.
 
-The edge dense vector embeds the complete source–relation–target explanation rather than either endpoint alone. Rebuilding derived exploratory neighbors does not modify verified content.
+The edge dense and lexical inputs bind both frozen endpoint input hashes and the complete admitted structured relationship. Island-port resolves those endpoint inputs and applies the exact approved compatibility-registry entry. Rebuilding derived exploratory neighbors does not modify verified content.
 
 ## Reconcile and evaluate
 

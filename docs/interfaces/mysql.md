@@ -291,11 +291,11 @@ Response:
         "matched_form_id": "form_sweltering_lemma_01",
         "lexical_score_basis_points": 10000,
         "candidate": {
-          "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+          "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "lemma_evidence_ids": ["evidence_dictionary_lemma_1041"], "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
           "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": ["evidence_dictionary_1042"], "status": "active"},
           "forms": [{"id": "form_sweltering_lemma_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "form": "sweltering", "normalized_form": "sweltering", "kind": "lemma", "morphology": null, "evidence_ids": ["evidence_dictionary_1042"], "status": "active"}],
           "sources": [{"release_id": "knowledge-2026-09", "source": {"id": "source_dictionary_2026_01", "name": "Reviewed dictionary", "version": "2026-09", "license": "reviewed", "attribution": "Dictionary publisher (2026)", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}}}],
-          "evidence": [{"id": "evidence_dictionary_1042", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:adj:1", "language": "en", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "content_hash": "sha256:4ef760d1...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}]
+          "evidence": [{"id": "evidence_dictionary_lemma_1041", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:lemma", "language": "en", "kind": "other", "confidence": "high", "text": "sweltering", "content_hash": "sha256:lemma...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}, {"id": "evidence_dictionary_1042", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:adj:1", "language": "en", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "content_hash": "sha256:4ef760d1...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}]
         }
       }
     ],
@@ -309,6 +309,8 @@ Response:
 Uniqueness is enforced by stable form, card, and sense IDs plus published canonical-form and alias rows, never by an ad hoc normalized lookup string. All eligible collisions at the best applicable rank are returned for resolution by the service.
 
 Each candidate must carry the authoritative, release-bound source record for every evidence fragment. `source.id` must equal `evidence.source_id`; source and evidence permissions must both authorize the requested use, and evidence permissions cannot exceed source permissions. For public redistribution, `source.attribution` is a nonempty, reviewed human-readable attribution (at most 256 Unicode characters), not a label synthesized from source ID or name. Missing, duplicate, conflicting, unlicensed, or cross-release source/evidence records fail closed. The adapter resolves these strict private DTOs into the existing candidate/source/evidence domain types; island-port must add this source chain before production delivery. Content hash and permission bits remain internal.
+
+`lexeme.lemma_evidence_ids` is a required, sorted, unique list of one to eight evidence IDs supporting the canonical lemma assertion itself. It is not borrowed from sense-definition evidence, does not imply `FormKind::Lemma`, and never participates in lexeme identity. Every ID must resolve through the response evidence/source chain (or the indexed `lineages` map for `senses/get`) to the same release and requested permission; dangling, duplicate, conflicting, or unused lineage fails closed.
 
 The Stage 4 canonical-only caller names its actual baseline NFC/lowercased lookup behavior `unicode-nfc-lookup-v1`; the previous illustrative `unicode-nfkc-v2` value did not describe that implementation. This version is request-local normalization metadata, not canonical authority data or identity.
 
@@ -338,10 +340,10 @@ Response:
   "value": {
     "canonical_schema_version": "canonical-v1",
     "target": {
-      "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+      "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "lemma_evidence_ids": ["evidence_dictionary_lemma_1041"], "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
       "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": [], "status": "active"}
     },
-    "lineages": {},
+    "lineages": {"evidence_dictionary_lemma_1041": {"source": {"id": "source_dictionary_2026_01", "name": "Reviewed dictionary", "version": "2026-09", "license": "reviewed", "attribution": "Dictionary publisher (2026)", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}}, "fragment": {"id": "evidence_dictionary_lemma_1041", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:lemma", "language": "en", "kind": "other", "confidence": "high", "text": "sweltering", "content_hash": "sha256:lemma...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}, "origin": {"kind": "licensed_source"}}},
     "localized_glosses": [],
     "pronunciations": [],
     "usage_labels": [],

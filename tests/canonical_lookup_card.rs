@@ -58,6 +58,7 @@ fn candidate(sense_id: &str, sense_key: &str) -> CanonicalCandidate {
       release_id: id("release-1"),
       language: language(),
       lemma: "hot".to_string(),
+      lemma_evidence_ids: vec![evidence_id.clone()],
       normalized_lemma: "hot".to_string(),
       part_of_speech: LexicalPartOfSpeech::Adjective,
       status: CanonicalStatus::Active,

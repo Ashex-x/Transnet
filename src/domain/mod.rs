@@ -8,6 +8,8 @@ pub mod canonical_content;
 pub mod canonical_translation;
 /// Immutable content-release staging, validation, publication, and rollback invariants.
 pub mod content_release;
+/// Release-pinned authoritative material and canonical embedding-input contracts.
+pub mod embedding_input;
 /// Typed, evidence-backed graph topology and traversal limits.
 pub mod graph;
 /// Deterministic pre-publication node and edge projection artifacts.

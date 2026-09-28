@@ -302,11 +302,11 @@ island-port server 不在当前仓库，仍需实现该 operation、原子选择
         "matched_form_id": "form_sweltering_lemma_01",
         "lexical_score_basis_points": 10000,
         "candidate": {
-          "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+          "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "lemma_evidence_ids": ["evidence_dictionary_lemma_1041"], "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
           "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": ["evidence_dictionary_1042"], "status": "active"},
           "forms": [{"id": "form_sweltering_lemma_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "form": "sweltering", "normalized_form": "sweltering", "kind": "lemma", "morphology": null, "evidence_ids": ["evidence_dictionary_1042"], "status": "active"}],
           "sources": [{"release_id": "knowledge-2026-09", "source": {"id": "source_dictionary_2026_01", "name": "Reviewed dictionary", "version": "2026-09", "license": "reviewed", "attribution": "Dictionary publisher (2026)", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}}}],
-          "evidence": [{"id": "evidence_dictionary_1042", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:adj:1", "language": "en", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "content_hash": "sha256:4ef760d1...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}]
+          "evidence": [{"id": "evidence_dictionary_lemma_1041", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:lemma", "language": "en", "kind": "other", "confidence": "high", "text": "sweltering", "content_hash": "sha256:lemma...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}, {"id": "evidence_dictionary_1042", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:adj:1", "language": "en", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "content_hash": "sha256:4ef760d1...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}]
         }
       }
     ],
@@ -320,6 +320,8 @@ island-port server 不在当前仓库，仍需实现该 operation、原子选择
 唯一性由稳定的词形、卡片和词义 ID 及已发布规范形式/别名行维护，不依赖临时规范化检索字符串。最佳适用层级的所有合格冲突均须返回，由服务解析。
 
 每个候选必须为每条 evidence 提供权威且固定发布的 source 记录。`source.id` 必须等于 `evidence.source_id`；source 和 evidence 的权限均须允许请求用途，且 evidence 权限不得超过 source 权限。公开再分发所需的 `source.attribution` 必须是非空、经过权利审核的人类可读署名（最多 256 个 Unicode 字符），不能由 source ID 或名称拼接。缺失、重复、冲突、无许可或跨发布的 source/evidence 记录均闭合失败。适配器将严格私有 DTO 映射至已有 candidate/source/evidence domain 类型；真实交付前 island-port 必须补齐此数据链。content hash 和权限位仍仅供内部使用。
+
+`lexeme.lemma_evidence_ids` 是必填、排序且唯一的 1 至 8 个 evidence ID，专门支持 canonical lemma assertion。它不能借用 sense definition evidence，不暗示存在 `FormKind::Lemma`，也永不参与 lexeme identity。每个 ID 必须通过响应 evidence/source chain（或 `senses/get` 的 indexed `lineages` map）解析到同一发布及请求 permission；dangling、重复、冲突或未使用 lineage 均闭合失败。
 
 Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的基础 NFC/小写查询行为；先前示意性的 `unicode-nfkc-v2` 值并不描述该实现。此版本是 request-local normalization metadata，不是规范权威数据或身份。
 
@@ -349,10 +351,10 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
   "value": {
     "canonical_schema_version": "canonical-v1",
     "target": {
-      "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+      "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "lemma_evidence_ids": ["evidence_dictionary_lemma_1041"], "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
       "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": [], "status": "active"}
     },
-    "lineages": {},
+    "lineages": {"evidence_dictionary_lemma_1041": {"source": {"id": "source_dictionary_2026_01", "name": "Reviewed dictionary", "version": "2026-09", "license": "reviewed", "attribution": "Dictionary publisher (2026)", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}}, "fragment": {"id": "evidence_dictionary_lemma_1041", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:lemma", "language": "en", "kind": "other", "confidence": "high", "text": "sweltering", "content_hash": "sha256:lemma...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}, "origin": {"kind": "licensed_source"}}},
     "localized_glosses": [],
     "pronunciations": [],
     "usage_labels": [],

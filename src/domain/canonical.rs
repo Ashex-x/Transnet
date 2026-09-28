@@ -400,6 +400,10 @@ pub struct Lexeme {
   pub language: LanguageTag,
   /// User-visible lemma, preserving source spelling.
   pub lemma: String,
+  /// Bounded, sorted evidence identities supporting the canonical lemma assertion.
+  ///
+  /// These references are release-scoped provenance and never participate in lexeme identity.
+  pub lemma_evidence_ids: Vec<EvidenceId>,
   /// Explicit normalized lookup key rather than an implicit database collation.
   pub normalized_lemma: String,
   /// Canonical part of speech.

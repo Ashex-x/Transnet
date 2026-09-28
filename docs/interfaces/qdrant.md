@@ -4,7 +4,7 @@
 
 This contract defines island-port's vector and graph HTTP endpoints for versioned canonical nodes and edges. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. Point examples document island-port's internal projection.
 
-Status: target island-port contract. Transnet contains the typed release-trio and relationship admission foundation plus deterministic pre-publication node/edge build artifacts, but the current executable does not compose a vector client or publisher. Preparation currently projects only authoritative active `Lexeme` and `Sense` records, records the named `semantic` and `lexical` embedding requirements without generating vectors, and builds edges only after every endpoint resolves in the exact node artifact. Construction, scale, and the broader target catalog remain closed until publisher-owned canonical sources are frozen. Island-port/Qdrant collection build, reconciliation, activation, rollback, and production acceptance remain external work.
+Status: target island-port contract. Transnet contains the typed release-trio and relationship admission foundation plus deterministic pre-publication node/edge build artifacts, but the current executable does not compose a vector client or publisher. Preparation currently projects only authoritative active `Lexeme` and `Sense` records, resolves their embedding-authorized lexical evidence, freezes separate dense and lexical canonical inputs without generating vectors, and builds edges only after every endpoint resolves in the exact node artifact. Construction, scale, and the broader target catalog remain closed until publisher-owned canonical sources are frozen. Island-port/Qdrant collection build, reconciliation, activation, rollback, and production acceptance remain external work.
 
 ## Contents
 
@@ -35,7 +35,17 @@ Every exact request body has the shape `{"context": RequestContext, "input": End
 
 Qdrant stores relationships between canonical Transnet concepts. It is a rebuildable read projection, while MySQL and authenticated release artifacts remain authoritative.
 
-Qdrant contains no user, learner, account, profile, preference, query, context, source passage, history, saved item, bookmark, practice, answer, mastery, schedule, layout, feedback, recording, or privacy-workflow data. Vectors are produced only from published canonical content and relationship explanations. Runtime request text is never embedded or stored.
+Qdrant contains no user, learner, account, profile, preference, query, context, source passage, history, saved item, bookmark, practice, answer, mastery, schedule, layout, feedback, recording, or privacy-workflow data. Vectors are produced only from published canonical content and admitted structured relationships. Runtime request text is never embedded or stored.
+
+## Canonical embedding inputs
+
+The frozen input contracts are `node-dense-input-v1`, `node-lexical-input-v1`, `edge-dense-input-v1`, and `edge-lexical-input-v1`. Each uses structured UTF-8 canonical bytes, NFC normalization without NFKC, preserved case and technical symbols, fixed field tags and order, unsigned big-endian byte-length prefixes, explicit one-byte optional presence markers, and deterministically sorted bounded lists. Release, typed identity, input family, and input-spec version are serialized. Dense and lexical hashes use separate versioned domains; neither is the Stage 3 projection content hash or a future persisted collection hash.
+
+Node material is limited to an active release-owned lexeme, its dedicated lemma evidence, an optional active owned sense and definition evidence, active word forms, source-backed localized glosses, reviewed non-passage translations whose meaning scope matches the node, and the exact source/evidence lineage permitting `embedding`. Empty optional lists encode explicit absence. Query-derived aliases, heuristic forms, model output, and unreviewed translations are forbidden.
+
+An edge input contains no publisher-authored or generated explanation prose. It binds the frozen source and target node input hashes, canonical relationship identity and revision, exact typed/wire relation, admitted structured scope, and verified evidence identities, sources, content hashes, and confidence. Island-port resolves the endpoint hashes to the already frozen node inputs before encoding vectors.
+
+Island-port is the embedding authority. `semantic` uses a controlled dense model; `lexical` uses a versioned deterministic lexical encoder. A closed compatibility registry maps an exact model/encoder identity and revision to allowed dimensions and input-spec versions. Missing entries, dimension drift, model revision drift, or input-spec mismatch fail closed. The contract intentionally does not name a production model revision or dimensions until a registry entry is approved.
 
 ## Release and collection contract
 
@@ -147,7 +157,7 @@ Canonical domain nodes additionally carry a compact knowledge profile so the LLM
 
 ## Knowledge edge point
 
-An edge is both a typed connection and a searchable explanation of why two nodes relate.
+An edge is a typed, searchable connection whose embedding input is derived only from its authoritative endpoints, relation, scope, and verified evidence metadata.
 
 ```json
 {
@@ -167,7 +177,6 @@ An edge is both a typed connection and a searchable explanation of why two nodes
     "source_node_id": "node_sweltering_hot_01",
     "target_node_id": "node_scorching_heat_01",
     "relation_type": "higher_degree",
-    "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
     "applicable_sense_ids": ["sense_sweltering_hot_01"],
     "conditions": ["temperature describes weather or an environment"],
     "restrictions": {
@@ -329,7 +338,7 @@ The endpoint does not infer a new scale or return an incomplete ladder. A missin
 
 ## POST /api/v1/edges/search
 
-Searches canonical relationship explanations. Eligibility filters apply before limiting, and verified and exploratory results remain separate.
+Searches canonical structured relationships. Eligibility filters apply before limiting, and verified and exploratory results remain separate.
 
 Request:
 
@@ -370,7 +379,6 @@ Response:
         "source_node_id": "node_sweltering_hot_01",
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree",
-        "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
         "fact_id": "fact_sweltering_degree_scorching_01",
         "fact_revision": 2,
         "verification_state": "verified"
