@@ -70,6 +70,8 @@ The publisher completes and verifies the deterministic node projection first. It
 
 The edge dense and lexical inputs bind both frozen endpoint input hashes and the complete admitted structured relationship. Island-port resolves those endpoint inputs and applies the exact approved compatibility-registry entry. Rebuilding derived exploratory neighbors does not modify verified content.
 
+The execution baseline uses `Qwen/Qwen3-Embedding-0.6B` at 1,024 dimensions for the `semantic` vector, but publication remains blocked until deployment supplies an exact immutable artifact revision and island-port can attest the revision it actually loaded. Lexical publication uses the non-neural `transnet-lexical-bm25-v1` encoder and the `lexical` sparse vector. It preserves NFC spelling, case, and attached technical `+`/`#` symbols, assigns collision-free release-local term indices from sorted UTF-8 terms, computes document-side BM25 term-frequency saturation only after the complete collection is frozen, and delegates collection-derived IDF to Qdrant's `idf` modifier. IDF never changes a canonical input hash. The exact tokenizer, dictionary, numeric, and execution bounds are normative in the [Qdrant contract](../interfaces/qdrant.md#lexical-encoder-contract).
+
 ## Reconcile and evaluate
 
 Reconcile every MySQL knowledge root with the staged node collection and every edge endpoint with the staged node manifest. Compare card, canonical-translation, domain-profile, fact, scale, node, and edge counts, identities, hashes, evidence coverage, embedding versions, and release metadata. Any missing, extra, stale, or incompatible record fails the stage.

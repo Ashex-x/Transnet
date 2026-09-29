@@ -60,6 +60,8 @@ flowchart LR
 
 为发布创建一个不可变节点集合和一个不可变边集合，同时使用具名稠密/稀疏向量和 [Qdrant 合同](../interfaces/qdrant_cn.md)的 Payload 索引。在 Manifest 中记录维度、规范化、嵌入模型、哈希、Schema、数量和端点覆盖率。Edge dense/lexical input 绑定两端冻结 input hash 与完整的已接纳结构化关系；island-port 解析端点输入并应用精确批准的 compatibility-registry entry。重建探索邻居不会修改已验证内容。
 
+Execution baseline 为 `semantic` vector 使用 1,024 维的 `Qwen/Qwen3-Embedding-0.6B`，但在部署提供精确不可变 artifact revision 且 island-port 能证明其实际加载的 revision 之前，publication 仍然闭合失败。Lexical publication 使用非神经的 `transnet-lexical-bm25-v1` encoder 与 `lexical` sparse vector。它保留 NFC spelling、大小写以及附着的技术符号 `+`/`#`，从按 UTF-8 排序的 term 构造无碰撞 release-local index，仅在完整 collection 冻结后计算 document-side BM25 term-frequency saturation，并将依赖 collection 的 IDF 交给 Qdrant `idf` modifier。IDF 绝不改变 canonical input hash。精确 tokenizer、dictionary、数值和执行边界由 [Qdrant 合同](../interfaces/qdrant_cn.md#lexical-encoder-合同)规定。
+
 Publisher 必须先完成并验证确定性节点投影，再冻结节点 manifest，并针对该精确节点哈希构建边。对账比较规范根、规范 schema、强类型物理 collection ID、payload schema、嵌入修订与维度、节点/边哈希和数量以及完整端点覆盖。成员缺失、活动 alias、跨发布引用、未解析的关系 wire 映射或未验证 collection 均阻止激活。
 
 ## 对账与评估

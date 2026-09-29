@@ -58,7 +58,21 @@ Node material 仅允许 active 且归属同一发布的 lexeme、lemma 专属 ev
 
 Edge input 不包含 publisher 编写或生成式 explanation prose。它绑定冻结的 source/target node input hash、规范 relationship identity 与 revision、精确 typed/wire relation、已接纳 structured scope，以及 verified evidence identity、source、content hash 与 confidence。Island-port 在编码向量前必须通过 endpoint hash 解析已冻结 node input。
 
-Island-port 是 embedding authority。`semantic` 使用受控 dense model；`lexical` 使用带版本的确定性 lexical encoder。闭合 compatibility registry 将精确 model/encoder identity 与 revision 映射到允许的 dimensions 和 input-spec version。Registry entry 缺失、dimension 漂移、model revision 漂移或 input-spec 不匹配均闭合失败。在生产 registry entry 获批前，本合同不虚构实际 model revision 或 dimensions。
+Island-port 是 embedding authority。`semantic` 向量使用 `Qwen/Qwen3-Embedding-0.6B`、1,024 维以及适用的 dense input specification。生产执行还必须具有精确且不可变的 artifact revision；model name、`latest`、branch name、可变 provider alias 或 deployment label 均不算 revision。只有部署提供并验证该不可变 revision 后，production dense registry entry 才成立。`lexical` 向量使用 revision 为 `v1` 的确定性 `transnet-lexical-bm25` encoder。闭合 compatibility registry 将 dense model family 与精确 artifact revision、lexical encoder identity 与 revision 映射至 dimensions、vector name 以及适用的 node/edge input specification。Registry entry 缺失、dimension 漂移、revision 漂移或 input-spec 不匹配均闭合失败。
+
+### Lexical encoder 合同
+
+`transnet-lexical-bm25-v1` 消费从 `node-lexical-input-v1` 或 `edge-lexical-input-v1` 解码出的文本字段；它绝不 tokenize 二进制 framing、不透明 ID、evidence ID、source ID 或 content hash。Node 文本包括 lemma、normalized lemma、可选 definition、form value 与 normalized form value、可选 morphology、localized gloss text，以及已审核 translation 的 source/target text。对于 edge，island-port 先将冻结的 source/target node input hash 解析为精确 node lexical input，再加入闭合 wire relationship 与已接纳的文本 scope value。缺失 endpoint input、hash 不匹配或不支持的 input version 均闭合失败。
+
+文本仅执行一次 NFC normalization，并保持大小写敏感。禁止 NFKC、stemming、stop-word removal、依赖 locale 的 case folding、transliteration 与 heuristic alias generation。Token 是 Unicode letter、mark 或 decimal digit 的最大连续序列；ASCII `+` 与 `#` 仅在直接连接到该序列时保留。其他标点与空白均作为分隔符，空 token 丢弃。因此 `C`、`C++`、`C#` 是三个不同 term，其拼写和符号不会互相规范化。单个 token 最多 256 UTF-8 bytes；单 point 最多 16,384 个 token occurrence 与 4,096 个 unique term；超限闭合失败。
+
+Release-local lexical dictionary 是完整冻结 collection 内所有不同 token UTF-8 byte string 的排序集合，按 unsigned bytewise order 排序。Index 0 保留，第一个 term 的 index 为 1，后续 term 使用连续 `u32` index。这是无碰撞 dictionary assignment，不是截断 token hash。Dictionary overflow、重复 index assignment 或 dictionary/input 不一致均闭合失败。Dictionary hash 与 encoder revision 属于 persisted collection manifest；两者都不会改变 Stage 4 embedding input hash。
+
+Document-side sparse value 使用公式 `tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl))`，其中 `k1 = 1.2`、`b = 0.75`，`dl` 为精确 token occurrence count，`avgdl` 在完整 collection 冻结后计算。冻结文本字段中的重复 occurrence 分别计数，不应用未声明的 field boost。计算使用 IEEE-754 binary64 中间值，并以 round-to-nearest、ties-to-even 转换为持久化 binary32 value。名为 `lexical` 的 Qdrant sparse vector 必须启用 `idf` modifier。IDF 是由 persisted collection statistics 得到的 collection/query-time state，因此明确不进入 per-point canonical input bytes 或 input hash。M4 必须先定义独立的 `query-lexical-input` 合同才能实现 query encoding；publication 不会把 document input contract 当作未声明的 query contract 复用。
+
+每个 canonical embedding input 最多 65,536 serialized bytes。Publication batch 最多 256 points 且 serialized request body 最多 1,048,576 bytes，两项限制独立执行。这些是执行边界，不是 canonical identity。Stage 4 的四类 input format 与 hash domain 均保持不变。
+
+Compatibility registry schema 记录 `dense_model_family`、`dense_artifact_revision`、`dense_dimensions`、`dense_vector_name`、`node_dense_input_spec`、`edge_dense_input_spec`、`lexical_encoder_identity`、`lexical_encoder_revision`、`lexical_vector_name`、`node_lexical_input_spec` 与 `edge_lexical_input_spec`。Island-port 必须在未来 build receipt 中返回所匹配的 registry-entry identity 与观测到的不可变 dense artifact revision。该观测必须来自已加载的 deployment artifact 或 provider attestation，不能简单回显请求。观测结果与 registry entry 不一致时闭合失败。精确 Qwen artifact revision 及其 attestation mechanism 仍是 deployment blocker，不在本合同中以占位值冒充。
 
 Qdrant 不包含用户、学习者、账户、画像、偏好、查询、上下文、源段落、历史、保存项目、书签、练习、答案、掌握度、日程、布局、反馈、录音或隐私流程数据。向量只能由已发布规范内容及已接纳的结构化关系生成；运行时请求文本绝不嵌入或存储。
 
@@ -69,6 +83,8 @@ Qdrant 不包含用户、学习者、账户、画像、偏好、查询、上下�
 Point ID 必须确定。先构建节点再构建边。发布拒绝缺失端点、跨发布引用、无效方向、重复有类型边、缺失证据、不兼容词义、无支持的语言或领域主张，以及不匹配的嵌入元数据。
 
 发布 manifest 示例：
+
+下方 dense artifact revision 占位值仅用于展示必填字段。在替换为已部署的不可变 revision 并由闭合 registry 精确匹配之前，它不能用于 production publication。
 
 ```json
 {
@@ -92,9 +108,11 @@ Point ID 必须确定。先构建节点再构建边。发布拒绝缺失端点�
     }
   },
   "embeddings": {
-    "dense_model_version": "multilingual-embedding-v4",
-    "dense_dimensions": 1536,
-    "sparse_model_version": "lexical-sparse-v2"
+    "dense_model_family": "Qwen/Qwen3-Embedding-0.6B",
+    "dense_artifact_revision": "<deployment-supplied-immutable-revision>",
+    "dense_dimensions": 1024,
+    "sparse_encoder_identity": "transnet-lexical-bm25",
+    "sparse_encoder_revision": "v1"
   },
   "endpoint_coverage": {
     "expected": 1225680,
@@ -117,7 +135,7 @@ Transnet 的预发布工件明确不是 collection manifest。它没有物理 co
 {
   "id": "node_sweltering_hot_01",
   "vectors": {
-    "semantic": "<1536-dimensional canonical-content vector>",
+    "semantic": "<1024-dimensional canonical-content vector>",
     "lexical": {
       "indices": [1842, 99104],
       "values": [1.0, 0.62]
@@ -178,7 +196,7 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 {
   "id": "edge_sweltering_scorching_01",
   "vectors": {
-    "semantic": "<1536-dimensional canonical-relationship vector>",
+    "semantic": "<1024-dimensional canonical-relationship vector>",
     "lexical": {
       "indices": [1842, 77103, 99104],
       "values": [0.71, 1.0, 0.48]
@@ -229,7 +247,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 {
   "id": "scale_environmental_heat_intensity_01",
   "vectors": {
-    "semantic": "<1536-dimensional scale-description vector>",
+    "semantic": "<1024-dimensional scale-description vector>",
     "lexical": {
       "indices": [1842, 77103, 99104],
       "values": [0.7, 1.0, 0.8]
@@ -263,7 +281,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 
 ```json
 {
-  "dense_vector": "<1536-dimensional ephemeral query vector>",
+  "dense_vector": "<1024-dimensional ephemeral query vector>",
   "sparse_vector": {
     "indices": [1842, 99104],
     "values": [1.0, 0.55]
@@ -359,7 +377,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 
 ```json
 {
-  "dense_vector": "<1536-dimensional ephemeral relationship vector>",
+  "dense_vector": "<1024-dimensional ephemeral relationship vector>",
   "sparse_vector": {
     "indices": [77103, 99104],
     "values": [1.0, 0.6]
@@ -486,9 +504,11 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
       }
     },
     "embeddings": {
-      "dense_model_version": "multilingual-embedding-v4",
-      "dense_dimensions": 1536,
-      "sparse_model_version": "lexical-sparse-v2"
+      "dense_model_family": "Qwen/Qwen3-Embedding-0.6B",
+      "dense_artifact_revision": "<deployment-supplied-immutable-revision>",
+      "dense_dimensions": 1024,
+      "sparse_encoder_identity": "transnet-lexical-bm25",
+      "sparse_encoder_revision": "v1"
     },
     "endpoint_coverage": {
       "expected": 1225680,

@@ -45,7 +45,21 @@ Node material is limited to an active release-owned lexeme, its dedicated lemma 
 
 An edge input contains no publisher-authored or generated explanation prose. It binds the frozen source and target node input hashes, canonical relationship identity and revision, exact typed/wire relation, admitted structured scope, and verified evidence identities, sources, content hashes, and confidence. Island-port resolves the endpoint hashes to the already frozen node inputs before encoding vectors.
 
-Island-port is the embedding authority. `semantic` uses a controlled dense model; `lexical` uses a versioned deterministic lexical encoder. A closed compatibility registry maps an exact model/encoder identity and revision to allowed dimensions and input-spec versions. Missing entries, dimension drift, model revision drift, or input-spec mismatch fail closed. The contract intentionally does not name a production model revision or dimensions until a registry entry is approved.
+Island-port is the embedding authority. The `semantic` vector uses `Qwen/Qwen3-Embedding-0.6B` with 1,024 dimensions and the applicable dense input specification. Production execution additionally requires an exact immutable artifact revision; a model name, `latest`, branch name, mutable provider alias, or deployment label is not a revision. No production dense registry entry exists until deployment supplies and verifies that immutable revision. The `lexical` vector uses the deterministic `transnet-lexical-bm25` encoder at revision `v1`. A closed compatibility registry maps the dense model family plus exact artifact revision and the lexical encoder identity plus revision to dimensions, vector names, and the applicable node and edge input specifications. Missing entries, dimension drift, revision drift, or input-spec mismatch fail closed.
+
+### Lexical encoder contract
+
+`transnet-lexical-bm25-v1` consumes the decoded textual fields of `node-lexical-input-v1` or `edge-lexical-input-v1`; it never tokenizes the binary framing, opaque IDs, evidence IDs, source IDs, or content hashes. Node text consists of lemma, normalized lemma, optional definition, form values and normalized form values, optional morphology, localized gloss text, and reviewed translation source and target text. For an edge, island-port resolves the frozen source and target node input hashes to those exact node lexical inputs, then adds the closed wire relationship and admitted textual scope values. Missing endpoint input, hash mismatch, or an unsupported input version fails closed.
+
+Text is NFC-normalized exactly once and remains case-sensitive. NFKC, stemming, stop-word removal, locale-dependent case folding, transliteration, and heuristic alias generation are forbidden. A token is a maximal run of Unicode letters, marks, or decimal digits, with ASCII `+` and `#` retained only when directly attached to such a run. All other punctuation and whitespace delimit tokens. Empty tokens are discarded. Consequently `C`, `C++`, and `C#` are three distinct terms; their spelling and symbols are not normalized into one another. A token may contain at most 256 UTF-8 bytes, a point may contain at most 16,384 token occurrences and 4,096 unique terms, and exceeding any bound fails closed.
+
+The release-local lexical dictionary is the sorted set of distinct token UTF-8 byte strings from the complete frozen collection. Sorting is unsigned bytewise order. Index zero is reserved; the first term receives index 1 and subsequent terms receive consecutive `u32` indices. This is a collision-free dictionary assignment, not a truncated token hash. Dictionary overflow, duplicate index assignment, or any dictionary/input disagreement fails closed. The dictionary hash and encoder revision belong to the persisted collection manifest; neither changes a Stage 4 embedding input hash.
+
+Document-side sparse values use `tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl))`, with `k1 = 1.2`, `b = 0.75`, the exact token occurrence count as `dl`, and `avgdl` computed after the complete collection is frozen. Repeated occurrences across the frozen text fields count independently; no undocumented field boost is applied. Computation uses IEEE-754 binary64 intermediates and round-to-nearest, ties-to-even conversion to binary32 persisted values. The Qdrant sparse vector named `lexical` must enable its `idf` modifier. IDF is collection/query-time state derived from the persisted collection statistics and is deliberately absent from per-point canonical input bytes and input hashes. M4 must define a separate `query-lexical-input` contract before query encoding is implemented; publication does not reuse a document input contract as an undocumented query contract.
+
+Every canonical embedding input is limited to 65,536 serialized bytes. Publication batches are limited to 256 points and 1,048,576 serialized request bytes, with both limits enforced independently. These are execution bounds, not canonical identity. The four Stage 4 input formats and their hash domains remain unchanged.
+
+The compatibility registry schema records `dense_model_family`, `dense_artifact_revision`, `dense_dimensions`, `dense_vector_name`, `node_dense_input_spec`, `edge_dense_input_spec`, `lexical_encoder_identity`, `lexical_encoder_revision`, `lexical_vector_name`, `node_lexical_input_spec`, and `edge_lexical_input_spec`. Island-port must return the matched registry-entry identity and the observed immutable dense artifact revision in its future build receipt. It must derive that observation from the loaded deployment artifact or provider attestation, not echo the request. A receipt whose observation differs from the registry entry fails closed. The exact Qwen artifact revision and its attestation mechanism remain deployment blockers rather than placeholders in this contract.
 
 ## Release and collection contract
 
@@ -54,6 +68,8 @@ Each logical knowledge release contains one immutable `knowledge_nodes` collecti
 Point IDs are deterministic. Nodes are built before edges. Publication rejects missing endpoints, cross-release references, invalid directions, duplicate typed edges, missing evidence, incompatible senses, unsupported language or domain claims, and mismatched embedding metadata.
 
 Release manifest example:
+
+The placeholder dense artifact revision below demonstrates the required field only. It is invalid for production publication until replaced by the deployed immutable revision and matched by the closed registry.
 
 ```json
 {
@@ -77,9 +93,11 @@ Release manifest example:
     }
   },
   "embeddings": {
-    "dense_model_version": "multilingual-embedding-v4",
-    "dense_dimensions": 1536,
-    "sparse_model_version": "lexical-sparse-v2"
+    "dense_model_family": "Qwen/Qwen3-Embedding-0.6B",
+    "dense_artifact_revision": "<deployment-supplied-immutable-revision>",
+    "dense_dimensions": 1024,
+    "sparse_encoder_identity": "transnet-lexical-bm25",
+    "sparse_encoder_revision": "v1"
   },
   "endpoint_coverage": {
     "expected": 1225680,
@@ -102,7 +120,7 @@ A node represents one independently explainable lexical sense, phrase, multiling
 {
   "id": "node_sweltering_hot_01",
   "vectors": {
-    "semantic": "<1536-dimensional canonical-content vector>",
+    "semantic": "<1024-dimensional canonical-content vector>",
     "lexical": {
       "indices": [1842, 99104],
       "values": [1.0, 0.62]
@@ -163,7 +181,7 @@ An edge is a typed, searchable connection whose embedding input is derived only 
 {
   "id": "edge_sweltering_scorching_01",
   "vectors": {
-    "semantic": "<1536-dimensional canonical-relationship vector>",
+    "semantic": "<1024-dimensional canonical-relationship vector>",
     "lexical": {
       "indices": [1842, 77103, 99104],
       "values": [0.71, 1.0, 0.48]
@@ -214,7 +232,7 @@ A first-class semantic scale is stored as a node projection so one retrieval can
 {
   "id": "scale_environmental_heat_intensity_01",
   "vectors": {
-    "semantic": "<1536-dimensional scale-description vector>",
+    "semantic": "<1024-dimensional scale-description vector>",
     "lexical": {
       "indices": [1842, 77103, 99104],
       "values": [0.7, 1.0, 0.8]
@@ -248,7 +266,7 @@ Request:
 
 ```json
 {
-  "dense_vector": "<1536-dimensional ephemeral query vector>",
+  "dense_vector": "<1024-dimensional ephemeral query vector>",
   "sparse_vector": {
     "indices": [1842, 99104],
     "values": [1.0, 0.55]
@@ -344,7 +362,7 @@ Request:
 
 ```json
 {
-  "dense_vector": "<1536-dimensional ephemeral relationship vector>",
+  "dense_vector": "<1024-dimensional ephemeral relationship vector>",
   "sparse_vector": {
     "indices": [77103, 99104],
     "values": [1.0, 0.6]
@@ -471,9 +489,11 @@ Request:
       }
     },
     "embeddings": {
-      "dense_model_version": "multilingual-embedding-v4",
-      "dense_dimensions": 1536,
-      "sparse_model_version": "lexical-sparse-v2"
+      "dense_model_family": "Qwen/Qwen3-Embedding-0.6B",
+      "dense_artifact_revision": "<deployment-supplied-immutable-revision>",
+      "dense_dimensions": 1024,
+      "sparse_encoder_identity": "transnet-lexical-bm25",
+      "sparse_encoder_revision": "v1"
     },
     "endpoint_coverage": {
       "expected": 1225680,
