@@ -6,7 +6,7 @@ This contract defines island-port's structured-data HTTP endpoints for shared ca
 
 Status: target island-port server contract with an implemented Transnet client boundary. The executable can optionally compose the strict outbound canonical-read client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, and real end-to-end acceptance remain unimplemented outside this repository.
 
-The checked-in M3 publication foundation models Qdrant build lifecycle, idempotency, compatibility receipts, and reconciliation hashes only. It does not add an island-port publication server, MySQL publication persistence, activation pointer mutation, or rollback implementation. Those authority-owned operations remain external requirements.
+The checked-in M3 publication foundation models Qdrant build lifecycle, idempotency, compatibility receipts, and reconciliation hashes. Its outbound publication port and strict island-port client can carry the bounded build contract, but they do not add an island-port publication server, MySQL build/reconciliation persistence, activation pointer mutation, or rollback implementation. Those authority-owned operations remain external requirements.
 
 ## Contents
 

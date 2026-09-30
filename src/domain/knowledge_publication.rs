@@ -104,6 +104,13 @@ impl PublicationBuildState {
 pub struct PublicationBuildId(String);
 
 impl PublicationBuildId {
+  /// Parses a previously derived build identity received from the publication authority.
+  pub fn parse(value: impl Into<String>) -> Result<Self, PublicationValidationError> {
+    let value = value.into();
+    validate_hash(&value)?;
+    Ok(Self(value))
+  }
+
   /// Derives a build identity without request IDs, clocks, randomness, or storage-generated values.
   pub fn derive(
     release: &ReleaseId,
@@ -143,6 +150,11 @@ impl PublicationIdempotencyKey {
       return Err(PublicationValidationError::InvalidIdentity);
     }
     Ok(Self(value))
+  }
+
+  /// Returns the opaque caller-supplied key for strict wire propagation.
+  pub fn as_str(&self) -> &str {
+    &self.0
   }
 }
 
@@ -356,6 +368,11 @@ impl LexicalDictionaryManifest {
   pub fn cardinality(&self) -> usize {
     self.entries.len()
   }
+
+  /// Returns the frozen ordered term-to-index entries.
+  pub fn entries(&self) -> &[(String, u32)] {
+    &self.entries
+  }
 }
 
 /// Persisted collection hash that excludes raw dense and sparse vector bytes.
@@ -363,6 +380,13 @@ impl LexicalDictionaryManifest {
 pub struct PersistedCollectionHash(String);
 
 impl PersistedCollectionHash {
+  /// Parses a persisted collection proof returned by the publication authority.
+  pub fn parse(value: impl Into<String>) -> Result<Self, PublicationValidationError> {
+    let value = value.into();
+    validate_hash(&value)?;
+    Ok(Self(value))
+  }
+
   /// Hashes one node collection proof from deterministic projection and execution metadata.
   pub fn for_nodes(
     build: &NodeProjectionBuild,
@@ -476,6 +500,13 @@ impl PersistedCollectionHash {
 pub struct PublicationManifestHash(String);
 
 impl PublicationManifestHash {
+  /// Parses a publication manifest proof returned by the publication authority.
+  pub fn parse(value: impl Into<String>) -> Result<Self, PublicationValidationError> {
+    let value = value.into();
+    validate_hash(&value)?;
+    Ok(Self(value))
+  }
+
   /// Binds one immutable release to distinct node and edge collection proofs.
   pub fn derive(
     release: &ReleaseId,

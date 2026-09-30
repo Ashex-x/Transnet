@@ -20,7 +20,8 @@ English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
   - [POST /api/v1/scales/search](#post-apiv1scalessearch)
   - [POST /api/v1/edges/search](#post-apiv1edgessearch)
   - [POST /api/v1/neighbors/search](#post-apiv1neighborssearch)
-  - [POST /api/v1/releases/publish](#post-apiv1releasespublish)
+  - [Internal publication operations](#internal-publication-operations)
+  - [Deprecated POST /api/v1/releases/publish](#deprecated-post-apiv1releasespublish)
   - [相关文档](#相关文档)
 
 ## endpoint 参考
@@ -37,7 +38,8 @@ English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
   - [POST /api/v1/scales/search](#post-apiv1scalessearch)
   - [POST /api/v1/edges/search](#post-apiv1edgessearch)
   - [POST /api/v1/neighbors/search](#post-apiv1neighborssearch)
-  - [POST /api/v1/releases/publish](#post-apiv1releasespublish)
+  - [Internal publication operations](#internal-publication-operations)
+  - [Deprecated POST /api/v1/releases/publish](#deprecated-post-apiv1releasespublish)
   - [相关文档](#相关文档)
 
 Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 UDS JSON 传输](transnet_cn.md)。调用方绝不直接连接 Qdrant 或提交原生 Qdrant 请求；collection 选择、查询构造、凭据和连接池均由 island-port 负责。只有 Transnet 运行时和经过认证的发布工具可以访问套接字。运行时调用方具有搜索权限；发布要求 publisher 服务账户。
@@ -74,7 +76,7 @@ Document-side sparse value 使用公式 `tf * (k1 + 1) / (tf + k1 * (1 - b + b *
 
 Compatibility registry schema 记录 `dense_model_family`、`dense_artifact_revision`、`dense_dimensions`、`dense_vector_name`、`node_dense_input_spec`、`edge_dense_input_spec`、`lexical_encoder_identity`、`lexical_encoder_revision`、`lexical_vector_name`、`node_lexical_input_spec` 与 `edge_lexical_input_spec`。Island-port 必须在未来 build receipt 中返回所匹配的 registry-entry identity 与观测到的不可变 dense artifact revision。该观测必须来自已加载的 deployment artifact 或 provider attestation，不能简单回显请求。观测结果与 registry entry 不一致时闭合失败。精确 Qwen artifact revision 及其 attestation mechanism 仍是 deployment blocker，不在本合同中以占位值冒充。
 
-已实现的 Transnet publication foundation 现在表达该 registry schema、精确 execution receipt、无碰撞 lexical-dictionary manifest、稳定 build/batch identity，以及 domain-separated persisted-collection/publication-manifest hash。空 registry 是合法的部署前状态；任何非空 entry 都必须携带精确不可变 dense artifact revision，因此仓库不会把浮动 model reference 冒充为可部署 entry。这只是与 transport 无关的 domain validation，不调用 embedding provider、不运行 lexical encoder、不创建或修改 Qdrant collection，也不实现 island-port publication server。
+已实现的 Transnet publication foundation 现在表达该 registry schema、精确 execution receipt、无碰撞 lexical-dictionary manifest、稳定 build/batch identity，以及 domain-separated persisted-collection/publication-manifest hash。出站 `KnowledgePublicationPort` 与严格 island-port client 已通过共享 UDS transport 实现 publisher 侧 begin、有界 batch、freeze、reconcile、status 与 abort contract。空 registry 是合法的部署前状态；任何非空 entry 都必须携带精确不可变 dense artifact revision，因此仓库不会把浮动 model reference 冒充为可部署 entry。该 client 只验证 fake-transport contract：它不调用 embedding provider、不运行 lexical encoder、不创建或修改 Qdrant collection、不实现 island-port publication server，也不激活 release。
 
 闭合 build lifecycle 为 `accepting_nodes` -> `nodes_frozen` -> `accepting_edges` -> `edges_frozen` -> `reconciling` -> `activation_candidate`。非终态 build 也可进入 `failed` 或 `aborting`；`aborting` 只能进入 `abandoned`，`failed` 或 `abandoned` 只能进入 `gc_eligible`。终态 failure/abandonment 不能原地恢复或成为 activation candidate。重复已完成的 finalize/reconciliation operation 属于 transport-level idempotent replay，不是第二次 lifecycle transition。
 
@@ -483,9 +485,59 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 
 扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
 
-## POST /api/v1/releases/publish
+## Internal publication operations
 
-发布向新的不可变集合写入确定性 point，并在激活前校验；不得改写活动集合。
+原先单 body 的 `/api/v1/releases/publish` 提案由仅供 publisher 调用的 island-port operation `POST /api/v1/knowledge-publications/begin`、`nodes/batch`、`nodes/freeze`、`edges/batch`、`edges/freeze`、`reconcile`、`status` 与 `abort` 取代。它们使用 transport schema `knowledge-publication-v1`、共享 `{ "context": ..., "input": ... }` envelope、RFC 3339 deadline、request ID 与不可变 `content_release`。Unknown field、malformed body、回显 context 不匹配，以及未知或矛盾的 outcome/code 组合都会闭合失败。
+
+Begin 绑定稳定 build ID、canonical/projection schema、完整 node/edge projection hash、精确 compatibility entry、预期 count、调用方 idempotency key 与 canonical request fingerprint。每个 family-local batch 最多包含 256 个有序 point，序列化 JSON 最多 1 MiB；其零基 ordinal 必须连续，identity 绑定 build、ordinal、request fingerprint 与 canonical batch content hash。Control request 与所有 response 上限为 256 KiB。完全相同的 retry 重放已存结果；以不同 canonical content 复用 identity 时返回 `conflict` 与 `idempotency_conflict`。
+
+Node freeze 先于 edge admission。Freeze response 提供由 island-port 分配的不可变 collection ID、persisted collection hash、projection hash/count，以及 dense/lexical execution receipt。Requested compatibility 不等于 execution proof：Transnet 会核对 server assertion 中的精确 dense artifact revision、dimensions、vector/input-spec name、lexical encoder revision、dictionary hash 与 processed count。该 assertion 背后的 production provenance 仍由 island-port deployment 负责。
+
+Reconcile 绑定两个不可变 collection ID、projection/persisted hash、edge-to-node projection binding、point/endpoint count、已验证 receipt 与 publication manifest hash。只有完整 endpoint coverage 和精确 cross-artifact agreement 才产生闭合 `activation_candidate` 状态；该 operation 不修改 active release。Status 只读；abort 遵守 domain state machine，不能离开或中止 activation candidate。
+
+```json
+{
+  "context": {
+    "request_id": "req_publish_01",
+    "deadline_at": "2026-10-01T12:00:00Z",
+    "schema_version": "knowledge-publication-v1",
+    "content_release": "knowledge-2026-10"
+  },
+  "input": {
+    "build_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "canonical_schema_version": "canonical-v1",
+    "projection_schema_version": "knowledge-graph-v1",
+    "node_projection_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "edge_projection_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "compatibility": {
+      "entry_id": "deployment-qwen-r1",
+      "dense_model_family": "Qwen/Qwen3-Embedding-0.6B",
+      "dense_artifact_revision": "deployment-supplied-immutable-revision",
+      "dense_dimensions": 1024,
+      "dense_vector_name": "semantic",
+      "node_dense_input_specification": "node-dense-input-v1",
+      "edge_dense_input_specification": "edge-dense-input-v1",
+      "lexical_encoder_identity": "transnet-lexical-bm25",
+      "lexical_encoder_revision": "v1",
+      "lexical_contract_identity": "transnet-lexical-bm25-v1",
+      "lexical_vector_name": "lexical",
+      "node_lexical_input_specification": "node-lexical-input-v1",
+      "edge_lexical_input_specification": "edge-lexical-input-v1"
+    },
+    "expected_node_count": 184220,
+    "expected_edge_count": 612840,
+    "expected_endpoint_count": 1225680,
+    "idempotency_key": "publish-knowledge-2026-10",
+    "request_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  }
+}
+```
+
+Status-shaped success response 回显 build ID、一个闭合 lifecycle state，以及每个 family 的下一预期 ordinal。闭合 lifecycle state 为 `accepting_nodes`、`nodes_frozen`、`accepting_edges`、`edges_frozen`、`reconciling`、`activation_candidate`、`failed`、`aborting`、`abandoned` 与 `gc_eligible`。闭合 outcome 为 `ok`、`missing`、`invalid_payload`、`version_mismatch`、`conflict`、`unavailable` 与 `timeout`；每个非成功 outcome 必须携带兼容的结构化 publication failure code。绝不根据 human message 分类。
+
+## Deprecated POST /api/v1/releases/publish
+
+这个较早的单 body target 示例只保留为历史上下文。它没有实现，新 publisher client 不得使用；上面的有界 operation 取代它。发布向新的不可变集合写入确定性 point，并在激活前校验；不得改写活动集合。
 
 请求：
 

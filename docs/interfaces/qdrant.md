@@ -20,7 +20,8 @@ Status: target island-port contract. Transnet contains the typed release-trio an
   - [POST /api/v1/scales/search](#post-apiv1scalessearch)
   - [POST /api/v1/edges/search](#post-apiv1edgessearch)
   - [POST /api/v1/neighbors/search](#post-apiv1neighborssearch)
-  - [POST /api/v1/releases/publish](#post-apiv1releasespublish)
+  - [Internal publication operations](#internal-publication-operations)
+  - [Deprecated POST /api/v1/releases/publish](#deprecated-post-apiv1releasespublish)
   - [Related documents](#related-documents)
 
 ## Endpoint reference
@@ -61,7 +62,7 @@ Every canonical embedding input is limited to 65,536 serialized bytes. Publicati
 
 The compatibility registry schema records `dense_model_family`, `dense_artifact_revision`, `dense_dimensions`, `dense_vector_name`, `node_dense_input_spec`, `edge_dense_input_spec`, `lexical_encoder_identity`, `lexical_encoder_revision`, `lexical_vector_name`, `node_lexical_input_spec`, and `edge_lexical_input_spec`. Island-port must return the matched registry-entry identity and the observed immutable dense artifact revision in its future build receipt. It must derive that observation from the loaded deployment artifact or provider attestation, not echo the request. A receipt whose observation differs from the registry entry fails closed. The exact Qwen artifact revision and its attestation mechanism remain deployment blockers rather than placeholders in this contract.
 
-The implemented Transnet publication foundation now represents that registry schema, exact execution receipts, collision-free lexical-dictionary manifests, stable build and batch identities, and domain-separated persisted-collection and publication-manifest hashes. An empty registry is the valid predeployment state; every populated entry requires an exact immutable dense artifact revision, so no checked-in entry pretends that a floating model reference is deployable. This is transport-independent domain validation only. It does not call an embedding provider, run the lexical encoder, create or mutate a Qdrant collection, or implement the island-port publication server.
+The implemented Transnet publication foundation now represents that registry schema, exact execution receipts, collision-free lexical-dictionary manifests, stable build and batch identities, and domain-separated persisted-collection and publication-manifest hashes. The outbound `KnowledgePublicationPort` and strict island-port client implement the publisher-side begin, bounded batch, freeze, reconcile, status, and abort contract over the shared UDS transport. An empty registry is the valid predeployment state; every populated entry requires an exact immutable dense artifact revision, so no checked-in entry pretends that a floating model reference is deployable. The client validates fake-transport contracts only: it does not call an embedding provider, run the lexical encoder, create or mutate a Qdrant collection, implement island-port's publication server, or activate a release.
 
 The closed build lifecycle is `accepting_nodes` -> `nodes_frozen` -> `accepting_edges` -> `edges_frozen` -> `reconciling` -> `activation_candidate`. A nonterminal build may instead enter `failed` or `aborting`; `aborting` proceeds only to `abandoned`, and `failed` or `abandoned` may proceed only to `gc_eligible`. Terminal failure and abandonment cannot recover in place or become activation candidates. Repeating a completed finalize or reconciliation operation is a transport-level idempotent replay, not a second lifecycle transition.
 
@@ -468,9 +469,59 @@ Response:
 
 Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
 
-## POST /api/v1/releases/publish
+## Internal publication operations
 
-Publication writes deterministic points to new immutable collections and verifies them before activation. It does not mutate an active collection.
+The former single-body `/api/v1/releases/publish` proposal is replaced by the publisher-only island-port operations `POST /api/v1/knowledge-publications/begin`, `nodes/batch`, `nodes/freeze`, `edges/batch`, `edges/freeze`, `reconcile`, `status`, and `abort`. They use transport schema `knowledge-publication-v1`, the shared `{ "context": ..., "input": ... }` envelope, an RFC 3339 deadline, request ID, and immutable `content_release`. Unknown fields, malformed bodies, mismatched echoed context, or unknown and contradictory outcome/code pairs fail closed.
+
+Begin binds the stable build ID, canonical and projection schemas, complete node and edge projection hashes, exact compatibility entry, expected counts, caller idempotency key, and canonical request fingerprint. Each family-local batch contains at most 256 ordered points and at most 1 MiB of serialized JSON. Its zero-based ordinal is consecutive, and its identity binds the build, ordinal, request fingerprint, and canonical batch content hash. Control requests and every response are limited to 256 KiB. Identical retries replay the stored result; reuse of an identity with different canonical content returns `conflict` with `idempotency_conflict`.
+
+Node freeze precedes edge admission. A freeze response supplies an island-port-allocated immutable collection ID, persisted collection hash, projection hash and count, plus dense and lexical execution receipts. Requested compatibility is not execution proof: Transnet compares the server assertion for the exact dense artifact revision, dimensions, vector and input-spec names, lexical encoder revision, dictionary hash, and processed count. The production provenance behind that assertion remains an island-port deployment responsibility.
+
+Reconcile binds both immutable collection IDs, both projection and persisted hashes, the edge-to-node projection binding, point and endpoint counts, validated receipts, and the publication manifest hash. Only complete endpoint coverage and exact cross-artifact agreement produce the closed `activation_candidate` state. This operation does not mutate the active release. Status is read-only; abort follows the domain state machine and cannot leave or abort an activation candidate.
+
+```json
+{
+  "context": {
+    "request_id": "req_publish_01",
+    "deadline_at": "2026-10-01T12:00:00Z",
+    "schema_version": "knowledge-publication-v1",
+    "content_release": "knowledge-2026-10"
+  },
+  "input": {
+    "build_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "canonical_schema_version": "canonical-v1",
+    "projection_schema_version": "knowledge-graph-v1",
+    "node_projection_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "edge_projection_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "compatibility": {
+      "entry_id": "deployment-qwen-r1",
+      "dense_model_family": "Qwen/Qwen3-Embedding-0.6B",
+      "dense_artifact_revision": "deployment-supplied-immutable-revision",
+      "dense_dimensions": 1024,
+      "dense_vector_name": "semantic",
+      "node_dense_input_specification": "node-dense-input-v1",
+      "edge_dense_input_specification": "edge-dense-input-v1",
+      "lexical_encoder_identity": "transnet-lexical-bm25",
+      "lexical_encoder_revision": "v1",
+      "lexical_contract_identity": "transnet-lexical-bm25-v1",
+      "lexical_vector_name": "lexical",
+      "node_lexical_input_specification": "node-lexical-input-v1",
+      "edge_lexical_input_specification": "edge-lexical-input-v1"
+    },
+    "expected_node_count": 184220,
+    "expected_edge_count": 612840,
+    "expected_endpoint_count": 1225680,
+    "idempotency_key": "publish-knowledge-2026-10",
+    "request_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  }
+}
+```
+
+Status-shaped success responses return the echoed build ID, one closed lifecycle state, and the next expected ordinal for each family. Closed lifecycle states are `accepting_nodes`, `nodes_frozen`, `accepting_edges`, `edges_frozen`, `reconciling`, `activation_candidate`, `failed`, `aborting`, `abandoned`, and `gc_eligible`. Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `conflict`, `unavailable`, and `timeout`; each non-success outcome must carry its compatible structured publication failure code. Human messages are never classified.
+
+## Deprecated POST /api/v1/releases/publish
+
+This earlier one-body target example is retained only as historical context. It is not implemented and must not be used by new publisher clients; the bounded operations above replace it. Publication writes deterministic points to new immutable collections and verifies them before activation. It does not mutate an active collection.
 
 Request:
 

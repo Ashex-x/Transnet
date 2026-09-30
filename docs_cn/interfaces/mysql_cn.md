@@ -6,7 +6,7 @@ English: [SQL data endpoint interface](../../docs/interfaces/mysql.md)
 
 状态：目标 island-port 服务端合同，Transnet client 边界已经实现。可执行文件可选地组合严格的出站 canonical-read client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留及真实端到端验收仍需在本仓库之外完成。
 
-仓库内 M3 publication foundation 只建模 Qdrant build lifecycle、idempotency、compatibility receipt 与 reconciliation hash。它没有新增 island-port publication server、MySQL publication persistence、activation pointer mutation 或 rollback implementation；这些 authority-owned operation 仍是外部要求。
+仓库内 M3 publication foundation 建模 Qdrant build lifecycle、idempotency、compatibility receipt 与 reconciliation hash。其出站 publication port 与严格 island-port client 可以承载有界 build contract，但没有新增 island-port publication server、MySQL build/reconciliation persistence、activation pointer mutation 或 rollback implementation；这些 authority-owned operation 仍是外部要求。
 
 ## 目录
 
