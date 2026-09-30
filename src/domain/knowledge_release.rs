@@ -63,8 +63,10 @@ pub enum ProjectionCollectionState {
 /// Versioned dense-vector configuration shared by one node/edge release pair.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DenseEmbeddingVersion {
-  /// Stable embedding model and revision identifier.
-  pub model_version: String,
+  /// Stable dense model family selected by the execution contract.
+  pub model_family: String,
+  /// Exact immutable artifact revision; floating aliases are invalid.
+  pub artifact_revision: String,
   /// Exact dense-vector dimensions produced by the model revision.
   pub dimensions: u32,
 }
@@ -72,8 +74,10 @@ pub struct DenseEmbeddingVersion {
 /// Versioned sparse-vector configuration shared by one node/edge release pair.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SparseEmbeddingVersion {
-  /// Stable sparse embedding model and revision identifier.
-  pub model_version: String,
+  /// Stable deterministic lexical encoder identity.
+  pub encoder_identity: String,
+  /// Exact immutable encoder contract revision.
+  pub encoder_revision: String,
 }
 
 /// Deterministic manifest for one immutable knowledge-node collection.
@@ -151,8 +155,10 @@ impl KnowledgeReleaseTrio {
     validate_hash(&nodes.content_hash)?;
     validate_hash(&edges.content_hash)?;
     validate_hash(&edges.verified_node_content_hash)?;
-    validate_version(&dense.model_version)?;
-    validate_version(&sparse.model_version)?;
+    validate_version(&dense.model_family)?;
+    validate_version(&dense.artifact_revision)?;
+    validate_version(&sparse.encoder_identity)?;
+    validate_version(&sparse.encoder_revision)?;
 
     if dense.dimensions == 0 {
       return Err(KnowledgeReleaseValidationError::InvalidDenseDimensions);
@@ -238,6 +244,21 @@ pub enum KnowledgeReleaseFailure {
   /// Dense or sparse embedding metadata is incompatible with the release manifest.
   #[error("embedding metadata incompatible")]
   EmbeddingMetadataIncompatible,
+  /// A publication operation attempted an illegal lifecycle transition.
+  #[error("publication lifecycle transition is invalid")]
+  InvalidLifecycleTransition,
+  /// An idempotency identity was reused with different canonical content.
+  #[error("publication idempotency identity conflicts")]
+  IdempotencyConflict,
+  /// The executed dense artifact differed from the approved immutable revision.
+  #[error("observed dense artifact revision mismatched the registry")]
+  ArtifactRevisionMismatch,
+  /// The executed lexical encoder differed from the approved revision.
+  #[error("observed lexical encoder revision mismatched the registry")]
+  LexicalEncoderMismatch,
+  /// The release-local lexical dictionary differed from its frozen manifest.
+  #[error("lexical dictionary mismatched the publication manifest")]
+  DictionaryMismatch,
   /// One or more edge endpoints were absent from the pinned node collection.
   #[error("endpoint reconciliation failed")]
   EndpointReconciliationFailed,
@@ -274,6 +295,11 @@ impl KnowledgeReleaseFailure {
       "edge_build_unavailable" => Ok(Self::EdgeBuildUnavailable),
       "schema_incompatible" => Ok(Self::SchemaIncompatible),
       "embedding_metadata_incompatible" => Ok(Self::EmbeddingMetadataIncompatible),
+      "invalid_lifecycle_transition" => Ok(Self::InvalidLifecycleTransition),
+      "idempotency_conflict" => Ok(Self::IdempotencyConflict),
+      "artifact_revision_mismatch" => Ok(Self::ArtifactRevisionMismatch),
+      "lexical_encoder_mismatch" => Ok(Self::LexicalEncoderMismatch),
+      "dictionary_mismatch" => Ok(Self::DictionaryMismatch),
       "endpoint_reconciliation_failed" => Ok(Self::EndpointReconciliationFailed),
       "hash_or_count_reconciliation_failed" => Ok(Self::HashOrCountReconciliationFailed),
       "incomplete_trio" => Ok(Self::IncompleteTrio),
@@ -382,14 +408,16 @@ mod tests {
 
   fn dense() -> DenseEmbeddingVersion {
     DenseEmbeddingVersion {
-      model_version: "multilingual-embedding-v4".to_string(),
-      dimensions: 1536,
+      model_family: "Qwen/Qwen3-Embedding-0.6B".to_string(),
+      artifact_revision: "sha256:deployment-artifact-r1".to_string(),
+      dimensions: 1024,
     }
   }
 
   fn sparse() -> SparseEmbeddingVersion {
     SparseEmbeddingVersion {
-      model_version: "lexical-sparse-v2".to_string(),
+      encoder_identity: "transnet-lexical-bm25".to_string(),
+      encoder_revision: "v1".to_string(),
     }
   }
 

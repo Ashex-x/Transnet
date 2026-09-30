@@ -74,6 +74,14 @@ Document-side sparse value 使用公式 `tf * (k1 + 1) / (tf + k1 * (1 - b + b *
 
 Compatibility registry schema 记录 `dense_model_family`、`dense_artifact_revision`、`dense_dimensions`、`dense_vector_name`、`node_dense_input_spec`、`edge_dense_input_spec`、`lexical_encoder_identity`、`lexical_encoder_revision`、`lexical_vector_name`、`node_lexical_input_spec` 与 `edge_lexical_input_spec`。Island-port 必须在未来 build receipt 中返回所匹配的 registry-entry identity 与观测到的不可变 dense artifact revision。该观测必须来自已加载的 deployment artifact 或 provider attestation，不能简单回显请求。观测结果与 registry entry 不一致时闭合失败。精确 Qwen artifact revision 及其 attestation mechanism 仍是 deployment blocker，不在本合同中以占位值冒充。
 
+已实现的 Transnet publication foundation 现在表达该 registry schema、精确 execution receipt、无碰撞 lexical-dictionary manifest、稳定 build/batch identity，以及 domain-separated persisted-collection/publication-manifest hash。空 registry 是合法的部署前状态；任何非空 entry 都必须携带精确不可变 dense artifact revision，因此仓库不会把浮动 model reference 冒充为可部署 entry。这只是与 transport 无关的 domain validation，不调用 embedding provider、不运行 lexical encoder、不创建或修改 Qdrant collection，也不实现 island-port publication server。
+
+闭合 build lifecycle 为 `accepting_nodes` -> `nodes_frozen` -> `accepting_edges` -> `edges_frozen` -> `reconciling` -> `activation_candidate`。非终态 build 也可进入 `failed` 或 `aborting`；`aborting` 只能进入 `abandoned`，`failed` 或 `abandoned` 只能进入 `gc_eligible`。终态 failure/abandonment 不能原地恢复或成为 activation candidate。重复已完成的 finalize/reconciliation operation 属于 transport-level idempotent replay，不是第二次 lifecycle transition。
+
+Build identity 由 immutable release、projection schema、node projection hash 与 compatibility-registry entry identity 派生。Batch identity 还绑定 collection family、连续 ordinal、canonical request fingerprint 与有序 batch content hash。完全一致的 retry 重放已存结果；相同 build/ordinal 携带不同 fingerprint 或 content hash 时闭合失败。Request ID、clock time、insertion order、randomness、Qdrant-generated value 与 raw vector bytes 均不定义 canonical publication identity。
+
+Hash hierarchy 保持独立：canonical embedding input hash -> projection content hash -> persisted collection hash -> publication manifest hash。Persisted collection hash 绑定 collection family、release、projection schema/hash、排序后的 point identity 与 point projection hash、dense/lexical input hash、精确 compatibility entry、vector name、dimensions、lexical dictionary hash/cardinality 及 point count，并排除 raw dense/sparse vector bytes。Publication manifest hash 将 canonical release/schema 与不同的 node/edge persisted collection hash 绑定。上述强类型值在 wire 中的最终位置仍属于 publication transport contract。
+
 Qdrant 不包含用户、学习者、账户、画像、偏好、查询、上下文、源段落、历史、保存项目、书签、练习、答案、掌握度、日程、布局、反馈、录音或隐私流程数据。向量只能由已发布规范内容及已接纳的结构化关系生成；运行时请求文本绝不嵌入或存储。
 
 ## 发布与集合合同
@@ -542,7 +550,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 
 构建对账将数量、端点覆盖、内容哈希、嵌入版本和发布元数据与经认证 manifest 比较。不完整或不匹配的集合对绝不激活。修正创建新不可变发布；回滚选择未变更的保留集合对。
 
-发布失败使用闭合结构化 code：`canonical_release_unavailable`、`node_build_unavailable`、`edge_build_unavailable`、`schema_incompatible`、`embedding_metadata_incompatible`、`endpoint_reconciliation_failed`、`hash_or_count_reconciliation_failed`、`incomplete_trio`、`activation_conflict`、`immutable_release_unavailable`、`timeout` 和 `dependency_unavailable`。Island-port 从构建与对账状态映射这些 code；调用方不得解析 message 字符串。成功发布只产生不可变激活候选，不切换活动发布。
+发布失败使用闭合结构化 code：`canonical_release_unavailable`、`node_build_unavailable`、`edge_build_unavailable`、`schema_incompatible`、`embedding_metadata_incompatible`、`invalid_lifecycle_transition`、`idempotency_conflict`、`artifact_revision_mismatch`、`lexical_encoder_mismatch`、`dictionary_mismatch`、`endpoint_reconciliation_failed`、`hash_or_count_reconciliation_failed`、`incomplete_trio`、`activation_conflict`、`immutable_release_unavailable`、`timeout` 和 `dependency_unavailable`。Island-port 从构建与对账状态映射这些 code；调用方不得解析 message 字符串。成功发布只产生不可变激活候选，不切换活动发布。
 
 ```json
 {

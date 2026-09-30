@@ -14,6 +14,8 @@ pub mod embedding_input;
 pub mod graph;
 /// Deterministic pre-publication node and edge projection artifacts.
 pub mod knowledge_projection;
+/// Publication lifecycle, idempotency, manifest hashes, and execution receipts.
+pub mod knowledge_publication;
 /// Immutable canonical, node-collection, and edge-collection release-trio invariants.
 pub mod knowledge_release;
 /// Bounded canonical lookup-card presentation values with assertion-level provenance.

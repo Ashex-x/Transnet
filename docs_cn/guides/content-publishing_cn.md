@@ -62,6 +62,8 @@ flowchart LR
 
 Execution baseline 为 `semantic` vector 使用 1,024 维的 `Qwen/Qwen3-Embedding-0.6B`，但在部署提供精确不可变 artifact revision 且 island-port 能证明其实际加载的 revision 之前，publication 仍然闭合失败。Lexical publication 使用非神经的 `transnet-lexical-bm25-v1` encoder 与 `lexical` sparse vector。它保留 NFC spelling、大小写以及附着的技术符号 `+`/`#`，从按 UTF-8 排序的 term 构造无碰撞 release-local index，仅在完整 collection 冻结后计算 document-side BM25 term-frequency saturation，并将依赖 collection 的 IDF 交给 Qdrant `idf` modifier。IDF 绝不改变 canonical input hash。精确 tokenizer、dictionary、数值和执行边界由 [Qdrant 合同](../interfaces/qdrant_cn.md#lexical-encoder-合同)规定。
 
+仓库内 publication foundation 会校验 node-first lifecycle、稳定 build/batch identity、冲突 retry、execution receipt、dictionary proof 以及 input/projection/persisted/manifest hash hierarchy，但不执行 publication。Failed 或 abandoned build 不能成为 activation candidate。Production 仍受阻于已部署的不可变 Qwen revision、island-port publication transport 与 attestation、真实 embedding/lexical execution、Qdrant mutation、reconciliation persistence 和 activation/rollback acceptance。
+
 Publisher 必须先完成并验证确定性节点投影，再冻结节点 manifest，并针对该精确节点哈希构建边。对账比较规范根、规范 schema、强类型物理 collection ID、payload schema、嵌入修订与维度、节点/边哈希和数量以及完整端点覆盖。成员缺失、活动 alias、跨发布引用、未解析的关系 wire 映射或未验证 collection 均阻止激活。
 
 ## 对账与评估

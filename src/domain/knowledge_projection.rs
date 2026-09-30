@@ -10,7 +10,8 @@ use super::canonical::{
 };
 use super::embedding_input::{
   AuthoritativeEmbeddingMaterial, CanonicalEmbeddingInput, EmbeddingInputFamily,
-  EDGE_DENSE_INPUT_VERSION, EDGE_LEXICAL_INPUT_VERSION,
+  EDGE_DENSE_INPUT_VERSION, EDGE_LEXICAL_INPUT_VERSION, NODE_DENSE_INPUT_VERSION,
+  NODE_LEXICAL_INPUT_VERSION,
 };
 use super::graph::{
   validate_published_relationships, GraphNodeKey, GraphNodeKind, GraphScope, GraphValidationError,
@@ -22,6 +23,16 @@ use super::knowledge_release::{DenseEmbeddingVersion, SparseEmbeddingVersion};
 pub const DENSE_VECTOR_NAME: &str = "semantic";
 /// Fixed sparse-vector name in the authoritative Qdrant contract.
 pub const SPARSE_VECTOR_NAME: &str = "lexical";
+/// Frozen dense model family for the first controlled execution contract.
+pub const DENSE_MODEL_FAMILY: &str = "Qwen/Qwen3-Embedding-0.6B";
+/// Frozen dense dimensions for the first controlled execution contract.
+pub const DENSE_DIMENSIONS: u32 = 1024;
+/// Frozen deterministic lexical encoder identity.
+pub const LEXICAL_ENCODER_IDENTITY: &str = "transnet-lexical-bm25";
+/// Frozen deterministic lexical encoder revision.
+pub const LEXICAL_ENCODER_REVISION: &str = "v1";
+/// Frozen lexical execution contract identity.
+pub const LEXICAL_CONTRACT_IDENTITY: &str = "transnet-lexical-bm25-v1";
 /// Version of the canonical binary serialization used for projection hashes.
 pub const PROJECTION_HASH_VERSION: &str = "knowledge-projection-hash-v1";
 
@@ -30,16 +41,32 @@ const MAX_VERSION_LENGTH: usize = 128;
 /// One closed compatibility entry configured by the controlled embedding authority.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmbeddingCompatibilityEntry {
-  /// Exact dense model identity and immutable revision.
-  pub dense_model_revision: String,
+  /// Stable registry-entry identity used by execution receipts.
+  pub entry_id: String,
+  /// Approved dense model family.
+  pub dense_model_family: String,
+  /// Exact immutable dense artifact revision.
+  pub dense_artifact_revision: String,
   /// Only accepted dimensions for that dense revision.
   pub dense_dimensions: u32,
-  /// Dense canonical-input specification accepted by the revision.
-  pub dense_input_specification: String,
+  /// Closed dense named-vector slot.
+  pub dense_vector_name: String,
+  /// Dense node input specification accepted by the revision.
+  pub node_dense_input_specification: String,
+  /// Dense edge input specification accepted by the revision.
+  pub edge_dense_input_specification: String,
+  /// Stable deterministic lexical encoder identity.
+  pub lexical_encoder_identity: String,
   /// Exact deterministic lexical encoder identity and revision.
   pub lexical_encoder_revision: String,
-  /// Lexical canonical-input specification accepted by the encoder.
-  pub lexical_input_specification: String,
+  /// Stable lexical contract identity.
+  pub lexical_contract_identity: String,
+  /// Closed lexical named-vector slot.
+  pub lexical_vector_name: String,
+  /// Lexical node input specification accepted by the encoder.
+  pub node_lexical_input_specification: String,
+  /// Lexical edge input specification accepted by the encoder.
+  pub edge_lexical_input_specification: String,
 }
 
 /// Closed model/encoder compatibility registry; absence is never treated as a default.
@@ -53,22 +80,39 @@ impl EmbeddingCompatibilityRegistry {
   pub fn new(
     mut entries: Vec<EmbeddingCompatibilityEntry>,
   ) -> Result<Self, ProjectionValidationError> {
-    entries.sort_by(|left, right| {
-      (&left.dense_model_revision, &left.lexical_encoder_revision)
-        .cmp(&(&right.dense_model_revision, &right.lexical_encoder_revision))
-    });
-    if entries.windows(2).any(|pair| {
-      pair[0].dense_model_revision == pair[1].dense_model_revision
-        && pair[0].lexical_encoder_revision == pair[1].lexical_encoder_revision
-    }) {
+    entries.sort_by(|left, right| left.entry_id.cmp(&right.entry_id));
+    if entries
+      .windows(2)
+      .any(|pair| pair[0].entry_id == pair[1].entry_id)
+    {
       return Err(ProjectionValidationError::InvalidEmbeddingMetadata);
     }
     for entry in &entries {
-      validate_version(&entry.dense_model_revision)?;
+      validate_version(&entry.entry_id)?;
+      validate_version(&entry.dense_model_family)?;
+      validate_exact_revision(&entry.dense_artifact_revision)?;
       validate_version(&entry.lexical_encoder_revision)?;
-      validate_version(&entry.dense_input_specification)?;
-      validate_version(&entry.lexical_input_specification)?;
-      if entry.dense_dimensions == 0 {
+      validate_version(&entry.dense_vector_name)?;
+      validate_version(&entry.node_dense_input_specification)?;
+      validate_version(&entry.edge_dense_input_specification)?;
+      validate_version(&entry.lexical_encoder_identity)?;
+      validate_version(&entry.lexical_contract_identity)?;
+      validate_version(&entry.lexical_vector_name)?;
+      validate_version(&entry.node_lexical_input_specification)?;
+      validate_version(&entry.edge_lexical_input_specification)?;
+      if entry.dense_dimensions == 0
+        || entry.dense_model_family != DENSE_MODEL_FAMILY
+        || entry.dense_dimensions != DENSE_DIMENSIONS
+        || entry.dense_vector_name != DENSE_VECTOR_NAME
+        || entry.node_dense_input_specification != NODE_DENSE_INPUT_VERSION
+        || entry.edge_dense_input_specification != EDGE_DENSE_INPUT_VERSION
+        || entry.lexical_encoder_identity != LEXICAL_ENCODER_IDENTITY
+        || entry.lexical_encoder_revision != LEXICAL_ENCODER_REVISION
+        || entry.lexical_contract_identity != LEXICAL_CONTRACT_IDENTITY
+        || entry.lexical_vector_name != SPARSE_VECTOR_NAME
+        || entry.node_lexical_input_specification != NODE_LEXICAL_INPUT_VERSION
+        || entry.edge_lexical_input_specification != EDGE_LEXICAL_INPUT_VERSION
+      {
         return Err(ProjectionValidationError::InvalidEmbeddingMetadata);
       }
     }
@@ -84,14 +128,29 @@ impl EmbeddingCompatibilityRegistry {
       .entries
       .iter()
       .any(|entry| {
-        entry.dense_model_revision == projection.dense.model_version
+        entry.dense_model_family == projection.dense.model_family
+          && entry.dense_artifact_revision == projection.dense.artifact_revision
           && entry.dense_dimensions == projection.dense.dimensions
-          && entry.lexical_encoder_revision == projection.sparse.model_version
-          && entry.dense_input_specification == super::embedding_input::NODE_DENSE_INPUT_VERSION
-          && entry.lexical_input_specification == super::embedding_input::NODE_LEXICAL_INPUT_VERSION
+          && entry.dense_vector_name == projection.dense_vector_name
+          && entry.lexical_encoder_identity == projection.sparse.encoder_identity
+          && entry.lexical_encoder_revision == projection.sparse.encoder_revision
+          && entry.lexical_vector_name == projection.sparse_vector_name
+          && entry.node_dense_input_specification
+            == super::embedding_input::NODE_DENSE_INPUT_VERSION
+          && entry.edge_dense_input_specification
+            == super::embedding_input::EDGE_DENSE_INPUT_VERSION
+          && entry.node_lexical_input_specification
+            == super::embedding_input::NODE_LEXICAL_INPUT_VERSION
+          && entry.edge_lexical_input_specification
+            == super::embedding_input::EDGE_LEXICAL_INPUT_VERSION
       })
       .then_some(())
       .ok_or(ProjectionValidationError::EmbeddingCompatibilityMissing)
+  }
+
+  /// Returns one exact approved entry, or `None` when deployment has not registered it.
+  pub fn entry(&self, entry_id: &str) -> Option<&EmbeddingCompatibilityEntry> {
+    self.entries.iter().find(|entry| entry.entry_id == entry_id)
   }
 }
 
@@ -129,8 +188,10 @@ impl ProjectionEmbeddingSpec {
   ) -> Result<Self, ProjectionValidationError> {
     let payload_schema_version = payload_schema_version.into();
     validate_version(&payload_schema_version)?;
-    validate_version(&dense.model_version)?;
-    validate_version(&sparse.model_version)?;
+    validate_version(&dense.model_family)?;
+    validate_exact_revision(&dense.artifact_revision)?;
+    validate_version(&sparse.encoder_identity)?;
+    validate_version(&sparse.encoder_revision)?;
     if dense.dimensions == 0 {
       return Err(ProjectionValidationError::InvalidEmbeddingMetadata);
     }
@@ -714,6 +775,18 @@ fn validate_version(value: &str) -> Result<(), ProjectionValidationError> {
   }
 }
 
+fn validate_exact_revision(value: &str) -> Result<(), ProjectionValidationError> {
+  validate_version(value)?;
+  if matches!(
+    value.to_ascii_lowercase().as_str(),
+    "latest" | "main" | "master" | "head"
+  ) {
+    Err(ProjectionValidationError::InvalidEmbeddingMetadata)
+  } else {
+    Ok(())
+  }
+}
+
 fn point_id(kind: &str, release: &ReleaseId, schema: &str, identity: &[u8]) -> ProjectionPointId {
   let mut bytes = CanonicalBytes::new();
   bytes.string(PROJECTION_HASH_VERSION);
@@ -816,10 +889,12 @@ fn hash_edge_build(
 fn embedding_bytes(out: &mut CanonicalBytes, spec: &ProjectionEmbeddingSpec) {
   out.string(&spec.payload_schema_version);
   out.string(&spec.dense_vector_name);
-  out.string(&spec.dense.model_version);
+  out.string(&spec.dense.model_family);
+  out.string(&spec.dense.artifact_revision);
   out.u32(spec.dense.dimensions);
   out.string(&spec.sparse_vector_name);
-  out.string(&spec.sparse.model_version);
+  out.string(&spec.sparse.encoder_identity);
+  out.string(&spec.sparse.encoder_revision);
 }
 fn node_key_bytes(node: &GraphNodeKey) -> Vec<u8> {
   let mut out = CanonicalBytes::new();
@@ -978,14 +1053,38 @@ mod tests {
     ProjectionEmbeddingSpec::new(
       schema,
       DenseEmbeddingVersion {
-        model_version: "multilingual-embedding-v4".to_string(),
-        dimensions: 1536,
+        model_family: "Qwen/Qwen3-Embedding-0.6B".to_string(),
+        artifact_revision: "sha256:test-artifact-r1".to_string(),
+        dimensions: 1024,
       },
       SparseEmbeddingVersion {
-        model_version: "lexical-sparse-v2".to_string(),
+        encoder_identity: "transnet-lexical-bm25".to_string(),
+        encoder_revision: "v1".to_string(),
       },
     )
     .unwrap()
+  }
+
+  fn compatibility_entry() -> EmbeddingCompatibilityEntry {
+    EmbeddingCompatibilityEntry {
+      entry_id: "qwen3-embedding-test-r1".into(),
+      dense_model_family: DENSE_MODEL_FAMILY.into(),
+      dense_artifact_revision: "sha256:test-artifact-r1".into(),
+      dense_dimensions: DENSE_DIMENSIONS,
+      dense_vector_name: DENSE_VECTOR_NAME.into(),
+      node_dense_input_specification: super::super::embedding_input::NODE_DENSE_INPUT_VERSION
+        .into(),
+      edge_dense_input_specification: super::super::embedding_input::EDGE_DENSE_INPUT_VERSION
+        .into(),
+      lexical_encoder_identity: LEXICAL_ENCODER_IDENTITY.into(),
+      lexical_encoder_revision: LEXICAL_ENCODER_REVISION.into(),
+      lexical_contract_identity: LEXICAL_CONTRACT_IDENTITY.into(),
+      lexical_vector_name: SPARSE_VECTOR_NAME.into(),
+      node_lexical_input_specification: super::super::embedding_input::NODE_LEXICAL_INPUT_VERSION
+        .into(),
+      edge_lexical_input_specification: super::super::embedding_input::EDGE_LEXICAL_INPUT_VERSION
+        .into(),
+    }
   }
 
   fn lexeme(name: &str, release: &str) -> Lexeme {
@@ -1328,11 +1427,13 @@ mod tests {
       ProjectionEmbeddingSpec::new(
         "knowledge-graph-v1",
         DenseEmbeddingVersion {
-          model_version: "dense-v1".to_string(),
+          model_family: "Qwen/Qwen3-Embedding-0.6B".to_string(),
+          artifact_revision: "sha256:test-artifact-r1".to_string(),
           dimensions: 0
         },
         SparseEmbeddingVersion {
-          model_version: "sparse-v1".to_string()
+          encoder_identity: "transnet-lexical-bm25".to_string(),
+          encoder_revision: "v1".to_string()
         },
       ),
       Err(ProjectionValidationError::InvalidEmbeddingMetadata)
@@ -1341,29 +1442,61 @@ mod tests {
 
   #[test]
   fn compatibility_registry_requires_exact_revision_dimensions_and_input_specs() {
-    let registry = EmbeddingCompatibilityRegistry::new(vec![EmbeddingCompatibilityEntry {
-      dense_model_revision: "multilingual-embedding-v4".into(),
-      dense_dimensions: 1536,
-      dense_input_specification: super::super::embedding_input::NODE_DENSE_INPUT_VERSION.into(),
-      lexical_encoder_revision: "lexical-sparse-v2".into(),
-      lexical_input_specification: super::super::embedding_input::NODE_LEXICAL_INPUT_VERSION.into(),
-    }])
-    .unwrap();
+    let registry = EmbeddingCompatibilityRegistry::new(vec![compatibility_entry()]).unwrap();
     assert_eq!(registry.validate(&embedding("knowledge-graph-v1")), Ok(()));
     let incompatible = ProjectionEmbeddingSpec::new(
       "knowledge-graph-v1",
       DenseEmbeddingVersion {
-        model_version: "multilingual-embedding-v4".into(),
+        model_family: "Qwen/Qwen3-Embedding-0.6B".into(),
+        artifact_revision: "sha256:test-artifact-r1".into(),
         dimensions: 768,
       },
       SparseEmbeddingVersion {
-        model_version: "lexical-sparse-v2".into(),
+        encoder_identity: "transnet-lexical-bm25".into(),
+        encoder_revision: "v1".into(),
       },
     )
     .unwrap();
     assert_eq!(
       registry.validate(&incompatible),
       Err(ProjectionValidationError::EmbeddingCompatibilityMissing)
+    );
+
+    assert!(EmbeddingCompatibilityRegistry::new(Vec::new()).is_ok());
+    let mut floating = compatibility_entry();
+    floating.dense_artifact_revision = "latest".into();
+    assert_eq!(
+      EmbeddingCompatibilityRegistry::new(vec![floating]),
+      Err(ProjectionValidationError::InvalidEmbeddingMetadata)
+    );
+  }
+
+  #[test]
+  fn persisted_hashes_exclude_raw_vectors_and_separate_node_and_edge_domains() {
+    use super::super::knowledge_publication::{LexicalDictionaryManifest, PersistedCollectionHash};
+
+    let nodes = build_node_projection(
+      id("release-1"),
+      embedding("knowledge-graph-v1"),
+      node_inputs("release-1"),
+    )
+    .unwrap();
+    let edges = build_edge_projection(
+      &nodes,
+      embedding("knowledge-graph-v1"),
+      vec![relationship("edge-1", "alpha", "beta")],
+    )
+    .unwrap();
+    let dictionary = LexicalDictionaryManifest::new(vec![("alpha".into(), 1)]).unwrap();
+    let entry = compatibility_entry();
+    let first = PersistedCollectionHash::for_nodes(&nodes, &entry, &dictionary).unwrap();
+    let hypothetical_raw_vectors = [0.125_f32, -0.75_f32, 1.0_f32];
+    let second = PersistedCollectionHash::for_nodes(&nodes, &entry, &dictionary).unwrap();
+    assert_eq!(first, second);
+    assert_eq!(hypothetical_raw_vectors.len(), 3);
+    assert_ne!(
+      first,
+      PersistedCollectionHash::for_edges(&edges, &entry, &dictionary).unwrap()
     );
   }
 
