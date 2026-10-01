@@ -5,11 +5,17 @@
 //! catalog, never arbitrary labels or request data, and deliberately drops telemetry rather than
 //! delaying or changing a user-visible operation when its bounded capacity is exhausted.
 
-use std::sync::Arc;
+use std::sync::{
+  atomic::{AtomicU64, Ordering},
+  Arc,
+};
 
 use tokio::sync::Semaphore;
 
-use crate::{domain::observability::MetricEvent, ports::metrics::MetricsRecorder};
+use crate::{
+  domain::observability::{MetricEvent, TelemetryDropReason},
+  ports::metrics::MetricsRecorder,
+};
 
 /// Maximum metric records allowed to be in flight through one dispatcher.
 ///
@@ -28,6 +34,24 @@ pub const MAX_IN_FLIGHT_METRIC_RECORDS: usize = 16;
 pub struct ClosedMetricsDispatcher {
   recorder: Arc<dyn MetricsRecorder>,
   permits: Arc<Semaphore>,
+  dropped_capacity: Arc<AtomicU64>,
+  dropped_runtime_unavailable: Arc<AtomicU64>,
+}
+
+/// Monotonic local counters for telemetry dropped before recorder delivery.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TelemetryDropSnapshot {
+  /// Records dropped because bounded delivery capacity was exhausted.
+  pub capacity: u64,
+  /// Records dropped because no Tokio runtime could schedule delivery.
+  pub runtime_unavailable: u64,
+}
+
+impl TelemetryDropSnapshot {
+  /// Returns the total number of locally observed drops.
+  pub const fn total(self) -> u64 {
+    self.capacity.saturating_add(self.runtime_unavailable)
+  }
 }
 
 impl ClosedMetricsDispatcher {
@@ -36,6 +60,8 @@ impl ClosedMetricsDispatcher {
     Self {
       recorder,
       permits: Arc::new(Semaphore::new(MAX_IN_FLIGHT_METRIC_RECORDS)),
+      dropped_capacity: Arc::new(AtomicU64::new(0)),
+      dropped_runtime_unavailable: Arc::new(AtomicU64::new(0)),
     }
   }
 
@@ -47,9 +73,11 @@ impl ClosedMetricsDispatcher {
   /// categorical observations rather than an audit log.
   pub fn dispatch(&self, event: MetricEvent) {
     let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+      self.record_drop(TelemetryDropReason::RuntimeUnavailable);
       return;
     };
     let Ok(permit) = self.permits.clone().try_acquire_owned() else {
+      self.record_drop(TelemetryDropReason::Capacity);
       return;
     };
     let recorder = self.recorder.clone();
@@ -57,6 +85,27 @@ impl ClosedMetricsDispatcher {
       recorder.record(event).await;
       drop(permit);
     });
+  }
+
+  /// Returns monotonic local drop counters without awaiting or contacting the recorder.
+  pub fn drop_snapshot(&self) -> TelemetryDropSnapshot {
+    TelemetryDropSnapshot {
+      capacity: self.dropped_capacity.load(Ordering::Relaxed),
+      runtime_unavailable: self.dropped_runtime_unavailable.load(Ordering::Relaxed),
+    }
+  }
+
+  fn record_drop(&self, reason: TelemetryDropReason) {
+    match reason {
+      TelemetryDropReason::Capacity => {
+        self.dropped_capacity.fetch_add(1, Ordering::Relaxed);
+      }
+      TelemetryDropReason::RuntimeUnavailable => {
+        self
+          .dropped_runtime_unavailable
+          .fetch_add(1, Ordering::Relaxed);
+      }
+    }
   }
 }
 
@@ -149,6 +198,22 @@ mod tests {
     assert_eq!(
       recorder.started.load(Ordering::SeqCst),
       MAX_IN_FLIGHT_METRIC_RECORDS
+    );
+    assert_eq!(dispatcher.drop_snapshot().capacity, 1);
+  }
+
+  #[test]
+  fn counts_runtime_unavailable_without_failing_the_caller() {
+    let dispatcher = ClosedMetricsDispatcher::new(Arc::new(BlockingRecorder::new()));
+
+    dispatcher.dispatch(event());
+
+    assert_eq!(
+      dispatcher.drop_snapshot(),
+      TelemetryDropSnapshot {
+        capacity: 0,
+        runtime_unavailable: 1,
+      }
     );
   }
 }

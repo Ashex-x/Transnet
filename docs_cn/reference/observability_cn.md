@@ -2,13 +2,15 @@
 
 English: [Observability contract](../../docs/reference/observability.md)
 
-本文定义 Transnet 进程、其 adapter 与离线 publisher 的目标全系统遥测合同，覆盖结构化日志、trace、指标和审计事件。在对应 Rust instrumentation、collector、测试与部署策略落地前，精确当前覆盖仍是过渡状态。
+本文定义 Transnet 进程、其 adapter 与离线 publisher 的目标全系统遥测合同，覆盖结构化日志、trace、指标和审计事件。当前 Rust 基础已实现闭合的无内容事件 envelope、严格的内部 `traceparent` 准入与 HTTP 传播、闭合指标维度、有界非阻塞指标分发和本地丢弃计数。完整路由 instrumentation、事件导出、collector、审计持久化、保留与部署策略仍属目标工作。
 
 ## 目标与失败规则
 
 遥测用于回答请求是否准入、运行了哪条有界路径、时间消耗在哪里、哪个依赖失败、是否发生降级，以及发布状态是否变化，同时不得记录被翻译材料或任何终端用户身份。
 
 在线遥测采用非阻塞、尽力而为策略。缓冲区满、collector 不可用、序列化错误或导出超时只增加本地丢弃事件计数，不得使业务响应失败、延迟、重试或改变。只有显式配置的强制审计 sink 可以阻止离线发布状态转换；它绝不影响在线翻译 readiness。
+
+当前 dispatcher 会在容量耗尽或异步 runtime 不可用时执行本地计数。Exporter 侧序列化、超时和 collector 失败计数将在生产 exporter 中补充；本基础不配置外部 collector。
 
 ## 信号归属
 
@@ -21,9 +23,13 @@ English: [Observability contract](../../docs/reference/observability.md)
 
 Island-port 创建或校验内部请求与 trace 标识符。Transnet 不接受任意互联网 trace baggage，也绝不把遥测关联当作用户身份。每个依赖 span 都是已准入请求的子 span，并共享其 deadline。
 
+当前 HTTP 边界仅接受一个规范 W3C version-00 `traceparent`，规范化十六进制字符，将已校验值存入请求 extension，并在响应中传播。畸形、重复、不支持版本及全零标识符会被丢弃。系统不接纳 `tracestate` 和任意 baggage。
+
 ## 通用事件 Schema
 
 每条结构化日志、trace event 和审计事件都使用版本化 envelope，包含 `event_schema`、`timestamp`、`severity`、`service`、`service_version`、`environment` 与 `event_name`。请求路径事件可增加 `request_id`、`trace_id`、`span_id`、`operation`、静态 `route`、`outcome`、安全 `error_code`、`duration_ms`、`deadline_remaining_bucket`、`request_size_bucket`、`response_size_bucket` 与 `content_release`。
+
+已实现的 envelope 有意从所需公共字段及闭合 route、outcome 和 dependency enum 起步，不包含自由格式 message 或 attribute map。请求标识符、耗时/大小 bucket、内容发布及更广的执行维度暂不加入，等待其所属 request-context 与路由 instrumentation 落地。
 
 只允许以下闭合执行维度：`input_kind`（`text`、`segments` 或 `image_regions`）、`inference_profile`（`none`、`fast` 或 `reasoning`）、`reasoning_escalated`、`retrieval_mode`（`offline`、`allowed` 或 `required`）、`retrieval_used`、`degraded`、`dependency`、`attempt`、`retry_count`，以及断路器或 bulkhead outcome。精确文本长度、图像尺寸、segment 数、引文 URL、模型 token、SQL 文本、规范标签及此处未明确列出的 ID 不是通用遥测字段。指标使用比日志和 trace 更粗的分桶。
 
@@ -58,6 +64,8 @@ Span 名是 `translation.execute`、`model.generate`、`embedding.search`、`liv
 ## 验证
 
 合同测试捕获每个信号 sink，并在成功、校验失败、依赖失败、timeout、取消、reasoning、视觉、实时检索与 panic-safe 路径中搜索植入的 secret 和请求片段。测试还强制闭合指标 label、静态 span 名、单一完成事件、trace parent 连续性、队列边界、丢弃行为、审计/状态顺序，以及遥测失败不得改变在线响应。
+
+当前仓库测试证明严格的 trace-parent 解析与传播、trace-context Debug 脱敏、无内容 envelope 构造与 Debug 输出、闭合指标 label、有界分发，以及单调的容量/runtime 丢弃计数。上述更广场景矩阵仍是尚未实现组件的验收目标。
 
 部署验收验证 collector 传输、访问控制、轮转、保留、备份行为、provider 侧遥测与删除策略。仅靠仓库测试无法证明这些外部控制。
 

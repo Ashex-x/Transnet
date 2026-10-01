@@ -1,9 +1,274 @@
-//! Closed, redacted metric events for backend observability.
+//! Closed, content-free events and metrics for backend observability.
 //!
 //! This catalog names the operational signals required by the backend foundation without defining
 //! an exporter, trace backend, retention policy, or alert thresholds. Metric events carry only
 //! fixed enum dimensions. They cannot carry raw queries, contexts, answers, credentials or other
 //! tokens, identities, or free-form attribute keys and values.
+
+use std::fmt;
+
+use time::OffsetDateTime;
+
+/// Version of the structured observability event envelope.
+pub const EVENT_SCHEMA_VERSION: &str = "transnet-observability-event-v1";
+
+/// Service name emitted by every Transnet event.
+pub const SERVICE_NAME: &str = "transnet";
+
+/// A deployment environment with bounded cardinality.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DeploymentEnvironment {
+  /// Developer workstation or local integration environment.
+  Development,
+  /// Automated test environment.
+  Test,
+  /// Pre-production environment.
+  Staging,
+  /// Production environment.
+  Production,
+}
+
+/// A closed event severity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum EventSeverity {
+  /// Informational lifecycle observation.
+  Info,
+  /// Recoverable degradation or rejected operation.
+  Warning,
+  /// Operation failure requiring diagnosis.
+  Error,
+}
+
+/// Static event names accepted by the structured envelope.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum EventName {
+  /// An admitted HTTP operation completed.
+  RequestCompleted,
+  /// One logical dependency call completed.
+  DependencyCompleted,
+  /// Telemetry delivery was dropped.
+  TelemetryDropped,
+  /// The process began graceful shutdown.
+  ShutdownStarted,
+}
+
+/// Static route templates safe for events and metric labels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StaticRoute {
+  /// A route not represented by the current closed catalog.
+  Unmatched,
+  /// Transitional health probe.
+  Health,
+  /// Transitional liveness probe.
+  Livez,
+  /// Transitional readiness probe.
+  Readyz,
+  /// Target translation operation.
+  Translations,
+  /// Target BasicCard lookup operation.
+  BasicCardLookup,
+  /// Target canonical sense read operation.
+  SenseRead,
+  /// Transitional graph node read.
+  GraphNodeRead,
+  /// Transitional graph-neighbor read.
+  GraphNeighbors,
+}
+
+/// A closed dependency dimension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DependencyKind {
+  /// No dependency participated.
+  None,
+  /// Generation model runtime.
+  Model,
+  /// Canonical structured-data authority.
+  CanonicalData,
+  /// Retrieval projection authority.
+  RetrievalData,
+  /// Ephemeral embedding runtime.
+  Embedding,
+  /// Bounded live-retrieval boundary.
+  LiveRetrieval,
+}
+
+/// A bounded reason why best-effort telemetry was dropped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TelemetryDropReason {
+  /// The bounded in-flight capacity was exhausted.
+  Capacity,
+  /// No asynchronous runtime was available for non-blocking delivery.
+  RuntimeUnavailable,
+}
+
+impl TelemetryDropReason {
+  const fn as_label(self) -> &'static str {
+    match self {
+      Self::Capacity => "capacity",
+      Self::RuntimeUnavailable => "runtime_unavailable",
+    }
+  }
+}
+
+/// Validated W3C trace context admitted from an internal HTTP boundary.
+///
+/// Debug output intentionally identifies only that valid context is present. Callers can obtain
+/// the normalized header value solely for propagation to another trusted internal hop.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TraceParent {
+  normalized: String,
+}
+
+impl TraceParent {
+  /// Parses the strict W3C `traceparent` version-00 wire shape.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`TraceParentError`] for unsupported versions, malformed hexadecimal fields, all-zero
+  /// trace or parent identifiers, or noncanonical lengths.
+  pub fn parse(value: &str) -> Result<Self, TraceParentError> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 55
+      || !bytes.iter().all(u8::is_ascii)
+      || bytes[2] != b'-'
+      || bytes[35] != b'-'
+      || bytes[52] != b'-'
+    {
+      return Err(TraceParentError::Malformed);
+    }
+    if &value[0..2] != "00" {
+      return Err(TraceParentError::UnsupportedVersion);
+    }
+    let trace_id = &value[3..35];
+    let parent_id = &value[36..52];
+    let flags = &value[53..55];
+    if ![trace_id, parent_id, flags]
+      .into_iter()
+      .all(|field| field.bytes().all(|byte| byte.is_ascii_hexdigit()))
+    {
+      return Err(TraceParentError::Malformed);
+    }
+    if trace_id.bytes().all(|byte| byte == b'0') || parent_id.bytes().all(|byte| byte == b'0') {
+      return Err(TraceParentError::ZeroIdentifier);
+    }
+    Ok(Self {
+      normalized: value.to_ascii_lowercase(),
+    })
+  }
+
+  /// Returns the normalized header value for trusted internal propagation.
+  pub fn as_header_value(&self) -> &str {
+    &self.normalized
+  }
+}
+
+impl fmt::Debug for TraceParent {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter.write_str("TraceParent(VALIDATED)")
+  }
+}
+
+/// Failure to validate an inbound W3C trace parent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum TraceParentError {
+  /// The header does not have the canonical four-field version-00 shape.
+  #[error("traceparent is malformed")]
+  Malformed,
+  /// Only W3C trace-context version 00 is currently admitted.
+  #[error("traceparent version is unsupported")]
+  UnsupportedVersion,
+  /// W3C forbids all-zero trace and parent identifiers.
+  #[error("traceparent contains an all-zero identifier")]
+  ZeroIdentifier,
+}
+
+/// A versioned structured event containing only closed, content-free dimensions.
+///
+/// The type has no free-form message, attribute map, request body, URL, credential, or identifier
+/// field. This makes ordinary construction content-free by design.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObservabilityEvent {
+  timestamp: OffsetDateTime,
+  severity: EventSeverity,
+  environment: DeploymentEnvironment,
+  event_name: EventName,
+  route: StaticRoute,
+  outcome: MetricOutcome,
+  dependency: DependencyKind,
+}
+
+impl ObservabilityEvent {
+  /// Creates one content-free event at a caller-supplied UTC timestamp.
+  pub const fn new(
+    timestamp: OffsetDateTime,
+    severity: EventSeverity,
+    environment: DeploymentEnvironment,
+    event_name: EventName,
+    route: StaticRoute,
+    outcome: MetricOutcome,
+    dependency: DependencyKind,
+  ) -> Self {
+    Self {
+      timestamp,
+      severity,
+      environment,
+      event_name,
+      route,
+      outcome,
+      dependency,
+    }
+  }
+
+  /// Returns the fixed envelope schema version.
+  pub const fn event_schema(&self) -> &'static str {
+    EVENT_SCHEMA_VERSION
+  }
+
+  /// Returns the fixed emitting service name.
+  pub const fn service(&self) -> &'static str {
+    SERVICE_NAME
+  }
+
+  /// Returns the package version of the emitting service.
+  pub const fn service_version(&self) -> &'static str {
+    env!("CARGO_PKG_VERSION")
+  }
+
+  /// Returns the event timestamp.
+  pub const fn timestamp(&self) -> OffsetDateTime {
+    self.timestamp
+  }
+
+  /// Returns the bounded severity.
+  pub const fn severity(&self) -> EventSeverity {
+    self.severity
+  }
+
+  /// Returns the bounded deployment environment.
+  pub const fn environment(&self) -> DeploymentEnvironment {
+    self.environment
+  }
+
+  /// Returns the static event name.
+  pub const fn event_name(&self) -> EventName {
+    self.event_name
+  }
+
+  /// Returns the static matched route.
+  pub const fn route(&self) -> StaticRoute {
+    self.route
+  }
+
+  /// Returns the closed operation outcome.
+  pub const fn outcome(&self) -> MetricOutcome {
+    self.outcome
+  }
+
+  /// Returns the closed dependency dimension.
+  pub const fn dependency(&self) -> DependencyKind {
+    self.dependency
+  }
+}
 
 /// Stable metric names for backend operational signals.
 ///
@@ -20,6 +285,8 @@ pub enum MetricName {
   VectorLagStateTotal,
   /// Count of graph-read operation outcomes.
   GraphOperationTotal,
+  /// Count of best-effort telemetry records dropped before delivery.
+  TelemetryDroppedTotal,
 }
 
 impl MetricName {
@@ -30,6 +297,7 @@ impl MetricName {
       Self::ModelValidationTotal => "transnet_model_validation_total",
       Self::VectorLagStateTotal => "transnet_vector_lag_state_total",
       Self::GraphOperationTotal => "transnet_graph_operation_total",
+      Self::TelemetryDroppedTotal => "transnet_telemetry_dropped_total",
     }
   }
 }
@@ -195,6 +463,11 @@ pub enum MetricEvent {
     /// Safe categorical result.
     outcome: MetricOutcome,
   },
+  /// One best-effort telemetry record was dropped.
+  TelemetryDropped {
+    /// Bounded reason for the drop.
+    reason: TelemetryDropReason,
+  },
 }
 
 impl MetricEvent {
@@ -205,6 +478,7 @@ impl MetricEvent {
       Self::ModelValidation { .. } => MetricName::ModelValidationTotal,
       Self::VectorLag { .. } => MetricName::VectorLagStateTotal,
       Self::GraphOperation { .. } => MetricName::GraphOperationTotal,
+      Self::TelemetryDropped { .. } => MetricName::TelemetryDroppedTotal,
     }
   }
 
@@ -228,6 +502,9 @@ impl MetricEvent {
         MetricLabel::new("operation", operation.as_label()),
         MetricLabel::new("outcome", outcome.as_label()),
       ],
+      Self::TelemetryDropped { reason } => {
+        vec![MetricLabel::new("reason", reason.as_label())]
+      }
     };
     MetricAttributes { labels }
   }
@@ -338,6 +615,12 @@ mod tests {
         operation: GraphOperation::Traversal,
         outcome: MetricOutcome::Failed,
       },
+      MetricEvent::TelemetryDropped {
+        reason: TelemetryDropReason::Capacity,
+      },
+      MetricEvent::TelemetryDropped {
+        reason: TelemetryDropReason::RuntimeUnavailable,
+      },
     ]
   }
 
@@ -354,6 +637,7 @@ mod tests {
         "transnet_graph_operation_total",
         "transnet_lookup_stage_total",
         "transnet_model_validation_total",
+        "transnet_telemetry_dropped_total",
         "transnet_vector_lag_state_total",
       ])
     );
@@ -416,5 +700,47 @@ mod tests {
     assert!(protected_values
       .iter()
       .all(|protected| !output.contains(protected)));
+  }
+
+  #[test]
+  fn trace_parent_is_strict_normalized_and_debug_redacted() {
+    let value = "00-4BF92F3577B34DA6A3CE929D0E0E4736-00F067AA0BA902B7-01";
+    let parent = TraceParent::parse(value).unwrap();
+
+    assert_eq!(
+      parent.as_header_value(),
+      "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    );
+    assert_eq!(format!("{parent:?}"), "TraceParent(VALIDATED)");
+    assert!(TraceParent::parse("00-00000000000000000000000000000000-00f067aa0ba902b7-01").is_err());
+    assert!(TraceParent::parse("00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01").is_err());
+    assert!(TraceParent::parse("credential-secret").is_err());
+    assert!(TraceParent::parse(&format!("{}é", "a".repeat(53))).is_err());
+  }
+
+  #[test]
+  fn event_envelope_has_only_versioned_closed_dimensions() {
+    let event = ObservabilityEvent::new(
+      OffsetDateTime::UNIX_EPOCH,
+      EventSeverity::Warning,
+      DeploymentEnvironment::Test,
+      EventName::DependencyCompleted,
+      StaticRoute::Translations,
+      MetricOutcome::Degraded,
+      DependencyKind::Model,
+    );
+    let rendered = format!("{event:?}");
+
+    assert_eq!(event.event_schema(), EVENT_SCHEMA_VERSION);
+    assert_eq!(event.service(), SERVICE_NAME);
+    assert_eq!(event.service_version(), env!("CARGO_PKG_VERSION"));
+    for forbidden in [
+      "request-body-secret",
+      "bearer-credential-secret",
+      "provider-response-secret",
+      "https://citation-secret.invalid",
+    ] {
+      assert!(!rendered.contains(forbidden));
+    }
   }
 }

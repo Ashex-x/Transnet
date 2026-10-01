@@ -47,6 +47,7 @@ mod readiness;
 mod request_context;
 mod request_id;
 mod stateless;
+mod trace_context;
 mod v1;
 
 pub use envelope::{SuccessEnvelope, SuccessMeta};
@@ -456,6 +457,7 @@ fn build_router(
     )
     .layer(middleware::from_fn(stateless::admit))
     .layer(middleware::from_fn(request_context::establish))
+    .layer(middleware::from_fn(trace_context::propagate_trace_parent))
     .layer(middleware::from_fn(request_id::propagate_request_id))
 }
 
@@ -479,8 +481,12 @@ fn cors_layer(config: &HttpConfig) -> Result<Option<CorsLayer>, HttpConfigError>
       header::CONTENT_TYPE,
       HeaderName::from_static("x-request-id"),
       HeaderName::from_static("x-deadline-at"),
+      HeaderName::from_static("traceparent"),
     ])
-    .expose_headers([HeaderName::from_static("x-request-id")]);
+    .expose_headers([
+      HeaderName::from_static("x-request-id"),
+      HeaderName::from_static("traceparent"),
+    ]);
   Ok(Some(cors))
 }
 
