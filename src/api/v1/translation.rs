@@ -55,11 +55,10 @@ pub(crate) async fn translate(
     }
   };
   match turn.input_kind() {
-    TranslationInputKind::Segments => return unsupported_capability("segments", &request_id),
     TranslationInputKind::ImageRegions => {
       return unsupported_capability("image_regions", &request_id)
     }
-    TranslationInputKind::Text => {}
+    TranslationInputKind::Text | TranslationInputKind::Segments => {}
   }
   let Some(orchestrator) = state.translation_orchestrator() else {
     return translation_model_unavailable(&request_id);

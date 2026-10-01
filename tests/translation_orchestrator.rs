@@ -18,8 +18,8 @@ use transnet::{
   },
   domain::translation_turn::{
     GuidanceAudience, GuidancePurpose, GuidanceRegister, TerminologyConstraint, TerminologyPolicy,
-    TranslationGuidance, TranslationHistory, TranslationResultKind, TranslationTurn,
-    TranslationTurnRequest,
+    TranslationGuidance, TranslationHistory, TranslationInput, TranslationResultKind,
+    TranslationSegment, TranslationTurn, TranslationTurnRequest,
   },
   CancellationSignal, GenerationInput, GenerationOutput, GenerationPort, GenerationProfile,
   GenerationRequest, GenerationResponse, ModelOperationContext, ModelOperationError, ModelVersion,
@@ -42,6 +42,40 @@ struct FakeGeneration {
 }
 
 struct VersionedChunkGeneration;
+
+struct SegmentGeneration {
+  invalidate_fast: bool,
+  reasoning_calls: AtomicUsize,
+}
+
+#[async_trait]
+impl GenerationPort for SegmentGeneration {
+  async fn generate(
+    &self,
+    context: ModelOperationContext<'_>,
+    request: GenerationRequest,
+  ) -> Result<GenerationResponse, ModelOperationError> {
+    context.ensure_active()?;
+    let encoded = request.input.as_str();
+    let prompt: serde_json::Value =
+      serde_json::from_str(encoded.split_once('\n').map_or(encoded, |(json, _)| json)).unwrap();
+    let index = prompt["segment_index"].as_u64().unwrap_or(0);
+    let output = match request.profile {
+      GenerationProfile::Reasoning => {
+        self.reasoning_calls.fetch_add(1, Ordering::AcqRel);
+        connected("修复 **{name}**")
+      }
+      GenerationProfile::Fast if self.invalidate_fast => "invalid".into(),
+      GenerationProfile::Fast if index == 0 => connected("发布 **{name}**"),
+      GenerationProfile::Fast => connected("正文"),
+    };
+    Ok(GenerationResponse {
+      output: GenerationOutput::new(output).unwrap(),
+      model_version: ModelVersion::new("segment-test-v1").unwrap(),
+      prompt_version: request.prompt_version,
+    })
+  }
+}
 
 #[async_trait]
 impl GenerationPort for VersionedChunkGeneration {
@@ -185,6 +219,39 @@ fn guided_turn(text: &str) -> TranslationTurn {
   .unwrap()
 }
 
+fn segment_turn() -> TranslationTurn {
+  TranslationTurn::new(TranslationTurnRequest {
+    text: None,
+    input: Some(TranslationInput::Segments {
+      segments: vec![
+        TranslationSegment {
+          segment_id: "title".into(),
+          text: "Launch **{name}**".into(),
+          role: transnet::domain::translation_turn::SegmentRole::Title,
+          format: transnet::domain::translation_turn::SegmentFormat::Markdown,
+          protected_ranges: vec![transnet::domain::translation_turn::ProtectedRange {
+            start: 9,
+            end: 15,
+          }],
+        },
+        TranslationSegment {
+          segment_id: "body".into(),
+          text: "Body".into(),
+          role: transnet::domain::translation_turn::SegmentRole::Paragraph,
+          format: transnet::domain::translation_turn::SegmentFormat::Plain,
+          protected_ranges: Vec::new(),
+        },
+      ],
+    }),
+    source_language: "en".into(),
+    target_language: "zh-CN".into(),
+    response_level: "standard".into(),
+    history: Vec::new(),
+    guidance: None,
+  })
+  .unwrap()
+}
+
 fn connected(value: &str) -> String {
   serde_json::json!({"status":"complete", "translation":value}).to_string()
 }
@@ -262,6 +329,94 @@ async fn terminology_violation_uses_only_one_repair_then_fails() {
   );
   assert_eq!(fake.calls().len(), 2);
   assert_eq!(fake.calls()[1].profile, GenerationProfile::Reasoning);
+}
+
+#[tokio::test]
+async fn segments_preserve_request_order_ids_protected_content_and_format() {
+  let generation = Arc::new(SegmentGeneration {
+    invalidate_fast: false,
+    reasoning_calls: AtomicUsize::new(0),
+  });
+  let orchestrator = TranslationOrchestrator::new(generation);
+  let turn = segment_turn();
+  let result = orchestrator
+    .translate(&context(30), Arc::new(CancellationSignal::default()), &turn)
+    .await
+    .unwrap();
+  result.validate_for_turn(&turn).unwrap();
+  let encoded = serde_json::to_value(result.translation).unwrap();
+  assert_eq!(encoded["unit"], "segment");
+  assert_eq!(encoded["segments"][0]["segment_id"], "title");
+  assert_eq!(encoded["segments"][0]["order"], 0);
+  assert_eq!(
+    encoded["segments"][0]["translations"][0]["text"],
+    "发布 **{name}**"
+  );
+  assert_eq!(encoded["segments"][1]["segment_id"], "body");
+  assert_eq!(encoded["segments"][1]["order"], 1);
+  assert_eq!(encoded["segments"][1]["translations"][0]["text"], "正文");
+}
+
+#[tokio::test]
+async fn segment_postcondition_failures_share_one_reasoning_repair() {
+  let generation = Arc::new(SegmentGeneration {
+    invalidate_fast: true,
+    reasoning_calls: AtomicUsize::new(0),
+  });
+  let orchestrator = TranslationOrchestrator::new(generation.clone());
+  assert_eq!(
+    orchestrator
+      .translate(
+        &context(30),
+        Arc::new(CancellationSignal::default()),
+        &segment_turn(),
+      )
+      .await
+      .unwrap_err(),
+    TranslationOrchestrationError::InvalidModelOutput
+  );
+  assert_eq!(generation.reasoning_calls.load(Ordering::Acquire), 1);
+}
+
+#[tokio::test]
+async fn segment_deadline_and_cancellation_propagate_without_partial_results() {
+  let expired = Arc::new(FakeGeneration::new([
+    Ok(connected("unused")),
+    Ok(connected("unused")),
+  ]));
+  let orchestrator = TranslationOrchestrator::new(expired.clone());
+  assert_eq!(
+    orchestrator
+      .translate(
+        &context(-1),
+        Arc::new(CancellationSignal::default()),
+        &segment_turn(),
+      )
+      .await
+      .unwrap_err(),
+    TranslationOrchestrationError::DeadlineExceeded
+  );
+  assert!(expired.calls().is_empty());
+
+  let delayed = Arc::new(FakeGeneration::delayed(
+    [Ok(connected("unused")), Ok(connected("unused"))],
+    Duration::from_secs(2),
+  ));
+  let orchestrator = TranslationOrchestrator::new(delayed);
+  let cancellation = Arc::new(CancellationSignal::default());
+  let cancel = cancellation.clone();
+  let context = context(30);
+  let turn = segment_turn();
+  let operation = orchestrator.translate(&context, cancellation, &turn);
+  tokio::pin!(operation);
+  tokio::select! {
+    result = &mut operation => panic!("segment operation completed unexpectedly: {result:?}"),
+    _ = tokio::time::sleep(Duration::from_millis(20)) => cancel.cancel(),
+  }
+  assert_eq!(
+    operation.await.unwrap_err(),
+    TranslationOrchestrationError::Cancelled
+  );
 }
 
 #[tokio::test]

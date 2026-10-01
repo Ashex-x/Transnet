@@ -4,7 +4,7 @@ English: [Translation application](../../../docs/reference/application/translati
 
 本模块负责连续文本、结构化分段与有界图像区域翻译，并产生共享结果中的主要译文部分。
 
-状态：请求 domain 已校验并保留三种 tagged shape 及其请求级 guidance 与 history。已校验 result superset 覆盖 word、phrase、passage、有序 segment 与有序 image-region outcome，并包含 typed annotation、terminology decision、review state、响应级 citation reference 及确定性 breadth projection。Application 现会为 text 执行 purpose、audience、register、terminology、请求的 annotation family 与 freshness guidance；它确定性检查 required/forbidden terminology 与段落结构，并最多允许一次 reasoning-profile repair。Preferred terminology 是 prompt preference，而不是硬 postcondition。Segment 与 image-region turn 仍在任何 model call 前被拒绝。
+状态：请求 domain 已校验并保留三种 tagged shape 及其请求级 guidance 与 history。已校验 result superset 覆盖 word、phrase、passage、有序 segment 与有序 image-region outcome，并包含 typed annotation、terminology decision、review state、响应级 citation reference 及确定性 breadth projection。当前 application 执行带 guidance 的 text 与结构化 segment；它确定性检查 required/forbidden terminology 与段落结构，并最多允许一次 reasoning-profile repair。Preferred terminology 是 prompt preference，而不是硬 postcondition。HTTP 边界仍会在任何 model 调用前以不含内容的 `501 translation_capability_unavailable` 响应拒绝已校验的 image-region turn。
 
 ## 职责
 
@@ -13,6 +13,8 @@ English: [Translation application](../../../docs/reference/application/translati
 Application 接受一种带判别标签的输入形式。文本是低延迟默认路径；分段保留调用方拥有的结构与稳定 segment ID；图像区域只附带当前请求所需像素和阅读提示。文件摄取、页面选择、OCR 策略、版面归属与持久文档状态仍由 island-port 负责。请求指导显式且一次性使用，不从用户画像推断。
 
 长输入可使用有界请求级分块计划与术语台账。分块尊重语义和段落边界、保持顺序，并在组合时不丢内容。台账只为当前请求跟踪名称、缩写与重复术语；它不是翻译记忆或持久任务。
+
+结构化 segment 使用有界并行 fast call，同时在组装结果中保持确定性请求顺序。每个 prompt 绑定 segment role、format、source/target language、protected scalar range 与 prompt contract；调用方 ID 不会发送给 model。整个请求共享一次 reasoning-repair budget。确定性 postcondition 会拒绝缺失或重排的 protected value、改变的换行数、Markdown delimiter 或 HTML tag。成功结果使用调用方 segment ID、零起始 segment order、`translation_0` 及可选闭合 format annotation；完成后不保留任何 segment 内容。
 
 Gemma4-27B 默认通过 fast profile 处理文本。闭合升级策略对 invalid、ambiguous 或违反 guidance 的输出最多允许一次 reasoning profile 调用；隐藏 reasoning 既不返回也不观测。`offline` 永不执行检索。由于尚未配置 production search authority，`allowed` 当前会退化为普通翻译且不会声称实时支持，`required` 则在生成前显式失败。配置 search authority 后，现有有界 live-retrieval service 仍是唯一允许的检索路径，并且每个依赖实时材料的声明都必须携带 response-local citation。
 

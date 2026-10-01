@@ -316,27 +316,52 @@ async fn unsupported_inline_image_media_type_returns_415() {
 }
 
 #[tokio::test]
-async fn structured_inputs_validate_then_fail_with_safe_capability_problem() {
-  let segment_secret = "private-segment-442";
-  let history_secret = "private-history-443";
+async fn structured_segments_return_ordered_ids_and_translations() {
   let response = app(Ok(connected_output()), Ok(lexical_output()))
     .oneshot(request(json!({
-      "input": {"type": "segments", "segments": [{"segment_id":segment_secret,
-        "text":"Launch {name}", "role":"title", "format":"plain",
-        "protected_ranges":[{"start":7,"end":13}]}]},
+      "input": {"type": "segments", "segments": [{"segment_id":"seg_title",
+        "text":"That plan is still up in the air.", "role":"title", "format":"plain",
+        "protected_ranges":[]}]},
       "source_language":"en", "target_language":"zh-CN", "response_level":"standard",
-      "history":[{"source_text":history_secret,"translated_text":"私密译文",
-        "source_language":"en","target_language":"zh-CN"}],
-      "guidance":{"purpose":"localization","freshness":"offline"}
+      "history":[]
     })))
     .await
     .unwrap();
-  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  assert_eq!(response.status(), StatusCode::OK);
+  let result = body(response).await;
+  assert_eq!(result["data"]["translation"]["unit"], "segment");
+  assert_eq!(
+    result["data"]["translation"]["segments"][0]["segment_id"],
+    "seg_title"
+  );
+  assert_eq!(result["data"]["translation"]["segments"][0]["order"], 0);
+  assert_eq!(
+    result["data"]["translation"]["segments"][0]["translations"][0]["translation_id"],
+    "translation_0"
+  );
+  assert_eq!(
+    result["meta"]["prompt_versions"],
+    json!(["translation-segment-v1"])
+  );
+}
+
+#[tokio::test]
+async fn segment_postcondition_failure_returns_redacted_bad_gateway() {
+  let secret = "private-protected-442";
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input": {"type": "segments", "segments": [{"segment_id":"seg_title",
+        "text":format!("Launch {secret}"), "role":"title", "format":"plain",
+        "protected_ranges":[{"start":7,"end":7 + secret.chars().count()}]}]},
+      "source_language":"en", "target_language":"zh-CN", "response_level":"standard",
+      "history":[]
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
   let problem = body(response).await;
-  assert_eq!(problem["code"], "translation_capability_unavailable");
-  assert!(!problem.to_string().contains(segment_secret));
-  assert!(!problem.to_string().contains(history_secret));
-  assert!(!problem.to_string().contains("Launch"));
+  assert_eq!(problem["code"], "invalid_model_output");
+  assert!(!problem.to_string().contains(secret));
 }
 
 #[tokio::test]

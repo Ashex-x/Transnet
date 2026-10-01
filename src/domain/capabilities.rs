@@ -88,6 +88,23 @@ impl ServiceCapabilities {
     self
   }
 
+  /// Advertises the structured-segment input and emitted format annotations as one runtime unit.
+  pub fn with_segment_translation(mut self, available: bool) -> Self {
+    self
+      .input_types
+      .retain(|value| *value != InputTypeCapability::Segments);
+    self
+      .annotation_families
+      .retain(|value| *value != AnnotationFamilyCapability::Format);
+    if available {
+      self.input_types.push(InputTypeCapability::Segments);
+      self
+        .annotation_families
+        .push(AnnotationFamilyCapability::Format);
+    }
+    self
+  }
+
   /// Rebinds the configured HTTP body limit without changing activated capabilities.
   pub fn with_max_request_body_bytes(mut self, max_request_body_bytes: usize) -> Self {
     self.limits.max_request_body_bytes = max_request_body_bytes;
@@ -136,6 +153,8 @@ pub enum TargetLanguageCapability {
 pub enum InputTypeCapability {
   /// One connected or lexical text input.
   Text,
+  /// Ordered structured document or localization segments.
+  Segments,
 }
 
 /// Image media types; the enum is intentionally uninhabited until vision input is implemented.
@@ -146,9 +165,13 @@ pub enum ImageMediaTypeCapability {}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum PurposeCapability {}
 
-/// Result annotation families; intentionally uninhabited until typed annotations are implemented.
+/// Result annotation families emitted by currently executable translation paths.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub enum AnnotationFamilyCapability {}
+#[serde(rename_all = "snake_case")]
+pub enum AnnotationFamilyCapability {
+  /// Protected-content and source-format preservation outcomes.
+  Format,
+}
 
 /// Guided-view lenses with an executable relation policy in the current implementation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
