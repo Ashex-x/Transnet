@@ -151,7 +151,7 @@ async fn relationship_page_capability_requires_both_runtime_dependencies_in_any_
       .unwrap()
   };
   let page_only =
-    app_router(AppState::new(legacy_service()).with_relationship_page_runtime(runtime.clone()))
+    app_router(AppState::new().with_relationship_page_runtime(runtime.clone()))
       .oneshot(capability_request())
       .await
       .unwrap();
@@ -162,7 +162,7 @@ async fn relationship_page_capability_requires_both_runtime_dependencies_in_any_
     .any(|value| value == "relationship-page-v1"));
 
   for state in [
-    AppState::new(legacy_service())
+    AppState::new()
       .with_translation_orchestrator(Arc::new(TranslationOrchestrator::new(Arc::new(
         FakeGeneration {
           connected: Ok(connected_output()),
@@ -170,7 +170,7 @@ async fn relationship_page_capability_requires_both_runtime_dependencies_in_any_
         },
       ))))
       .with_relationship_page_runtime(runtime.clone()),
-    AppState::new(legacy_service())
+    AppState::new()
       .with_relationship_page_runtime(runtime.clone())
       .with_translation_orchestrator(Arc::new(TranslationOrchestrator::new(Arc::new(
         FakeGeneration {
@@ -210,7 +210,7 @@ async fn relationship_page_deadline_and_cancellation_keep_closed_problem_semanti
       lexical: Ok(lexical_output()),
     }));
     let response = app_router(
-      AppState::new(legacy_service())
+      AppState::new()
         .with_translation_orchestrator(Arc::new(orchestrator))
         .with_relationship_page_runtime(relationship_runtime(error)),
     )
@@ -233,7 +233,7 @@ async fn structured_alternatives_fail_before_model_or_material_execution() {
     lexical: Err(ModelOperationError::Unavailable),
   }));
   let response = app_router(
-    AppState::new(legacy_service())
+    AppState::new()
       .with_translation_orchestrator(Arc::new(orchestrator))
       .with_relationship_page_runtime(relationship_runtime(
         RelationshipPageMaterialError::Unavailable,
