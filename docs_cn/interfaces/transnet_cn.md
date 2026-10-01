@@ -4,7 +4,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本合同定义目标 island-port 到 Transnet 接口及内部共享 HTTP/1.1-over-UDS 规则。Island-port 负责互联网传输、认证、用户状态、文件接入、文档重建和最终展示。Transnet 不接收终端用户身份，也不持久化实时请求内容。
 
-状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。翻译边界严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；带 guidance 的 text、结构化 segment 与有界 image region 都会进入当前中立 Gemma VLM orchestrator。迁移期间可以通过显式配置保留 loopback listener。严格 knowledge-path handler 及其 application service 已在隔离 route-composition seam 后实现，但默认 runtime 尚未注入该 service 或公开 route。实时检索现在具备下文描述的请求级 policy orchestrator 与强化的生产 page-fetch adapter，但尚无生产 search adapter 或 runtime composition；因此 capability 继续将其报告为不可用。引导式知识视图仍未实现为 runtime capability。
+状态：修订后的目标 v1 合同。仓库中的可执行文件只通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery、探针、翻译、BasicCard 与固定发布 sense read，以及按条件组合的 knowledge view/path。翻译边界严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；带 guidance 的 text、结构化 segment 与有界 image region 都会进入当前中立 Gemma VLM orchestrator。缺少完整 search/fetch runtime composition 时，实时检索仍不可用。
 
 ## 目录
 
@@ -437,7 +437,7 @@ request body 与两个嵌套 node reference 都拒绝未知字段。Node kind �
 
 畸形 JSON 或 content type 返回 `400 invalid_json`；无效字段返回 `422 invalid_knowledge_path_request`；退役 pin 返回 `409 content_release_unavailable`；dependency 与 incomplete-search failure 返回可重试 `503` problem；deadline 耗尽返回可重试 `504 deadline_exceeded`；矛盾不可变 proof 返回 `502 invalid_knowledge_proof`。每个 success 与 problem response 都使用 `Cache-Control: no-store`；错误绝不回显 node ID 或 dependency payload。
 
-旧目标草案 `POST /api/v1/graph/get` 与 `POST /api/v1/graph/neighbors` 已从修订目标合同移除。当前可执行文件中的过渡期 `GET /v1/graph...` handler 在迁移或移除前仍是实现兼容行为；它们的存在不使其成为目标 v1 路由。
+旧目标草案 `POST /api/v1/graph/get`、`POST /api/v1/graph/neighbors` 与过渡期 `GET /v1/graph...` handler 均已移除。引导式 view/path 是唯一公共 relationship traversal 表面。
 
 ## 相关文档
 

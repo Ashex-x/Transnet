@@ -599,8 +599,6 @@ async fn target_payload_limit_uses_the_shared_problem_contract() {
     AppState::new(legacy_service()).with_translation_orchestrator(Arc::new(orchestrator)),
     &HttpConfig {
       max_request_body_bytes: 32,
-      allowed_origins: Vec::new(),
-      allow_credentials: false,
     },
   )
   .unwrap();
@@ -619,7 +617,7 @@ async fn target_payload_limit_uses_the_shared_problem_contract() {
 }
 
 #[tokio::test]
-async fn missing_orchestrator_fails_closed_without_affecting_the_legacy_route() {
+async fn missing_orchestrator_fails_closed_on_the_target_route() {
   let router = app_router(AppState::new(legacy_service()));
   let response = router
     .oneshot(request(json!({

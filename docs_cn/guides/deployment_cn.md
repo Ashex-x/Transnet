@@ -17,7 +17,7 @@ sudo systemctl enable transnet
 sudo systemctl restart transnet
 ```
 
-该 unit 以 `0770` 模式创建 `/run/transnet`，并将进程 umask 设为 `0007`。目标运行时会在其中绑定 `/run/transnet/transnet.sock`；应仅通过配置的组向 island-port 运行时授予访问权。在入站 UDS 迁移完成前，当前可执行文件仍使用配置的回环 TCP listener。
+该 unit 以 `0770` 模式创建 `/run/transnet`，并将进程 umask 设为 `0007`。运行时只在其中绑定 `/run/transnet/transnet.sock`；应仅通过配置的组向 island-port 运行时授予访问权。
 
 生产配置和所有 provider 凭据都必须留在版本控制之外。不得向本仓库加入凭据、请求文本、生成输出、日志或运行时状态。当前及目标设置见[配置指南](configuration_cn.md)。
 
@@ -46,14 +46,7 @@ ashex ALL=(root) NOPASSWD: /bin/systemctl restart transnet, /bin/systemctl is-ac
 
 ## 发布检查
 
-在 UDS 传输迁移完成前，检查配置的过渡性回环 listener 和服务状态：
-
-```bash
-curl --fail http://127.0.0.1:16002/health
-sudo systemctl status transnet
-```
-
-目标 listener 实现后，改用文档规定的 UDS 探针：
+检查目标 UDS 探针和服务状态：
 
 ```bash
 curl --fail --unix-socket /run/transnet/transnet.sock \

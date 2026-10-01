@@ -17,7 +17,7 @@
   <a href="README_cn.md">中文</a>
 </p>
 
-Transnet is a private, stateless translation and relationship-knowledge service. It translates connected text and, for a resolved lexical sense or domain concept, builds a concise relationship-centered translation-wiki page. The checked-in executable currently provides the loopback translation and structured-lookup subset; the [system design](docs/transnet.md) defines the target service.
+Transnet is a private, stateless translation and relationship-knowledge service. It translates connected text and, for a resolved lexical sense or domain concept, builds a concise relationship-centered translation-wiki page. The checked-in executable serves the target API over a Unix domain socket; the [system design](docs/transnet.md) defines the service.
 
 ```mermaid
 flowchart LR
@@ -37,7 +37,7 @@ This two-provider setup describes the current executable only. The target archit
 
 ## Configure
 
-The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` selects the target Unix socket with `socket_path` and `socket_mode`; omitting `socket_path` explicitly selects the transitional loopback `host` and `port`. `[http]` sets the body limit and transitional CORS policy, `[translation]` sets routing and legacy retry defaults, `[gemma4]` and `[translate_gemma]` identify those provider endpoints, and `[provider_resilience.*]` sets independent timeout, retry, concurrency, and circuit-breaker bounds. See the [configuration guide](docs/guides/configuration.md). Do not commit real provider credentials.
+The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` requires the Unix `socket_path` and `socket_mode`; `[http]` sets the body limit. `[translation]` and the provider sections retain internal model policy while the provider adapter is consolidated. See the [configuration guide](docs/guides/configuration.md). Do not commit real provider credentials.
 
 `RUST_LOG` overrides `server.log_level`. `server.log_format = "json"` writes newline-delimited JSON; any other value writes compact text. Debug builds log to `logs/debug/transnet.log`, release builds log to `logs/release/transnet.log`; each file is replaced on startup.
 
@@ -84,7 +84,7 @@ curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/a
 
 The checked-in configuration uses the target UDS listener. MySQL canonical cards and releases plus Qdrant knowledge nodes and edges remain target capabilities until their status is advanced in the interface and guide documents. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
 
-For transitional loopback compatibility, omit `server.socket_path`, then verify with `curl http://127.0.0.1:16002/health`.
+Legacy TCP, CORS, `POST /translate`, `/v1/lookups`, `/v1/senses/*`, and raw `/v1/graph*` surfaces are not registered.
 
 See the [design](docs/transnet.md), [island-port-to-Transnet service interface and UDS transport](docs/interfaces/transnet.md), [canonical-data endpoints](docs/interfaces/canonical-data.md), [retrieval-data endpoints](docs/interfaces/retrieval-data.md), [configuration reference](docs/guides/configuration.md), and [deployment guide](docs/guides/deployment.md).
 

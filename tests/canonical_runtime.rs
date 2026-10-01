@@ -217,7 +217,12 @@ async fn strict_outbound_client_can_back_opt_in_service_and_readiness() {
       )));
     assert!(state.canonical_read_service().is_some());
     let response = app_router(state)
-      .oneshot(Request::get("/readyz").body(Body::empty()).unwrap())
+      .oneshot(
+        Request::post("/api/v1/readyz")
+          .header("content-type", "application/json")
+          .body(Body::from("{}"))
+          .unwrap(),
+      )
       .await
       .unwrap();
     assert_eq!(response.status(), expected);
@@ -229,11 +234,16 @@ async fn disabled_runtime_keeps_model_only_readiness_and_no_canonical_dependency
   let state = AppState::new(legacy_service());
   assert!(state.canonical_read_service().is_none());
   let response = app_router(state)
-    .oneshot(Request::get("/readyz").body(Body::empty()).unwrap())
+    .oneshot(
+      Request::post("/api/v1/readyz")
+        .header("content-type", "application/json")
+        .body(Body::from("{}"))
+        .unwrap(),
+    )
     .await
     .unwrap();
   assert_eq!(response.status(), StatusCode::OK);
-  assert_eq!(json(response).await, serde_json::json!({"status":"ok"}));
+  assert_eq!(json(response).await["data"]["status"], "ready");
 }
 
 #[tokio::test]
@@ -258,7 +268,12 @@ async fn enabled_runtime_reuses_one_authority_for_service_and_read_only_probe() 
     let router = app_router(state);
     let response = router
       .clone()
-      .oneshot(Request::get("/readyz").body(Body::empty()).unwrap())
+      .oneshot(
+        Request::post("/api/v1/readyz")
+          .header("content-type", "application/json")
+          .body(Body::from("{}"))
+          .unwrap(),
+      )
       .await
       .unwrap();
     assert_eq!(response.status(), expected);

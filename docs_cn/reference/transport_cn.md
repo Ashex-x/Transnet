@@ -6,7 +6,7 @@ English: [Transport and API boundary](../../docs/reference/transport.md)
 
 ## 当前运行时
 
-可执行文件当前绑定回环 TCP，保留过渡期 `POST /translate`，并以共享 problem response 基础设施暴露统一 `POST /api/v1/translations` handler。这不表示目标 UDS listener 已实现；后者仍是独立的传输工作。
+可执行文件只绑定其所属 Unix socket，并以共享 envelope 与 problem response 基础设施暴露目标 `/api/v1` 操作。TCP、CORS、`POST /translate`、`/v1/lookups`、`/v1/senses/*` 与原始 `/v1/graph*` 路由均不存在。
 
 ## 目标 server
 
@@ -18,7 +18,7 @@ Middleware 顺序是确定的：识别路由、建立安全请求上下文、应
 
 ## Handler 规则
 
-探针、翻译、词义和图 handler 必须保持轻薄：解码并校验线上结构，调用一次 application 操作，再编码已记录结果。它们不选择模型、不推断领域、不构造数据库查询、不遍历图，也不持久化请求数据。
+探针、翻译、BasicCard、sense read、knowledge view 与 knowledge path handler 必须保持轻薄：解码并校验线上结构，调用一次 application 操作，再编码已记录结果。它们不选择模型、不推断领域、不构造数据库查询、不遍历图，也不持久化请求数据。
 
 ## 验证
 

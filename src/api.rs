@@ -1,19 +1,15 @@
 //! HTTP boundary, platform middleware, and versioned API routing.
 
-use std::{fmt, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use axum::{
-  extract::{rejection::JsonRejection, DefaultBodyLimit, MatchedPath, Request, State},
-  http::{header, HeaderName, Method, StatusCode},
+  extract::{DefaultBodyLimit, MatchedPath, Request},
+  http::StatusCode,
   middleware,
   response::{IntoResponse, Response},
-  routing::{get, post},
   Json, Router,
 };
-use sha2::{Digest, Sha256};
-use thiserror::Error;
 use tower_http::{
-  cors::{AllowOrigin, CorsLayer},
   limit::RequestBodyLimitLayer,
   trace::{DefaultOnFailure, DefaultOnResponse, TraceLayer},
 };
@@ -21,25 +17,14 @@ use tracing::Level;
 
 use crate::{
   application::{
-    canonical_lookup::CanonicalLookupService,
     canonical_read::CanonicalReadService,
-    canonical_sense_details::{ActiveCanonicalSenseDetailsService, CanonicalSenseDetailsService},
-    graph::GraphService,
-    graph_topology_cache::GraphTopologySnapshotCacheService,
-    lookup::LookupService,
-    observability::ClosedMetricsDispatcher,
     relationship_page::RelationshipPageRuntime,
     translation::TranslationOrchestrator,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
   domain::capabilities::{KnowledgeCapabilityBundle, ServiceCapabilities},
-  domain::observability::MetricEvent,
-  ports::{
-    active_content_reader::ActiveContentReader, learning_model::LearningModel,
-    metrics::MetricsRecorder,
-  },
-  provider::{TranslationError, TranslationService},
-  types::{ErrorResponse, HealthResponse, TranslateRequest},
+  provider::TranslationService,
+  types::ErrorResponse,
 };
 
 mod envelope;
@@ -66,111 +51,14 @@ pub use v1::{
 
 use request_id::RequestId;
 
-/// One internally coherent graph-route dependency arrangement.
-///
-/// A cached topology service owns the graph service used to rebuild public snapshots. Keeping the
-/// two variants mutually exclusive makes it impossible for [`AppState`] to route full topology
-/// reads through one graph service while direct neighbor pages use another.
-#[derive(Clone)]
-enum GraphRouteService {
-  Direct(Arc<GraphService>),
-  TopologyCached(Arc<GraphTopologySnapshotCacheService>),
-}
-
-impl GraphRouteService {
-  fn graph_service(&self) -> &Arc<GraphService> {
-    match self {
-      Self::Direct(service) => service,
-      Self::TopologyCached(service) => service.graph_service(),
-    }
-  }
-
-  fn topology_cache_service(&self) -> Option<&Arc<GraphTopologySnapshotCacheService>> {
-    match self {
-      Self::Direct(_) => None,
-      Self::TopologyCached(service) => Some(service),
-    }
-  }
-
-  fn with_metrics_dispatcher(self, dispatcher: Arc<ClosedMetricsDispatcher>) -> Self {
-    match self {
-      Self::Direct(service) => Self::Direct(Arc::new(
-        (*service).clone().with_metrics_dispatcher(dispatcher),
-      )),
-      Self::TopologyCached(service) => Self::TopologyCached(Arc::new(
-        (*service).clone().with_metrics_dispatcher(dispatcher),
-      )),
-    }
-  }
-}
-/// Minimum number of secret bytes accepted for graph-cursor confidentiality and integrity.
-pub const MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES: usize = 32;
-
-/// Validated secret used to protect opaque graph neighbor cursors.
-///
-/// This type deliberately redacts its contents in `Debug` output. Its normalized key material is
-/// used for both confidentiality and integrity. Hosts serving graph pagination across restarts or
-/// multiple replicas must inject the same high-entropy value through
-/// [`AppState::with_graph_cursor_protection_key`].
-#[derive(Clone)]
-pub struct GraphCursorProtectionKey(Arc<[u8]>);
-
-impl GraphCursorProtectionKey {
-  /// Creates a graph-cursor protection key from at least 32 bytes of high-entropy secret material.
-  ///
-  /// # Errors
-  ///
-  /// Returns an error when `secret` is shorter than the minimum protection-key length.
-  pub fn new(secret: impl AsRef<[u8]>) -> Result<Self, GraphCursorProtectionKeyError> {
-    let secret = secret.as_ref();
-    if secret.len() < MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES {
-      return Err(GraphCursorProtectionKeyError::TooShort);
-    }
-    Ok(Self(Arc::from(Sha256::digest(secret).to_vec())))
-  }
-
-  fn ephemeral() -> Self {
-    let mut secret = Vec::with_capacity(MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES);
-    secret.extend(ulid::Ulid::new().to_bytes());
-    secret.extend(ulid::Ulid::new().to_bytes());
-    Self(Arc::from(Sha256::digest(secret).to_vec()))
-  }
-
-  pub(crate) fn as_bytes(&self) -> &[u8] {
-    &self.0
-  }
-}
-
-impl fmt::Debug for GraphCursorProtectionKey {
-  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-    formatter.write_str("GraphCursorProtectionKey(REDACTED)")
-  }
-}
-
-/// Validation failure for graph-cursor protection-key material.
-#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
-pub enum GraphCursorProtectionKeyError {
-  /// The supplied key cannot safely provide the required cursor protection.
-  #[error(
-    "graph cursor protection key must contain at least {MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES} bytes"
-  )]
-  TooShort,
-}
-
 /// Shared dependencies used by request handlers.
 #[derive(Clone)]
 pub struct AppState {
-  service: Arc<TranslationService>,
+  _service: Arc<TranslationService>,
   translation_orchestrator: Option<Arc<TranslationOrchestrator>>,
   relationship_page_runtime: Option<Arc<RelationshipPageRuntime>>,
-  lookup: Option<Arc<LookupService>>,
-  canonical_lookup: Option<Arc<CanonicalLookupService>>,
   canonical_read: Option<Arc<CanonicalReadService>>,
   canonical_read_timeout: Option<Duration>,
-  canonical_sense_details: Option<Arc<ActiveCanonicalSenseDetailsService>>,
-  graph: Option<GraphRouteService>,
-  graph_cursor_protection_key: GraphCursorProtectionKey,
-  metrics: Option<Arc<ClosedMetricsDispatcher>>,
   readiness: Arc<dyn Readiness>,
   capabilities: ServiceCapabilities,
   knowledge_routes: Option<KnowledgeRouteDependencies>,
@@ -178,24 +66,14 @@ pub struct AppState {
 }
 
 impl AppState {
-  /// Creates application state for a translation service.
-  ///
-  /// Graph pagination starts with an ephemeral process-local protection key. A graph-serving host
-  /// must replace it with [`Self::with_graph_cursor_protection_key`] when cursors must survive a
-  /// restart or move between replicas.
+  /// Creates application state for the target translation service.
   pub fn new(service: TranslationService) -> Self {
     Self {
-      service: Arc::new(service),
+      _service: Arc::new(service),
       translation_orchestrator: None,
       relationship_page_runtime: None,
-      lookup: None,
-      canonical_lookup: None,
       canonical_read: None,
       canonical_read_timeout: None,
-      canonical_sense_details: None,
-      graph: None,
-      graph_cursor_protection_key: GraphCursorProtectionKey::ephemeral(),
-      metrics: None,
       readiness: Arc::new(AlwaysReady),
       capabilities: ServiceCapabilities::current(DEFAULT_MAX_REQUEST_BODY_BYTES),
       knowledge_routes: None,
@@ -237,29 +115,6 @@ impl AppState {
     self
   }
 
-  /// Adds the structured lexical-model dependency used by `/v1/lookups`.
-  pub fn with_learning_model(mut self, model: Arc<dyn LearningModel>) -> Self {
-    self.lookup = Some(Arc::new(LookupService::new(model)));
-    self
-  }
-
-  /// Adds the deterministic canonical lookup dependency used by eligible `/v1/lookups` requests.
-  ///
-  /// Requests with automatic language detection or nonblank context intentionally remain on the
-  /// injected learning-model path because this foundation does not perform language analysis or
-  /// private contextual policy.
-  pub fn with_canonical_lookup(mut self, mut lookup: Arc<CanonicalLookupService>) -> Self {
-    if let Some(dispatcher) = &self.metrics {
-      lookup = Arc::new(
-        (*lookup)
-          .clone()
-          .with_metrics_dispatcher(dispatcher.clone()),
-      );
-    }
-    self.canonical_lookup = Some(lookup);
-    self
-  }
-
   /// Retains the opt-in canonical-only application dependency for BasicCard delivery.
   pub fn with_canonical_read_service(mut self, service: Arc<CanonicalReadService>) -> Self {
     self.canonical_read = Some(service);
@@ -288,95 +143,7 @@ impl AppState {
     self.canonical_read_timeout
   }
 
-  /// Adds the public active-release-pinned canonical sense-details composition.
-  ///
-  /// The route is registered only when both the narrow active-content reader and dedicated
-  /// details service are injected. The default model-only runtime therefore cannot imply that
-  /// canonical content, source permissions, or a current content release are available.
-  pub fn with_canonical_sense_details(
-    mut self,
-    active_content: Arc<dyn ActiveContentReader>,
-    details: Arc<CanonicalSenseDetailsService>,
-  ) -> Self {
-    self.canonical_sense_details = Some(Arc::new(ActiveCanonicalSenseDetailsService::new(
-      active_content,
-      details,
-    )));
-    self
-  }
-
-  /// Adds a closed, best-effort metric recorder to the available observed backend dependencies.
-  ///
-  /// The recorder accepts only the closed metric catalog. Its bounded dispatcher is never awaited:
-  /// saturated or runtime-less delivery drops telemetry rather than delaying or changing a response.
-  /// Canonical lookup and graph services already attached to this state are cloned with this
-  /// dispatcher, as are services attached later through their respective builders. Translation,
-  /// health and readiness routes do not invent events that the catalog cannot express.
-  pub fn with_metrics_recorder(self, recorder: Arc<dyn MetricsRecorder>) -> Self {
-    self.with_metrics_dispatcher(Arc::new(ClosedMetricsDispatcher::new(recorder)))
-  }
-
-  /// Adds a prebuilt bounded dispatcher to the available observed backend dependencies.
-  ///
-  /// The dispatcher is attached to canonical lookup and graph services regardless of builder order.
-  /// It carries only closed static metric values and cannot delay a request path.
-  pub fn with_metrics_dispatcher(mut self, dispatcher: Arc<ClosedMetricsDispatcher>) -> Self {
-    self.metrics = Some(dispatcher.clone());
-    if let Some(canonical_lookup) = self.canonical_lookup.clone() {
-      self.canonical_lookup = Some(Arc::new(
-        (*canonical_lookup)
-          .clone()
-          .with_metrics_dispatcher(dispatcher.clone()),
-      ));
-    }
-    if let Some(graph) = self.graph.clone() {
-      self.graph = Some(graph.with_metrics_dispatcher(dispatcher));
-    }
-    self
-  }
-
-  /// Adds an uncached canonical graph service used by the conditional graph-read routes.
-  ///
-  /// Without this injected dependency, graph routes are intentionally not registered so the
-  /// default model-only runtime cannot imply that canonical graph content is available.
-  pub fn with_graph_service(mut self, mut service: Arc<GraphService>) -> Self {
-    if let Some(dispatcher) = &self.metrics {
-      service = Arc::new(
-        (*service)
-          .clone()
-          .with_metrics_dispatcher(dispatcher.clone()),
-      );
-    }
-    self.graph = Some(GraphRouteService::Direct(service));
-    self
-  }
-
-  /// Adds one coherent public graph-topology cache arrangement for conditional graph routes.
-  pub fn with_graph_topology_snapshot_cache(
-    mut self,
-    mut service: Arc<GraphTopologySnapshotCacheService>,
-  ) -> Self {
-    if let Some(dispatcher) = &self.metrics {
-      service = Arc::new(
-        (*service)
-          .clone()
-          .with_metrics_dispatcher(dispatcher.clone()),
-      );
-    }
-    self.graph = Some(GraphRouteService::TopologyCached(service));
-    self
-  }
-
-  /// Replaces the process-local graph-cursor protection key with stable secret material.
-  ///
-  /// Every graph-serving replica and replacement process must use the same high-entropy key when
-  /// clients need to resume opaque neighbor cursors across a restart or load-balanced request.
-  pub fn with_graph_cursor_protection_key(mut self, key: GraphCursorProtectionKey) -> Self {
-    self.graph_cursor_protection_key = key;
-    self
-  }
-
-  /// Adds the dependency probe used by `GET /readyz` when no knowledge bundle owns readiness.
+  /// Adds the dependency probe used by `POST /api/v1/readyz` when no knowledge bundle owns readiness.
   pub fn with_readiness(mut self, readiness: Arc<dyn Readiness>) -> Self {
     if self.knowledge_routes.is_none() {
       self.readiness = readiness;
@@ -411,10 +178,6 @@ impl AppState {
     self
   }
 
-  pub(crate) fn canonical_lookup_service(&self) -> Option<&Arc<CanonicalLookupService>> {
-    self.canonical_lookup.as_ref()
-  }
-
   pub(crate) fn translation_orchestrator(&self) -> Option<&Arc<TranslationOrchestrator>> {
     self.translation_orchestrator.as_ref()
   }
@@ -422,46 +185,8 @@ impl AppState {
   pub(crate) fn relationship_page_runtime(&self) -> Option<&Arc<RelationshipPageRuntime>> {
     self.relationship_page_runtime.as_ref()
   }
-
-  pub(crate) fn canonical_sense_details_service(
-    &self,
-  ) -> Option<&Arc<ActiveCanonicalSenseDetailsService>> {
-    self.canonical_sense_details.as_ref()
-  }
-
-  pub(crate) fn dispatch_metric(&self, event: MetricEvent) {
-    if let Some(metrics) = &self.metrics {
-      metrics.dispatch(event);
-    }
-  }
-
-  pub(crate) fn graph_service(&self) -> Option<&Arc<GraphService>> {
-    self.graph.as_ref().map(GraphRouteService::graph_service)
-  }
-
-  pub(crate) fn graph_topology_snapshot_cache_service(
-    &self,
-  ) -> Option<&Arc<GraphTopologySnapshotCacheService>> {
-    self
-      .graph
-      .as_ref()
-      .and_then(GraphRouteService::topology_cache_service)
-  }
-
-  pub(crate) fn graph_cursor_protection_key(&self) -> &[u8] {
-    self.graph_cursor_protection_key.as_bytes()
-  }
-
   pub(crate) fn capabilities(&self) -> &ServiceCapabilities {
     &self.capabilities
-  }
-
-  fn has_graph_service(&self) -> bool {
-    self.graph.is_some()
-  }
-
-  fn has_canonical_sense_details_service(&self) -> bool {
-    self.canonical_sense_details.is_some()
   }
 
   fn has_knowledge_routes(&self) -> bool {
@@ -471,27 +196,23 @@ impl AppState {
 
 /// Builds the complete Transnet HTTP router with a safe default HTTP boundary.
 pub fn app_router(state: AppState) -> Router {
-  build_router(state, DEFAULT_MAX_REQUEST_BODY_BYTES, None)
+  build_router(state, DEFAULT_MAX_REQUEST_BODY_BYTES)
 }
 
 /// Builds the complete Transnet HTTP router with validated runtime HTTP configuration.
 ///
 /// # Errors
 ///
-/// Returns an error when the request-size or CORS origin configuration is invalid.
+/// Returns an error when the request-size configuration is invalid.
 pub fn app_router_with_http_config(
   state: AppState,
   config: &HttpConfig,
 ) -> Result<Router, HttpConfigError> {
-  let cors = cors_layer(config)?;
-  Ok(build_router(state, config.max_request_body_bytes, cors))
+  config.validate()?;
+  Ok(build_router(state, config.max_request_body_bytes))
 }
 
-fn build_router(
-  mut state: AppState,
-  max_request_body_bytes: usize,
-  cors: Option<CorsLayer>,
-) -> Router {
+fn build_router(mut state: AppState, max_request_body_bytes: usize) -> Router {
   let has_knowledge_routes = state.has_knowledge_routes();
   state.capabilities = state
     .capabilities
@@ -504,17 +225,6 @@ fn build_router(
   let knowledge_routes = state.knowledge_routes.clone();
   let runtime_cancellation = state.runtime_cancellation.clone();
   let router = Router::new()
-    .route("/health", get(health))
-    .route("/livez", get(livez))
-    .route("/readyz", get(readyz))
-    .route("/translate", post(translate))
-    .nest(
-      "/v1",
-      v1::router(
-        state.has_graph_service(),
-        state.has_canonical_sense_details_service(),
-      ),
-    )
     .nest(
       "/api/v1",
       v1::target_router(knowledge_routes, runtime_cancellation),
@@ -523,11 +233,6 @@ fn build_router(
     .layer(DefaultBodyLimit::max(max_request_body_bytes))
     .layer(RequestBodyLimitLayer::new(max_request_body_bytes))
     .layer(middleware::from_fn(payload_limit_response));
-  let router = match cors {
-    Some(cors) => router.layer(cors),
-    None => router,
-  };
-
   router
     .layer(
       TraceLayer::new_for_http()
@@ -560,28 +265,6 @@ fn trace_route<B>(request: &Request<B>) -> &str {
     .map_or("unmatched", MatchedPath::as_str)
 }
 
-fn cors_layer(config: &HttpConfig) -> Result<Option<CorsLayer>, HttpConfigError> {
-  let origins = config.origin_header_values()?;
-  if origins.is_empty() {
-    return Ok(None);
-  }
-
-  let cors = CorsLayer::new()
-    .allow_origin(AllowOrigin::list(origins))
-    .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-    .allow_headers([
-      header::CONTENT_TYPE,
-      HeaderName::from_static("x-request-id"),
-      HeaderName::from_static("x-deadline-at"),
-      HeaderName::from_static("traceparent"),
-    ])
-    .expose_headers([
-      HeaderName::from_static("x-request-id"),
-      HeaderName::from_static("traceparent"),
-    ]);
-  Ok(Some(cors))
-}
-
 async fn payload_limit_response(request: Request, next: middleware::Next) -> Response {
   let is_v1 = request.uri().path() == "/v1"
     || request.uri().path().starts_with("/v1/")
@@ -599,51 +282,6 @@ async fn payload_limit_response(request: Request, next: middleware::Next) -> Res
     }
   }
   error(StatusCode::PAYLOAD_TOO_LARGE, "request body too large")
-}
-
-async fn health() -> Json<HealthResponse> {
-  Json(HealthResponse { status: "ok" })
-}
-
-async fn livez() -> Json<HealthResponse> {
-  Json(HealthResponse { status: "ok" })
-}
-
-async fn readyz(State(state): State<AppState>) -> Response {
-  if state.readiness.is_ready().await {
-    return (StatusCode::OK, Json(HealthResponse { status: "ok" })).into_response();
-  }
-
-  tracing::warn!("readiness probe reported an unavailable dependency");
-  (
-    StatusCode::SERVICE_UNAVAILABLE,
-    Json(HealthResponse {
-      status: "unavailable",
-    }),
-  )
-    .into_response()
-}
-
-async fn translate(
-  State(state): State<AppState>,
-  payload: Result<Json<TranslateRequest>, JsonRejection>,
-) -> Response {
-  let Json(request) = match payload {
-    Ok(request) => request,
-    Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
-      return error(StatusCode::PAYLOAD_TOO_LARGE, "request body too large")
-    }
-    Err(_) => return error(StatusCode::BAD_REQUEST, "invalid JSON request"),
-  };
-
-  match state.service.translate(request).await {
-    Ok(response) => (StatusCode::OK, Json(response)).into_response(),
-    Err(TranslationError::Validation(message)) => error(StatusCode::UNPROCESSABLE_ENTITY, message),
-    Err(TranslationError::Provider) => error(
-      StatusCode::SERVICE_UNAVAILABLE,
-      "translation provider unavailable",
-    ),
-  }
 }
 
 fn error(status: StatusCode, message: impl Into<String>) -> Response {
@@ -671,20 +309,7 @@ mod tests {
   };
   use tower::ServiceExt;
 
-  use super::{trace_route, GraphCursorProtectionKey, GraphCursorProtectionKeyError};
-
-  #[test]
-  fn graph_cursor_protection_keys_require_length_and_redact_debug_output() {
-    let secret = b"protection-key-must-not-appear-in-debug";
-    let key = GraphCursorProtectionKey::new(secret).unwrap();
-
-    assert_eq!(format!("{key:?}"), "GraphCursorProtectionKey(REDACTED)");
-    assert!(GraphCursorProtectionKey::new([0_u8; 31]).is_err());
-    assert!(matches!(
-      GraphCursorProtectionKey::new([0_u8; 31]),
-      Err(GraphCursorProtectionKeyError::TooShort)
-    ));
-  }
+  use super::trace_route;
 
   #[test]
   fn trace_route_never_falls_back_to_a_raw_unmatched_path() {

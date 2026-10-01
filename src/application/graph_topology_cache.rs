@@ -438,10 +438,6 @@ impl GraphTopologySnapshotCacheService {
   /// This is crate-visible so the HTTP composition root can direct neighbor pages through the
   /// same canonical graph dependency without accepting a second, potentially mismatched graph
   /// service from callers.
-  pub(crate) fn graph_service(&self) -> &Arc<GraphService> {
-    &self.graph
-  }
-
   fn expires_at(&self) -> Option<UtcTimestamp> {
     self.clock.now().checked_add(self.ttl)
   }

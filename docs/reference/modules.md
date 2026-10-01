@@ -4,7 +4,7 @@
 
 This directory documents the important service modules and their ownership boundaries. Read this index first, then open the module page that owns the behavior. Exact wire and storage schemas stay in [interfaces](../interfaces/README.md); product semantics stay in the [system design](../transnet.md); procedures stay in [guides](../documentation-index.md#guides); public Rust item details stay in source comments and rustdoc.
 
-Status: the current executable uses transitional loopback HTTP. Target pages describe intended boundaries unless their status section explicitly says the behavior is composed in the default runtime.
+Status: the executable uses target HTTP/1.1 over UDS. Target pages describe intended boundaries unless their status section explicitly says the behavior is composed in the runtime.
 
 ## Module map
 

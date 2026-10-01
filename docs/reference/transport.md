@@ -6,7 +6,7 @@ This module owns request admission and mapping between HTTP/JSON and application
 
 ## Current runtime
 
-The executable currently binds loopback TCP, preserves the transitional `POST /translate`, and exposes the unified `POST /api/v1/translations` handler with the shared problem-response infrastructure. This does not implement the target UDS listener; that remains separate transport work.
+The executable binds only its owned Unix socket and exposes the target `/api/v1` operations with shared envelope and problem-response infrastructure. TCP, CORS, `POST /translate`, `/v1/lookups`, `/v1/senses/*`, and raw `/v1/graph*` routes are absent.
 
 ## Target server
 
@@ -18,7 +18,7 @@ The implemented admission middleware now validates or generates one safe request
 
 ## Handler rule
 
-Probe, translation, sense, and graph handlers are thin. They decode and validate wire shapes, call one application operation, and encode the documented result. They do not select models, infer domains, construct database queries, traverse graphs, or persist request data.
+Probe, translation, BasicCard, sense-read, knowledge-view, and knowledge-path handlers are thin. They decode and validate wire shapes, call one application operation, and encode the documented result. They do not select models, infer domains, construct database queries, traverse graphs, or persist request data.
 
 ## Verification
 

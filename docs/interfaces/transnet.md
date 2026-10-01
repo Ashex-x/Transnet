@@ -4,7 +4,7 @@
 
 This contract defines the target island-port-to-Transnet interface and the shared internal HTTP/1.1-over-UDS rules. Island-port owns internet transport, authentication, user state, file ingestion, document reconstruction, and final presentation. Transnet receives no end-user identity and persists no live request content.
 
-Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 through the target inbound UDS and implements target capability discovery and health, liveness, and dependency-readiness probes plus the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. The translation boundary strictly validates tagged text, structured segments, image regions, history, and professional guidance; guided text, structured segments, and bounded image regions reach the current neutral Gemma VLM orchestrator. Explicit configuration may retain the loopback listener during migration. The strict knowledge-path handler and its application service are implemented behind an isolated route-composition seam, but the default runtime does not yet inject that service or expose the route. Live retrieval now has the request-local policy orchestrator and hardened production page-fetch adapter described below, but no production search adapter or runtime composition; capabilities therefore continue to report it unavailable. Guided knowledge views remain an unimplemented runtime capability.
+Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 only through the target inbound UDS and implements target capability discovery, probes, translation, BasicCard and pinned-sense reads, and conditionally composed knowledge views and paths. The translation boundary strictly validates tagged text, structured segments, image regions, history, and professional guidance; guided text, structured segments, and bounded image regions reach the current neutral Gemma VLM orchestrator. Live retrieval remains unavailable without complete search/fetch runtime composition.
 
 ## Contents
 
@@ -445,7 +445,7 @@ Normal outcomes are `connected` and `no_verified_path`; the latter returns an em
 
 Malformed JSON or content type returns `400 invalid_json`; invalid fields return `422 invalid_knowledge_path_request`; a retired pin returns `409 content_release_unavailable`; dependency and incomplete-search failures return retryable `503` problems; deadline exhaustion returns retryable `504 deadline_exceeded`; and contradictory immutable proof returns `502 invalid_knowledge_proof`. Every success and problem response uses `Cache-Control: no-store`; errors never echo node IDs or dependency payloads.
 
-The former target drafts `POST /api/v1/graph/get` and `POST /api/v1/graph/neighbors` are removed from the revised target contract. Transitional `GET /v1/graph...` handlers in the current executable remain implementation compatibility behavior until migrated or removed; their existence does not make them target v1 routes.
+The former target drafts `POST /api/v1/graph/get` and `POST /api/v1/graph/neighbors` and the transitional `GET /v1/graph...` handlers are removed. Guided views and paths are the only public relationship traversal surface.
 
 ## Related documents
 

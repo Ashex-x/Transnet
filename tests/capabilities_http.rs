@@ -57,8 +57,6 @@ fn app_with_state(
     configure(AppState::new(service)),
     &HttpConfig {
       max_request_body_bytes,
-      allowed_origins: Vec::new(),
-      allow_credentials: false,
     },
   )
   .unwrap()

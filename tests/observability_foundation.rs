@@ -31,12 +31,13 @@ fn app() -> axum::Router {
 async fn valid_trace_parent_is_normalized_and_propagated() {
   let response = app()
     .oneshot(
-      Request::get("/health")
+      Request::post("/api/v1/health")
+        .header("content-type", "application/json")
         .header(
           "traceparent",
           "00-4BF92F3577B34DA6A3CE929D0E0E4736-00F067AA0BA902B7-01",
         )
-        .body(Body::empty())
+        .body(Body::from("{}"))
         .unwrap(),
     )
     .await
@@ -54,9 +55,10 @@ async fn malformed_or_repeated_trace_parent_is_not_propagated() {
   let malformed = app()
     .clone()
     .oneshot(
-      Request::get("/health")
+      Request::post("/api/v1/health")
+        .header("content-type", "application/json")
         .header("traceparent", "credential-secret")
-        .body(Body::empty())
+        .body(Body::from("{}"))
         .unwrap(),
     )
     .await
@@ -65,7 +67,8 @@ async fn malformed_or_repeated_trace_parent_is_not_propagated() {
 
   let repeated = app()
     .oneshot(
-      Request::get("/health")
+      Request::post("/api/v1/health")
+        .header("content-type", "application/json")
         .header(
           "traceparent",
           "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
@@ -74,7 +77,7 @@ async fn malformed_or_repeated_trace_parent_is_not_propagated() {
           "traceparent",
           "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-00",
         )
-        .body(Body::empty())
+        .body(Body::from("{}"))
         .unwrap(),
     )
     .await

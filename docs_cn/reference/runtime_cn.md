@@ -4,7 +4,7 @@ English: [Runtime module](../../docs/reference/runtime.md)
 
 运行时模块负责进程配置、启动、依赖组合、就绪、listener 生命周期与优雅停机。它包含生命周期接线，不包含翻译或检索策略。
 
-状态：当前可执行文件绑定过渡期回环 TCP。目标组合使用 [Transnet 服务接口](../interfaces/transnet_cn.md)定义的 UDS 边界。
+状态：可执行文件只绑定 [Transnet 服务接口](../interfaces/transnet_cn.md)定义的 UDS 边界，并拒绝旧 TCP 与 CORS 配置。
 
 当前公共库与路由已移除学习者状态、练习、私有反馈、保存布局和查询任务；健康检查、翻译及旧版模型查询经过无状态请求边界后执行。
 

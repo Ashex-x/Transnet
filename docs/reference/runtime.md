@@ -4,7 +4,7 @@
 
 The runtime module owns process configuration, startup, dependency composition, readiness, listener lifetime, and graceful shutdown. It contains lifecycle wiring, not translation or retrieval policy.
 
-Status: the current executable binds transitional loopback TCP. The target composition uses the UDS boundary defined by the [Transnet service interface](../interfaces/transnet.md).
+Status: the executable binds only the UDS boundary defined by the [Transnet service interface](../interfaces/transnet.md). Legacy TCP and CORS configuration is rejected.
 
 ## Configuration
 

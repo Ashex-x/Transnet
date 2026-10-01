@@ -64,4 +64,9 @@ jobs:
               cargo build --release --locked
               sudo systemctl restart transnet
               sudo systemctl is-active --quiet transnet
+              curl --fail --silent --show-error \
+                --unix-socket /run/transnet/transnet.sock \
+                --request POST http://localhost/api/v1/health \
+                --header 'content-type: application/json' \
+                --data '{}'
           REMOTE
