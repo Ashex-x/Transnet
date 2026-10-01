@@ -36,6 +36,8 @@ pub mod request_context;
 pub mod retrieval;
 /// Bounded storage-neutral requests and results for retrieval-data-v1.
 pub mod retrieval_data;
+/// Root-first canonical and exploratory retrieval outcomes.
+pub mod root_retrieval;
 /// Structured multilingual-to-English translation.
 pub mod translation;
 /// Request-local unified translation values, normalization, and response projection.

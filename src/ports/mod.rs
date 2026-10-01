@@ -32,6 +32,8 @@ pub mod release_control;
 pub mod retrieval_data;
 /// Generic ranked-candidate retrieval interface.
 pub mod retriever;
+/// Canonical root resolution and request-local lexical query encoding.
+pub mod root_retrieval;
 /// Request-local connected-text and lexical-draft model operations.
 pub mod translation_model;
 /// Versioned vector-retrieval interface.
