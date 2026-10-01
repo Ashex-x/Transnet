@@ -26,7 +26,8 @@ use crate::{
   },
   ports::{
     canonical_read::{
-      CanonicalAssertionQuery, CanonicalReadContext, CanonicalReadError, CanonicalReadPort,
+      CanonicalAssertionQuery, CanonicalKnowledgeNodeQuery, CanonicalReadContext,
+      CanonicalReadError, CanonicalReadPort,
     },
     retrieval_data::{RetrievalDataError, RetrievalDataPort},
   },
@@ -36,6 +37,8 @@ use crate::{
 pub const MAX_KNOWLEDGE_PATH_EXPANSIONS: usize = 50;
 /// Maximum retrieval pages consumed while proving one bounded-search outcome.
 pub const MAX_KNOWLEDGE_PATH_PAGES: usize = 12;
+/// Frozen useful-path relation policy revision.
+pub const KNOWLEDGE_PATH_POLICY_VERSION: u32 = 1;
 
 /// Content-free failures that preclude a trustworthy bounded-path outcome.
 #[derive(Clone, Copy, Debug, Error, Eq, PartialEq)]
@@ -98,6 +101,7 @@ impl BoundedKnowledgePathService {
     request: KnowledgePathRequest,
   ) -> Result<KnowledgePathResult, KnowledgePathSearchError> {
     self.validate_request(context, cancellation, &request)?;
+    self.validate_roots(context, cancellation, &request).await?;
 
     let mut frontier = VecDeque::from([SearchState {
       node: request.from.node.clone(),
@@ -128,7 +132,7 @@ impl BoundedKnowledgePathService {
       for (candidate, proof) in neighbors.into_iter().zip(hydrated) {
         let traversal = proof.traversal();
         let expected = candidate.edge.assertion_projection();
-        if !projection_matches(&expected, proof.as_ref())
+        if !projection_matches(&expected, &proof)
           || traversal.source != state.node
           || traversal.target.id() != &candidate.node.node_id
           || traversal.target.family() != CanonicalNodeFamily::from(candidate.node.node_type)
@@ -138,20 +142,22 @@ impl BoundedKnowledgePathService {
         if state.visited.contains(&traversal.target) {
           continue;
         }
-        let step = step_from(proof.as_ref());
+        let next_node = traversal.target.clone();
+        let step = step_from(proof, request.release.clone())?;
         let mut steps = state.steps.clone();
         steps.push(step);
-        if traversal.target == request.to.node {
+        if next_node == request.to.node {
           paths.push(VerifiedKnowledgePath { order: 0, steps });
           if paths.len() == MAX_KNOWLEDGE_PATHS {
+            ensure_active(context, cancellation)?;
             return finalize(request, paths);
           }
           continue;
         }
         let mut visited = state.visited.clone();
-        visited.insert(traversal.target.clone());
+        visited.insert(next_node.clone());
         next_states.push(SearchState {
-          node: traversal.target.clone(),
+          node: next_node,
           steps,
           visited,
         });
@@ -160,6 +166,7 @@ impl BoundedKnowledgePathService {
       frontier.extend(next_states);
     }
 
+    ensure_active(context, cancellation)?;
     if paths.is_empty() {
       let result = KnowledgePathResult {
         request,
@@ -220,11 +227,9 @@ impl BoundedKnowledgePathService {
         limit: MAX_RETRIEVAL_DATA_RESULTS,
         cursor,
       };
-      let response = self
-        .retrieval
-        .search_neighbors(context, search)
-        .await
-        .map_err(map_retrieval_error)?;
+      let response = self.retrieval.search_neighbors(context, search).await;
+      ensure_active(context, cancellation)?;
+      let response = response.map_err(map_retrieval_error)?;
       validate_neighbor_page(&response, root, request, &self.execution)?;
       for candidate in response.neighbors {
         if !edge_ids.insert(candidate.edge.edge_id.clone()) {
@@ -258,7 +263,7 @@ impl BoundedKnowledgePathService {
     cancellation: &CancellationSignal,
     request: &KnowledgePathRequest,
     neighbors: &[crate::domain::retrieval_data::NeighborCandidate],
-  ) -> Result<Vec<Arc<HydratedAssertionProjection>>, KnowledgePathSearchError> {
+  ) -> Result<Vec<HydratedAssertionProjection>, KnowledgePathSearchError> {
     if neighbors.is_empty() {
       return Ok(Vec::new());
     }
@@ -284,20 +289,58 @@ impl BoundedKnowledgePathService {
           limit: projections.len(),
         },
       )
-      .await
-      .map_err(map_canonical_error)?;
+      .await;
+    ensure_active(context, cancellation)?;
+    let hydrated = hydrated.map_err(map_canonical_error)?;
     if hydrated.len() != projections.len() {
       return Err(KnowledgePathSearchError::IncompleteSearch);
     }
-    let hydrated = hydrated.into_iter().map(Arc::new).collect::<Vec<_>>();
     if hydrated
       .iter()
       .zip(&projections)
-      .any(|(value, expected)| !projection_matches(expected, value.as_ref()))
+      .any(|(value, expected)| !projection_matches(expected, value))
     {
       return Err(KnowledgePathSearchError::InconsistentProof);
     }
     Ok(hydrated)
+  }
+
+  async fn validate_roots(
+    &self,
+    context: &RequestContext,
+    cancellation: &CancellationSignal,
+    request: &KnowledgePathRequest,
+  ) -> Result<(), KnowledgePathSearchError> {
+    let canonical_context = CanonicalReadContext {
+      request_id: context.request_id().as_str().to_string(),
+      deadline_at: context.deadline_rfc3339(),
+      timeout: context.remaining_budget(),
+    };
+    let expected = [&request.from.node, &request.to.node];
+    let roots = self
+      .canonical
+      .knowledge_nodes(
+        &canonical_context,
+        &request.release,
+        CanonicalKnowledgeNodeQuery {
+          node_ids: expected.iter().map(|node| node.id().clone()).collect(),
+          evidence_use: EvidenceUse::ApiRedistribution,
+          limit: expected.len(),
+        },
+      )
+      .await;
+    ensure_active(context, cancellation)?;
+    let roots = roots.map_err(map_canonical_error)?;
+    if roots.len() != expected.len()
+      || roots.iter().zip(expected).any(|(root, expected)| {
+        root.validate().is_err()
+          || root.node_id != *expected.id()
+          || CanonicalNodeFamily::from(root.node_type) != expected.family()
+      })
+    {
+      return Err(KnowledgePathSearchError::IncompleteSearch);
+    }
+    Ok(())
   }
 }
 
@@ -315,7 +358,7 @@ fn state_key(state: &SearchState) -> (CanonicalNodeFamily, String, Vec<String>) 
     state
       .steps
       .iter()
-      .map(|step| step.edge_id.to_string())
+      .map(|step| step.projection().traversal().edge_id.to_string())
       .collect(),
   )
 }
@@ -339,20 +382,12 @@ fn projection_matches(
     && !assertion.evidence_ids.is_empty()
 }
 
-fn step_from(hydrated: &HydratedAssertionProjection) -> VerifiedKnowledgeStep {
-  let assertion = hydrated.assertion();
-  let traversal = hydrated.traversal();
-  VerifiedKnowledgeStep {
-    edge_id: traversal.edge_id.clone(),
-    relationship_revision: traversal.relationship_revision,
-    assertion_id: assertion.assertion_id.clone(),
-    assertion_revision: assertion.assertion_revision,
-    traversal_id: traversal.traversal_id.clone(),
-    relation_registry_revision: traversal.relation_registry_revision,
-    source: traversal.source.clone(),
-    target: traversal.target.clone(),
-    evidence_ids: assertion.evidence_ids.clone(),
-  }
+fn step_from(
+  hydrated: HydratedAssertionProjection,
+  release: crate::domain::canonical::CanonicalReleasePin,
+) -> Result<VerifiedKnowledgeStep, KnowledgePathSearchError> {
+  VerifiedKnowledgeStep::from_hydrated(hydrated, release)
+    .map_err(|_| KnowledgePathSearchError::InconsistentProof)
 }
 
 fn validate_neighbor_page(
@@ -387,12 +422,12 @@ fn finalize(
     let left_key = left
       .steps
       .iter()
-      .map(|step| step.edge_id.to_string())
+      .map(|step| step.projection().traversal().edge_id.to_string())
       .collect::<Vec<_>>();
     let right_key = right
       .steps
       .iter()
-      .map(|step| step.edge_id.to_string())
+      .map(|step| step.projection().traversal().edge_id.to_string())
       .collect::<Vec<_>>();
     (left.steps.len(), left_key).cmp(&(right.steps.len(), right_key))
   });
@@ -400,8 +435,13 @@ fn finalize(
     left
       .steps
       .iter()
-      .map(|step| &step.edge_id)
-      .eq(right.steps.iter().map(|step| &step.edge_id))
+      .map(|step| &step.projection().traversal().edge_id)
+      .eq(
+        right
+          .steps
+          .iter()
+          .map(|step| &step.projection().traversal().edge_id),
+      )
   });
   paths.truncate(MAX_KNOWLEDGE_PATHS);
   for (index, path) in paths.iter_mut().enumerate() {
@@ -457,6 +497,7 @@ fn map_canonical_error(error: CanonicalReadError) -> KnowledgePathSearchError {
 }
 
 fn eligible_relations() -> Vec<RetrievalRelation> {
+  debug_assert_eq!(KNOWLEDGE_PATH_POLICY_VERSION, 1);
   [
     "synonym",
     "near_synonym",
@@ -467,7 +508,6 @@ fn eligible_relations() -> Vec<RetrievalRelation> {
     "has_part",
     "part_of",
     "confusable_with",
-    "associated_with",
     "inflection_of",
     "has_inflection",
     "derivationally_related_to",
@@ -525,6 +565,7 @@ mod tests {
     execution: NeighborProjectionExecutionProof,
     neighbors: BTreeMap<CanonicalId, Vec<NeighborCandidate>>,
     failure: Option<RetrievalDataError>,
+    cancel_after_call: Option<Arc<CancellationSignal>>,
   }
 
   #[async_trait]
@@ -561,12 +602,19 @@ mod tests {
       if let Some(error) = self.failure {
         return Err(error);
       }
+      if let Some(cancellation) = &self.cancel_after_call {
+        cancellation.cancel();
+      }
       assert_eq!(request.direction, NeighborDirection::Outgoing);
       assert_eq!(
         request.verification_states,
         vec![RetrievalVerificationState::Verified]
       );
-      assert_eq!(request.relation_types.len(), 21);
+      assert_eq!(request.relation_types.len(), 20);
+      assert!(request
+        .relation_types
+        .iter()
+        .all(|relation| relation.wire_name() != "associated_with"));
       assert!(request.cursor.is_none());
       Ok(NeighborSearchResult {
         release_id: request.release_id,
@@ -585,6 +633,7 @@ mod tests {
   struct FakeCanonical {
     release_id: ReleaseId,
     omit: bool,
+    omit_roots: bool,
     calls: Mutex<usize>,
   }
 
@@ -646,6 +695,38 @@ mod tests {
         .map(|projection| hydrated(&self.release_id, projection))
         .collect()
     }
+
+    async fn knowledge_nodes(
+      &self,
+      _context: &CanonicalReadContext,
+      pin: &CanonicalReleasePin,
+      query: CanonicalKnowledgeNodeQuery,
+    ) -> Result<Vec<crate::domain::knowledge_hydration::HydratedKnowledgeNode>, CanonicalReadError>
+    {
+      assert_eq!(&self.release_id, &pin.release_id);
+      assert_eq!(query.evidence_use, EvidenceUse::ApiRedistribution);
+      if self.omit_roots {
+        return Ok(Vec::new());
+      }
+      Ok(
+        query
+          .node_ids
+          .into_iter()
+          .map(
+            |node_id| crate::domain::knowledge_hydration::HydratedKnowledgeNode {
+              canonical_label: node_id.to_string(),
+              node_id,
+              revision: 1,
+              node_type: RetrievalNodeType::Concept,
+              sense_id: None,
+              language: None,
+              domain_ids: vec![],
+              evidence_ids: vec![id("evidence-root")],
+            },
+          )
+          .collect(),
+      )
+    }
   }
 
   #[tokio::test]
@@ -671,6 +752,7 @@ mod tests {
     let canonical = Arc::new(FakeCanonical {
       release_id: execution.content.release_id.clone(),
       omit: false,
+      omit_roots: false,
       calls: Mutex::new(0),
     });
     let service = BoundedKnowledgePathService::new(
@@ -678,6 +760,7 @@ mod tests {
         execution: proof(&execution),
         neighbors,
         failure: None,
+        cancel_after_call: None,
       }),
       canonical.clone(),
       execution.clone(),
@@ -696,8 +779,14 @@ mod tests {
     };
     assert_eq!(paths.len(), 2);
     assert_eq!(paths[0].order, 1);
-    assert_eq!(paths[0].steps[0].edge_id, id("edge-a-b"));
-    assert_eq!(paths[1].steps[0].edge_id, id("edge-a-c"));
+    assert_eq!(
+      paths[0].steps[0].projection().traversal().edge_id,
+      id("edge-a-b")
+    );
+    assert_eq!(
+      paths[1].steps[0].projection().traversal().edge_id,
+      id("edge-a-c")
+    );
     assert_eq!(*canonical.calls.lock().unwrap(), 3);
   }
 
@@ -711,10 +800,12 @@ mod tests {
         execution: proof(&execution),
         neighbors,
         failure: None,
+        cancel_after_call: None,
       }),
       Arc::new(FakeCanonical {
         release_id: execution.content.release_id.clone(),
         omit: true,
+        omit_roots: false,
         calls: Mutex::new(0),
       }),
       execution.clone(),
@@ -737,10 +828,12 @@ mod tests {
         execution: proof(&execution),
         neighbors: BTreeMap::new(),
         failure: Some(RetrievalDataError::Unavailable),
+        cancel_after_call: None,
       }),
       Arc::new(FakeCanonical {
         release_id: execution.content.release_id.clone(),
         omit: false,
+        omit_roots: false,
         calls: Mutex::new(0),
       }),
       execution.clone(),
@@ -763,10 +856,12 @@ mod tests {
         execution: proof(&execution),
         neighbors: BTreeMap::new(),
         failure: None,
+        cancel_after_call: None,
       }),
       Arc::new(FakeCanonical {
         release_id: execution.content.release_id.clone(),
         omit: false,
+        omit_roots: false,
         calls: Mutex::new(0),
       }),
       execution.clone(),
@@ -780,6 +875,73 @@ mod tests {
       .await
       .unwrap();
     assert_eq!(result.outcome, KnowledgePathOutcome::NoVerifiedPath);
+  }
+
+  #[tokio::test]
+  async fn unknown_root_never_becomes_no_verified_path() {
+    let execution = execution();
+    let service = BoundedKnowledgePathService::new(
+      Arc::new(FakeRetrieval {
+        execution: proof(&execution),
+        neighbors: BTreeMap::new(),
+        failure: Some(RetrievalDataError::Unavailable),
+        cancel_after_call: None,
+      }),
+      Arc::new(FakeCanonical {
+        release_id: execution.content.release_id.clone(),
+        omit: false,
+        omit_roots: true,
+        calls: Mutex::new(0),
+      }),
+      execution.clone(),
+    );
+    let result = service
+      .find(
+        &context(&execution.content),
+        &CancellationSignal::default(),
+        request(&execution.content, "node-unknown", "node-z"),
+      )
+      .await;
+    assert_eq!(result, Err(KnowledgePathSearchError::IncompleteSearch));
+  }
+
+  #[tokio::test]
+  async fn cancellation_after_dependency_await_prevents_success() {
+    let execution = execution();
+    let cancellation = Arc::new(CancellationSignal::default());
+    let service = BoundedKnowledgePathService::new(
+      Arc::new(FakeRetrieval {
+        execution: proof(&execution),
+        neighbors: BTreeMap::new(),
+        failure: None,
+        cancel_after_call: Some(cancellation.clone()),
+      }),
+      Arc::new(FakeCanonical {
+        release_id: execution.content.release_id.clone(),
+        omit: false,
+        omit_roots: false,
+        calls: Mutex::new(0),
+      }),
+      execution.clone(),
+    );
+    let result = service
+      .find(
+        &context(&execution.content),
+        cancellation.as_ref(),
+        request(&execution.content, "node-a", "node-z"),
+      )
+      .await;
+    assert_eq!(result, Err(KnowledgePathSearchError::DeadlineExceeded));
+  }
+
+  #[test]
+  fn useful_path_policy_is_versioned_and_excludes_topical_edges() {
+    assert_eq!(KNOWLEDGE_PATH_POLICY_VERSION, 1);
+    let relations = eligible_relations();
+    assert_eq!(relations.len(), 20);
+    assert!(relations
+      .iter()
+      .all(|relation| relation.wire_name() != "associated_with"));
   }
 
   fn id(value: &str) -> CanonicalId {
