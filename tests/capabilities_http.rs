@@ -221,9 +221,8 @@ async fn structured_capabilities_follow_composition_across_builder_order() {
     serde_json::json!(["text", "segments", "image_regions"])
   );
 
-  let advertised_without_runtime = ServiceCapabilities::current(8_192)
-    .with_image_region_translation()
-    .with_segment_translation(true);
+  let advertised_without_runtime =
+    ServiceCapabilities::current(8_192).with_translation_orchestrator(true);
   let response = app_with_state(8_192, |state| {
     state.with_capabilities(advertised_without_runtime)
   })
