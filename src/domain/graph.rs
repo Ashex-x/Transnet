@@ -134,6 +134,52 @@ pub enum GraphNodeKind {
   Construction,
   /// A context-qualified ordered semantic scale.
   Scale,
+  /// One established phrase.
+  Phrase,
+  /// One multilingual term.
+  MultilingualTerm,
+  /// One language-independent concept.
+  Concept,
+  /// One named entity.
+  Entity,
+  /// One phenomenon.
+  Phenomenon,
+  /// One mechanism.
+  Mechanism,
+  /// One process.
+  Process,
+  /// One equation.
+  Equation,
+  /// One quantity.
+  Quantity,
+  /// One material.
+  Material,
+  /// One instrument.
+  Instrument,
+  /// One method.
+  Method,
+  /// One technology.
+  Technology,
+  /// One application.
+  Application,
+  /// One standard.
+  Standard,
+  /// One organization.
+  Organization,
+  /// One person.
+  Person,
+  /// One place.
+  Place,
+  /// One idiom.
+  Idiom,
+  /// One metaphor.
+  Metaphor,
+  /// One collocation.
+  Collocation,
+  /// One misconception.
+  Misconception,
+  /// One canonical domain.
+  Domain,
 }
 
 /// Stable typed key for every graph node.
