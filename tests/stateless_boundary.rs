@@ -111,16 +111,18 @@ async fn private_headers_are_rejected_before_dispatch_without_echoing_values() {
 async fn translation_and_lookup_reject_unknown_and_private_fields() {
   for (path, base) in [
     (
-      "/translate",
-      serde_json::json!({"text":"hello","source_lang":"en","target_lang":"zh-CN"}),
+      "/api/v1/translations",
+      serde_json::json!({"text":"hello","source_language":"en","target_language":"zh-CN","response_level":"brief"}),
     ),
-    ("/v1/lookups", serde_json::json!({"query":"hello"})),
+    (
+      "/api/v1/basic-cards/lookup",
+      serde_json::json!({"query":"hello","source_language":"en","target_language":"zh-CN"}),
+    ),
   ] {
     for field in [
       "user_id",
       "account_id",
       "learner_level",
-      "history",
       "profile",
       "saved_items",
       "mastery",
@@ -150,7 +152,7 @@ async fn translation_and_lookup_reject_unknown_and_private_fields() {
   }
   let response = router()
     .oneshot(
-      Request::post("/v1/lookups")
+      Request::post("/api/v1/basic-cards/lookup")
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
           r#"{"query":"hello","include":["practice_preview"]}"#,
