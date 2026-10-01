@@ -2029,6 +2029,8 @@ dependencies = [
  "chacha20poly1305",
  "getrandom 0.3.4",
  "httpdate",
+ "hyper",
+ "hyper-util",
  "reqwest",
  "serde",
  "serde_json",

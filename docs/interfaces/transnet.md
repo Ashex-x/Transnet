@@ -4,7 +4,7 @@
 
 This contract defines the target island-port-to-Transnet interface and the shared internal HTTP/1.1-over-UDS rules. Island-port owns internet transport, authentication, user state, file ingestion, document reconstruction, and final presentation. Transnet receives no end-user identity and persists no live request content.
 
-Status: revised target v1 contract. The checked-in executable still uses loopback HTTP and implements the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices plus target capability discovery. Structured segments, image regions, live retrieval, target inbound UDS, guided knowledge views, and knowledge paths are not implemented until their handlers, composition, tests, and documentation land together.
+Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 through the target inbound UDS and implements target capability discovery and health, liveness, and dependency-readiness probes plus the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. Explicit configuration may retain the loopback listener during migration. Structured segments, image regions, live retrieval, guided knowledge views, and knowledge paths are not implemented until their handlers, composition, tests, and documentation land together.
 
 ## Contents
 

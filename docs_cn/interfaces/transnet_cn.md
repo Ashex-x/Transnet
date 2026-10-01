@@ -4,7 +4,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本合同定义目标 island-port 到 Transnet 接口及内部共享 HTTP/1.1-over-UDS 规则。Island-port 负责互联网传输、认证、用户状态、文件接入、文档重建和最终展示。Transnet 不接收终端用户身份，也不持久化实时请求内容。
 
-状态：修订后的目标 v1 合同。仓库中的可执行文件仍使用回环 HTTP，且实现已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片，以及目标 capability discovery。结构化 segment、image region、实时检索、目标入站 UDS、引导式知识视图和知识路径，必须等 handler、组合、测试与文档共同落地后才算已实现。
+状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。迁移期间可以通过显式配置保留 loopback listener。结构化 segment、image region、实时检索、引导式知识视图和知识路径，必须等 handler、组合、测试与文档共同落地后才算已实现。
 
 ## 目录
 

@@ -87,6 +87,69 @@ async fn readyz_uses_the_injected_readiness_probe() {
 }
 
 #[tokio::test]
+async fn target_probes_require_exact_empty_json_and_use_envelopes() {
+  for (path, status) in [
+    ("/api/v1/health", "ok"),
+    ("/api/v1/livez", "alive"),
+    ("/api/v1/readyz", "ready"),
+  ] {
+    let response = app()
+      .oneshot(
+        Request::post(path)
+          .header(header::CONTENT_TYPE, "application/json")
+          .header("x-request-id", "probe-contract-1")
+          .body(Body::from("{}"))
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    let body = json(response).await;
+    assert_eq!(body["data"]["status"], status);
+    assert_eq!(body["meta"]["request_id"], "probe-contract-1");
+    assert_eq!(body["meta"]["schema_version"], "probe-v1");
+  }
+
+  for body in ["", r#"{"extra":true}"#, "[]"] {
+    let response = app()
+      .oneshot(
+        Request::post("/api/v1/health")
+          .header(header::CONTENT_TYPE, "application/json")
+          .body(Body::from(body))
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    assert_eq!(json(response).await["code"], "invalid_probe_request");
+  }
+}
+
+#[tokio::test]
+async fn target_readyz_maps_dependency_failure_to_a_problem() {
+  let response =
+    app_router(AppState::new(service()).with_readiness(Arc::new(FixedReadiness(false))))
+      .oneshot(
+        Request::post("/api/v1/readyz")
+          .header(header::CONTENT_TYPE, "application/json")
+          .body(Body::from("{}"))
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+
+  assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+  assert_eq!(
+    response.headers()[header::CONTENT_TYPE],
+    "application/problem+json"
+  );
+  assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+  assert_eq!(json(response).await["code"], "dependency_unavailable");
+}
+
+#[tokio::test]
 async fn request_ids_preserve_safe_values_and_replace_unsafe_values() {
   let safe_response = app()
     .oneshot(

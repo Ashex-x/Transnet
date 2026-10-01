@@ -20,6 +20,9 @@ pub mod ports;
 pub mod provider;
 /// Bounded, redacted resilience controls for outbound providers.
 pub mod resilience;
+/// Owned Unix-domain listener lifecycle and HTTP serving.
+#[cfg(unix)]
+pub mod server;
 /// Public HTTP request and response types.
 pub mod types;
 
