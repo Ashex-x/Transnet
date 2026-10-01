@@ -291,6 +291,13 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
     "indices": [1842, 99104],
     "values": [1.0, 0.55]
   },
+  "execution": {
+    "dense_artifact_revision": "sha256:qwen-node-query-r1",
+    "dense_input_specification": "node-dense-input-v1",
+    "lexical_encoder_identity": "transnet-lexical-bm25",
+    "lexical_encoder_revision": "v1",
+    "lexical_input_specification": "node-lexical-input-v1"
+  },
   "filters": {
     "release_id": "knowledge-2026-09",
     "publication_states": ["published"],
@@ -315,6 +322,15 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
   "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
+    "execution": {
+      "collection_id": "knowledge_nodes__knowledge_2026_09",
+      "collection_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dense_artifact_revision": "sha256:qwen-node-query-r1",
+      "dense_input_specification": "node-dense-input-v1",
+      "lexical_encoder_identity": "transnet-lexical-bm25",
+      "lexical_encoder_revision": "v1",
+      "lexical_input_specification": "node-lexical-input-v1"
+    },
     "candidates": [
       {
         "node_id": "node_sweltering_hot_01",
@@ -333,7 +349,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 }
 ```
 
-分数只可在相同模型和发布内比较。向量相似度仅是候选信号，不能证明翻译、同义、层级、因果、共同机制或文化意义。
+请求绑定精确 query-side dense artifact 与冻结 dense/lexical input contract。响应必须标识不可变物理 node collection、提供其精确 SHA-256 content hash，并精确回显所有 execution member；proof 缺失、hash 格式错误或版本漂移会使整个响应闭合失败。分数只可在该已证明模型、collection 与发布内比较。向量相似度仅是候选信号，不能证明翻译、同义、层级、因果、共同机制或文化意义。
 
 ## POST /api/v1/scales/search
 

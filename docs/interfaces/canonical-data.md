@@ -441,6 +441,7 @@ Request `input`:
 {
   "facts": [{"fact_id": "fact_sweltering_degree_scorching_01", "revision": 2}],
   "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1",
   "verification_states": ["verified"],
   "limit": 20
 }
@@ -452,6 +453,7 @@ Response:
 {
   "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
   "schema_version": "canonical-data-v1",
+  "canonical_schema_version": "canonical-v1",
   "outcome": "ok",
   "value": {
     "facts": [
@@ -489,6 +491,7 @@ Request `input`:
   "scale_ids": ["scale_environmental_heat_intensity_01"],
   "for_node_id": "node_sweltering_hot_01",
   "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1",
   "verification_states": ["verified"],
   "limit": 5
 }
@@ -500,6 +503,7 @@ Response:
 {
   "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
   "schema_version": "canonical-data-v1",
+  "canonical_schema_version": "canonical-v1",
   "outcome": "ok",
   "value": {
     "scales": [
@@ -539,6 +543,7 @@ Request `input`:
 {
   "node_ids": ["node_sweltering_hot_01"],
   "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1",
   "evidence_use": "api_redistribution",
   "limit": 20
 }
@@ -550,6 +555,7 @@ Response:
 {
   "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
   "schema_version": "canonical-data-v1",
+  "canonical_schema_version": "canonical-v1",
   "outcome": "ok",
   "value": {
     "nodes": [
@@ -557,6 +563,7 @@ Response:
         "node_id": "node_sweltering_hot_01",
         "revision": 4,
         "node_type": "lexical_sense",
+        "sense_id": "sense_sweltering_hot_01",
         "canonical_label": "sweltering",
         "language": "en",
         "domain_ids": ["domain_weather"],
@@ -569,7 +576,9 @@ Response:
 }
 ```
 
-The response order is a subsequence of the requested node IDs after omitted ineligible values are removed. Every node has a positive immutable revision, a closed node family, an optional canonical BCP 47 language, a reviewed label of at most 512 scalar values, sorted unique domain IDs, and one to 32 sorted unique evidence IDs. Requests and responses are limited to 50 nodes. Missing or ineligible values are omitted; an unrequested, duplicated, cross-release, unverified, or malformed node fails the whole response closed.
+All three hydration operations require `content_release` and `canonical_schema_version` in the input and echo both at the top level. Transnet rejects either mismatch; the transport `schema_version` does not substitute for the content-schema pin.
+
+The response order is a subsequence of the requested node IDs after omitted ineligible values are removed. Every node has a positive immutable revision, a closed node family, an optional canonical BCP 47 language, a reviewed label of at most 512 scalar values, sorted unique domain IDs, and one to 32 sorted unique evidence IDs. A `lexical_sense` node must carry its canonical `sense_id`; every other node family must set `sense_id` to `null`. Requests and responses are limited to 50 nodes. Missing or ineligible values are omitted; an unrequested, duplicated, cross-release, unverified, or malformed node fails the whole response closed.
 
 ## Domain proposal handling
 

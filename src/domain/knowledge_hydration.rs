@@ -230,6 +230,8 @@ pub struct HydratedKnowledgeNode {
   pub revision: u32,
   /// Closed node family.
   pub node_type: RetrievalNodeType,
+  /// Canonical sense identity for lexical-sense nodes and no other family.
+  pub sense_id: Option<CanonicalId>,
   /// Concise reviewed label.
   pub canonical_label: String,
   /// Optional canonical language for language-bearing nodes.
@@ -248,6 +250,9 @@ impl HydratedKnowledgeNode {
     }
     if !valid_text(&self.canonical_label, 512) {
       return Err(KnowledgeHydrationValidationError::InvalidText);
+    }
+    if (self.node_type == RetrievalNodeType::LexicalSense) != self.sense_id.is_some() {
+      return Err(KnowledgeHydrationValidationError::InvalidRelation);
     }
     validate_optional_ids(&self.domain_ids)?;
     validate_required_ids(&self.evidence_ids)
@@ -337,5 +342,31 @@ mod tests {
       evidence_ids: vec![id("evidence-1")],
     };
     assert_eq!(scale.validate(), Ok(()));
+  }
+
+  #[test]
+  fn knowledge_node_sense_identity_matches_its_family() {
+    let mut node = HydratedKnowledgeNode {
+      node_id: id("node-sense"),
+      revision: 1,
+      node_type: RetrievalNodeType::LexicalSense,
+      sense_id: Some(id("sense-1")),
+      canonical_label: "heat".into(),
+      language: Some(LanguageTag::parse("en").unwrap()),
+      domain_ids: vec![],
+      evidence_ids: vec![id("evidence-1")],
+    };
+    assert_eq!(node.validate(), Ok(()));
+    node.sense_id = None;
+    assert_eq!(
+      node.validate(),
+      Err(KnowledgeHydrationValidationError::InvalidRelation)
+    );
+    node.node_type = RetrievalNodeType::Concept;
+    node.sense_id = Some(id("sense-1"));
+    assert_eq!(
+      node.validate(),
+      Err(KnowledgeHydrationValidationError::InvalidRelation)
+    );
   }
 }

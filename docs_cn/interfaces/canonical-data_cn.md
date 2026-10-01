@@ -433,6 +433,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 {
   "facts": [{"fact_id": "fact_sweltering_degree_scorching_01", "revision": 2}],
   "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1",
   "verification_states": ["verified"],
   "limit": 20
 }
@@ -444,6 +445,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 {
   "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
   "schema_version": "canonical-data-v1",
+  "canonical_schema_version": "canonical-v1",
   "outcome": "ok",
   "value": {
     "facts": [
@@ -481,6 +483,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
   "scale_ids": ["scale_environmental_heat_intensity_01"],
   "for_node_id": "node_sweltering_hot_01",
   "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1",
   "verification_states": ["verified"],
   "limit": 5
 }
@@ -492,6 +495,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 {
   "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
   "schema_version": "canonical-data-v1",
+  "canonical_schema_version": "canonical-v1",
   "outcome": "ok",
   "value": {
     "scales": [
@@ -531,6 +535,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 {
   "node_ids": ["node_sweltering_hot_01"],
   "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1",
   "evidence_use": "api_redistribution",
   "limit": 20
 }
@@ -542,6 +547,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 {
   "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
   "schema_version": "canonical-data-v1",
+  "canonical_schema_version": "canonical-v1",
   "outcome": "ok",
   "value": {
     "nodes": [
@@ -549,6 +555,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
         "node_id": "node_sweltering_hot_01",
         "revision": 4,
         "node_type": "lexical_sense",
+        "sense_id": "sense_sweltering_hot_01",
         "canonical_label": "sweltering",
         "language": "en",
         "domain_ids": ["domain_weather"],
@@ -561,7 +568,9 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 }
 ```
 
-响应顺序是移除不合格值后的请求 node ID 子序列。每个 node 都有正不可变修订、闭合 node family、可选规范 BCP 47 language、最多 512 个 scalar 的已审核 label、排序唯一 domain ID，以及一至 32 个排序唯一 evidence ID。请求和响应最多包含 50 个 node。缺失或不合格值会被省略；未请求、重复、跨发布、未验证或格式错误的 node 会使整个响应闭合失败。
+三个 hydration operation 都要求 input 包含 `content_release` 与 `canonical_schema_version`，并在顶层精确回显二者。Transnet 拒绝任一不匹配；transport `schema_version` 不能替代内容 schema pin。
+
+响应顺序是移除不合格值后的请求 node ID 子序列。每个 node 都有正不可变修订、闭合 node family、可选规范 BCP 47 language、最多 512 个 scalar 的已审核 label、排序唯一 domain ID，以及一至 32 个排序唯一 evidence ID。`lexical_sense` node 必须携带其规范 `sense_id`；其他每种 node family 都必须把 `sense_id` 设为 `null`。请求和响应最多包含 50 个 node。缺失或不合格值会被省略；未请求、重复、跨发布、未验证或格式错误的 node 会使整个响应闭合失败。
 
 ## 领域提案处理
 

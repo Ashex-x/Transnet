@@ -14,7 +14,7 @@ use transnet::{
     LookupFormInput, SemanticScalesGetInput, SenseGetInput, TranslationResolveInput,
   },
   domain::{
-    canonical::{CanonicalId, EvidenceUse, LanguageTag},
+    canonical::{CanonicalId, CanonicalReleasePin, EvidenceUse, LanguageTag},
     canonical_translation::{SourceFingerprint, SOURCE_FINGERPRINT_VERSION},
     knowledge_hydration::CanonicalFactRef,
     retrieval::LexicalMatchKind,
@@ -31,7 +31,7 @@ struct FakeTransport {
 async fn exact_fact_hydration_validates_wire_echo_revision_and_support() {
   let transport = Arc::new(FakeTransport::new(json!({
     "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
-    "content_release":"knowledge-2026-09", "value":{"facts":[{
+    "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v1", "value":{"facts":[{
       "fact_id":"fact-1", "revision":2, "statement":"Scorching is hotter than sweltering.",
       "subject_node_id":"node-scorching", "predicate":"higher_degree_than",
       "relation_registry_version":1, "object_node_id":"node-sweltering",
@@ -44,7 +44,7 @@ async fn exact_fact_hydration_validates_wire_echo_revision_and_support() {
   let facts = IslandPortCanonicalClient::new(transport.clone())
     .get_knowledge_facts(
       &context(),
-      &id("knowledge-2026-09"),
+      &pin(),
       KnowledgeFactsGetInput {
         facts: vec![CanonicalFactRef {
           fact_id: id("fact-1"),
@@ -61,6 +61,7 @@ async fn exact_fact_hydration_validates_wire_echo_revision_and_support() {
   let (path, body, _) = request.as_ref().unwrap();
   assert_eq!(*path, "/api/v1/knowledge-facts/get");
   assert_eq!(body["input"]["content_release"], "knowledge-2026-09");
+  assert_eq!(body["input"]["canonical_schema_version"], "canonical-v1");
   assert_eq!(body["input"]["facts"][0]["revision"], 2);
 }
 
@@ -69,7 +70,7 @@ async fn fact_hydration_rejects_wrong_revision_and_registry() {
   for (revision, registry) in [(3, 1), (2, 2)] {
     let response = json!({
       "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
-      "content_release":"knowledge-2026-09", "value":{"facts":[{
+      "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v1", "value":{"facts":[{
         "fact_id":"fact-1", "revision":revision, "statement":"Reviewed statement.",
         "subject_node_id":"node-a", "predicate":"associated_with",
         "relation_registry_version":registry, "object_node_id":"node-b",
@@ -81,7 +82,7 @@ async fn fact_hydration_rejects_wrong_revision_and_registry() {
     let result = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))
       .get_knowledge_facts(
         &context(),
-        &id("knowledge-2026-09"),
+        &pin(),
         KnowledgeFactsGetInput {
           facts: vec![CanonicalFactRef {
             fact_id: id("fact-1"),
@@ -97,10 +98,34 @@ async fn fact_hydration_rejects_wrong_revision_and_registry() {
 }
 
 #[tokio::test]
+async fn knowledge_hydration_rejects_canonical_schema_echo_mismatch() {
+  let transport = Arc::new(FakeTransport::new(json!({
+    "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+    "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v2",
+    "value":{"facts":[]}
+  })));
+  let result = IslandPortCanonicalClient::new(transport)
+    .get_knowledge_facts(
+      &context(),
+      &pin(),
+      KnowledgeFactsGetInput {
+        facts: vec![CanonicalFactRef {
+          fact_id: id("fact-1"),
+          revision: 2,
+        }],
+        verification_states: vec![RetrievalVerificationState::Verified],
+        limit: 20,
+      },
+    )
+    .await;
+  assert_eq!(result, Err(IslandPortClientError::SchemaIncompatible));
+}
+
+#[tokio::test]
 async fn scale_and_node_hydration_validate_membership_order_and_evidence() {
   let scale_transport = Arc::new(FakeTransport::new(json!({
     "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
-    "content_release":"knowledge-2026-09", "value":{"scales":[{
+    "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v1", "value":{"scales":[{
       "scale_id":"scale-heat", "revision":1, "dimension":"heat_intensity",
       "direction":"increasing", "domain_ids":["domain_weather"], "conditions":[],
       "members":[{"node_id":"node-warm","position":10},{"node_id":"node-hot","position":20}],
@@ -110,7 +135,7 @@ async fn scale_and_node_hydration_validate_membership_order_and_evidence() {
   let scales = IslandPortCanonicalClient::new(scale_transport)
     .get_semantic_scales(
       &context(),
-      &id("knowledge-2026-09"),
+      &pin(),
       SemanticScalesGetInput {
         scale_ids: vec![id("scale-heat")],
         for_node_id: id("node-hot"),
@@ -124,16 +149,16 @@ async fn scale_and_node_hydration_validate_membership_order_and_evidence() {
 
   let node_transport = Arc::new(FakeTransport::new(json!({
     "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
-    "content_release":"knowledge-2026-09", "value":{"nodes":[{
+    "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v1", "value":{"nodes":[{
       "node_id":"node-hot", "revision":4, "node_type":"concept",
-      "canonical_label":"heat", "language":"en", "domain_ids":["domain_weather"],
+      "sense_id":null, "canonical_label":"heat", "language":"en", "domain_ids":["domain_weather"],
       "evidence_ids":["evidence-1"], "verification_state":"verified"
     }]}
   })));
   let nodes = IslandPortCanonicalClient::new(node_transport.clone())
     .get_knowledge_nodes(
       &context(),
-      &id("knowledge-2026-09"),
+      &pin(),
       KnowledgeNodesGetInput {
         node_ids: vec![id("node-hot")],
         evidence_use: EvidenceUse::ApiRedistribution,
@@ -277,6 +302,10 @@ impl IslandPortTransport for FakeTransport {
 
 fn id(value: &str) -> CanonicalId {
   CanonicalId::new(value).unwrap()
+}
+
+fn pin() -> CanonicalReleasePin {
+  CanonicalReleasePin::new(id("knowledge-2026-09"), "canonical-v1".into()).unwrap()
 }
 
 fn language(value: &str) -> LanguageTag {

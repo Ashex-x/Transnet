@@ -446,21 +446,21 @@ impl IslandPortCanonicalClient {
   pub async fn get_knowledge_facts(
     &self,
     context: &IslandPortCallContext,
-    release_id: &crate::domain::canonical::ReleaseId,
+    pin: &CanonicalReleasePin,
     input: KnowledgeFactsGetInput,
   ) -> Result<Vec<KnowledgeFact>, IslandPortClientError> {
     validate_exact_fact_input(&input)?;
     let requested = input.facts.clone();
     let limit = input.limit;
-    let input = KnowledgeFactsGetInputDto::new(input, release_id);
+    let input = KnowledgeFactsGetInputDto::new(input, pin);
     let envelope = RequestEnvelope {
-      context: context_dto(context, release_id),
+      context: context_dto(context, &pin.release_id),
       input,
     };
     let response: KnowledgeFactsGetResponseDto = self
       .call("/api/v1/knowledge-facts/get", context, &envelope)
       .await?;
-    validate_response_context(&response.common, context, release_id)?;
+    validate_pinned_response_context(&response.common, context, pin)?;
     let facts = response.common.value()?.facts;
     if facts.len() > limit {
       return Err(IslandPortClientError::InconsistentData);
@@ -477,7 +477,7 @@ impl IslandPortCanonicalClient {
   pub async fn get_semantic_scales(
     &self,
     context: &IslandPortCallContext,
-    release_id: &crate::domain::canonical::ReleaseId,
+    pin: &CanonicalReleasePin,
     input: SemanticScalesGetInput,
   ) -> Result<Vec<HydratedSemanticScale>, IslandPortClientError> {
     validate_id_input(&input.scale_ids, input.limit)?;
@@ -485,15 +485,15 @@ impl IslandPortCanonicalClient {
     let requested = input.scale_ids.clone();
     let for_node_id = input.for_node_id.clone();
     let limit = input.limit;
-    let input = SemanticScalesGetInputDto::new(input, release_id);
+    let input = SemanticScalesGetInputDto::new(input, pin);
     let envelope = RequestEnvelope {
-      context: context_dto(context, release_id),
+      context: context_dto(context, &pin.release_id),
       input,
     };
     let response: SemanticScalesGetResponseDto = self
       .call("/api/v1/semantic-scales/get", context, &envelope)
       .await?;
-    validate_response_context(&response.common, context, release_id)?;
+    validate_pinned_response_context(&response.common, context, pin)?;
     let scales = response.common.value()?.scales;
     if scales.len() > limit {
       return Err(IslandPortClientError::InconsistentData);
@@ -510,21 +510,21 @@ impl IslandPortCanonicalClient {
   pub async fn get_knowledge_nodes(
     &self,
     context: &IslandPortCallContext,
-    release_id: &crate::domain::canonical::ReleaseId,
+    pin: &CanonicalReleasePin,
     input: KnowledgeNodesGetInput,
   ) -> Result<Vec<HydratedKnowledgeNode>, IslandPortClientError> {
     validate_id_input(&input.node_ids, input.limit)?;
     let requested = input.node_ids.clone();
     let limit = input.limit;
-    let input = KnowledgeNodesGetInputDto::new(input, release_id);
+    let input = KnowledgeNodesGetInputDto::new(input, pin);
     let envelope = RequestEnvelope {
-      context: context_dto(context, release_id),
+      context: context_dto(context, &pin.release_id),
       input,
     };
     let response: KnowledgeNodesGetResponseDto = self
       .call("/api/v1/knowledge-nodes/get", context, &envelope)
       .await?;
-    validate_response_context(&response.common, context, release_id)?;
+    validate_pinned_response_context(&response.common, context, pin)?;
     let nodes = response.common.value()?.nodes;
     if nodes.len() > limit {
       return Err(IslandPortClientError::InconsistentData);
@@ -798,7 +798,7 @@ impl CanonicalReadPort for IslandPortCanonicalClient {
     self
       .get_knowledge_facts(
         &call_context(context)?,
-        &pin.release_id,
+        pin,
         KnowledgeFactsGetInput {
           facts: query.facts,
           verification_states: query.verification_states,
@@ -818,7 +818,7 @@ impl CanonicalReadPort for IslandPortCanonicalClient {
     self
       .get_semantic_scales(
         &call_context(context)?,
-        &pin.release_id,
+        pin,
         SemanticScalesGetInput {
           scale_ids: query.scale_ids,
           for_node_id: query.for_node_id,
@@ -839,7 +839,7 @@ impl CanonicalReadPort for IslandPortCanonicalClient {
     self
       .get_knowledge_nodes(
         &call_context(context)?,
-        &pin.release_id,
+        pin,
         KnowledgeNodesGetInput {
           node_ids: query.node_ids,
           evidence_use: query.evidence_use,
@@ -916,6 +916,7 @@ struct CommonResponseDto<T> {
   schema_version: String,
   outcome: OutcomeDto,
   content_release: Option<String>,
+  canonical_schema_version: Option<String>,
   value: Option<T>,
   error: Option<ErrorDto>,
 }
@@ -1004,6 +1005,18 @@ fn validate_response_context<T>(
       return Err(IslandPortClientError::InconsistentData)
     }
     _ => {}
+  }
+  Ok(())
+}
+
+fn validate_pinned_response_context<T>(
+  response: &CommonResponseDto<T>,
+  context: &IslandPortCallContext,
+  pin: &CanonicalReleasePin,
+) -> Result<(), IslandPortClientError> {
+  validate_response_context(response, context, &pin.release_id)?;
+  if response.canonical_schema_version.as_deref() != Some(pin.canonical_schema_version.as_str()) {
+    return Err(IslandPortClientError::SchemaIncompatible);
   }
   Ok(())
 }
@@ -2422,12 +2435,13 @@ struct PeriodDto {
 struct KnowledgeFactsGetInputDto {
   facts: Vec<CanonicalFactRefDto>,
   content_release: String,
+  canonical_schema_version: String,
   verification_states: Vec<&'static str>,
   limit: usize,
 }
 
 impl KnowledgeFactsGetInputDto {
-  fn new(value: KnowledgeFactsGetInput, release_id: &CanonicalId) -> Self {
+  fn new(value: KnowledgeFactsGetInput, pin: &CanonicalReleasePin) -> Self {
     Self {
       facts: value
         .facts
@@ -2437,7 +2451,8 @@ impl KnowledgeFactsGetInputDto {
           revision: fact.revision,
         })
         .collect(),
-      content_release: release_id.to_string(),
+      content_release: pin.release_id.to_string(),
+      canonical_schema_version: pin.canonical_schema_version.clone(),
       verification_states: value
         .verification_states
         .into_iter()
@@ -2560,12 +2575,13 @@ struct SemanticScalesGetInputDto {
   scale_ids: Vec<String>,
   for_node_id: String,
   content_release: String,
+  canonical_schema_version: String,
   verification_states: Vec<&'static str>,
   limit: usize,
 }
 
 impl SemanticScalesGetInputDto {
-  fn new(value: SemanticScalesGetInput, release_id: &CanonicalId) -> Self {
+  fn new(value: SemanticScalesGetInput, pin: &CanonicalReleasePin) -> Self {
     Self {
       scale_ids: value
         .scale_ids
@@ -2573,7 +2589,8 @@ impl SemanticScalesGetInputDto {
         .map(|id| id.to_string())
         .collect(),
       for_node_id: value.for_node_id.to_string(),
-      content_release: release_id.to_string(),
+      content_release: pin.release_id.to_string(),
+      canonical_schema_version: pin.canonical_schema_version.clone(),
       verification_states: value
         .verification_states
         .into_iter()
@@ -2683,19 +2700,21 @@ impl ScaleMemberDto {
 struct KnowledgeNodesGetInputDto {
   node_ids: Vec<String>,
   content_release: String,
+  canonical_schema_version: String,
   evidence_use: EvidenceUseDto,
   limit: usize,
 }
 
 impl KnowledgeNodesGetInputDto {
-  fn new(value: KnowledgeNodesGetInput, release_id: &CanonicalId) -> Self {
+  fn new(value: KnowledgeNodesGetInput, pin: &CanonicalReleasePin) -> Self {
     Self {
       node_ids: value
         .node_ids
         .into_iter()
         .map(|id| id.to_string())
         .collect(),
-      content_release: release_id.to_string(),
+      content_release: pin.release_id.to_string(),
+      canonical_schema_version: pin.canonical_schema_version.clone(),
       evidence_use: EvidenceUseDto::from(value.evidence_use),
       limit: value.limit,
     }
@@ -2720,6 +2739,7 @@ struct KnowledgeNodeDto {
   node_id: String,
   revision: u32,
   node_type: String,
+  sense_id: Option<String>,
   canonical_label: String,
   language: Option<String>,
   domain_ids: Vec<String>,
@@ -2736,6 +2756,7 @@ impl KnowledgeNodeDto {
       node_id: canonical_id(self.node_id)?,
       revision: self.revision,
       node_type: RetrievalNodeType::new(self.node_type).map_err(inconsistent)?,
+      sense_id: self.sense_id.map(canonical_id).transpose()?,
       canonical_label: self.canonical_label,
       language: self.language.as_deref().map(language).transpose()?,
       domain_ids: self

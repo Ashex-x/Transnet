@@ -10,6 +10,11 @@ use super::{
   graph::GraphRelationType,
 };
 
+use super::{
+  embedding_input::{NODE_DENSE_INPUT_VERSION, NODE_LEXICAL_INPUT_VERSION},
+  knowledge_projection::{LEXICAL_ENCODER_IDENTITY, LEXICAL_ENCODER_REVISION},
+};
+
 /// Transport schema required by every retrieval-data operation.
 pub const RETRIEVAL_DATA_SCHEMA_VERSION: &str = "retrieval-data-v1";
 /// Largest result limit accepted by any retrieval-data search.
@@ -409,10 +414,102 @@ pub struct NodeSearchRequest {
   pub dense_vector: DenseQueryVector,
   /// Ephemeral sparse nomination signal.
   pub sparse_vector: SparseQueryVector,
+  /// Exact query-encoder revisions and input contracts expected from the selected projection.
+  pub execution: NodeProjectionExecutionExpectation,
   /// Eligibility filters applied before limiting.
   pub filters: RetrievalFilters,
   /// Maximum candidates returned.
   pub limit: usize,
+}
+
+/// Query-side execution versions that the immutable node projection must echo exactly.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NodeProjectionExecutionExpectation {
+  /// Immutable dense artifact revision used for the ephemeral query vector.
+  pub dense_artifact_revision: String,
+  /// Exact dense canonical-input contract.
+  pub dense_input_specification: String,
+  /// Frozen lexical encoder identity.
+  pub lexical_encoder_identity: String,
+  /// Frozen lexical encoder revision.
+  pub lexical_encoder_revision: String,
+  /// Exact lexical canonical-input contract.
+  pub lexical_input_specification: String,
+}
+
+impl NodeProjectionExecutionExpectation {
+  /// Creates the closed node-projection expectation for one immutable dense artifact.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when the artifact revision is blank, untrimmed, or oversized.
+  pub fn v1(
+    dense_artifact_revision: impl Into<String>,
+  ) -> Result<Self, RetrievalDataValidationError> {
+    let dense_artifact_revision = dense_artifact_revision.into();
+    if !valid_version(&dense_artifact_revision) {
+      return Err(RetrievalDataValidationError::InvalidFilters);
+    }
+    Ok(Self {
+      dense_artifact_revision,
+      dense_input_specification: NODE_DENSE_INPUT_VERSION.to_string(),
+      lexical_encoder_identity: LEXICAL_ENCODER_IDENTITY.to_string(),
+      lexical_encoder_revision: LEXICAL_ENCODER_REVISION.to_string(),
+      lexical_input_specification: NODE_LEXICAL_INPUT_VERSION.to_string(),
+    })
+  }
+
+  /// Validates that no caller substituted a competing input or encoder contract.
+  pub fn validate(&self) -> Result<(), RetrievalDataValidationError> {
+    if !valid_version(&self.dense_artifact_revision)
+      || self.dense_input_specification != NODE_DENSE_INPUT_VERSION
+      || self.lexical_encoder_identity != LEXICAL_ENCODER_IDENTITY
+      || self.lexical_encoder_revision != LEXICAL_ENCODER_REVISION
+      || self.lexical_input_specification != NODE_LEXICAL_INPUT_VERSION
+    {
+      return Err(RetrievalDataValidationError::InvalidFilters);
+    }
+    Ok(())
+  }
+}
+
+/// Server-observed immutable node-projection execution proof.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NodeProjectionExecutionProof {
+  /// Immutable physical node collection selected for the pinned release.
+  pub collection_id: CanonicalId,
+  /// SHA-256 content hash of that frozen collection.
+  pub collection_content_hash: String,
+  /// Dense artifact revision observed by the projection.
+  pub dense_artifact_revision: String,
+  /// Dense canonical-input contract observed by the projection.
+  pub dense_input_specification: String,
+  /// Lexical encoder identity observed by the projection.
+  pub lexical_encoder_identity: String,
+  /// Lexical encoder revision observed by the projection.
+  pub lexical_encoder_revision: String,
+  /// Lexical canonical-input contract observed by the projection.
+  pub lexical_input_specification: String,
+}
+
+impl NodeProjectionExecutionProof {
+  /// Validates the immutable collection proof against the query-side expectation.
+  pub fn validate_against(
+    &self,
+    expected: &NodeProjectionExecutionExpectation,
+  ) -> Result<(), RetrievalDataValidationError> {
+    expected.validate()?;
+    if !valid_sha256(&self.collection_content_hash)
+      || self.dense_artifact_revision != expected.dense_artifact_revision
+      || self.dense_input_specification != expected.dense_input_specification
+      || self.lexical_encoder_identity != expected.lexical_encoder_identity
+      || self.lexical_encoder_revision != expected.lexical_encoder_revision
+      || self.lexical_input_specification != expected.lexical_input_specification
+    {
+      return Err(RetrievalDataValidationError::IneligibleCandidate);
+    }
+    Ok(())
+  }
 }
 
 /// Index request for complete semantic-scale candidates.
@@ -599,6 +696,8 @@ pub struct NeighborCandidate {
 pub struct NodeSearchResult {
   /// Immutable release echoed by island-port.
   pub release_id: ReleaseId,
+  /// Exact immutable collection and encoder proof used for this search.
+  pub execution: NodeProjectionExecutionProof,
   /// Bounded candidates in authoritative retrieval order.
   pub candidates: Vec<NodeCandidate>,
 }
@@ -659,6 +758,18 @@ fn valid_name(value: &str, max: usize) -> bool {
     && value
       .bytes()
       .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-'))
+}
+
+fn valid_version(value: &str) -> bool {
+  value.trim() == value && !value.is_empty() && value.len() <= 256 && value.is_ascii()
+}
+
+fn valid_sha256(value: &str) -> bool {
+  value.len() == 71
+    && value.starts_with("sha256:")
+    && value[7..]
+      .bytes()
+      .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
 }
 
 #[cfg(test)]

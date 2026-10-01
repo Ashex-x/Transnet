@@ -291,6 +291,13 @@ Request:
     "indices": [1842, 99104],
     "values": [1.0, 0.55]
   },
+  "execution": {
+    "dense_artifact_revision": "sha256:qwen-node-query-r1",
+    "dense_input_specification": "node-dense-input-v1",
+    "lexical_encoder_identity": "transnet-lexical-bm25",
+    "lexical_encoder_revision": "v1",
+    "lexical_input_specification": "node-lexical-input-v1"
+  },
   "filters": {
     "release_id": "knowledge-2026-09",
     "publication_states": ["published"],
@@ -315,6 +322,15 @@ Response:
   "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
+    "execution": {
+      "collection_id": "knowledge_nodes__knowledge_2026_09",
+      "collection_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dense_artifact_revision": "sha256:qwen-node-query-r1",
+      "dense_input_specification": "node-dense-input-v1",
+      "lexical_encoder_identity": "transnet-lexical-bm25",
+      "lexical_encoder_revision": "v1",
+      "lexical_input_specification": "node-lexical-input-v1"
+    },
     "candidates": [
       {
         "node_id": "node_sweltering_hot_01",
@@ -333,7 +349,7 @@ Response:
 }
 ```
 
-Scores are comparable only within the same model and release. Vector similarity is a candidate signal, never proof of translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
+The request binds the exact query-side dense artifact and frozen dense/lexical input contracts. The response must identify the immutable physical node collection, provide its exact SHA-256 content hash, and echo every execution member exactly; missing proof, malformed hash, or version drift fails the whole response closed. Scores are comparable only within that proven model, collection, and release. Vector similarity is a candidate signal, never proof of translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
 
 ## POST /api/v1/scales/search
 
