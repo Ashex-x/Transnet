@@ -169,12 +169,16 @@ pub struct LexiconRelease {
   pub rollback_predecessor: Option<ReleaseId>,
 }
 
-/// Exact compatible lexical and vector versions selected for a request.
+/// Legacy single-index retrieval snapshot used by the pre-M3 process-local retrieval foundation.
+///
+/// This value is not the M3 publication authority because one `vector_collection_id` cannot name
+/// independently immutable node and edge collections. New publication uses
+/// [`crate::domain::knowledge_release::KnowledgeReleaseTrio`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ActiveContentVersion {
   /// Immutable lexical release used for canonical records and permissions.
   pub release_id: ReleaseId,
-  /// Immutable vector collection paired with `release_id`.
+  /// Legacy immutable vector index paired with `release_id` for existing retrieval tests.
   pub vector_collection_id: VectorCollectionId,
   /// Canonical-schema version shared by both stores.
   pub schema_version: String,
@@ -396,6 +400,10 @@ pub struct Lexeme {
   pub language: LanguageTag,
   /// User-visible lemma, preserving source spelling.
   pub lemma: String,
+  /// Bounded, sorted evidence identities supporting the canonical lemma assertion.
+  ///
+  /// These references are release-scoped provenance and never participate in lexeme identity.
+  pub lemma_evidence_ids: Vec<EvidenceId>,
   /// Explicit normalized lookup key rather than an implicit database collation.
   pub normalized_lemma: String,
   /// Canonical part of speech.

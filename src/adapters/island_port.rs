@@ -1194,6 +1194,7 @@ struct LexemeDto {
   id: String,
   language: String,
   lemma: String,
+  lemma_evidence_ids: Vec<String>,
   normalized_lemma: String,
   part_of_speech: PartOfSpeechDto,
   status: StatusDto,
@@ -1209,6 +1210,11 @@ impl LexemeDto {
       release_id: release_id.clone(),
       language: language(&self.language)?,
       lemma: self.lemma,
+      lemma_evidence_ids: self
+        .lemma_evidence_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<Vec<_>, _>>()?,
       normalized_lemma: self.normalized_lemma,
       part_of_speech: self.part_of_speech.into_domain(),
       status: self.status.into_domain(),
@@ -1505,6 +1511,19 @@ impl SenseDetailsDto {
       })
       .collect::<Result<BTreeMap<_, _>, _>>()?;
     let mut used = BTreeSet::new();
+    for evidence_id in lexeme
+      .lemma_evidence_ids
+      .iter()
+      .chain(sense.definition_evidence_ids.iter())
+    {
+      let lineage = lineages
+        .get(evidence_id.as_str())
+        .ok_or(IslandPortClientError::InconsistentData)?;
+      if !lineage.permits(release_id, crate::domain::canonical::EvidenceUse::Display) {
+        return Err(IslandPortClientError::InconsistentData);
+      }
+      used.insert(evidence_id.as_str().to_string());
+    }
     let mut assertion = |dto: AssertionDto,
                          expected: crate::domain::canonical_content::CanonicalDetailKind|
      -> Result<CanonicalFactualAssertion, IslandPortClientError> {

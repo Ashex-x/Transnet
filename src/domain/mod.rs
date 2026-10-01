@@ -8,8 +8,16 @@ pub mod canonical_content;
 pub mod canonical_translation;
 /// Immutable content-release staging, validation, publication, and rollback invariants.
 pub mod content_release;
+/// Release-pinned authoritative material and canonical embedding-input contracts.
+pub mod embedding_input;
 /// Typed, evidence-backed graph topology and traversal limits.
 pub mod graph;
+/// Deterministic pre-publication node and edge projection artifacts.
+pub mod knowledge_projection;
+/// Publication lifecycle, idempotency, manifest hashes, and execution receipts.
+pub mod knowledge_publication;
+/// Immutable canonical, node-collection, and edge-collection release-trio invariants.
+pub mod knowledge_release;
 /// Bounded canonical lookup-card presentation values with assertion-level provenance.
 pub mod lookup_card;
 /// Closed, redacted metric names and categorical event dimensions.

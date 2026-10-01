@@ -4,7 +4,7 @@
 
 This contract defines island-port's vector and graph HTTP endpoints for versioned canonical nodes and edges. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. Point examples document island-port's internal projection.
 
-Status: target contract; the current executable does not compose this service client.
+Status: target island-port contract with a checked-in Transnet publication client and application orchestrator, neither of which is composed into the online executable. Transnet contains the typed release-trio and relationship admission foundation plus deterministic pre-publication node/edge build artifacts. Preparation currently projects only authoritative active `Lexeme` and `Sense` records, resolves their embedding-authorized lexical evidence, freezes separate dense and lexical canonical inputs without generating vectors, and builds edges only after every endpoint resolves in the exact node artifact. Construction, scale, and the broader target catalog remain closed until publisher-owned canonical sources are frozen. The island-port publication server, production build/status and reconciliation persistence, embedding and lexical-encoder execution, Qdrant collection mutation and verification, activation, rollback, and production acceptance remain external work.
 
 ## Contents
 
@@ -20,7 +20,8 @@ Status: target contract; the current executable does not compose this service cl
   - [POST /api/v1/scales/search](#post-apiv1scalessearch)
   - [POST /api/v1/edges/search](#post-apiv1edgessearch)
   - [POST /api/v1/neighbors/search](#post-apiv1neighborssearch)
-  - [POST /api/v1/releases/publish](#post-apiv1releasespublish)
+  - [Internal publication operations](#internal-publication-operations)
+  - [Deprecated POST /api/v1/releases/publish](#deprecated-post-apiv1releasespublish)
   - [Related documents](#related-documents)
 
 ## Endpoint reference
@@ -35,7 +36,39 @@ Every exact request body has the shape `{"context": RequestContext, "input": End
 
 Qdrant stores relationships between canonical Transnet concepts. It is a rebuildable read projection, while MySQL and authenticated release artifacts remain authoritative.
 
-Qdrant contains no user, learner, account, profile, preference, query, context, source passage, history, saved item, bookmark, practice, answer, mastery, schedule, layout, feedback, recording, or privacy-workflow data. Vectors are produced only from published canonical content and relationship explanations. Runtime request text is never embedded or stored.
+Qdrant contains no user, learner, account, profile, preference, query, context, source passage, history, saved item, bookmark, practice, answer, mastery, schedule, layout, feedback, recording, or privacy-workflow data. Vectors are produced only from published canonical content and admitted structured relationships. Runtime request text is never embedded or stored.
+
+## Canonical embedding inputs
+
+The frozen input contracts are `node-dense-input-v1`, `node-lexical-input-v1`, `edge-dense-input-v1`, and `edge-lexical-input-v1`. Each uses structured UTF-8 canonical bytes, NFC normalization without NFKC, preserved case and technical symbols, fixed field tags and order, unsigned big-endian byte-length prefixes, explicit one-byte optional presence markers, and deterministically sorted bounded lists. Release, typed identity, input family, and input-spec version are serialized. Dense and lexical hashes use separate versioned domains; neither is the Stage 3 projection content hash or a future persisted collection hash.
+
+Node material is limited to an active release-owned lexeme, its dedicated lemma evidence, an optional active owned sense and definition evidence, active word forms, source-backed localized glosses, reviewed non-passage translations whose meaning scope matches the node, and the exact source/evidence lineage permitting `embedding`. Empty optional lists encode explicit absence. Query-derived aliases, heuristic forms, model output, and unreviewed translations are forbidden.
+
+An edge input contains no publisher-authored or generated explanation prose. It binds the frozen source and target node input hashes, canonical relationship identity and revision, exact typed/wire relation, admitted structured scope, and verified evidence identities, sources, content hashes, and confidence. Island-port resolves the endpoint hashes to the already frozen node inputs before encoding vectors.
+
+Island-port is the embedding authority. The `semantic` vector uses `Qwen/Qwen3-Embedding-0.6B` with 1,024 dimensions and the applicable dense input specification. Production execution additionally requires an exact immutable artifact revision; a model name, `latest`, branch name, mutable provider alias, or deployment label is not a revision. No production dense registry entry exists until deployment supplies and verifies that immutable revision. The `lexical` vector uses the deterministic `transnet-lexical-bm25` encoder at revision `v1`. A closed compatibility registry maps the dense model family plus exact artifact revision and the lexical encoder identity plus revision to dimensions, vector names, and the applicable node and edge input specifications. Missing entries, dimension drift, revision drift, or input-spec mismatch fail closed.
+
+### Lexical encoder contract
+
+`transnet-lexical-bm25-v1` consumes the decoded textual fields of `node-lexical-input-v1` or `edge-lexical-input-v1`; it never tokenizes the binary framing, opaque IDs, evidence IDs, source IDs, or content hashes. Node text consists of lemma, normalized lemma, optional definition, form values and normalized form values, optional morphology, localized gloss text, and reviewed translation source and target text. For an edge, island-port resolves the frozen source and target node input hashes to those exact node lexical inputs, then adds the closed wire relationship and admitted textual scope values. Missing endpoint input, hash mismatch, or an unsupported input version fails closed.
+
+Text is NFC-normalized exactly once and remains case-sensitive. NFKC, stemming, stop-word removal, locale-dependent case folding, transliteration, and heuristic alias generation are forbidden. A token is a maximal run of Unicode letters, marks, or decimal digits, with ASCII `+` and `#` retained only when directly attached to such a run. All other punctuation and whitespace delimit tokens. Empty tokens are discarded. Consequently `C`, `C++`, and `C#` are three distinct terms; their spelling and symbols are not normalized into one another. A token may contain at most 256 UTF-8 bytes, a point may contain at most 16,384 token occurrences and 4,096 unique terms, and exceeding any bound fails closed.
+
+The release-local lexical dictionary is the sorted set of distinct token UTF-8 byte strings from the complete frozen collection. Sorting is unsigned bytewise order. Index zero is reserved; the first term receives index 1 and subsequent terms receive consecutive `u32` indices. This is a collision-free dictionary assignment, not a truncated token hash. Dictionary overflow, duplicate index assignment, or any dictionary/input disagreement fails closed. The dictionary hash and encoder revision belong to the persisted collection manifest; neither changes a Stage 4 embedding input hash.
+
+Document-side sparse values use `tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl))`, with `k1 = 1.2`, `b = 0.75`, the exact token occurrence count as `dl`, and `avgdl` computed after the complete collection is frozen. Repeated occurrences across the frozen text fields count independently; no undocumented field boost is applied. Computation uses IEEE-754 binary64 intermediates and round-to-nearest, ties-to-even conversion to binary32 persisted values. The Qdrant sparse vector named `lexical` must enable its `idf` modifier. IDF is collection/query-time state derived from the persisted collection statistics and is deliberately absent from per-point canonical input bytes and input hashes. M4 must define a separate `query-lexical-input` contract before query encoding is implemented; publication does not reuse a document input contract as an undocumented query contract.
+
+Every canonical embedding input is limited to 65,536 final canonical serialized bytes; 65,536 is accepted and 65,537 fails closed before hashing or publication. Publication batches are limited to 256 points and 1,048,576 serialized request bytes, with both limits enforced independently. These are execution bounds, not canonical identity. The four Stage 4 input formats and their hash domains remain unchanged.
+
+The compatibility registry schema records `dense_model_family`, `dense_artifact_revision`, `dense_dimensions`, `dense_vector_name`, `node_dense_input_spec`, `edge_dense_input_spec`, `lexical_encoder_identity`, `lexical_encoder_revision`, `lexical_vector_name`, `node_lexical_input_spec`, and `edge_lexical_input_spec`. Island-port must return the matched registry-entry identity and the observed immutable dense artifact revision in its future build receipt. It must derive that observation from the loaded deployment artifact or provider attestation, not echo the request. A receipt whose observation differs from the registry entry fails closed. The exact Qwen artifact revision and its attestation mechanism remain deployment blockers rather than placeholders in this contract.
+
+The implemented Transnet publication foundation now represents that registry schema, exact execution receipts, collision-free lexical-dictionary manifests, stable build and batch identities, and domain-separated persisted-collection and publication-manifest hashes. The outbound `KnowledgePublicationPort` and strict island-port client implement the publisher-side begin, bounded batch, freeze, reconcile, status, and abort contract over the shared UDS transport. `KnowledgePublicationService` drives begin, authoritative status-based resume, node batches and freeze, edge batches and freeze, and reconciliation without storing local progress or a status cache. Only successful authoritative reconciliation returns a typed `PublicationActivationCandidate`; activation remains a separate mutation performed by an external authenticated publisher or control plane through island-port. An empty registry is the valid predeployment state; every populated entry requires an exact immutable dense artifact revision, so no checked-in entry pretends that a floating model reference is deployable. The client and service are covered by strict fake-transport and orchestration tests only: they do not call an embedding provider, run the lexical encoder, create or mutate a Qdrant collection, implement island-port's publication server or persistence, or activate or roll back a release trio.
+
+The closed build lifecycle is `accepting_nodes` -> `nodes_frozen` -> `accepting_edges` -> `edges_frozen` -> `reconciling` -> `activation_candidate`. A nonterminal build may instead enter `failed` or `aborting`; `aborting` proceeds only to `abandoned`, and `failed` or `abandoned` may proceed only to `gc_eligible`. Terminal failure and abandonment cannot recover in place or become activation candidates. Repeating a completed finalize or reconciliation operation is a transport-level idempotent replay, not a second lifecycle transition.
+
+Build identity is derived from immutable release, projection schema, node projection hash, and compatibility-registry entry identity. Batch identity additionally binds collection family, consecutive ordinal, canonical request fingerprint, and ordered batch content hash. An exact retry replays its stored result; reuse of the same build and ordinal with another fingerprint or content hash fails closed. Request ID, clock time, insertion order, randomness, Qdrant-generated values, and raw vector bytes never define canonical publication identity.
+
+The hash hierarchy is distinct: canonical embedding input hash -> projection content hash -> persisted collection hash -> publication manifest hash. A persisted collection hash binds collection family, release, projection schema and hash, sorted point identities and point projection hashes, dense and lexical input hashes, exact compatibility entry, vector names, dimensions, lexical dictionary hash and cardinality, and point count. It excludes raw dense and sparse vector bytes. A publication manifest hash binds canonical release and schema to different node and edge persisted collection hashes. The eventual wire locations for these typed values remain part of the publication transport contract.
 
 ## Release and collection contract
 
@@ -45,21 +78,48 @@ Point IDs are deterministic. Nodes are built before edges. Publication rejects m
 
 Release manifest example:
 
+The placeholder dense artifact revision below demonstrates the required field only. It is invalid for production publication until replaced by the deployed immutable revision and matched by the closed registry.
+
 ```json
 {
   "release_id": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1",
   "collections": {
-    "nodes": "knowledge_nodes__knowledge_2026_09",
-    "edges": "knowledge_edges__knowledge_2026_09"
+    "nodes": {
+      "collection_id": "knowledge_nodes__knowledge_2026_09",
+      "payload_schema_version": "knowledge-graph-v1",
+      "content_hash": "sha256:63af5c1e...",
+      "point_count": 184220,
+      "state": "verified"
+    },
+    "edges": {
+      "collection_id": "knowledge_edges__knowledge_2026_09",
+      "payload_schema_version": "knowledge-graph-v1",
+      "content_hash": "sha256:b19d28a7...",
+      "point_count": 612840,
+      "verified_node_content_hash": "sha256:63af5c1e...",
+      "state": "verified"
+    }
   },
-  "dense_model": "multilingual-embedding-v4",
-  "dense_dimensions": 1536,
-  "sparse_model": "lexical-sparse-v2",
-  "payload_schema_version": "knowledge-graph-v1",
-  "node_content_hash": "sha256:63af5c1e...",
-  "edge_content_hash": "sha256:b19d28a7..."
+  "embeddings": {
+    "dense_model_family": "Qwen/Qwen3-Embedding-0.6B",
+    "dense_artifact_revision": "<deployment-supplied-immutable-revision>",
+    "dense_dimensions": 1024,
+    "sparse_encoder_identity": "transnet-lexical-bm25",
+    "sparse_encoder_revision": "v1"
+  },
+  "endpoint_coverage": {
+    "expected": 1225680,
+    "resolved": 1225680
+  }
 }
 ```
+
+The physical node and edge collection identifiers are different typed members; an active alias is never accepted as either immutable identifier. The canonical release, both collection manifests, both embedding revisions, and endpoint coverage form one activation candidate. Both collections must be verified, the payload schemas must match, the edge manifest must name the exact verified node hash, and every edge endpoint must resolve in that node collection. A Transnet ranking version is request-time policy and is not part of this authority-owned manifest.
+
+Node projection completes and verifies before edge construction starts. Island-port rejects a missing member, cross-release member, schema or embedding mismatch, count or hash mismatch, incomplete endpoint coverage, or unverified build; no placeholder collection identifier is permitted.
+
+Transnet's pre-publication artifact is intentionally not a collection manifest. It has no physical collection ID and never claims the `verified` collection lifecycle state. Stable point IDs are SHA-256 values over a length-prefixed, versioned canonical serialization of the release, payload schema, typed canonical identity, and point family. Point and build content hashes use the same explicit serialization, sorted typed identities, sorted evidence references, and fixed field order; insertion order, request IDs, timestamps, ranking scores, Debug output, and Qdrant-generated values do not participate. Exact duplicate nodes are collapsed, conflicting duplicates fail closed, Stage 2 rejects duplicate typed relationships, and the edge artifact binds the exact node build hash together with expected and resolved endpoint counts.
 
 ## Knowledge node point
 
@@ -69,7 +129,7 @@ A node represents one independently explainable lexical sense, phrase, multiling
 {
   "id": "node_sweltering_hot_01",
   "vectors": {
-    "semantic": "<1536-dimensional canonical-content vector>",
+    "semantic": "<1024-dimensional canonical-content vector>",
     "lexical": {
       "indices": [1842, 99104],
       "values": [1.0, 0.62]
@@ -124,13 +184,13 @@ Canonical domain nodes additionally carry a compact knowledge profile so the LLM
 
 ## Knowledge edge point
 
-An edge is both a typed connection and a searchable explanation of why two nodes relate.
+An edge is a typed, searchable connection whose embedding input is derived only from its authoritative endpoints, relation, scope, and verified evidence metadata.
 
 ```json
 {
   "id": "edge_sweltering_scorching_01",
   "vectors": {
-    "semantic": "<1536-dimensional canonical-relationship vector>",
+    "semantic": "<1024-dimensional canonical-relationship vector>",
     "lexical": {
       "indices": [1842, 77103, 99104],
       "values": [0.71, 1.0, 0.48]
@@ -144,7 +204,6 @@ An edge is both a typed connection and a searchable explanation of why two nodes
     "source_node_id": "node_sweltering_hot_01",
     "target_node_id": "node_scorching_heat_01",
     "relation_type": "higher_degree",
-    "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
     "applicable_sense_ids": ["sense_sweltering_hot_01"],
     "conditions": ["temperature describes weather or an environment"],
     "restrictions": {
@@ -166,6 +225,12 @@ An edge is both a typed connection and a searchable explanation of why two nodes
 
 Supported families cover lexical naming and translation equivalence; taxonomy and part-whole structure; synonymy, antonymy, contrast, and named intensity dimensions; valency, grammar, collocation, and fixed expressions; morphology; suitability by register, dialect, region, period, scene, and domain; cultural extension; and domain mechanism, causation, dependency, implementation, application, measurement, standardization, and terminology. Exploratory associations remain a separate family. A versioned relation-type registry defines direction, inverse, symmetry, transitivity, and causality; neither the UI nor the LLM infers those properties from wording. Payload indexes cover both endpoints, relation type and version, assessment eligibility, publication and verification state, release, applicable sense, language, dialect, region, period, domain, and evidence ID. Qdrant stores no judgment or aggregate value.
 
+The current Transnet registry freezes only mappings whose exact direction is already normative here: internal `Hypernym` stores broader to narrower and publishes as `has_subtype`; internal `Hyponym` stores narrower to broader and publishes as `is_a`; `LowerDegree` and `HigherDegree` publish as `lower_degree_than` and `higher_degree_than`. Existing graph identities for synonymy, antonymy, translation equivalence, morphology, construction, etymology, and weak association retain their internal direction and inverse rules, but their Qdrant wire names, transitivity, and causality remain unresolved contract gaps. Publication fails closed rather than deriving names from Rust variants or English labels.
+
+Before projection, the implemented Transnet admission boundary requires the declared wire relation and inverse to equal the registry, validates the permitted endpoint kinds, and canonicalizes symmetric endpoints for identity without emitting a second inverse edge. One stable edge identity contains the immutable release, publisher-assigned relationship ID and revision, canonical endpoints, internal relation type, and admitted scope; runtime rank, insertion order, request IDs, timestamps, and Qdrant-generated IDs never participate. Duplicate typed assertions are rejected separately by release, canonicalized endpoints, relation type, and scope even if a publisher supplied different relationship IDs. Evidence revision membership in edge identity remains unresolved and is therefore not guessed.
+
+Admission resolves every evidence ID through the existing canonical evidence lineage. The exact ID set must match, every fragment must belong to the relationship release, both source and fragment permissions must allow storage and embedding, the fragment must be active, and generated evidence must have completed reviewed promotion. Evidence confidence uses the existing closed `High`, `Medium`, and `Low` domain values, so an absent or out-of-range numeric value cannot enter this domain boundary. The current `GraphScope` can safely carry a typed dialect and a bounded nonblank register. Free-text conditions and string domain scope are rejected from M3 projection until canonical condition and domain-ID semantics are frozen.
+
 `is_a` points from a narrower sense to a broader category and `has_subtype` is its inverse. `lower_degree_than` and `higher_degree_than` compare members only within a named compatible dimension. No degree edge implies taxonomy, synonymy, or interchangeability.
 
 ## Semantic scale point
@@ -176,7 +241,7 @@ A first-class semantic scale is stored as a node projection so one retrieval can
 {
   "id": "scale_environmental_heat_intensity_01",
   "vectors": {
-    "semantic": "<1536-dimensional scale-description vector>",
+    "semantic": "<1024-dimensional scale-description vector>",
     "lexical": {
       "indices": [1842, 77103, 99104],
       "values": [0.7, 1.0, 0.8]
@@ -210,7 +275,7 @@ Request:
 
 ```json
 {
-  "dense_vector": "<1536-dimensional ephemeral query vector>",
+  "dense_vector": "<1024-dimensional ephemeral query vector>",
   "sparse_vector": {
     "indices": [1842, 99104],
     "values": [1.0, 0.55]
@@ -300,13 +365,13 @@ The endpoint does not infer a new scale or return an incomplete ladder. A missin
 
 ## POST /api/v1/edges/search
 
-Searches canonical relationship explanations. Eligibility filters apply before limiting, and verified and exploratory results remain separate.
+Searches canonical structured relationships. Eligibility filters apply before limiting, and verified and exploratory results remain separate.
 
 Request:
 
 ```json
 {
-  "dense_vector": "<1536-dimensional ephemeral relationship vector>",
+  "dense_vector": "<1024-dimensional ephemeral relationship vector>",
   "sparse_vector": {
     "indices": [77103, 99104],
     "values": [1.0, 0.6]
@@ -341,7 +406,6 @@ Response:
         "source_node_id": "node_sweltering_hot_01",
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree",
-        "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
         "fact_id": "fact_sweltering_degree_scorching_01",
         "fact_revision": 2,
         "verification_state": "verified"
@@ -405,9 +469,59 @@ Response:
 
 Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
 
-## POST /api/v1/releases/publish
+## Internal publication operations
 
-Publication writes deterministic points to new immutable collections and verifies them before activation. It does not mutate an active collection.
+The former single-body `/api/v1/releases/publish` proposal is replaced by the publisher-only island-port operations `POST /api/v1/knowledge-publications/begin`, `nodes/batch`, `nodes/freeze`, `edges/batch`, `edges/freeze`, `reconcile`, `status`, and `abort`. They use transport schema `knowledge-publication-v1`, the shared `{ "context": ..., "input": ... }` envelope, an RFC 3339 deadline, request ID, and immutable `content_release`. Unknown fields, malformed bodies, mismatched echoed context, or unknown and contradictory outcome/code pairs fail closed.
+
+Begin binds the stable build ID, canonical and projection schemas, complete node and edge projection hashes, exact compatibility entry, expected counts, caller idempotency key, and canonical request fingerprint. Each family-local batch contains at most 256 ordered points and at most 1 MiB of serialized JSON. Its zero-based ordinal is consecutive, and its identity binds the build, ordinal, request fingerprint, and canonical batch content hash. The transport accepts at most 128 ASCII-graphic request-ID bytes and 64 RFC 3339 deadline bytes. Before mutation, the application obtains the largest fitting prefix through the port's pure wire-admission inspection. Inspection and send share the exact DTO, JSON, and base64 serializer; inspection uses the real release and payload with a worst-case legal transport context, so request IDs and deadlines never change deterministic boundaries. A single oversized point fails before `begin` or batch submission. The adapter repeats the 1 MiB validation immediately before transport. Control requests and every response are limited to 256 KiB. Identical retries replay the stored result; reuse of an identity with different canonical content returns `conflict` with `idempotency_conflict`.
+
+Node freeze precedes edge admission. A freeze response supplies an island-port-allocated immutable collection ID, persisted collection hash, projection hash and count, plus dense and lexical execution receipts. Requested compatibility is not execution proof: Transnet compares the server assertion for the exact dense artifact revision, dimensions, vector and input-spec names, lexical encoder revision, dictionary hash, and processed count. The production provenance behind that assertion remains an island-port deployment responsibility.
+
+Reconcile binds both immutable collection IDs, both projection and persisted hashes, the edge-to-node projection binding, point and endpoint counts, validated receipts, and the publication manifest hash. Only complete endpoint coverage and exact cross-artifact agreement produce the closed `activation_candidate` state. This operation does not mutate the active release. Status is read-only; abort follows the domain state machine and cannot leave or abort an activation candidate.
+
+```json
+{
+  "context": {
+    "request_id": "req_publish_01",
+    "deadline_at": "2026-10-01T12:00:00Z",
+    "schema_version": "knowledge-publication-v1",
+    "content_release": "knowledge-2026-10"
+  },
+  "input": {
+    "build_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "canonical_schema_version": "canonical-v1",
+    "projection_schema_version": "knowledge-graph-v1",
+    "node_projection_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "edge_projection_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "compatibility": {
+      "entry_id": "deployment-qwen-r1",
+      "dense_model_family": "Qwen/Qwen3-Embedding-0.6B",
+      "dense_artifact_revision": "deployment-supplied-immutable-revision",
+      "dense_dimensions": 1024,
+      "dense_vector_name": "semantic",
+      "node_dense_input_specification": "node-dense-input-v1",
+      "edge_dense_input_specification": "edge-dense-input-v1",
+      "lexical_encoder_identity": "transnet-lexical-bm25",
+      "lexical_encoder_revision": "v1",
+      "lexical_contract_identity": "transnet-lexical-bm25-v1",
+      "lexical_vector_name": "lexical",
+      "node_lexical_input_specification": "node-lexical-input-v1",
+      "edge_lexical_input_specification": "edge-lexical-input-v1"
+    },
+    "expected_node_count": 184220,
+    "expected_edge_count": 612840,
+    "expected_endpoint_count": 1225680,
+    "idempotency_key": "publish-knowledge-2026-10",
+    "request_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  }
+}
+```
+
+Status-shaped success responses return the echoed build ID, one closed lifecycle state, and the next expected ordinal for each family. Closed lifecycle states are `accepting_nodes`, `nodes_frozen`, `accepting_edges`, `edges_frozen`, `reconciling`, `activation_candidate`, `failed`, `aborting`, `abandoned`, and `gc_eligible`. Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `conflict`, `unavailable`, and `timeout`; each non-success outcome must carry its compatible structured publication failure code. Human messages are never classified.
+
+## Deprecated POST /api/v1/releases/publish
+
+This earlier one-body target example is retained only as historical context. It is not implemented and must not be used by new publisher clients; the bounded operations above replace it. Publication writes deterministic points to new immutable collections and verifies them before activation. It does not mutate an active collection.
 
 Request:
 
@@ -415,14 +529,35 @@ Request:
 {
   "manifest": {
     "release_id": "knowledge-2026-10",
-    "payload_schema_version": "knowledge-graph-v1",
-    "dense_model": "multilingual-embedding-v4",
-    "dense_dimensions": 1536,
-    "sparse_model": "lexical-sparse-v2",
-    "expected_node_count": 184220,
-    "expected_edge_count": 612840,
-    "node_content_hash": "sha256:dd401f2a...",
-    "edge_content_hash": "sha256:98d3a647..."
+    "canonical_schema_version": "canonical-v1",
+    "collections": {
+      "nodes": {
+        "collection_id": "knowledge_nodes__knowledge_2026_10",
+        "payload_schema_version": "knowledge-graph-v1",
+        "content_hash": "sha256:dd401f2a...",
+        "point_count": 184220,
+        "state": "verified"
+      },
+      "edges": {
+        "collection_id": "knowledge_edges__knowledge_2026_10",
+        "payload_schema_version": "knowledge-graph-v1",
+        "content_hash": "sha256:98d3a647...",
+        "point_count": 612840,
+        "verified_node_content_hash": "sha256:dd401f2a...",
+        "state": "verified"
+      }
+    },
+    "embeddings": {
+      "dense_model_family": "Qwen/Qwen3-Embedding-0.6B",
+      "dense_artifact_revision": "<deployment-supplied-immutable-revision>",
+      "dense_dimensions": 1024,
+      "sparse_encoder_identity": "transnet-lexical-bm25",
+      "sparse_encoder_revision": "v1"
+    },
+    "endpoint_coverage": {
+      "expected": 1225680,
+      "resolved": 1225680
+    }
   },
   "idempotency_key": "publish-qdrant-knowledge-2026-10"
 }
@@ -432,6 +567,8 @@ Response:
 
 ```json
 {
+  "request_id": "req_publish_01",
+  "schema_version": "vector-data-v1",
   "outcome": "ok",
   "value": {
     "release_id": "knowledge-2026-10",
@@ -439,15 +576,34 @@ Response:
     "edge_collection": "knowledge_edges__knowledge_2026_10",
     "node_count": 184220,
     "edge_count": 612840,
+    "manifest_hash": "sha256:manifest-771e...",
     "endpoint_coverage": 1.0,
     "validation_state": "ready_for_activation"
-  }
+  },
+  "release_id": "knowledge-2026-10"
 }
 ```
 
 Build reconciliation compares counts, endpoint coverage, content hashes, embedding versions, and release metadata with an authenticated manifest. A partial or mismatched pair never activates. Correction creates a new immutable release; rollback selects an unchanged retained pair.
 
-Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`. Logs omit credentials, vectors, canonical source text, request content, and raw Qdrant bodies.
+Publication failures use the closed structured codes `canonical_release_unavailable`, `node_build_unavailable`, `edge_build_unavailable`, `schema_incompatible`, `embedding_metadata_incompatible`, `invalid_lifecycle_transition`, `idempotency_conflict`, `artifact_revision_mismatch`, `lexical_encoder_mismatch`, `dictionary_mismatch`, `endpoint_reconciliation_failed`, `hash_or_count_reconciliation_failed`, `incomplete_trio`, `activation_conflict`, `immutable_release_unavailable`, `timeout`, and `dependency_unavailable`. Island-port maps these from build and reconciliation state; callers never classify a message string. A successful publish response is an immutable activation candidate and does not switch the active release.
+
+```json
+{
+  "request_id": "req_publish_01",
+  "schema_version": "vector-data-v1",
+  "outcome": "conflict",
+  "error": {
+    "code": "endpoint_reconciliation_failed",
+    "message": "release projection did not pass reconciliation"
+  },
+  "release_id": "knowledge-2026-10"
+}
+```
+
+An error has no `value`; success has no `error`. `request_id`, transport `schema_version`, and the selected `release_id` echo the request context and never substitute for the canonical schema or collection payload schema inside the manifest.
+
+General closed outcomes remain `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`; publication may also return `conflict` with one of the publication failure codes. Logs omit credentials, vectors, canonical source text, request content, and raw Qdrant bodies.
 
 ## Related documents
 

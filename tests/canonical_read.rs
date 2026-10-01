@@ -10,8 +10,9 @@ use transnet::{
   application::canonical_read::CanonicalReadService,
   domain::{
     canonical::{
-      CanonicalId, CanonicalReleasePin, CanonicalStatus, EvidenceUse, LanguageTag, Lexeme,
-      LexicalPartOfSpeech, Sense,
+      CanonicalId, CanonicalReleasePin, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
+      EvidenceKind, EvidenceUse, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource, Sense,
+      SourcePermissions,
     },
     canonical_content::{CanonicalSenseDetails, CanonicalSenseDetailsInput, SenseContentTarget},
     canonical_translation::{
@@ -41,11 +42,21 @@ struct SwitchingAuthority {
 }
 
 fn candidate(pin: &CanonicalReleasePin) -> CanonicalCandidate {
+  let evidence_id = CanonicalId::new("evidence-hello").unwrap();
+  let source_id = CanonicalId::new("source-dictionary").unwrap();
+  let permissions = SourcePermissions {
+    storage: true,
+    display: true,
+    embedding: true,
+    model_processing: false,
+    api_redistribution: true,
+  };
   let lexeme = Lexeme {
     id: CanonicalId::new("lexeme-hello").unwrap(),
     release_id: pin.release_id.clone(),
     language: language("en"),
     lemma: "hello".into(),
+    lemma_evidence_ids: vec![evidence_id.clone()],
     normalized_lemma: "hello".into(),
     part_of_speech: LexicalPartOfSpeech::Interjection,
     status: CanonicalStatus::Active,
@@ -63,8 +74,27 @@ fn candidate(pin: &CanonicalReleasePin) -> CanonicalCandidate {
     lexeme,
     sense,
     forms: Vec::new(),
-    evidence: Vec::new(),
-    sources: Vec::new(),
+    evidence: vec![EvidenceFragment {
+      id: evidence_id,
+      source_id: source_id.clone(),
+      source_reference: "entry:hello".into(),
+      release_id: pin.release_id.clone(),
+      language: language("en"),
+      kind: EvidenceKind::Other,
+      confidence: EvidenceConfidence::High,
+      text: "hello".into(),
+      content_hash: "sha256:hello".into(),
+      permissions,
+      status: CanonicalStatus::Active,
+    }],
+    sources: vec![LexicalSource {
+      id: source_id,
+      name: "Reviewed dictionary".into(),
+      version: "1".into(),
+      license: "reviewed".into(),
+      attribution: Some("Reviewed dictionary".into()),
+      permissions,
+    }],
   }
 }
 

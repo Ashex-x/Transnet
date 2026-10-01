@@ -16,6 +16,8 @@ pub mod clock;
 pub mod content_release_repository;
 /// Read-only canonical graph topology interface.
 pub mod graph_repository;
+/// Outbound-only immutable knowledge-publication capability.
+pub mod knowledge_publication;
 /// Structured learning-model interface.
 pub mod learning_model;
 /// Closed, redacted backend metric-event recording interface.

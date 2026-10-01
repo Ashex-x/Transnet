@@ -22,6 +22,8 @@ Stage 4 在同一出站 transport 中增加 active canonical release 读取。�
 
 可执行文件可通过经校验的运行配置按需构造此出站 transport 与 canonical-only read service。canonical 依赖的就绪检查只使用只读 active-release 操作。公开 BasicCard lookup 与固定发布 sense follow-up 通过 application 边界使用该服务；没有新增入站 UDS listener 或数据库 client。
 
+Publication adapter 是复用同一可注入 transport 的独立 outbound-only client。私有 strict DTO 把 `KnowledgePublicationPort` operation 映射到 `knowledge-publication-v1` 的 begin、node/edge batch、freeze、reconcile、status 与 abort call。其纯 node/edge batch inspection 与最终 send 使用同一套 DTO/JSON/base64 serializer；inspection 不执行 transport I/O，并为最大合法 request-ID/deadline representation 预留空间，send 则再次执行 1 MiB 防御性校验。它还强制校验 request/deadline/release 回显、256-point bound、256 KiB control/response bound、闭合 outcome/code 组合、精确 execution receipt 和 cross-artifact hash。Fake transport test 在不增加 Qdrant/MySQL driver、island-port server、embedding execution、activation 或 runtime handler wiring 的情况下验证该合同。
+
 对应 island-port server 位于本仓库之外，必须同步实现 `interfaces/mysql.md` 中的当前 delta。在 peer 升级之前，不兼容或不完整响应会 fail closed，且不能声称真实 island-port/MySQL E2E 已验证。
 
 结构化与向量映射保留发布标识符与闭合结果。Island-port 负责 MySQL 和 Qdrant driver、查询、连接池、事务、collection 选择与凭据。Transnet 不暴露 SQL 或 Qdrant-native 请求。文件系统权限认证进程；JSON 绝不转发终端用户身份或凭据。

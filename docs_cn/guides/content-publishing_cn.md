@@ -4,7 +4,7 @@ English: [Publish canonical knowledge content](../../docs/guides/content-publish
 
 本指南定义 MySQL 基础卡、规范翻译以及配对 Qdrant 知识节点/知识边集合的拟议发布流程，面向内容工程师和发布运维人员。
 
-状态：拟议；当前运行时没有摄取或发布流水线。
+状态：Transnet 侧已部分实现，但尚未 production-complete。在线 runtime 没有摄取或 mutation 流水线。Transnet 已具备确定性的固定发布 projection preparation、严格出站 publication client，以及通过权威 status 恢复并完成 reconciliation 的离线 application orchestration。它不生成 production embedding、不分配真实 collection ID、不写入 Qdrant、不持久化 island-port build state，也不激活 release。
 
 ## 前置条件
 
@@ -34,6 +34,8 @@ flowchart LR
 
 每个可独立选择的词义创建一个无 Qdrant 仍可用的精简 MySQL `BasicCard`，包含规范形式与别名、精简翻译与定义、发音与形态摘要、例句、用法说明、领域、证据元数据、发布状态和知识根 ID。Qdrant 节点表示可独立解释的词义、短语、术语、概念、实体、现象、机理、过程、方程、物理量、材料、仪器、方法、技术、应用、标准、组织、人物、地点、习语、隐喻、语法模式、搭配、误解和领域。
 
+已实现的准备 builder 当前只接纳 active 的权威 lexeme 与 sense，因为只有这些 node family 能在不合成 publisher identity 的前提下无损重建。它先确定性排序并 hash node point，再只接纳 Stage 2 已验证且两个端点都存在于该精确 node 工件中的 relationship。缺失端点、跨发布内容、未解析 wire mapping、不兼容 embedding specification、inactive 内容与冲突重复节点全部闭合失败。生成的 summary 携带 release、schema、embedding requirement、hash、count、node-hash binding 与 endpoint coverage，但有意不携带物理 collection ID 或 production verification state。
+
 仅为已审核、可复用的共享内容创建规范翻译修订。记录其单词、短语或段落单元，带语言标签的精确源文与译文，适用词义、方言、语域和领域范围，来源与证据，发布权利声明，选择理由，审核决定，normalizer 版本及内容 hash。绝不从请求日志产生候选，也绝不摄取私有用户保存内容。基础卡引用与精确翻译解析相同的已发布翻译身份。
 
 目标 MySQL schema 通过共享稳定的 `canonical_entity` 身份和不可变 `canonical_entity_revision` 行表示 lexeme、词义、基础卡、翻译、领域、事实和语义尺度。高频过滤键保留为列；每个内容族使用闭合且带版本的 JSON payload schema 保存其有界字段。Publisher 拒绝声明实体类型、引用或 schema 版本不一致的 payload，然后通过 `release_member` 固定已批准的实体与关系修订。不得仅因增加一个有界内容字段就新建表。
@@ -50,11 +52,19 @@ flowchart LR
 
 ## 构建与校验边
 
-节点先于边构建。每条边指定两端、类型、方向、完整解释、适用词义与领域、条件、语言、方言、地区、时代、证据状态、置信度、来源、验证状态和发布。版本化关系注册表定义逆关系、对称性、传递性和因果性，不从标签猜测。校验拒绝孤立端点、跨发布引用、无效方向、重复边、缺失证据与不兼容词义。强度不得冒充分类，探索邻居与已验证边分开。
+节点先于边构建。每条边指定两端、类型、方向、适用词义与领域、条件、语言、方言、地区、时代、证据状态、置信度、来源、验证状态和发布。不存在新的权威关系解释 prose：带版本的 edge input 由冻结 endpoint lexical input、typed wire relation、已接纳 structured scope 与 verified evidence metadata 确定性组装。版本化关系注册表定义逆关系、对称性、传递性和因果性，不从标签猜测。校验拒绝孤立端点、跨发布引用、无效方向、重复边、缺失证据与不兼容词义。强度不得冒充分类，探索邻居与已验证边分开。
+
+已实现的 admission foundation 还要求精确且已冻结的 Qdrant wire 映射、精确 inverse 声明、规范端点 kind 与发布所有权、verified lifecycle，以及 evidence ID 到具有 storage/embedding permission 的 active、source-qualified lineage 的一对一解析。对称输入只为 identity 进行规范化；publisher 不合成 inverse record。重复 typed assertion 不受输入顺序或替代 edge ID 影响，均被确定性拒绝。在 canonical domain ID 和 condition schema 冻结前，字符串 domain scope 与自由文本 condition 闭合失败，不进入投影 payload。
 
 ## 构建不可变 Qdrant 集合
 
-为发布创建一个不可变节点集合和一个不可变边集合，同时使用具名稠密/稀疏向量和 [Qdrant 合同](../interfaces/qdrant_cn.md)的 Payload 索引。在 Manifest 中记录维度、规范化、嵌入模型、哈希、Schema、数量和端点覆盖率。边稠密向量嵌入完整的源–关系–目标解释；重建探索邻居不会修改已验证内容。
+为发布创建一个不可变节点集合和一个不可变边集合，同时使用具名稠密/稀疏向量和 [Qdrant 合同](../interfaces/qdrant_cn.md)的 Payload 索引。在 Manifest 中记录维度、规范化、嵌入模型、哈希、Schema、数量和端点覆盖率。Edge dense/lexical input 绑定两端冻结 input hash 与完整的已接纳结构化关系；island-port 解析端点输入并应用精确批准的 compatibility-registry entry。重建探索邻居不会修改已验证内容。
+
+Execution baseline 为 `semantic` vector 使用 1,024 维的 `Qwen/Qwen3-Embedding-0.6B`，但在部署提供精确不可变 artifact revision 且 island-port 能证明其实际加载的 revision 之前，publication 仍然闭合失败。Lexical publication 使用非神经的 `transnet-lexical-bm25-v1` encoder 与 `lexical` sparse vector。它保留 NFC spelling、大小写以及附着的技术符号 `+`/`#`，从按 UTF-8 排序的 term 构造无碰撞 release-local index，仅在完整 collection 冻结后计算 document-side BM25 term-frequency saturation，并将依赖 collection 的 IDF 交给 Qdrant `idf` modifier。IDF 绝不改变 canonical input hash。精确 tokenizer、dictionary、数值和执行边界由 [Qdrant 合同](../interfaces/qdrant_cn.md#lexical-encoder-合同)规定。
+
+仓库内 publication foundation 会校验 node-first lifecycle、稳定 build/batch identity、冲突 retry、execution receipt、dictionary proof 以及 input/projection/persisted/manifest hash hierarchy。其出站 publication port 与严格 island-port client 通过共享 UDS transport 承载 begin、有界 node/edge batch、freeze receipt、reconciliation、status 与 abort。`KnowledgePublicationService` 从不可变 projection 工件驱动该合同，始终以 island-port 权威 status 恢复，不保留本地 publication progress，并且只在 reconciliation 成功后返回 typed activation candidate。Failed 或 abandoned build 不能成为 candidate，reconciliation 也不会激活 release。Production 仍受阻于已部署的不可变 Qwen revision 与 attestation、真实 dense/lexical execution、island-port build/status 与 reconciliation persistence、Qdrant node/edge collection 创建和 mutation、production collection verification 与 persisted hash、真实 MySQL/Qdrant reconciliation，以及 release-trio E2E 验收。
+
+Publisher 必须先完成并验证确定性节点投影，再冻结节点 manifest，并针对该精确节点哈希构建边。对账比较规范根、规范 schema、强类型物理 collection ID、payload schema、嵌入修订与维度、节点/边哈希和数量以及完整端点覆盖。成员缺失、活动 alias、跨发布引用、未解析的关系 wire 映射或未验证 collection 均阻止激活。
 
 ## 对账与评估
 
@@ -62,7 +72,11 @@ flowchart LR
 
 ## 激活与回滚
 
-MySQL 卡片与规范翻译发布以及配对 Qdrant 节点/边版本作为一个逻辑发布激活，每个请求在两个存储间钉住同一发布身份。部分构建不可见，别名不作为版本权威；回滚选择未改动的保留发布。已发布规范记录绝不静默改写。
+MySQL 卡片与规范翻译发布以及配对 Qdrant 节点/边版本作为一个逻辑发布激活，每个请求在两个存储间钉住同一发布身份。部分构建不可见，别名不作为版本权威；已发布规范记录绝不静默改写。
+
+Transnet 在线请求路径只有读取权限。Transnet publication orchestration 在 `PublicationActivationCandidate` 处停止。外部认证 publisher/control-plane 将该 candidate 提交给 island-port；island-port 拥有 MySQL/Qdrant 凭据、collection mutation、对账持久化与原子活动指针。激活只能选择完全对账的不可变三件套。
+
+回滚通过同一个 island-port authority 重新激活此前已验证且保留的不可变三件套。它不改写旧 canonical release，也不重建旧 immutable Qdrant collection。目标必须仍处于 verified、retained 且可寻址状态；build GC 绝不能删除 active 或 retained rollback target。Production retention 与 rollback 行为仍需外部验证。
 
 ## 修正、隔离与删除
 

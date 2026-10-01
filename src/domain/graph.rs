@@ -5,9 +5,10 @@ use std::collections::BTreeSet;
 use thiserror::Error;
 
 use super::canonical::{
-  CanonicalId, CanonicalValidationError, EvidenceConfidence, EvidenceId, LanguageTag,
+  CanonicalId, CanonicalValidationError, EvidenceConfidence, EvidenceId, EvidenceUse, LanguageTag,
   LexicalPartOfSpeech, ReleaseId,
 };
+use super::canonical_content::CanonicalEvidenceLineage;
 
 /// Default number of hops returned for a graph read.
 pub const DEFAULT_GRAPH_DEPTH: u8 = 1;
@@ -57,6 +58,48 @@ pub enum GraphValidationError {
   /// A canonical relation had no independently citable supporting evidence.
   #[error("graph relation evidence must not be empty")]
   EmptyEvidence,
+  /// A relation registry rule rejected the source node family.
+  #[error("graph relation source node kind is not allowed")]
+  InvalidRelationSourceKind,
+  /// A relation registry rule rejected the target node family.
+  #[error("graph relation target node kind is not allowed")]
+  InvalidRelationTargetKind,
+  /// The target Qdrant contract has not frozen a wire name for this relation.
+  #[error("graph relation has no authoritative Qdrant wire mapping")]
+  UnresolvedQdrantRelation,
+  /// A relationship revision has not passed canonical publication review.
+  #[error("graph relationship revision is not verified")]
+  UnverifiedRelationship,
+  /// A relationship or endpoint belongs to a different immutable release.
+  #[error("graph relationship and endpoints must share one release")]
+  RelationshipReleaseMismatch,
+  /// One release repeated the same typed source-target assertion.
+  #[error("graph release contains a duplicate typed relationship")]
+  DuplicateTypedRelationship,
+  /// A caller declared a Qdrant direction that differs from the registry mapping.
+  #[error("graph relationship wire direction contradicts the registry")]
+  RelationshipDirectionMismatch,
+  /// A caller declared inverse semantics that differ from the registry.
+  #[error("graph relationship inverse semantics contradict the registry")]
+  RelationshipInverseMismatch,
+  /// The relationship's resolved evidence did not exactly match its evidence identifiers.
+  #[error("graph relationship evidence lineage is incomplete or contradictory")]
+  RelationshipEvidenceMismatch,
+  /// Resolved evidence belongs to another immutable release.
+  #[error("graph relationship evidence belongs to another release")]
+  RelationshipEvidenceReleaseMismatch,
+  /// Resolved evidence lacks permission or lifecycle eligibility for vector projection.
+  #[error("graph relationship evidence is not eligible for projection")]
+  RelationshipEvidenceNotPermitted,
+  /// Current canonical-domain scope cannot yet be represented without a guessed identity.
+  #[error("graph relationship domain scope semantics are unresolved")]
+  UnresolvedRelationshipDomainScope,
+  /// Free-text conditions are not admitted as canonical relationship conditions.
+  #[error("graph relationship condition semantics are unsupported")]
+  UnsupportedRelationshipCondition,
+  /// A supported scope field was blank or exceeded its bounded representation.
+  #[error("graph relationship scope is invalid")]
+  InvalidRelationshipScope,
   /// A semantic scale contained a non-sense member.
   #[error("semantic scale members must be sense nodes")]
   InvalidScaleMember,
@@ -276,7 +319,161 @@ pub enum GraphRelationType {
   HigherDegree,
 }
 
+/// Directionality declared by the authoritative relationship registry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelationshipDirection {
+  /// Source and target have distinct roles and inversion changes the relation type.
+  Directed,
+  /// Endpoint order has no semantic effect after canonical key ordering.
+  Symmetric,
+}
+
+/// Whether the authoritative contract declares a transitive or causal property.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelationshipProperty {
+  /// The contract explicitly declares that the property applies.
+  Declared,
+  /// The contract explicitly declares that the property does not apply.
+  NotApplicable,
+  /// The property remains unspecified and consumers must not infer it.
+  Unspecified,
+}
+
+/// Scope fields the current graph domain can carry without inventing publication metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RelationshipScopeFields {
+  /// Whether an explicit dialect restriction may qualify the assertion.
+  pub dialect: bool,
+  /// Whether an explicit canonical-domain restriction may qualify the assertion.
+  pub domain: bool,
+  /// Whether an explicit register restriction may qualify the assertion.
+  pub register: bool,
+  /// Whether a concise evidence-backed condition may qualify the assertion.
+  pub condition: bool,
+}
+
+/// Immutable semantics for one supported internal relationship type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RelationshipRule {
+  /// Internal relation identity used by the graph domain.
+  pub relation_type: GraphRelationType,
+  /// Qdrant payload name when the authoritative contract defines one exactly.
+  pub qdrant_wire_name: Option<&'static str>,
+  /// Node families permitted at the stored source endpoint.
+  pub source_kinds: &'static [GraphNodeKind],
+  /// Node families permitted at the stored target endpoint.
+  pub target_kinds: &'static [GraphNodeKind],
+  /// Directed or symmetric endpoint semantics.
+  pub direction: RelationshipDirection,
+  /// Relation visible from the opposite endpoint.
+  pub inverse: GraphRelationType,
+  /// Transitivity semantics; unspecified is fail-closed and never means transitive.
+  pub transitivity: RelationshipProperty,
+  /// Causality semantics; unspecified is fail-closed and never proves causation.
+  pub causality: RelationshipProperty,
+  /// Explicit scope fields carried by the current graph contract.
+  pub allowed_scope_fields: RelationshipScopeFields,
+  /// Whether independently citable evidence is mandatory for publication.
+  pub requires_evidence: bool,
+  /// Whether source-qualified confidence is mandatory for publication.
+  pub requires_confidence: bool,
+  /// Whether only a verified canonical revision may be published.
+  pub requires_verified_revision: bool,
+  /// Whether endpoints and assertion must belong to the same immutable release.
+  pub requires_release_ownership: bool,
+}
+
+const SENSE_KINDS: &[GraphNodeKind] = &[GraphNodeKind::Sense];
+const LEXICAL_KINDS: &[GraphNodeKind] = &[GraphNodeKind::Sense, GraphNodeKind::Lexeme];
+const CONSTRUCTION_SOURCE_KINDS: &[GraphNodeKind] = &[GraphNodeKind::Sense, GraphNodeKind::Lexeme];
+const CONSTRUCTION_TARGET_KINDS: &[GraphNodeKind] = &[GraphNodeKind::Construction];
+const SCALE_KINDS: &[GraphNodeKind] = &[GraphNodeKind::Scale];
+
+impl RelationshipRule {
+  /// Validates the typed endpoints without inferring semantics from labels or wire names.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when either endpoint family is not allowed by this registry rule.
+  pub fn validate_endpoint_kinds(
+    &self,
+    source: GraphNodeKind,
+    target: GraphNodeKind,
+  ) -> Result<(), GraphValidationError> {
+    if !self.source_kinds.contains(&source) {
+      return Err(GraphValidationError::InvalidRelationSourceKind);
+    }
+    if !self.target_kinds.contains(&target) {
+      return Err(GraphValidationError::InvalidRelationTargetKind);
+    }
+    Ok(())
+  }
+
+  /// Returns the exact Qdrant payload name or fails closed when it is not frozen.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error rather than deriving a wire value from the Rust enum variant.
+  pub fn require_qdrant_wire_name(&self) -> Result<&'static str, GraphValidationError> {
+    self
+      .qdrant_wire_name
+      .ok_or(GraphValidationError::UnresolvedQdrantRelation)
+  }
+}
+
 impl GraphRelationType {
+  /// Returns the immutable registry rule for this internal relation identity.
+  pub const fn rule(self) -> RelationshipRule {
+    let (source_kinds, target_kinds) = match self {
+      Self::InflectionOf
+      | Self::HasInflection
+      | Self::DerivationallyRelatedTo
+      | Self::EtymologicallyDerivedFrom
+      | Self::EtymologicalSourceOf => (LEXICAL_KINDS, LEXICAL_KINDS),
+      Self::ConstructionMember => (CONSTRUCTION_SOURCE_KINDS, CONSTRUCTION_TARGET_KINDS),
+      Self::HasConstructionMember => (CONSTRUCTION_TARGET_KINDS, CONSTRUCTION_SOURCE_KINDS),
+      Self::ScaleContains => (SCALE_KINDS, SENSE_KINDS),
+      Self::MemberOfScale => (SENSE_KINDS, SCALE_KINDS),
+      _ => (SENSE_KINDS, SENSE_KINDS),
+    };
+    let qdrant_wire_name = match self {
+      // The graph domain stores broader -> narrower while the Qdrant contract names that
+      // direction `has_subtype`; the inverse narrower -> broader direction is `is_a`.
+      Self::Hypernym => Some("has_subtype"),
+      Self::Hyponym => Some("is_a"),
+      Self::LowerDegree => Some("lower_degree_than"),
+      Self::HigherDegree => Some("higher_degree_than"),
+      _ => None,
+    };
+    let direction = if self.is_symmetric() {
+      RelationshipDirection::Symmetric
+    } else {
+      RelationshipDirection::Directed
+    };
+    RelationshipRule {
+      relation_type: self,
+      qdrant_wire_name,
+      source_kinds,
+      target_kinds,
+      direction,
+      inverse: self.inverse(),
+      // The current authoritative contract states that a registry owns these properties but does
+      // not freeze their values for each relation. Unspecified prevents accidental inference.
+      transitivity: RelationshipProperty::Unspecified,
+      causality: RelationshipProperty::Unspecified,
+      allowed_scope_fields: RelationshipScopeFields {
+        dialect: true,
+        domain: false,
+        register: true,
+        condition: false,
+      },
+      requires_evidence: true,
+      requires_confidence: true,
+      requires_verified_revision: true,
+      requires_release_ownership: true,
+    }
+  }
+
   /// Returns the relation type visible when the same fact is read from its opposite endpoint.
   pub const fn inverse(self) -> Self {
     match self {
@@ -457,6 +654,190 @@ pub struct StoredGraphRelation {
   pub feedback_capabilities: BTreeSet<GraphFeedbackCapability>,
   /// Versioned rank and score components.
   pub ranking: GraphRanking,
+}
+
+/// Publication lifecycle state attached to an authoritative relationship revision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelationshipVerificationState {
+  /// The assertion passed the evidence, rights, and editorial review workflow.
+  Verified,
+  /// The assertion remains a candidate and cannot enter a canonical projection.
+  Exploratory,
+}
+
+/// Release ownership attached to one relationship before Qdrant projection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublishedRelationship {
+  /// Canonical relation revision being projected.
+  pub relation: StoredGraphRelation,
+  /// Release that owns the relation revision.
+  pub relation_release_id: ReleaseId,
+  /// Release that owns the source endpoint revision.
+  pub source_release_id: ReleaseId,
+  /// Release that owns the target endpoint revision.
+  pub target_release_id: ReleaseId,
+  /// Exact Qdrant relation name declared by the projection candidate.
+  pub declared_wire_relation: String,
+  /// Inverse relation identity declared by the projection candidate.
+  pub declared_inverse: GraphRelationType,
+  /// Fully resolved M2 evidence lineage referenced by the relation.
+  pub evidence_lineage: Vec<CanonicalEvidenceLineage>,
+  /// Review lifecycle state of the relation revision.
+  pub verification_state: RelationshipVerificationState,
+}
+
+/// Stable semantic identity used to detect duplicate typed edge projections.
+///
+/// Evidence revisions are intentionally excluded until the authoritative contract decides whether
+/// evidence changes create a new edge identity or only a new relationship revision.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PublishedEdgeIdentity {
+  /// Immutable release owning the assertion and both endpoints.
+  pub release_id: ReleaseId,
+  /// Stable canonical relationship identity assigned by the publisher.
+  pub relationship_id: GraphEdgeId,
+  /// Immutable positive revision of the canonical relationship.
+  pub relationship_revision: RelationVersion,
+  /// Canonical source endpoint after symmetric canonicalization.
+  pub source: GraphNodeKey,
+  /// Canonical target endpoint after symmetric canonicalization.
+  pub target: GraphNodeKey,
+  /// Internal typed relation identity.
+  pub relation_type: GraphRelationType,
+  /// Scope and condition identity admitted by the current registry.
+  pub scope: GraphScope,
+}
+
+impl PublishedRelationship {
+  /// Validates relationship registry, evidence, review, and same-release ownership rules.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when the relation itself is invalid, its endpoint kinds violate the
+  /// registry, it is not verified, or any endpoint belongs to another release.
+  pub fn validate(&self) -> Result<(), GraphValidationError> {
+    self.relation.validate()?;
+    let rule = self.relation.relation_type.rule();
+    rule.validate_endpoint_kinds(self.relation.source.kind, self.relation.target.kind)?;
+    if rule.require_qdrant_wire_name()? != self.declared_wire_relation {
+      return Err(GraphValidationError::RelationshipDirectionMismatch);
+    }
+    if rule.inverse != self.declared_inverse {
+      return Err(GraphValidationError::RelationshipInverseMismatch);
+    }
+    if self.verification_state != RelationshipVerificationState::Verified {
+      return Err(GraphValidationError::UnverifiedRelationship);
+    }
+    if self.source_release_id != self.relation_release_id
+      || self.target_release_id != self.relation_release_id
+    {
+      return Err(GraphValidationError::RelationshipReleaseMismatch);
+    }
+    validate_relationship_scope(&self.relation.scope, &rule)?;
+    self.validate_evidence()?;
+    Ok(())
+  }
+
+  /// Returns the deterministic semantic identity used for duplicate rejection.
+  pub fn identity(&self) -> PublishedEdgeIdentity {
+    let (source, target) = if self.relation.relation_type.is_symmetric()
+      && self.relation.source > self.relation.target
+    {
+      (self.relation.target.clone(), self.relation.source.clone())
+    } else {
+      (self.relation.source.clone(), self.relation.target.clone())
+    };
+    PublishedEdgeIdentity {
+      release_id: self.relation_release_id.clone(),
+      relationship_id: self.relation.edge_id.clone(),
+      relationship_revision: self.relation.relation_version,
+      source,
+      target,
+      relation_type: self.relation.relation_type,
+      scope: self.relation.scope.clone(),
+    }
+  }
+
+  fn validate_evidence(&self) -> Result<(), GraphValidationError> {
+    if self.evidence_lineage.is_empty() {
+      return Err(GraphValidationError::EmptyEvidence);
+    }
+    let expected = self
+      .relation
+      .evidence
+      .evidence_ids
+      .iter()
+      .cloned()
+      .collect::<BTreeSet<_>>();
+    let actual = self
+      .evidence_lineage
+      .iter()
+      .map(|lineage| lineage.fragment().id.clone())
+      .collect::<BTreeSet<_>>();
+    if actual.len() != self.evidence_lineage.len() || actual != expected {
+      return Err(GraphValidationError::RelationshipEvidenceMismatch);
+    }
+    for lineage in &self.evidence_lineage {
+      if lineage.fragment().release_id != self.relation_release_id {
+        return Err(GraphValidationError::RelationshipEvidenceReleaseMismatch);
+      }
+      if !lineage.permits(&self.relation_release_id, EvidenceUse::Embedding) {
+        return Err(GraphValidationError::RelationshipEvidenceNotPermitted);
+      }
+    }
+    Ok(())
+  }
+}
+
+/// Validates a release's relationships and rejects duplicate typed endpoint assertions.
+///
+/// Duplicate identity is defined by stored source, target, and internal relation type rather than
+/// by an independently supplied edge ID.
+///
+/// # Errors
+///
+/// Returns an error when a relationship is invalid or a typed endpoint assertion is repeated.
+pub fn validate_published_relationships(
+  relationships: &[PublishedRelationship],
+) -> Result<(), GraphValidationError> {
+  let mut ordered = relationships.iter().collect::<Vec<_>>();
+  ordered.sort_by_key(|published| published.identity());
+  let mut identities = BTreeSet::new();
+  for published in ordered {
+    published.validate()?;
+    let identity = published.identity();
+    let typed_assertion = (
+      identity.release_id,
+      identity.source,
+      identity.target,
+      identity.relation_type,
+      identity.scope,
+    );
+    if !identities.insert(typed_assertion) {
+      return Err(GraphValidationError::DuplicateTypedRelationship);
+    }
+  }
+  Ok(())
+}
+
+fn validate_relationship_scope(
+  scope: &GraphScope,
+  rule: &RelationshipRule,
+) -> Result<(), GraphValidationError> {
+  if scope.domain.is_some() && !rule.allowed_scope_fields.domain {
+    return Err(GraphValidationError::UnresolvedRelationshipDomainScope);
+  }
+  if scope.note.is_some() && !rule.allowed_scope_fields.condition {
+    return Err(GraphValidationError::UnsupportedRelationshipCondition);
+  }
+  if scope
+    .register
+    .as_ref()
+    .is_some_and(|value| value.trim().is_empty() || value.len() > 64)
+  {
+    return Err(GraphValidationError::InvalidRelationshipScope);
+  }
+  Ok(())
 }
 
 impl StoredGraphRelation {
@@ -937,6 +1318,14 @@ pub struct GraphReadResult {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::domain::{
+    canonical::{
+      CanonicalStatus, EvidenceFragment, EvidenceKind, LexicalSource, SourcePermissions,
+    },
+    canonical_content::{
+      CanonicalEvidenceLineage, CanonicalEvidenceOrigin, GeneratedEvidenceReview,
+    },
+  };
 
   fn id(value: &str) -> CanonicalId {
     CanonicalId::new(value).unwrap()
@@ -973,6 +1362,61 @@ mod tests {
       scope: GraphScope::default(),
       feedback_capabilities: BTreeSet::from([GraphFeedbackCapability::Accuracy]),
       ranking: ranking(9_000),
+    }
+  }
+
+  fn permissions(embedding: bool) -> SourcePermissions {
+    SourcePermissions {
+      storage: true,
+      display: true,
+      embedding,
+      model_processing: false,
+      api_redistribution: true,
+    }
+  }
+
+  fn lineage(release: &str, embedding: bool) -> CanonicalEvidenceLineage {
+    let source_id = id("source-1");
+    let permissions = permissions(embedding);
+    CanonicalEvidenceLineage::new(
+      LexicalSource {
+        id: source_id.clone(),
+        name: "Reviewed source".to_string(),
+        version: "2026-01".to_string(),
+        license: "reviewed".to_string(),
+        attribution: Some("Reviewed source".to_string()),
+        permissions,
+      },
+      EvidenceFragment {
+        id: id("evidence-1"),
+        source_id,
+        source_reference: "entry-1".to_string(),
+        release_id: id(release),
+        language: LanguageTag::parse("en").unwrap(),
+        kind: EvidenceKind::Definition,
+        confidence: EvidenceConfidence::High,
+        text: "A reviewed definition.".to_string(),
+        content_hash: "sha256:evidence".to_string(),
+        permissions,
+        status: CanonicalStatus::Active,
+      },
+      CanonicalEvidenceOrigin::LicensedSource,
+    )
+    .unwrap()
+  }
+
+  fn published(relation_type: GraphRelationType) -> PublishedRelationship {
+    let release = id("release-1");
+    let rule = relation_type.rule();
+    PublishedRelationship {
+      relation: relation(relation_type),
+      relation_release_id: release.clone(),
+      source_release_id: release.clone(),
+      target_release_id: release,
+      declared_wire_relation: rule.qdrant_wire_name.unwrap_or("unresolved").to_string(),
+      declared_inverse: rule.inverse,
+      evidence_lineage: vec![lineage("release-1", true)],
+      verification_state: RelationshipVerificationState::Verified,
     }
   }
 
@@ -1126,5 +1570,245 @@ mod tests {
     edges.sort_by(compare_graph_edges);
 
     assert_eq!(edges[0].id.as_str(), "edge-1");
+  }
+
+  #[test]
+  fn relationship_registry_maps_taxonomy_direction_explicitly() {
+    let broader_to_narrower = GraphRelationType::Hypernym.rule();
+    let narrower_to_broader = GraphRelationType::Hyponym.rule();
+
+    assert_eq!(
+      broader_to_narrower.require_qdrant_wire_name(),
+      Ok("has_subtype")
+    );
+    assert_eq!(narrower_to_broader.require_qdrant_wire_name(), Ok("is_a"));
+    assert_eq!(broader_to_narrower.inverse, GraphRelationType::Hyponym);
+    assert_eq!(narrower_to_broader.inverse, GraphRelationType::Hypernym);
+    assert_eq!(
+      broader_to_narrower.direction,
+      RelationshipDirection::Directed
+    );
+  }
+
+  #[test]
+  fn symmetric_registry_rules_preserve_inverse_identity() {
+    for relation_type in [
+      GraphRelationType::Synonym,
+      GraphRelationType::Antonym,
+      GraphRelationType::TranslationEquivalent,
+    ] {
+      let rule = relation_type.rule();
+      assert_eq!(rule.direction, RelationshipDirection::Symmetric);
+      assert_eq!(rule.inverse, relation_type);
+      assert!(rule.requires_evidence);
+      assert!(rule.requires_confidence);
+    }
+  }
+
+  #[test]
+  fn unresolved_qdrant_relation_names_fail_closed() {
+    assert_eq!(
+      GraphRelationType::Synonym.rule().require_qdrant_wire_name(),
+      Err(GraphValidationError::UnresolvedQdrantRelation)
+    );
+  }
+
+  #[test]
+  fn relationship_registry_rejects_invalid_endpoint_kinds() {
+    let rule = GraphRelationType::ConstructionMember.rule();
+    assert_eq!(
+      rule.validate_endpoint_kinds(GraphNodeKind::Scale, GraphNodeKind::Construction),
+      Err(GraphValidationError::InvalidRelationSourceKind)
+    );
+    assert_eq!(
+      rule.validate_endpoint_kinds(GraphNodeKind::Sense, GraphNodeKind::Sense),
+      Err(GraphValidationError::InvalidRelationTargetKind)
+    );
+  }
+
+  #[test]
+  fn publication_requires_verified_same_release_relationships() {
+    let mut published = published(GraphRelationType::Hypernym);
+    assert_eq!(published.validate(), Ok(()));
+
+    published.verification_state = RelationshipVerificationState::Exploratory;
+    assert_eq!(
+      published.validate(),
+      Err(GraphValidationError::UnverifiedRelationship)
+    );
+    published.verification_state = RelationshipVerificationState::Verified;
+    published.target_release_id = id("release-2");
+    assert_eq!(
+      published.validate(),
+      Err(GraphValidationError::RelationshipReleaseMismatch)
+    );
+  }
+
+  #[test]
+  fn publication_rejects_duplicate_typed_relationship_identity() {
+    let first = published(GraphRelationType::Hypernym);
+    let mut duplicate = first.clone();
+    duplicate.relation.edge_id = GraphEdgeId::stored(id("different-edge-id"));
+
+    assert_eq!(
+      validate_published_relationships(&[first, duplicate]),
+      Err(GraphValidationError::DuplicateTypedRelationship)
+    );
+  }
+
+  #[test]
+  fn admission_rejects_unresolved_or_reversed_wire_direction() {
+    assert_eq!(
+      published(GraphRelationType::Synonym).validate(),
+      Err(GraphValidationError::UnresolvedQdrantRelation)
+    );
+    let mut reversed = published(GraphRelationType::Hypernym);
+    reversed.declared_wire_relation = "is_a".to_string();
+    assert_eq!(
+      reversed.validate(),
+      Err(GraphValidationError::RelationshipDirectionMismatch)
+    );
+  }
+
+  #[test]
+  fn admission_rejects_invalid_inverse_declaration() {
+    let mut candidate = published(GraphRelationType::Hypernym);
+    candidate.declared_inverse = GraphRelationType::Hypernym;
+    assert_eq!(
+      candidate.validate(),
+      Err(GraphValidationError::RelationshipInverseMismatch)
+    );
+  }
+
+  #[test]
+  fn symmetric_identity_canonicalizes_endpoint_order() {
+    let first = published(GraphRelationType::Synonym);
+    let mut reversed = first.clone();
+    std::mem::swap(&mut reversed.relation.source, &mut reversed.relation.target);
+
+    assert_eq!(first.identity(), reversed.identity());
+  }
+
+  #[test]
+  fn distinct_relation_types_have_distinct_edge_identity() {
+    let hypernym = published(GraphRelationType::Hypernym);
+    let hyponym = published(GraphRelationType::Hyponym);
+
+    assert_ne!(hypernym.identity(), hyponym.identity());
+  }
+
+  #[test]
+  fn admission_requires_exact_release_bound_evidence() {
+    let mut missing = published(GraphRelationType::Hypernym);
+    missing.evidence_lineage.clear();
+    assert_eq!(missing.validate(), Err(GraphValidationError::EmptyEvidence));
+
+    let mut wrong_release = published(GraphRelationType::Hypernym);
+    wrong_release.evidence_lineage = vec![lineage("release-2", true)];
+    assert_eq!(
+      wrong_release.validate(),
+      Err(GraphValidationError::RelationshipEvidenceReleaseMismatch)
+    );
+
+    let mut forbidden = published(GraphRelationType::Hypernym);
+    forbidden.evidence_lineage = vec![lineage("release-1", false)];
+    assert_eq!(
+      forbidden.validate(),
+      Err(GraphValidationError::RelationshipEvidenceNotPermitted)
+    );
+  }
+
+  #[test]
+  fn admission_rejects_duplicate_or_contradictory_evidence_resolution() {
+    let mut duplicate = published(GraphRelationType::Hypernym);
+    duplicate.evidence_lineage.push(lineage("release-1", true));
+    assert_eq!(
+      duplicate.validate(),
+      Err(GraphValidationError::RelationshipEvidenceMismatch)
+    );
+
+    let mut contradictory = published(GraphRelationType::Hypernym);
+    contradictory.relation.evidence.evidence_ids = vec![id("another-evidence")];
+    assert_eq!(
+      contradictory.validate(),
+      Err(GraphValidationError::RelationshipEvidenceMismatch)
+    );
+  }
+
+  #[test]
+  fn generated_evidence_must_be_reviewed_before_admission() {
+    let source_id = id("source-1");
+    let permissions = permissions(true);
+    let result = CanonicalEvidenceLineage::new(
+      LexicalSource {
+        id: source_id.clone(),
+        name: "Reviewed source".to_string(),
+        version: "2026-01".to_string(),
+        license: "reviewed".to_string(),
+        attribution: None,
+        permissions,
+      },
+      EvidenceFragment {
+        id: id("evidence-1"),
+        source_id,
+        source_reference: "entry-1".to_string(),
+        release_id: id("release-1"),
+        language: LanguageTag::parse("en").unwrap(),
+        kind: EvidenceKind::Definition,
+        confidence: EvidenceConfidence::High,
+        text: "Generated candidate.".to_string(),
+        content_hash: "sha256:generated".to_string(),
+        permissions,
+        status: CanonicalStatus::Active,
+      },
+      CanonicalEvidenceOrigin::Generated {
+        generation_id: id("generation-1"),
+        review: GeneratedEvidenceReview::Unreviewed,
+      },
+    );
+
+    assert!(result.is_err());
+  }
+
+  #[test]
+  fn unresolved_domain_and_condition_scopes_fail_closed() {
+    let mut domain = published(GraphRelationType::Hypernym);
+    domain.relation.scope.domain = Some("medicine".to_string());
+    assert_eq!(
+      domain.validate(),
+      Err(GraphValidationError::UnresolvedRelationshipDomainScope)
+    );
+
+    let mut condition = published(GraphRelationType::Hypernym);
+    condition.relation.scope.note = Some("when used figuratively".to_string());
+    assert_eq!(
+      condition.validate(),
+      Err(GraphValidationError::UnsupportedRelationshipCondition)
+    );
+  }
+
+  #[test]
+  fn invalid_bounded_scope_is_rejected() {
+    let mut candidate = published(GraphRelationType::Hypernym);
+    candidate.relation.scope.register = Some(" ".to_string());
+    assert_eq!(
+      candidate.validate(),
+      Err(GraphValidationError::InvalidRelationshipScope)
+    );
+  }
+
+  #[test]
+  fn validation_result_is_independent_of_input_order() {
+    let first = published(GraphRelationType::Hypernym);
+    let mut duplicate = first.clone();
+    duplicate.relation.edge_id = GraphEdgeId::stored(id("another-edge"));
+
+    let forward = validate_published_relationships(&[first.clone(), duplicate.clone()]);
+    let reverse = validate_published_relationships(&[duplicate, first]);
+    assert_eq!(forward, reverse);
+    assert_eq!(
+      forward,
+      Err(GraphValidationError::DuplicateTypedRelationship)
+    );
   }
 }

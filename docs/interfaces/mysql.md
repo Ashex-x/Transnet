@@ -6,6 +6,8 @@ This contract defines island-port's structured-data HTTP endpoints for shared ca
 
 Status: target island-port server contract with an implemented Transnet client boundary. The executable can optionally compose the strict outbound canonical-read client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, and real end-to-end acceptance remain unimplemented outside this repository.
 
+The checked-in M3 publication foundation models Qdrant build lifecycle, idempotency, compatibility receipts, and reconciliation hashes. Its outbound publication port and strict island-port client carry the bounded build contract, while `KnowledgePublicationService` drives authoritative status-based resume through node and edge publication and reconciliation without keeping local progress. Successful reconciliation returns only a typed activation candidate. An external authenticated publisher or control plane must submit that candidate to island-port for atomic active-trio selection. The repository does not add an island-port publication server, MySQL build/reconciliation persistence, activation pointer mutation, or rollback implementation; those authority-owned operations remain external requirements.
+
 ## Contents
 
 - [SQL data endpoint interface](#sql-data-endpoint-interface)
@@ -291,11 +293,11 @@ Response:
         "matched_form_id": "form_sweltering_lemma_01",
         "lexical_score_basis_points": 10000,
         "candidate": {
-          "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+          "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "lemma_evidence_ids": ["evidence_dictionary_lemma_1041"], "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
           "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": ["evidence_dictionary_1042"], "status": "active"},
           "forms": [{"id": "form_sweltering_lemma_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "form": "sweltering", "normalized_form": "sweltering", "kind": "lemma", "morphology": null, "evidence_ids": ["evidence_dictionary_1042"], "status": "active"}],
           "sources": [{"release_id": "knowledge-2026-09", "source": {"id": "source_dictionary_2026_01", "name": "Reviewed dictionary", "version": "2026-09", "license": "reviewed", "attribution": "Dictionary publisher (2026)", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}}}],
-          "evidence": [{"id": "evidence_dictionary_1042", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:adj:1", "language": "en", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "content_hash": "sha256:4ef760d1...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}]
+          "evidence": [{"id": "evidence_dictionary_lemma_1041", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:lemma", "language": "en", "kind": "other", "confidence": "high", "text": "sweltering", "content_hash": "sha256:lemma...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}, {"id": "evidence_dictionary_1042", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:adj:1", "language": "en", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "content_hash": "sha256:4ef760d1...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}]
         }
       }
     ],
@@ -309,6 +311,8 @@ Response:
 Uniqueness is enforced by stable form, card, and sense IDs plus published canonical-form and alias rows, never by an ad hoc normalized lookup string. All eligible collisions at the best applicable rank are returned for resolution by the service.
 
 Each candidate must carry the authoritative, release-bound source record for every evidence fragment. `source.id` must equal `evidence.source_id`; source and evidence permissions must both authorize the requested use, and evidence permissions cannot exceed source permissions. For public redistribution, `source.attribution` is a nonempty, reviewed human-readable attribution (at most 256 Unicode characters), not a label synthesized from source ID or name. Missing, duplicate, conflicting, unlicensed, or cross-release source/evidence records fail closed. The adapter resolves these strict private DTOs into the existing candidate/source/evidence domain types; island-port must add this source chain before production delivery. Content hash and permission bits remain internal.
+
+`lexeme.lemma_evidence_ids` is a required, sorted, unique list of one to eight evidence IDs supporting the canonical lemma assertion itself. It is not borrowed from sense-definition evidence, does not imply `FormKind::Lemma`, and never participates in lexeme identity. Every ID must resolve through the response evidence/source chain (or the indexed `lineages` map for `senses/get`) to the same release and requested permission; dangling, duplicate, conflicting, or unused lineage fails closed.
 
 The Stage 4 canonical-only caller names its actual baseline NFC/lowercased lookup behavior `unicode-nfc-lookup-v1`; the previous illustrative `unicode-nfkc-v2` value did not describe that implementation. This version is request-local normalization metadata, not canonical authority data or identity.
 
@@ -338,10 +342,10 @@ Response:
   "value": {
     "canonical_schema_version": "canonical-v1",
     "target": {
-      "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
+      "lexeme": {"id": "lexeme_sweltering_en_adj_01", "language": "en", "lemma": "sweltering", "lemma_evidence_ids": ["evidence_dictionary_lemma_1041"], "normalized_lemma": "sweltering", "part_of_speech": "adjective", "status": "active"},
       "sense": {"id": "sense_sweltering_hot_01", "lexeme_id": "lexeme_sweltering_en_adj_01", "sense_key": "weather-hot", "definition": "uncomfortably hot", "definition_evidence_ids": [], "status": "active"}
     },
-    "lineages": {},
+    "lineages": {"evidence_dictionary_lemma_1041": {"source": {"id": "source_dictionary_2026_01", "name": "Reviewed dictionary", "version": "2026-09", "license": "reviewed", "attribution": "Dictionary publisher (2026)", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}}, "fragment": {"id": "evidence_dictionary_lemma_1041", "source_id": "source_dictionary_2026_01", "source_reference": "entry:sweltering:lemma", "language": "en", "kind": "other", "confidence": "high", "text": "sweltering", "content_hash": "sha256:lemma...", "permissions": {"storage": true, "display": true, "embedding": true, "model_processing": true, "api_redistribution": true}, "status": "active"}, "origin": {"kind": "licensed_source"}}},
     "localized_glosses": [],
     "pronunciations": [],
     "usage_labels": [],
@@ -546,6 +550,8 @@ Response:
 ## POST /api/v1/releases/activate
 
 Activation is atomic and references a compatible immutable Qdrant node/edge release. It fails if any card root, domain, evidence record, content hash, or Qdrant manifest is missing or incompatible.
+
+The referenced Qdrant manifest is the complete typed release trio defined by the vector contract: one canonical release and schema, one verified immutable node collection, and one verified immutable edge collection built against the exact node hash. Activation never accepts one generic vector collection identifier, an active alias, an incomplete pair, or a local Transnet ranking version. The supplied manifest hash commits to collection identities, schemas, embedding revisions, counts, hashes, and complete endpoint coverage.
 
 Request:
 

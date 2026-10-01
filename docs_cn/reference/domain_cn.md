@@ -32,6 +32,18 @@ Verified 内容是已发布规范知识；inferred 解释与 exploratory 候选�
 
 一个内容视图由 MySQL 卡片发布及配对的不可变 Qdrant 节点与边 collection 构成。请求只固定三元组一次，每次结构化与向量读取都使用它。MySQL 或签名发布工件是权威来源；Qdrant 是可重建投影，其候选需要同一发布补全。
 
+已实现的 M3 foundation 通过 `KnowledgeReleaseTrio` 表示该激活候选：现有 canonical-only `CanonicalReleasePin`、一个强类型不可变节点 collection manifest、一个强类型不可变边 collection manifest，以及共享的 dense/sparse embedding 修订。边 manifest 绑定已验证节点内容哈希并携带完整端点数量。`ActiveContentVersion` 只保留给较早的进程内单索引检索基础，不是发布权威；其中单个 `vector_collection_id` 绝不能代替两个 M3 collection。
+
+已实现的关系 registry 保留现有图身份，并校验端点 family、逆关系和对称性、证据、已验证生命周期及同发布所有权。精确 Qdrant 映射目前只覆盖合同已冻结的分类与具名强度方向。其他 M3 关系 wire 名及逐类型传递性/因果性仍是目标合同缺口，因此未来投影必须闭合失败。目标节点目录比已实现的 `Sense`、`Lexeme`、`Construction` 和 `Scale` 读取模型 family 更广；phrase、term、concept、entity 及专业节点必须先具备 publisher 所有的 canonical entity 映射，才能在不使用合成 ID 的情况下加入。
+
+`PublishedRelationship` 是已实现的 Stage 2 admission aggregate。它将 stored relation 与两个端点的发布所有权、精确声明的 wire 方向和 inverse、经审核的 M2 evidence lineage 以及 verified lifecycle state 绑定。稳定 `PublishedEdgeIdentity` 包含 canonical relationship ID 与 revision，但在合同决策前排除 evidence revision。批量校验先按该 identity 排序，再验证候选，并使用独立的 scope-aware semantic key 拒绝重复 typed assertion，不受输入顺序或所提供 edge ID 影响。
+
+Stage 3 preparation foundation 将 active 的权威 lexeme 与 sense 转换为确定性 node 工件，然后仅在两个端点都能从精确 node set 解析后，把已 admission 的 relationship 转换为 edge 工件。规范 lemma 现在携带有界、有序的 `lemma_evidence_ids`；这些引用支持 lemma assertion，不参与 lexeme identity，并且必须解析为同发布且允许 embedding 的 lineage。Projection admission 从 lexeme、可选且归属一致的 sense、active word form、localized gloss、经审核的词汇 translation 与精确 evidence lineage 构造一个有界权威 aggregate。缺失、重复、冲突、dangling、跨发布、未经审核或无权限的 material 均闭合失败；passage translation 以及 query/model 派生 material 被排除。
+
+稳定 point ID 与内容 hash 使用带版本的 `knowledge-projection-hash-v1` 长度前缀规范序列化，而不依赖 JSON map 顺序或 Debug 输出。独立的 `node-dense-input-v1`、`node-lexical-input-v1`、`edge-dense-input-v1` 和 `edge-lexical-input-v1` 合同使用 UTF-8 NFC、保留大小写与技术符号、编码冻结字段顺序/tag、字节长度、presence marker 及确定性 list 顺序，并为 dense 与 lexical 使用不同 hash domain。Edge input 绑定冻结的 source/target node input hash、typed wire relation、已接纳 scope 与 verified evidence metadata，不包含生成式 relationship prose。Execution contract 将 dense family 固定为 1,024 维的 `Qwen/Qwen3-Embedding-0.6B`，其精确不可变 artifact revision 仍由部署提供；sparse 侧固定为非神经的 `transnet-lexical-bm25-v1` encoder。闭合 compatibility registry 必须精确匹配 artifact/encoder revision、dimensions、vector name 以及 node/edge input-spec version。这些仍是不含 collection ID、也不声明 production `Verified` 的预发布值。Transnet 现在已有严格的出站 publication client 与 application reconciliation orchestration，但仍没有 embedding execution、Qdrant mutation、island-port publication server、持久化 production reconciliation 或 activation 路径。
+
+`knowledge_publication` 定义与 transport 无关的 node-first lifecycle、确定性 build/request/batch identity、精确 retry classification、无碰撞 lexical dictionary proof、persisted collection/publication manifest hash 与 dense/lexical execution receipt。Raw vector、request ID、clock、random value 与 storage-generated identity 不能进入 canonical hash。Receipt validation 将独立观测的 execution metadata 与一个精确 registry entry 比较，并在 build、revision、dimensions、encoder、dictionary、input-spec 或 count 不匹配时闭合失败。`KnowledgePublicationService` 通过 `KnowledgePublicationPort` 驱动 begin、基于权威 status 的恢复、有界 node batch、node freeze、有界 edge batch、edge freeze 与 reconciliation，且不保留本地进度。成功 reconciliation 只返回 typed activation candidate；该服务不执行 embedding、不修改 collection、不持久化权威状态，也不激活或回滚 release。
+
 向量失败时可返回带显式降级的 MySQL 基础卡，但不得虚构关系或隐藏缺失知识族。权威内容缺失或发布不兼容必须安全失败。实时请求不能创建别名、卡片、事实、领域、边、修订或发布。
 
 精确持久 payload 由 [SQL](../interfaces/mysql_cn.md) 与[向量](../interfaces/qdrant_cn.md)接口负责。

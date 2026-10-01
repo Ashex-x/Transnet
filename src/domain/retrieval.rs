@@ -288,6 +288,20 @@ impl CanonicalCandidate {
       && self.lexeme.id == self.sense.lexeme_id
       && self.lexeme.status.is_lookup_eligible()
       && self.sense.status.is_lookup_eligible()
+      && !self.lexeme.lemma_evidence_ids.is_empty()
+      && self.lexeme.lemma_evidence_ids.len() <= 8
+      && self
+        .lexeme
+        .lemma_evidence_ids
+        .windows(2)
+        .all(|pair| pair[0] < pair[1])
+      && self.lexeme.lemma_evidence_ids.iter().all(|evidence_id| {
+        self
+          .evidence
+          .iter()
+          .find(|fragment| fragment.id == *evidence_id)
+          .is_some_and(|fragment| fragment.permits(release_id, evidence_use))
+      })
       && self.forms.iter().all(|form| {
         form.lexeme_id == self.lexeme.id
           && form.release_id == *release_id
@@ -704,6 +718,7 @@ mod tests {
         release_id: release_id.clone(),
         language: language(),
         lemma: lemma.to_string(),
+        lemma_evidence_ids: vec![evidence_id.clone()],
         normalized_lemma: normalize_lookup_key(lemma),
         part_of_speech: LexicalPartOfSpeech::Adjective,
         status: CanonicalStatus::Active,
