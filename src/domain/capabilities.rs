@@ -95,13 +95,6 @@ impl ServiceCapabilities {
         ImageMediaTypeCapability::Jpeg,
         ImageMediaTypeCapability::WebP,
       ];
-      self.purposes = vec![
-        PurposeCapability::General,
-        PurposeCapability::Publication,
-        PurposeCapability::Technical,
-        PurposeCapability::Localization,
-        PurposeCapability::Subtitles,
-      ];
       self
         .annotation_families
         .push(AnnotationFamilyCapability::Format);

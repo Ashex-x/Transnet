@@ -7,7 +7,8 @@ use anyhow::{ensure, Context, Result};
 use async_trait::async_trait;
 use transnet::{
   app_router_with_http_config, application::translation::TranslationOrchestrator, logger,
-  AppConfig, AppState, OpenAiGenerationAdapter, OpenAiLearningModel, TranslationService,
+  AppConfig, AppState, CancellationSignal, OpenAiGenerationAdapter, OpenAiLearningModel,
+  TranslationService,
 };
 
 #[cfg(unix)]
@@ -89,7 +90,9 @@ async fn run(config: AppConfig) -> Result<()> {
   )?;
   let orchestrator =
     TranslationOrchestrator::new(Arc::new(OpenAiGenerationAdapter::new(service.clone())));
+  let runtime_cancellation = Arc::new(CancellationSignal::default());
   let state = AppState::new(service)
+    .with_runtime_cancellation(runtime_cancellation.clone())
     .with_learning_model(Arc::new(learning_model))
     .with_translation_orchestrator(Arc::new(orchestrator));
   let state = match canonical {
@@ -113,7 +116,9 @@ async fn run(config: AppConfig) -> Result<()> {
         transnet::server::UnixListenerConfig::new(socket_path, &config.server.socket_mode)?;
       let listener = transnet::server::OwnedUnixListener::bind(&socket).await?;
       tracing::info!("starting transnet Unix listener");
-      listener.serve(router, shutdown_signal()).await?;
+      listener
+        .serve(router, shutdown_and_cancel(runtime_cancellation.clone()))
+        .await?;
     }
     #[cfg(not(unix))]
     anyhow::bail!("server.socket_path requires Unix domain socket support");
@@ -123,7 +128,7 @@ async fn run(config: AppConfig) -> Result<()> {
       .with_context(|| format!("failed to bind to {address}"))?;
     tracing::info!(address = %address, "starting transitional transnet TCP listener");
     axum::serve(listener, router)
-      .with_graceful_shutdown(shutdown_signal())
+      .with_graceful_shutdown(shutdown_and_cancel(runtime_cancellation.clone()))
       .await
       .context("transnet server failed")?;
   }
@@ -401,4 +406,9 @@ async fn shutdown_signal() {
     _ = ctrl_c => tracing::info!(signal = "ctrl_c", "graceful shutdown requested"),
     _ = terminate => tracing::info!(signal = "terminate", "graceful shutdown requested"),
   }
+}
+
+async fn shutdown_and_cancel(runtime: Arc<CancellationSignal>) {
+  shutdown_signal().await;
+  runtime.cancel();
 }

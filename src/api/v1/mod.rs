@@ -25,11 +25,8 @@ pub(crate) mod translation;
 /// Builds the target `/api/v1` routes implemented by the current loopback runtime.
 pub(crate) fn target_router(
   knowledge: Option<knowledge_views::KnowledgeRouteDependencies>,
+  runtime_cancellation: Arc<crate::domain::model_runtime::CancellationSignal>,
 ) -> Router<AppState> {
-  let runtime_cancellation = knowledge
-    .as_ref()
-    .map(knowledge_views::KnowledgeRouteDependencies::runtime_cancellation)
-    .unwrap_or_else(|| Arc::new(crate::domain::model_runtime::CancellationSignal::default()));
   let router = Router::new()
     .route("/capabilities", post(capabilities::get))
     .route("/health", post(probe::health))

@@ -108,12 +108,6 @@ impl KnowledgeRouteDependencies {
   pub(crate) fn readiness(&self) -> Arc<dyn crate::api::Readiness> {
     self.readiness.clone()
   }
-
-  pub(crate) fn runtime_cancellation(
-    &self,
-  ) -> Arc<crate::domain::model_runtime::CancellationSignal> {
-    self.runtime_cancellation.clone()
-  }
 }
 
 /// Builds both strict target knowledge routes for one merge beneath `/api/v1`.

@@ -167,16 +167,7 @@ async fn structured_capabilities_activate_only_with_the_translation_orchestrator
     json["data"]["annotation_families"],
     serde_json::json!(["format"])
   );
-  assert_eq!(
-    json["data"]["purposes"],
-    serde_json::json!([
-      "general",
-      "publication",
-      "technical",
-      "localization",
-      "subtitles"
-    ])
-  );
+  assert_eq!(json["data"]["purposes"], serde_json::json!([]));
 }
 
 #[tokio::test]

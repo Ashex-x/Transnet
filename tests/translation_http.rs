@@ -12,9 +12,9 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 use transnet::{
   app_router, app_router_with_http_config, application::translation::TranslationOrchestrator,
-  AppState, GenerationOutput, GenerationPort, GenerationRequest, GenerationResponse, HttpConfig,
-  ModelOperationContext, ModelOperationError, ModelVersion, ProviderConfig, TranslationConfig,
-  TranslationService,
+  AppState, CancellationSignal, GenerationOutput, GenerationPort, GenerationRequest,
+  GenerationResponse, HttpConfig, ModelOperationContext, ModelOperationError, ModelVersion,
+  ProviderConfig, TranslationConfig, TranslationService,
 };
 
 #[derive(Clone)]
@@ -128,6 +128,30 @@ async fn composed_vlm_truthfully_activates_image_capabilities() {
     value["data"]["image_media_types"],
     json!(["image/png", "image/jpeg", "image/webp"])
   );
+}
+
+#[tokio::test]
+async fn production_router_propagates_runtime_drain_to_translation() {
+  let runtime = Arc::new(CancellationSignal::default());
+  let orchestrator = TranslationOrchestrator::new(Arc::new(FakeGeneration {
+    connected: Ok(connected_output()),
+    lexical: Ok(lexical_output()),
+  }));
+  let app = app_router(
+    AppState::new(legacy_service())
+      .with_runtime_cancellation(runtime.clone())
+      .with_translation_orchestrator(Arc::new(orchestrator)),
+  );
+  runtime.cancel();
+  let response = app
+    .oneshot(request(json!({
+      "text":"hello world", "source_language":"en", "target_language":"zh-CN",
+      "response_level":"brief"
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+  assert_eq!(body(response).await["code"], "request_cancelled");
 }
 
 #[tokio::test]

@@ -172,6 +172,7 @@ pub struct AppState {
   readiness: Arc<dyn Readiness>,
   capabilities: ServiceCapabilities,
   knowledge_routes: Option<KnowledgeRouteDependencies>,
+  runtime_cancellation: Arc<crate::domain::model_runtime::CancellationSignal>,
 }
 
 impl AppState {
@@ -195,7 +196,21 @@ impl AppState {
       readiness: Arc::new(AlwaysReady),
       capabilities: ServiceCapabilities::current(DEFAULT_MAX_REQUEST_BODY_BYTES),
       knowledge_routes: None,
+      runtime_cancellation: Arc::new(crate::domain::model_runtime::CancellationSignal::default()),
     }
+  }
+
+  /// Installs the process-owned signal cancelled when listener drain begins.
+  pub fn with_runtime_cancellation(
+    mut self,
+    cancellation: Arc<crate::domain::model_runtime::CancellationSignal>,
+  ) -> Self {
+    self.runtime_cancellation = cancellation.clone();
+    self.knowledge_routes = self
+      .knowledge_routes
+      .take()
+      .map(|dependencies| dependencies.with_runtime_cancellation(cancellation));
+    self
   }
 
   /// Adds the unified request-local translation operation used by `/api/v1/translations`.
@@ -377,6 +392,7 @@ impl AppState {
   /// The dependency bundle is indivisible, so application state cannot register only one route or
   /// advertise knowledge lenses without the complete route composition.
   pub fn with_knowledge_routes(mut self, dependencies: KnowledgeRouteDependencies) -> Self {
+    let dependencies = dependencies.with_runtime_cancellation(self.runtime_cancellation.clone());
     self.readiness = dependencies.readiness();
     self.knowledge_routes = Some(dependencies);
     self
@@ -469,6 +485,7 @@ fn build_router(
     })
     .with_max_request_body_bytes(max_request_body_bytes);
   let knowledge_routes = state.knowledge_routes.clone();
+  let runtime_cancellation = state.runtime_cancellation.clone();
   let router = Router::new()
     .route("/health", get(health))
     .route("/livez", get(livez))
@@ -481,7 +498,10 @@ fn build_router(
         state.has_canonical_sense_details_service(),
       ),
     )
-    .nest("/api/v1", v1::target_router(knowledge_routes))
+    .nest(
+      "/api/v1",
+      v1::target_router(knowledge_routes, runtime_cancellation),
+    )
     .with_state(state)
     .layer(DefaultBodyLimit::max(max_request_body_bytes))
     .layer(RequestBodyLimitLayer::new(max_request_body_bytes))

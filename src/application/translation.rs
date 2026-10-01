@@ -443,7 +443,26 @@ impl TranslationOrchestrator {
       cancellation: &cancellation,
     }
     .ensure_active()?;
-    let (model_images, descriptors) = crop_region_attachments(images, reading_order)?;
+    let crop_context = context.clone();
+    let crop_cancellation = cancellation.clone();
+    let crop_images = images.clone();
+    let crop_order = reading_order.clone();
+    let (model_images, descriptor_values) = tokio::task::spawn_blocking(move || {
+      crop_region_attachments(&crop_context, &crop_cancellation, &crop_images, &crop_order)
+    })
+    .await
+    .map_err(|_| TranslationOrchestrationError::InvalidImageData)??;
+    let descriptors = descriptor_values
+      .iter()
+      .enumerate()
+      .map(
+        |(attachment_index, (image_id, region_id))| ImageRegionAttachment {
+          attachment_index,
+          image_id,
+          region_id,
+        },
+      )
+      .collect::<Vec<_>>();
     let prompt = image_region_prompt(turn, &descriptors, reading_order)?;
     let response = self
       .generation
@@ -1030,6 +1049,8 @@ struct ImageRegionAttachment<'a> {
   region_id: &'a str,
 }
 
+type CroppedRegionAttachments = (Vec<GenerationImage>, Vec<(String, String)>);
+
 fn image_region_prompt(
   turn: &TranslationTurn,
   region_attachments: &[ImageRegionAttachment<'_>],
@@ -1049,12 +1070,22 @@ fn image_region_prompt(
   GenerationInput::new(encoded).map_err(|_| TranslationOrchestrationError::ChunkPlanLimit)
 }
 
-fn crop_region_attachments<'a>(
-  images: &'a [crate::domain::translation_turn::TranslationImage],
+fn crop_region_attachments(
+  context: &RequestContext,
+  cancellation: &CancellationSignal,
+  images: &[crate::domain::translation_turn::TranslationImage],
   reading_order: &[String],
-) -> Result<(Vec<GenerationImage>, Vec<ImageRegionAttachment<'a>>), TranslationOrchestrationError> {
+) -> Result<CroppedRegionAttachments, TranslationOrchestrationError> {
+  const MAX_DECODED_REGION_INPUT_BYTES: usize = 256 * 1_048_576;
+  const MAX_ENCODED_REGION_OUTPUT_BYTES: usize = 32 * 1_048_576;
   let mut decoded = BTreeMap::<&str, RgbaImage>::new();
+  let mut decoded_bytes = 0usize;
   for image in images {
+    ModelOperationContext {
+      request: context,
+      cancellation,
+    }
+    .ensure_active()?;
     let bytes = BASE64
       .decode(&image.data)
       .map_err(|_| TranslationOrchestrationError::InvalidImageData)?;
@@ -1067,12 +1098,22 @@ fn crop_region_attachments<'a>(
     let pixels = image::load_from_memory_with_format(&bytes, format)
       .map_err(|_| TranslationOrchestrationError::InvalidImageData)?
       .to_rgba8();
+    decoded_bytes = decoded_bytes
+      .checked_add(pixels.len())
+      .filter(|total| *total <= MAX_DECODED_REGION_INPUT_BYTES)
+      .ok_or(TranslationOrchestrationError::InvalidImageData)?;
     decoded.insert(image.image_id.as_str(), pixels);
   }
 
   let mut attachments = Vec::with_capacity(reading_order.len());
   let mut descriptors = Vec::with_capacity(reading_order.len());
-  for (attachment_index, key) in reading_order.iter().enumerate() {
+  let mut encoded_bytes = 0usize;
+  for key in reading_order {
+    ModelOperationContext {
+      request: context,
+      cancellation,
+    }
+    .ensure_active()?;
     let (image_id, region_id) = key
       .split_once(':')
       .ok_or(TranslationOrchestrationError::InvalidImageData)?;
@@ -1103,16 +1144,22 @@ fn crop_region_attachments<'a>(
     crop
       .write_to(&mut encoded, ImageFormat::Png)
       .map_err(|_| TranslationOrchestrationError::InvalidImageData)?;
+    let encoded = encoded.into_inner();
+    encoded_bytes = encoded_bytes
+      .checked_add(encoded.len())
+      .filter(|total| *total <= MAX_ENCODED_REGION_OUTPUT_BYTES)
+      .ok_or(TranslationOrchestrationError::InvalidImageData)?;
     attachments.push(
-      GenerationImage::new(GenerationImageMediaType::Png, encoded.into_inner())
+      GenerationImage::new(GenerationImageMediaType::Png, encoded)
         .map_err(|_| TranslationOrchestrationError::InvalidImageData)?,
     );
-    descriptors.push(ImageRegionAttachment {
-      attachment_index,
-      image_id: &image.image_id,
-      region_id: &region.region_id,
-    });
+    descriptors.push((image.image_id.clone(), region.region_id.clone()));
   }
+  ModelOperationContext {
+    request: context,
+    cancellation,
+  }
+  .ensure_active()?;
   Ok((attachments, descriptors))
 }
 

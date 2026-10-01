@@ -4,7 +4,7 @@ English: [Translation application](../../../docs/reference/application/translati
 
 本模块负责连续文本、结构化分段与有界图像区域翻译，并产生共享结果中的主要译文部分。
 
-状态：请求 domain 已校验并保留三种 tagged shape 及其请求级 guidance 与 history。已校验 result superset 覆盖 word、phrase、passage、有序 segment 与有序 image-region outcome，并包含 typed annotation、terminology decision、review state、响应级 citation reference 及确定性 breadth projection。Application 执行带 guidance 的 text、结构化 segment 与有界 image-region turn；它确定性检查 required/forbidden terminology 与段落结构，并最多允许一次 reasoning-profile repair。Preferred terminology 是 prompt preference，而不是硬 postcondition。Image execution 会拒绝自身无法执行的 execution-dependent guidance，在本地解码每张已校验图片，只为每个声明 region 提交一个有界 crop，执行一次有界 fast-profile 调用，并把 attachment index、精确 reading-order ID 与检测语言严格映射到 image-region result。
+状态：请求 domain 已校验并保留三种 tagged shape 及其请求级 guidance 与 history。已校验 result superset 覆盖 word、phrase、passage、有序 segment 与有序 image-region outcome，并包含 typed annotation、terminology decision、review state、响应级 citation reference 及确定性 breadth projection。Application 执行带 guidance 的 text、结构化 segment 与有界 image-region turn；它确定性检查 required/forbidden terminology 与段落结构，并最多允许一次 reasoning-profile repair。Preferred terminology 是 prompt preference，而不是硬 postcondition。Image execution 会拒绝自身无法执行的 execution-dependent guidance，在 blocking pool 上执行有界 decode/crop/encode 并在各 unit 之间检查 deadline 与 cancellation，只为每个声明 region 提交一个有界 crop，执行一次有界 fast-profile 调用，并把 attachment index、精确 reading-order ID 与检测语言严格映射到 image-region result。
 
 ## 职责
 
