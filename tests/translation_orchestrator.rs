@@ -194,8 +194,9 @@ fn context(seconds: i64) -> RequestContext {
 
 fn turn(text: &str) -> TranslationTurn {
   TranslationTurn::new(TranslationTurnRequest {
-    text: Some(text.to_string()),
-    input: None,
+    input: TranslationInput::Text {
+      text: text.to_string(),
+    },
     source_language: "en".to_string(),
     target_language: "zh-CN".to_string(),
     response_level: "full".to_string(),
@@ -237,8 +238,9 @@ fn split_color_image_turn() -> TranslationTurn {
 
 fn guided_turn(text: &str) -> TranslationTurn {
   TranslationTurn::new(TranslationTurnRequest {
-    text: Some(text.to_string()),
-    input: None,
+    input: TranslationInput::Text {
+      text: text.to_string(),
+    },
     source_language: "en".to_string(),
     target_language: "zh-CN".to_string(),
     response_level: "full".to_string(),
@@ -260,8 +262,7 @@ fn guided_turn(text: &str) -> TranslationTurn {
 
 fn segment_turn() -> TranslationTurn {
   TranslationTurn::new(TranslationTurnRequest {
-    text: None,
-    input: Some(TranslationInput::Segments {
+    input: TranslationInput::Segments {
       segments: vec![
         TranslationSegment {
           segment_id: "title".into(),
@@ -281,7 +282,7 @@ fn segment_turn() -> TranslationTurn {
           protected_ranges: Vec::new(),
         },
       ],
-    }),
+    },
     source_language: "en".into(),
     target_language: "zh-CN".into(),
     response_level: "standard".into(),
@@ -401,8 +402,7 @@ async fn segment_guidance_is_prompted_enforced_and_bound_to_the_result() {
   let generation = Arc::new(FakeGeneration::new([Ok(connected("Measure torque."))]));
   let orchestrator = TranslationOrchestrator::new(generation.clone());
   let turn = TranslationTurn::new(TranslationTurnRequest {
-    text: None,
-    input: Some(TranslationInput::Segments {
+    input: TranslationInput::Segments {
       segments: vec![TranslationSegment {
         segment_id: "technical".into(),
         text: "测量扭矩值".into(),
@@ -410,7 +410,7 @@ async fn segment_guidance_is_prompted_enforced_and_bound_to_the_result() {
         format: transnet::domain::translation_turn::SegmentFormat::Plain,
         protected_ranges: Vec::new(),
       }],
-    }),
+    },
     source_language: "zh-CN".into(),
     target_language: "en".into(),
     response_level: "standard".into(),
@@ -729,8 +729,9 @@ fn generation_input_debug_is_content_free() {
 #[test]
 fn history_shape_remains_request_local() {
   let request = TranslationTurn::new(TranslationTurnRequest {
-    text: Some("This is ready.".into()),
-    input: None,
+    input: TranslationInput::Text {
+      text: "This is ready.".into(),
+    },
     source_language: "en".into(),
     target_language: "zh-CN".into(),
     response_level: "brief".into(),

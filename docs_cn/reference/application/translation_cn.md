@@ -20,7 +20,7 @@ Gemma4-27B 默认通过 fast profile 处理文本。闭合升级策略对 invali
 
 实时材料只作为结构化 `live_material` 数组进入 generation；固定 application instruction 将其中 fragment 标记为不可信数据。每个模型 citation 都是严格的 `{source_id, claim_id}` pair：lexical claim 绑定 `translation_N`，connected-text claim 绑定实际消费 source 的精确 `chunk_N`。每个实时辅助 claim 都必须具有已准入 source；重复、伪造、缺失或跨 claim citation 都不满足有界输出契约。Application 仅暴露已引用的 title 与最终抓取 URL descriptor，把每个 source 标为 `live_external`，在返回前校验最终 request-bound result，把 `translation-live-v1` 记录为 retrieval version，并随请求丢弃 query、抓取 fragment 与 vector。只有 search、安全 fetch 和本 translation orchestrator 作为一个 runtime unit 完整组合时，capability discovery 才报告 live retrieval；默认 executable 仍没有 production search authority，因此继续报告不可用。
 
-段落提示与明确标注的备选仍计划在后续 milestone 实现。在 application 结果模型、确定性 usefulness evaluator 与编排真正生成这些能力之前，HTTP handler 不会伪造它们。当前 offline 路径的空 external-source collection 会被省略。
+段落提示仍不可用。明确标注的备选只在已解析 lexical 结果中实现，并要求原子配置的 relationship-page material authority 提供确定性 evaluator 输入；数量最多为两个，非 lexical 请求会在生成前失败。默认 executable 未安装该外部 production authority，因此不公布 `relationship-page-v1`。Offline 路径的空 external-source collection 会被省略。
 
 ## 边界
 

@@ -28,7 +28,7 @@ Provider Trace 只包含静态 Provider 边界、操作名、尝试次数、结�
 
 目标 `[telemetry]` 设置选择 NDJSON 标准输出或本地 collector、有界队列容量、导出 timeout、固定成功/失败采样分类及可选的仅开发滚动文件。指标 label 与事件 attribute 是代码编译的闭合集合，而不是任意配置。审计 sink 设置属于离线 publisher 组合，不得使在线翻译 readiness 依赖 exporter。详见[可观测性合同](../reference/observability_cn.md)；在对应类型化实现存在前，不向仓库配置增加这些目标 key。
 
-目标翻译操作使用中立 generation boundary。Provider 专属配置节在 generation adapter 完成合并前仍是内部兼容配置；它们不会启用旧公共路由。
+翻译操作使用由 `[gemma4]` 与 `[provider_resilience.gemma4]` 支持的单一中立 generation boundary。TranslateGemma、按长度路由及 provider 专属兼容配置节都会作为未知配置被拒绝。
 
 `[canonical]` 是可选启用的生产 canonical-only 读取依赖。仓库配置为 `enabled = false`：进程不构造 island-port client，模型翻译保持原行为，readiness 也不声称 canonical 可用。在 Unix 主机启用时，设置 `enabled = true`、island-port 的绝对 `socket_path`（例如 `/run/island-port/island-port.sock`），以及 1 至 30,000 的 `timeout_ms`。Unix socket 路径不得超过 107 字节，不得含空白或 `..` 路径组件；配置 Debug 与错误不会输出该路径。启用时缺失或无效配置会拒绝启动；非 Unix 主机启用会因没有生产 UDS transport 而拒绝启动。
 

@@ -20,7 +20,7 @@ Structured reads resolve active releases, canonical candidates, complete sense d
 
 Every read carries the request deadline and exact release identifiers. Closed outcomes distinguish missing, incompatible, unavailable, invalid, and permission-filtered data without disclosing withheld content.
 
-The online composition receives no mutation methods. Separate publication ports may stage, validate, project, activate, quarantine, remove, and roll back reviewed canonical content, and are never passed to request handlers. Exact operations belong to the [canonical-data](../interfaces/canonical-data.md) and [retrieval-data](../interfaces/retrieval-data.md) contracts.
+The online composition receives no mutation methods. Separate Transnet-owned offline ports submit immutable projection batches, reconcile manifests, submit activation candidates, abort incomplete builds, and request rollback selection; they are never passed to request handlers. Island-port owns staging, validation, quarantine, removal, active-pointer mutation, and rollback eligibility. Exact operations belong to the [canonical-data](../interfaces/canonical-data.md) and [retrieval-data](../interfaces/retrieval-data.md) contracts.
 
 ## Verification
 

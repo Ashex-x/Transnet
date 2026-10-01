@@ -4,8 +4,6 @@
 pub mod clock;
 /// Deterministic in-memory implementations of platform ports.
 pub mod in_memory;
-/// Test-only deterministic canonical repository and vector adapter.
-pub mod in_memory_retrieval;
 /// Strict outbound island-port canonical-read client.
 pub mod island_port;
 /// Strict read-only Island-port client for the active knowledge release tuple.
@@ -16,8 +14,6 @@ pub mod island_port_publication;
 pub mod island_port_release_control;
 /// Strict outbound island-port retrieval-data client.
 pub mod island_port_retrieval;
-/// OpenAI-compatible structured lexical-model client.
-pub mod learning_model;
 /// Provider-neutral OpenAI-compatible generation and ephemeral embedding adapters.
 pub mod model_runtime;
 /// Public-network validation foundation for bounded live page fetching.

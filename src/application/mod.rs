@@ -1,21 +1,11 @@
 //! Application use cases.
 
-/// Request-scoped canonical retrieval and deterministic card assembly without query caching.
-pub mod canonical_lookup;
 /// Bounded deterministic canonical lookup-card assembly without HTTP or model generation.
 pub mod canonical_lookup_card;
 /// Request-local production canonical-only read composition.
 pub mod canonical_read;
-/// Release-pinned bounded canonical sense-detail reads without HTTP or model generation.
-pub mod canonical_sense_details;
-/// Content-release staging, validation, publication, rollback, and source quarantine.
-pub mod content_release;
 /// Deterministic request-local domain assessment over one canonical release pin.
 pub mod domain_assessment;
-/// Typed bounded canonical graph reads and neighbor expansion.
-pub mod graph;
-/// Public bounded graph-topology snapshot caching with version-pinned cache keys.
-pub mod graph_topology_cache;
 /// Deterministic bounded search over fully hydrated canonical assertion projections.
 pub mod knowledge_paths;
 /// Deterministic release-pinned knowledge projection preparation.
@@ -28,16 +18,12 @@ pub mod knowledge_view_policy;
 pub mod knowledge_views;
 /// One-shot bounded live-retrieval policy and orchestration.
 pub mod live_retrieval;
-/// Structured lookup orchestration.
-pub mod lookup;
 /// Bounded response-neutral delivery of closed metric events.
 pub mod observability;
 /// Explicit offline publication and release-control composition.
 pub mod offline_publication;
 /// Relationship-centered lexical-page assembly from already verified application outputs.
 pub mod relationship_page;
-/// Canonical hybrid retrieval and lexical-only fallback.
-pub mod retrieval;
 /// Canonical-root-first bounded hybrid nomination and authoritative hydration.
 pub mod root_retrieval;
 /// Unified request-local translation orchestration and automatic intent routing.

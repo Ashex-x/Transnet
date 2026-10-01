@@ -28,7 +28,7 @@ English: [Quality assurance](../../docs/guides/quality-assurance.md)
 
 ## 内容、隐私和注入安全
 
-发布测试校验确定性 ID、不可变集合、manifest 对账、隔离、激活和回滚。Bootstrap 测试证明生成候选在证据或批准编辑来源策略、权利检查、确定性校验及审核成功前保持隔离；模型输出本身绝不能成为已验证内容。隐私测试证明当前文本、翻译历史、调用方身份、生成 provider body 和用户相关状态不进入 MySQL、Qdrant、缓存、日志、trace、指标、备份、队列或向量。
+Transnet 发布测试校验确定性 ID、不可变 projection payload、manifest 对账、activation-candidate 提交、显式 rollback selection 与失败关闭的 control receipt。隔离状态转换、候选保留和 direct-predecessor rollback eligibility 属于 island-port authority 验收要求，在针对生产边界执行前保持开放。Bootstrap policy 仍要求生成候选在证据或批准编辑来源策略、权利检查、确定性校验及审核成功前保持隔离；模型输出本身绝不能成为已验证内容。隐私测试证明当前文本、翻译历史、调用方身份、生成 provider body 和用户相关状态不进入 Transnet persistence、缓存、日志、trace、指标、队列或向量；生产范围的存储与备份证明仍是外部验收项。
 
 Migration 测试构建全新 schema，并从每个受支持起始版本升级，比较其逻辑结构，覆盖中断 DDL 恢复与 checksum drift，让新旧 binary 在声明兼容窗口内运行，验证可恢复有界 backfill，并证明在保留发布与 rollback binary 不再依赖旧结构前不能执行收缩 migration。
 

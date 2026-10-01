@@ -278,10 +278,10 @@ fn invalid_translation_field(field: &'static str, request_id: &RequestId) -> Res
     "target_language" => "must be one of `en` or `zh-CN`.",
     "response_level" => "must be one of `brief`, `standard`, or `full`.",
     "history" => "must contain only valid chronological minimal translation turns.",
-    "input" => "must contain exactly one legacy text or tagged input value.",
+    "input" => "must contain one tagged text, segments, or image-regions value.",
     "input.text" => "must be nonblank and contain at most 131072 Unicode scalars.",
     "guidance.max_alternatives" => {
-      "must be between zero and two; only zero is currently available."
+      "must be between zero and two; nonzero values require a composed lexical relationship page."
     }
     "generation_context" => "must fit the bounded request-local model context after JSON encoding.",
     _ => "is invalid.",

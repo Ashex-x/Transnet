@@ -432,8 +432,9 @@ mod tests {
       },
     )))));
     let turn = TranslationTurn::new(crate::domain::translation_turn::TranslationTurnRequest {
-      text: Some("term".into()),
-      input: None,
+      input: crate::domain::translation_turn::TranslationInput::Text {
+        text: "term".into(),
+      },
       source_language: "en".into(),
       target_language: "zh-CN".into(),
       response_level: "standard".into(),

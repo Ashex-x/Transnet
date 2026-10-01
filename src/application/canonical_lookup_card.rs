@@ -1,75 +1,24 @@
 //! Deterministic assembly of bounded canonical lookup cards.
 //!
-//! This foundation maps the existing canonical retrieval outcome into typed Rust values. It does
-//! not call a model, expose an HTTP route, persist a snapshot, or change the current
-//! `POST /v1/lookups` model-backed contract.
+//! This mapper converts release-pinned canonical candidates into typed target card values. It
+//! does not call a model, expose a route, or persist a snapshot.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use thiserror::Error;
-
-use crate::{
-  application::retrieval::{
-    CanonicalRetrievalError, CanonicalRetrievalService, RetrievalOutcome, RetrievalPath,
+use crate::domain::{
+  canonical::{CanonicalStatus, EvidenceFragment, EvidenceId, EvidenceUse, WordForm},
+  lookup_card::{
+    CanonicalLookupAssertionKind, CanonicalLookupCard, CanonicalLookupCardAssertion,
+    CanonicalLookupCardCandidate, CanonicalLookupCardCoverage, CanonicalLookupCardCoverageState,
+    CanonicalLookupCardEvidence, CanonicalLookupCardEvidenceProvenance, CanonicalLookupCardForm,
+    CanonicalLookupCardLexeme, CanonicalLookupCardSectionCoverage, CanonicalLookupCardSense,
+    CanonicalLookupQueryAnalysis, MAX_LOOKUP_CARD_CANDIDATES,
+    MAX_LOOKUP_CARD_EVIDENCE_PER_ASSERTION, MAX_LOOKUP_CARD_FORMS_PER_CANDIDATE,
   },
-  domain::{
-    canonical::{CanonicalStatus, EvidenceFragment, EvidenceId, EvidenceUse, WordForm},
-    lookup_card::{
-      CanonicalLookupAssertionKind, CanonicalLookupCard, CanonicalLookupCardAssertion,
-      CanonicalLookupCardCandidate, CanonicalLookupCardCoverage, CanonicalLookupCardCoverageState,
-      CanonicalLookupCardEvidence, CanonicalLookupCardEvidenceProvenance, CanonicalLookupCardForm,
-      CanonicalLookupCardLexeme, CanonicalLookupCardSectionCoverage, CanonicalLookupCardSense,
-      CanonicalLookupQueryAnalysis, MAX_LOOKUP_CARD_CANDIDATES,
-      MAX_LOOKUP_CARD_EVIDENCE_PER_ASSERTION, MAX_LOOKUP_CARD_FORMS_PER_CANDIDATE,
-    },
-    retrieval::{CanonicalCandidate, RankedCandidate, RetrievalRequest},
-  },
+  retrieval::{CanonicalCandidate, RankedCandidate, RetrievalRequest},
 };
 
-/// Failure while retrieving material for a canonical lookup card.
-#[derive(Debug, Clone, Error, PartialEq, Eq)]
-pub enum CanonicalLookupCardError {
-  /// The authoritative canonical retrieval stage could not produce a safe result.
-  #[error(transparent)]
-  Retrieval(#[from] CanonicalRetrievalError),
-}
-
-/// Builds a deterministic canonical lookup card from the existing retrieval service.
-///
-/// The service intentionally remains independent of the model-backed lookup service and HTTP
-/// router. A future transport adapter may choose to call it after deciding the canonical path is
-/// appropriate, but this module does not wire that policy itself.
-#[derive(Clone)]
-pub struct CanonicalLookupCardService {
-  retrieval: CanonicalRetrievalService,
-}
-
-impl CanonicalLookupCardService {
-  /// Creates a card service around the supplied canonical retrieval service.
-  pub fn new(retrieval: CanonicalRetrievalService) -> Self {
-    Self { retrieval }
-  }
-
-  /// Retrieves and assembles one bounded evidence-backed canonical lookup card.
-  ///
-  /// No model is invoked. Vector unavailability yields a lexical-only card whose retrieval
-  /// coverage is `VectorDegraded`; an authoritative canonical-repository failure remains an
-  /// error.
-  ///
-  /// # Errors
-  ///
-  /// Returns an error when the canonical retrieval service cannot safely read authoritative
-  /// canonical content.
-  pub async fn lookup(
-    &self,
-    request: RetrievalRequest,
-  ) -> Result<CanonicalLookupCard, CanonicalLookupCardError> {
-    let outcome = self.retrieval.retrieve(request.clone()).await?;
-    Ok(CanonicalLookupCardMapper::assemble(&request, outcome))
-  }
-}
-
-/// Pure mapper from a retrieval outcome to a bounded canonical lookup card.
+/// Pure mapper from release-pinned candidates to a bounded canonical lookup card.
 ///
 /// It preserves the incoming ranked-candidate order and rank values. The mapper is public so
 /// non-HTTP callers can assemble a card from an already retrieved immutable outcome without
@@ -77,21 +26,6 @@ impl CanonicalLookupCardService {
 pub struct CanonicalLookupCardMapper;
 
 impl CanonicalLookupCardMapper {
-  /// Assembles one card from the normalized request and an existing deterministic outcome.
-  ///
-  /// This method defensively reapplies release, lifecycle, ownership, and source-permission
-  /// checks before exposing an assertion. It never creates, rewrites, or ranks factual text.
-  pub fn assemble(request: &RetrievalRequest, outcome: RetrievalOutcome) -> CanonicalLookupCard {
-    let release_id = outcome.content.release_id.clone();
-    Self::assemble_with_content(
-      request,
-      outcome.candidates,
-      Some(outcome.path),
-      outcome.content,
-      &release_id,
-    )
-  }
-
   /// Assembles the same bounded card from a canonical-only pin and ranked lexical candidates.
   pub fn assemble_canonical(
     request: &RetrievalRequest,
@@ -99,13 +33,12 @@ impl CanonicalLookupCardMapper {
     candidates: Vec<RankedCandidate>,
   ) -> CanonicalLookupCard<crate::domain::canonical::CanonicalReleasePin> {
     let release_id = pin.release_id.clone();
-    Self::assemble_with_content(request, candidates, None, pin, &release_id)
+    Self::assemble_with_content(request, candidates, pin, &release_id)
   }
 
   fn assemble_with_content<C>(
     request: &RetrievalRequest,
     ranked_candidates: Vec<RankedCandidate>,
-    path: Option<RetrievalPath>,
     content: C,
     release_id: &crate::domain::canonical::ReleaseId,
   ) -> CanonicalLookupCard<C> {
@@ -127,13 +60,7 @@ impl CanonicalLookupCardMapper {
     counts.senses.truncated += source_candidate_count.saturating_sub(candidate_limit);
 
     let candidate_coverage = counts.candidate_section();
-    let retrieval = match path {
-      None | Some(RetrievalPath::Hybrid) => candidate_coverage.clone(),
-      Some(RetrievalPath::LexicalFallback) => CanonicalLookupCardSectionCoverage {
-        state: CanonicalLookupCardCoverageState::VectorDegraded,
-        ..candidate_coverage
-      },
-    };
+    let retrieval = candidate_coverage.clone();
 
     CanonicalLookupCard {
       query: CanonicalLookupQueryAnalysis {
@@ -499,13 +426,12 @@ mod tests {
     LanguageTag::parse("en").unwrap()
   }
 
-  fn content() -> crate::domain::canonical::ActiveContentVersion {
-    crate::domain::canonical::ActiveContentVersion {
-      release_id: id("release-1"),
-      vector_collection_id: id("vectors-1"),
-      schema_version: "canonical-v1".to_string(),
-      ranking_version: "rank-v1".to_string(),
-    }
+  fn pin() -> crate::domain::canonical::CanonicalReleasePin {
+    crate::domain::canonical::CanonicalReleasePin::new(
+      id("release-1"),
+      "canonical-data-v1".to_string(),
+    )
+    .unwrap()
   }
 
   fn request() -> RetrievalRequest {
@@ -589,18 +515,17 @@ mod tests {
     }
   }
 
+  fn assemble(
+    candidates: Vec<RankedCandidate>,
+  ) -> CanonicalLookupCard<crate::domain::canonical::CanonicalReleasePin> {
+    CanonicalLookupCardMapper::assemble_canonical(&request(), pin(), candidates)
+  }
+
   #[test]
   fn mapper_preserves_ranked_candidate_order_and_separates_card_entities() {
     let first = candidate("sense-first", "first");
     let second = candidate("sense-second", "second");
-    let card = CanonicalLookupCardMapper::assemble(
-      &request(),
-      RetrievalOutcome {
-        content: content(),
-        path: RetrievalPath::Hybrid,
-        candidates: vec![ranked(second, 2), ranked(first, 1)],
-      },
-    );
+    let card = assemble(vec![ranked(second, 2), ranked(first, 1)]);
 
     assert_eq!(card.query.normalized_query, "hot");
     assert_eq!(card.candidates[0].sense.id.as_str(), "sense-second");
@@ -628,14 +553,7 @@ mod tests {
   fn mapper_hides_unpermitted_assertions_and_reports_filtered_coverage() {
     let mut blocked = candidate("sense-blocked", "blocked");
     blocked.evidence[0].permissions.api_redistribution = false;
-    let card = CanonicalLookupCardMapper::assemble(
-      &request(),
-      RetrievalOutcome {
-        content: content(),
-        path: RetrievalPath::Hybrid,
-        candidates: vec![ranked(blocked, 1)],
-      },
-    );
+    let card = assemble(vec![ranked(blocked, 1)]);
 
     assert!(card.candidates[0].sense.definition.is_none());
     assert!(card.candidates[0].forms.is_empty());
@@ -651,17 +569,10 @@ mod tests {
   }
 
   #[test]
-  fn mapper_marks_missing_forms_and_vector_fallback_without_dropping_definition() {
+  fn mapper_marks_missing_forms_without_dropping_definition() {
     let mut without_forms = candidate("sense-hot", "hot");
     without_forms.forms.clear();
-    let card = CanonicalLookupCardMapper::assemble(
-      &request(),
-      RetrievalOutcome {
-        content: content(),
-        path: RetrievalPath::LexicalFallback,
-        candidates: vec![ranked(without_forms, 1)],
-      },
-    );
+    let card = assemble(vec![ranked(without_forms, 1)]);
 
     assert!(card.candidates[0].sense.definition.is_some());
     assert_eq!(
@@ -670,7 +581,7 @@ mod tests {
     );
     assert_eq!(
       card.coverage.retrieval.state,
-      CanonicalLookupCardCoverageState::VectorDegraded
+      CanonicalLookupCardCoverageState::Available
     );
   }
 
@@ -704,14 +615,7 @@ mod tests {
       })
       .collect();
 
-    let card = CanonicalLookupCardMapper::assemble(
-      &request(),
-      RetrievalOutcome {
-        content: content(),
-        path: RetrievalPath::Hybrid,
-        candidates: vec![ranked(bounded, 1)],
-      },
-    );
+    let card = assemble(vec![ranked(bounded, 1)]);
 
     assert_eq!(
       card.candidates[0].forms.len(),

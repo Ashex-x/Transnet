@@ -20,7 +20,7 @@ Port 模块定义 application service 从模型和数据依赖所需的窄操作
 
 每次读取携带请求 deadline 和精确发布标识符。闭合结果区分缺失、不兼容、不可用、无效与权限过滤数据，且不泄露被隐藏内容。
 
-在线组合不接收 mutation method。独立发布 port 可暂存、校验、投影、激活、隔离、移除与回滚已审核规范内容，并绝不传给请求 handler。精确操作由[规范数据](../interfaces/canonical-data_cn.md)与[检索数据](../interfaces/retrieval-data_cn.md)合同负责。
+在线组合不接收 mutation method。独立且由 Transnet 拥有的离线 port 会提交不可变 projection batch、对账 manifest、提交 activation candidate、中止未完成 build，并请求 rollback selection；这些 port 绝不传给请求 handler。Island-port 负责暂存、校验、隔离、移除、活动指针 mutation 与 rollback eligibility。精确操作由[规范数据](../interfaces/canonical-data_cn.md)与[检索数据](../interfaces/retrieval-data_cn.md)合同负责。
 
 ## 验证
 

@@ -20,7 +20,7 @@ Status: repository implementation complete with named external acceptance blocke
 - [x] UDS-only HTTP process, request bounds, request IDs, health probes, graceful shutdown, and redacted structured tracing.
 - [x] One neutral fast/reasoning generation provider with bounded resilience and operational metrics.
 - [x] Target translation plus opt-in canonical and knowledge route composition.
-- [x] Library foundations and process-local test adapters for canonical lookup, sense detail, content releases, and bounded graph reads; these are not production storage composition.
+- [x] Strict canonical-data and retrieval-data clients, the BasicCard mapper, release-pinned root/view/path services, offline publication fakes, and contract tests; production authorities remain external.
 - [x] Target human contracts for translation, lookup, sense detail, and bounded graph reads.
 - [x] Transnet-owned publication projection/client, relationship-page composition seam, and complete target wire semantics.
 - [ ] Production Island-port/MySQL/Qdrant execution, paired activation, production relationship-page authority, and real acceptance.

@@ -62,12 +62,8 @@ pub struct TranslationHistory {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TranslationTurnRequest {
-  /// Legacy text input retained during target-contract migration.
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub text: Option<String>,
-  /// Target tagged input; exactly one of this or legacy `text` is required.
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub input: Option<TranslationInput>,
+  /// Closed tagged input for text, structured segments, or image regions.
+  pub input: TranslationInput,
   /// auto, en, or zh-CN.
   pub source_language: String,
   /// en or zh-CN.
@@ -488,11 +484,7 @@ impl TranslationTurn {
     let encoded_bytes = serde_json::to_vec(&request)
       .map_err(|_| TurnValidationError::Field("input"))?
       .len();
-    let input = match (request.text, request.input) {
-      (Some(text), None) => TranslationInput::Text { text },
-      (None, Some(input)) => input,
-      _ => return Err(TurnValidationError::Field("input")),
-    };
+    let input = request.input;
     let guidance = request.guidance.unwrap_or_default();
     validate_guidance(&guidance)?;
     let generation_context_bytes = serde_json::to_vec(&(&request.history, &guidance))
@@ -2247,8 +2239,9 @@ mod tests {
 
   fn request() -> TranslationTurnRequest {
     TranslationTurnRequest {
-      text: Some("C++".to_string()),
-      input: None,
+      input: TranslationInput::Text {
+        text: "C++".to_string(),
+      },
       source_language: "en".to_string(),
       target_language: "zh-CN".to_string(),
       response_level: "standard".to_string(),
@@ -2300,7 +2293,7 @@ mod tests {
   #[test]
   fn strict_request_and_history_shapes_reject_unknown_fields() {
     assert!(serde_json::from_value::<TranslationTurnRequest>(json!({
-      "text": "hello",
+      "input": {"type":"text", "text": "hello"},
       "source_language": "en",
       "target_language": "zh-CN",
       "response_level": "brief",
@@ -2308,7 +2301,7 @@ mod tests {
     }))
     .is_err());
     assert!(serde_json::from_value::<TranslationTurnRequest>(json!({
-      "text": "hello",
+      "input": {"type":"text", "text": "hello"},
       "source_language": "en",
       "target_language": "zh-CN",
       "response_level": "brief",
@@ -2319,6 +2312,13 @@ mod tests {
         "target_language": "zh-CN",
         "turn_id": "not-allowed"
       }]
+    }))
+    .is_err());
+    assert!(serde_json::from_value::<TranslationTurnRequest>(json!({
+      "text": "legacy-shape",
+      "source_language": "en",
+      "target_language": "zh-CN",
+      "response_level": "brief"
     }))
     .is_err());
   }
@@ -2415,7 +2415,9 @@ mod tests {
     );
 
     let mut oversized_text = request();
-    oversized_text.text = Some("x".repeat(MAX_TURN_BYTES));
+    oversized_text.input = TranslationInput::Text {
+      text: "x".repeat(MAX_TURN_BYTES),
+    };
     assert_eq!(
       TranslationTurn::new(oversized_text).unwrap_err(),
       TurnValidationError::Field("input.text")
@@ -2991,7 +2993,9 @@ mod tests {
     let secret_text = "current-secret-8172";
     let history_secret = "history-secret-4815";
     let mut input = request();
-    input.text = Some(secret_text.to_string());
+    input.input = TranslationInput::Text {
+      text: secret_text.to_string(),
+    };
     input.history = vec![history(history_secret)];
     assert_eq!(format!("{input:?}"), "TranslationTurnRequest(REDACTED)");
     let turn = TranslationTurn::new(input).unwrap();
@@ -3000,7 +3004,9 @@ mod tests {
     assert!(!rendered.contains(history_secret));
 
     let mut invalid = request();
-    invalid.text = Some(secret_text.to_string());
+    invalid.input = TranslationInput::Text {
+      text: secret_text.to_string(),
+    };
     invalid.history = vec![history("  ")];
     let error = TranslationTurn::new(invalid).unwrap_err().to_string();
     assert!(!error.contains(secret_text));
