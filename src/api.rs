@@ -31,7 +31,7 @@ use crate::{
     translation::TranslationOrchestrator,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
-  domain::capabilities::ServiceCapabilities,
+  domain::capabilities::{KnowledgeCapabilityBundle, ServiceCapabilities},
   domain::observability::MetricEvent,
   ports::{
     active_content_reader::ActiveContentReader, learning_model::LearningModel,
@@ -58,7 +58,9 @@ pub use readiness::{
 };
 pub use v1::{
   knowledge_paths::KnowledgePathUseCase,
-  knowledge_views::{knowledge_router, KnowledgeRouteDependencies},
+  knowledge_views::{
+    knowledge_router, KnowledgeRouteDependencies, KnowledgeRouteDependenciesError,
+  },
 };
 
 use request_id::RequestId;
@@ -169,6 +171,7 @@ pub struct AppState {
   metrics: Option<Arc<ClosedMetricsDispatcher>>,
   readiness: Arc<dyn Readiness>,
   capabilities: ServiceCapabilities,
+  knowledge_routes: Option<KnowledgeRouteDependencies>,
 }
 
 impl AppState {
@@ -191,6 +194,7 @@ impl AppState {
       metrics: None,
       readiness: Arc::new(AlwaysReady),
       capabilities: ServiceCapabilities::current(DEFAULT_MAX_REQUEST_BODY_BYTES),
+      knowledge_routes: None,
     }
   }
 
@@ -342,15 +346,27 @@ impl AppState {
     self
   }
 
-  /// Adds the dependency probe used by `GET /readyz`.
+  /// Adds the dependency probe used by `GET /readyz` when no knowledge bundle owns readiness.
   pub fn with_readiness(mut self, readiness: Arc<dyn Readiness>) -> Self {
-    self.readiness = readiness;
+    if self.knowledge_routes.is_none() {
+      self.readiness = readiness;
+    }
     self
   }
 
   /// Replaces the content-free capability declaration derived by runtime composition.
   pub fn with_capabilities(mut self, capabilities: ServiceCapabilities) -> Self {
     self.capabilities = capabilities;
+    self
+  }
+
+  /// Atomically enables the guided knowledge-view and verified-path HTTP routes.
+  ///
+  /// The dependency bundle is indivisible, so application state cannot register only one route or
+  /// advertise knowledge lenses without the complete route composition.
+  pub fn with_knowledge_routes(mut self, dependencies: KnowledgeRouteDependencies) -> Self {
+    self.readiness = dependencies.readiness();
+    self.knowledge_routes = Some(dependencies);
     self
   }
 
@@ -402,6 +418,10 @@ impl AppState {
   fn has_canonical_sense_details_service(&self) -> bool {
     self.canonical_sense_details.is_some()
   }
+
+  fn has_knowledge_routes(&self) -> bool {
+    self.knowledge_routes.is_some()
+  }
 }
 
 /// Builds the complete Transnet HTTP router with a safe default HTTP boundary.
@@ -427,9 +447,16 @@ fn build_router(
   max_request_body_bytes: usize,
   cors: Option<CorsLayer>,
 ) -> Router {
+  let has_knowledge_routes = state.has_knowledge_routes();
   state.capabilities = state
     .capabilities
+    .with_knowledge_bundle(if has_knowledge_routes {
+      KnowledgeCapabilityBundle::FullyConfigured
+    } else {
+      KnowledgeCapabilityBundle::Disabled
+    })
     .with_max_request_body_bytes(max_request_body_bytes);
+  let knowledge_routes = state.knowledge_routes.clone();
   let router = Router::new()
     .route("/health", get(health))
     .route("/livez", get(livez))
@@ -442,7 +469,7 @@ fn build_router(
         state.has_canonical_sense_details_service(),
       ),
     )
-    .nest("/api/v1", v1::target_router())
+    .nest("/api/v1", v1::target_router(knowledge_routes))
     .with_state(state)
     .layer(DefaultBodyLimit::max(max_request_body_bytes))
     .layer(RequestBodyLimitLayer::new(max_request_body_bytes))

@@ -33,8 +33,10 @@ const RESULT_SCHEMA_VERSION: &str = "knowledge-path-result-v1";
 #[async_trait]
 /// Request-independent boundary used by the knowledge-path HTTP route.
 pub trait KnowledgePathUseCase: Send + Sync {
-  /// Returns the one immutable canonical pin served by this instance.
-  fn execution_pin(&self) -> &CanonicalReleasePin;
+  /// Returns the complete immutable projection expectation served by this instance.
+  fn execution_expectation(
+    &self,
+  ) -> &crate::domain::retrieval_data::NeighborProjectionExecutionExpectation;
 
   /// Finds bounded verified paths under the supplied request-owned cancellation signal.
   async fn find(
@@ -47,8 +49,10 @@ pub trait KnowledgePathUseCase: Send + Sync {
 
 #[async_trait]
 impl KnowledgePathUseCase for BoundedKnowledgePathService {
-  fn execution_pin(&self) -> &CanonicalReleasePin {
-    &self.execution().content
+  fn execution_expectation(
+    &self,
+  ) -> &crate::domain::retrieval_data::NeighborProjectionExecutionExpectation {
+    self.execution()
   }
 
   async fn find(
@@ -105,7 +109,7 @@ async fn find(
     Ok(value) => value,
     Err(error) => return invalid_field(&request_id, error.field, error.message),
   };
-  if &request.release != service.execution_pin() {
+  if request.release != service.execution_expectation().content {
     return unavailable_release(&request_id);
   }
   let context = match context
@@ -552,13 +556,15 @@ mod tests {
   struct FakeUseCase {
     mode: Mode,
     observed_schema: Mutex<Option<String>>,
-    pin: CanonicalReleasePin,
+    execution: crate::domain::retrieval_data::NeighborProjectionExecutionExpectation,
   }
 
   #[async_trait]
   impl KnowledgePathUseCase for FakeUseCase {
-    fn execution_pin(&self) -> &CanonicalReleasePin {
-      &self.pin
+    fn execution_expectation(
+      &self,
+    ) -> &crate::domain::retrieval_data::NeighborProjectionExecutionExpectation {
+      &self.execution
     }
 
     async fn find(
@@ -601,7 +607,7 @@ mod tests {
     let use_case: Arc<dyn KnowledgePathUseCase> = Arc::new(FakeUseCase {
       mode,
       observed_schema: Mutex::new(None),
-      pin: CanonicalReleasePin::new(id("release-1"), "canonical-v1".into()).unwrap(),
+      execution: execution(),
     });
     Router::new()
       .nest(
@@ -644,6 +650,19 @@ mod tests {
 
   fn id(value: &str) -> CanonicalId {
     CanonicalId::new(value).unwrap()
+  }
+
+  fn execution() -> crate::domain::retrieval_data::NeighborProjectionExecutionExpectation {
+    crate::domain::retrieval_data::NeighborProjectionExecutionExpectation {
+      content: CanonicalReleasePin::new(id("release-1"), "canonical-v1".into()).unwrap(),
+      node_collection_id: id("nodes-1"),
+      node_collection_content_hash: format!("sha256:{}", "a".repeat(64)),
+      edge_collection_id: id("edges-1"),
+      edge_collection_content_hash: format!("sha256:{}", "b".repeat(64)),
+      relationship_registry_version: crate::domain::retrieval_data::RELATION_REGISTRY_VERSION,
+      edge_dense_input_version: crate::domain::embedding_input::EDGE_DENSE_INPUT_VERSION.into(),
+      edge_lexical_input_version: crate::domain::embedding_input::EDGE_LEXICAL_INPUT_VERSION.into(),
+    }
   }
 
   fn request(body: impl Into<Body>) -> Request<Body> {

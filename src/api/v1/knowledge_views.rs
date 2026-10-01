@@ -10,6 +10,7 @@ use axum::{
   Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::{
   application::knowledge_views::{
@@ -30,6 +31,7 @@ use crate::{
     retrieval_data::RetrievalNodeType,
     translation_turn::ResponseLevel,
   },
+  ports::active_knowledge_release::ActiveKnowledgeReleasePort,
 };
 
 use super::super::{
@@ -51,6 +53,18 @@ pub struct KnowledgeRouteDependencies {
   cursors: Arc<KnowledgeCursorCodec>,
   paths: Arc<dyn KnowledgePathUseCase>,
   runtime_cancellation: Arc<crate::domain::model_runtime::CancellationSignal>,
+  readiness: Arc<dyn crate::api::Readiness>,
+}
+
+/// Invalid atomic knowledge-route dependency composition.
+#[derive(Clone, Copy, Debug, Error, Eq, PartialEq)]
+pub enum KnowledgeRouteDependenciesError {
+  /// The view and path services do not use the same complete immutable projection expectation.
+  #[error("knowledge route services use different immutable projection expectations")]
+  ProjectionMismatch,
+  /// The shared immutable projection expectation is invalid.
+  #[error("knowledge route projection expectation is invalid")]
+  InvalidProjection,
 }
 
 impl KnowledgeRouteDependencies {
@@ -59,13 +73,27 @@ impl KnowledgeRouteDependencies {
     service: Arc<KnowledgeViewService>,
     cursors: Arc<KnowledgeCursorCodec>,
     paths: Arc<dyn KnowledgePathUseCase>,
-  ) -> Self {
-    Self {
+    active_release: Arc<dyn ActiveKnowledgeReleasePort>,
+    readiness_timeout: std::time::Duration,
+  ) -> Result<Self, KnowledgeRouteDependenciesError> {
+    let execution = service.execution().clone();
+    if execution.validate().is_err() {
+      return Err(KnowledgeRouteDependenciesError::InvalidProjection);
+    }
+    if paths.execution_expectation() != &execution {
+      return Err(KnowledgeRouteDependenciesError::ProjectionMismatch);
+    }
+    Ok(Self {
       service,
       cursors,
       paths,
       runtime_cancellation: Arc::new(crate::domain::model_runtime::CancellationSignal::default()),
-    }
+      readiness: Arc::new(crate::api::CompositeKnowledgeReadiness::configured(
+        active_release,
+        execution,
+        readiness_timeout,
+      )),
+    })
   }
 
   /// Connects request cancellation to the runtime drain signal used by the eventual server.
@@ -76,10 +104,21 @@ impl KnowledgeRouteDependencies {
     self.runtime_cancellation = runtime_cancellation;
     self
   }
+
+  pub(crate) fn readiness(&self) -> Arc<dyn crate::api::Readiness> {
+    self.readiness.clone()
+  }
 }
 
 /// Builds both strict target knowledge routes for one merge beneath `/api/v1`.
 pub fn knowledge_router<S>(dependencies: KnowledgeRouteDependencies) -> Router<S>
+where
+  S: Clone + Send + Sync + 'static,
+{
+  routes(dependencies).method_not_allowed_fallback(super::method_not_allowed)
+}
+
+pub(super) fn routes<S>(dependencies: KnowledgeRouteDependencies) -> Router<S>
 where
   S: Clone + Send + Sync + 'static,
 {
@@ -90,7 +129,6 @@ where
     .layer(Extension(dependencies))
     .merge(paths)
     .layer(Extension(cancellations))
-    .method_not_allowed_fallback(super::method_not_allowed)
 }
 
 async fn view(
@@ -602,6 +640,8 @@ mod tests {
 
   use super::*;
   use crate::{
+    api::{app_router, AppState},
+    config::{ProviderApiKey, ProviderConfig, TranslationConfig},
     domain::{
       canonical::CanonicalReleasePin,
       canonical_content::CanonicalSenseDetails,
@@ -626,6 +666,7 @@ mod tests {
       },
       retrieval_data::{RetrievalDataError, RetrievalDataPort},
     },
+    provider::TranslationService,
   };
 
   struct EmptyRetrieval {
@@ -673,13 +714,13 @@ mod tests {
   struct RootCanonical;
 
   struct UnusedPathUseCase {
-    pin: CanonicalReleasePin,
+    execution: NeighborProjectionExecutionExpectation,
   }
 
   #[async_trait]
   impl KnowledgePathUseCase for UnusedPathUseCase {
-    fn execution_pin(&self) -> &CanonicalReleasePin {
-      &self.pin
+    fn execution_expectation(&self) -> &NeighborProjectionExecutionExpectation {
+      &self.execution
     }
 
     async fn find(
@@ -692,6 +733,30 @@ mod tests {
       crate::application::knowledge_paths::KnowledgePathSearchError,
     > {
       Err(crate::application::knowledge_paths::KnowledgePathSearchError::DependencyUnavailable)
+    }
+  }
+
+  struct ActiveRelease(NeighborProjectionExecutionExpectation);
+
+  struct NeverReady;
+
+  #[async_trait]
+  impl crate::api::Readiness for NeverReady {
+    async fn is_ready(&self) -> bool {
+      false
+    }
+  }
+
+  #[async_trait]
+  impl crate::ports::active_knowledge_release::ActiveKnowledgeReleasePort for ActiveRelease {
+    async fn active_knowledge_release(
+      &self,
+      _: &crate::ports::canonical_read::CanonicalReadContext,
+    ) -> Result<
+      Option<NeighborProjectionExecutionExpectation>,
+      crate::ports::active_knowledge_release::ActiveKnowledgeReleaseError,
+    > {
+      Ok(Some(self.0.clone()))
     }
   }
 
@@ -822,20 +887,24 @@ mod tests {
 
   fn state() -> KnowledgeRouteDependencies {
     let expected = execution();
-    let pin = expected.content.clone();
     KnowledgeRouteDependencies::new(
       Arc::new(KnowledgeViewService::new(
         Arc::new(EmptyRetrieval {
           proof: proof(&expected),
         }),
         Arc::new(RootCanonical),
-        expected,
+        expected.clone(),
       )),
       Arc::new(KnowledgeCursorCodec::new(
         crate::domain::knowledge_cursor::KnowledgeCursorProtectionKey::new([9_u8; 32]).unwrap(),
       )),
-      Arc::new(UnusedPathUseCase { pin }),
+      Arc::new(UnusedPathUseCase {
+        execution: expected.clone(),
+      }),
+      Arc::new(ActiveRelease(expected)),
+      std::time::Duration::from_secs(1),
     )
+    .unwrap()
   }
 
   fn body(cursor: Option<&str>, extra: &str) -> String {
@@ -858,6 +927,160 @@ mod tests {
       )
       .await
       .unwrap()
+  }
+
+  fn composed_app(with_knowledge: bool) -> Router {
+    let provider = ProviderConfig {
+      base_url: "http://127.0.0.1:1/v1".into(),
+      model: "unused".into(),
+      api_key: ProviderApiKey::new("unused"),
+    };
+    let legacy = TranslationService::new(
+      TranslationConfig {
+        long_text_chars: 4_000,
+        timeout_seconds: 1,
+        max_retries: 0,
+        retry_delay_ms: 0,
+      },
+      provider.clone(),
+      provider,
+    )
+    .unwrap();
+    let app_state = AppState::new(legacy);
+    app_router(if with_knowledge {
+      app_state
+        .with_knowledge_routes(state())
+        .with_readiness(Arc::new(NeverReady))
+    } else {
+      app_state
+    })
+  }
+
+  async fn json(response: Response) -> serde_json::Value {
+    serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+  }
+
+  #[tokio::test]
+  async fn runtime_composition_registers_both_routes_and_exactly_six_lenses_atomically() {
+    let disabled = composed_app(false)
+      .oneshot(
+        Request::builder()
+          .method("POST")
+          .uri("/api/v1/knowledge/views")
+          .header("content-type", "application/json")
+          .body(Body::from(body(None, "")))
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(disabled.status(), StatusCode::NOT_FOUND);
+
+    let capabilities = composed_app(true)
+      .oneshot(
+        Request::builder()
+          .method("POST")
+          .uri("/api/v1/capabilities")
+          .header("content-type", "application/json")
+          .body(Body::from("{}"))
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(
+      json(capabilities).await["data"]["knowledge_lenses"],
+      serde_json::json!(["meaning", "contrast", "usage", "form", "origin", "domain"])
+    );
+
+    let view = composed_app(true)
+      .oneshot(
+        Request::builder()
+          .method("POST")
+          .uri("/api/v1/knowledge/views")
+          .header("content-type", "application/json")
+          .body(Body::from(body(None, "")))
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(view.status(), StatusCode::OK);
+
+    let path = composed_app(true)
+      .oneshot(
+        Request::builder()
+          .method("POST")
+          .uri("/api/v1/knowledge/paths")
+          .header("content-type", "application/json")
+          .body(Body::from(
+            r#"{"from":{"kind":"concept","id":"a"},"to":{"kind":"concept","id":"b"},"target_language":"en","content_release":"release-1","canonical_schema_version":"canonical-v1"}"#,
+          ))
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(path.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(path.headers()["cache-control"], "no-store");
+
+    let wrong_method = composed_app(true)
+      .oneshot(
+        Request::builder()
+          .method("GET")
+          .uri("/api/v1/knowledge/views")
+          .body(Body::empty())
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(wrong_method.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(wrong_method.headers()["cache-control"], "no-store");
+
+    let readiness = composed_app(true)
+      .oneshot(
+        Request::builder()
+          .method("POST")
+          .uri("/api/v1/readyz")
+          .header("content-type", "application/json")
+          .body(Body::from("{}"))
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(readiness.status(), StatusCode::OK);
+    assert_eq!(
+      json(readiness).await["data"]["components"],
+      serde_json::json!({
+        "canonical_data":"available",
+        "retrieval_data":"available",
+        "knowledge_projection":"available"
+      })
+    );
+  }
+
+  #[test]
+  fn dependency_bundle_rejects_mismatched_view_and_path_projection_snapshots() {
+    let expected = execution();
+    let mut mismatched = expected.clone();
+    mismatched.edge_collection_id = id("edges-2");
+    let result = KnowledgeRouteDependencies::new(
+      Arc::new(KnowledgeViewService::new(
+        Arc::new(EmptyRetrieval {
+          proof: proof(&expected),
+        }),
+        Arc::new(RootCanonical),
+        expected.clone(),
+      )),
+      Arc::new(KnowledgeCursorCodec::new(
+        crate::domain::knowledge_cursor::KnowledgeCursorProtectionKey::new([7_u8; 32]).unwrap(),
+      )),
+      Arc::new(UnusedPathUseCase {
+        execution: mismatched,
+      }),
+      Arc::new(ActiveRelease(expected)),
+      std::time::Duration::from_secs(1),
+    );
+    assert!(matches!(
+      result,
+      Err(KnowledgeRouteDependenciesError::ProjectionMismatch)
+    ));
   }
 
   #[tokio::test]

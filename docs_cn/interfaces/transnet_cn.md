@@ -244,7 +244,7 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 
 返回当前已实现的 BCP 47 语言 selector、输入类型、图片类型、purpose、annotation family、知识 lens、body 与语义限制、实时检索可用性、generation profile 和 schema 版本。空的闭合集明确表示当前 runtime 尚未实现该能力。它不暴露凭据、provider URL、socket 路径、并发状态或私有 feature flag。
 
-知识 lens 的激活是原子的。只有当规范读取 port、检索读取 port、活动 trio authority、引导式 view service、稳定 cursor key 与 HTTP route 被配置为同一个完整 bundle 时，runtime 才可以准确公布 `meaning`、`contrast`、`usage`、`form`、`origin` 和 `domain`。`mechanism` 与 `application` 仍不公布，因为其显式技术关系策略尚不可执行。部分配置的 bundle 不公布任何知识 lens。
+知识 lens 的激活是原子的。`AppState` 只接受一个经过验证且不可拆分的 knowledge route dependency bundle，其中 view 与 path service 必须共享同一个完整不可变 projection expectation；安装它时也会同时安装与该快照匹配的 active-release readiness。未提供 bundle 时两个 route 都不存在。只有安装该 bundle 时，runtime 才公布 `meaning`、`contrast`、`usage`、`form`、`origin` 和 `domain`，即使调用方提供了陈旧 capability 声明也不例外。`mechanism` 与 `application` 仍不公布，因为其显式技术关系策略尚不可执行。默认 executable 尚未构造该 bundle。
 
 Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cache-Control: no-store`。调用方可以在需要当前部署信息时重新获取，但合同不承诺 HTTP cache 或 validator 语义。
 

@@ -30,8 +30,9 @@ pub use adapters::learning_model::OpenAiLearningModel;
 pub use adapters::model_runtime::{OpenAiEmbeddingAdapter, OpenAiGenerationAdapter};
 pub use api::{
   app_router, app_router_with_http_config, AlwaysReady, AppState, CompositeKnowledgeReadiness,
-  GraphCursorProtectionKey, GraphCursorProtectionKeyError, KnowledgeProjectionReadiness,
-  KnowledgeReadinessComponents, Readiness, ReadinessComponentState, ReadinessReport,
+  GraphCursorProtectionKey, GraphCursorProtectionKeyError, KnowledgePathUseCase,
+  KnowledgeProjectionReadiness, KnowledgeReadinessComponents, KnowledgeRouteDependencies,
+  KnowledgeRouteDependenciesError, Readiness, ReadinessComponentState, ReadinessReport,
   SuccessEnvelope, SuccessMeta, MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES,
 };
 pub use application::canonical_lookup::{CanonicalLookupError, CanonicalLookupService};

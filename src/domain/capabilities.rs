@@ -74,6 +74,7 @@ impl ServiceCapabilities {
 
   /// Activates only the lenses backed by one fully composed canonical/retrieval/view bundle.
   pub fn with_knowledge_bundle(mut self, bundle: KnowledgeCapabilityBundle) -> Self {
+    self.knowledge_lenses.clear();
     if bundle == KnowledgeCapabilityBundle::FullyConfigured {
       self.knowledge_lenses = vec![
         KnowledgeLensCapability::Meaning,

@@ -47,7 +47,7 @@ fn app_with_state(
 }
 
 #[tokio::test]
-async fn preserves_atomic_knowledge_activation_while_rebinding_the_http_limit() {
+async fn refuses_manually_advertised_knowledge_without_the_atomic_route_bundle() {
   let capabilities = ServiceCapabilities::current(1)
     .with_knowledge_bundle(KnowledgeCapabilityBundle::FullyConfigured);
   let response = app_with_state(8_192, |state| state.with_capabilities(capabilities))
@@ -56,10 +56,7 @@ async fn preserves_atomic_knowledge_activation_while_rebinding_the_http_limit() 
     .unwrap();
   let (_, json) = body(response).await;
 
-  assert_eq!(
-    json["data"]["knowledge_lenses"],
-    serde_json::json!(["meaning", "contrast", "usage", "form", "origin", "domain"])
-  );
+  assert_eq!(json["data"]["knowledge_lenses"], serde_json::json!([]));
   assert_eq!(json["data"]["limits"]["max_request_body_bytes"], 8_192);
 }
 
