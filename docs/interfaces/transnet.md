@@ -4,7 +4,7 @@
 
 This contract defines the target island-port-to-Transnet interface and the shared internal HTTP/1.1-over-UDS rules. Island-port owns internet transport, authentication, user state, file ingestion, document reconstruction, and final presentation. Transnet receives no end-user identity and persists no live request content.
 
-Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 through the target inbound UDS and implements target capability discovery and health, liveness, and dependency-readiness probes plus the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. The translation boundary now strictly validates tagged text, structured segments, image regions, history, and professional guidance; text reaches the current orchestrator, while valid segment and image requests return `501 translation_capability_unavailable` until their result composition lands. Explicit configuration may retain the loopback listener during migration. Live retrieval, guided knowledge views, and knowledge paths remain unimplemented.
+Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 through the target inbound UDS and implements target capability discovery and health, liveness, and dependency-readiness probes plus the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. The translation boundary now strictly validates tagged text, structured segments, image regions, history, and professional guidance; text reaches the current orchestrator, while valid segment and image requests return `501 translation_capability_unavailable` until their result composition lands. Explicit configuration may retain the loopback listener during migration. The strict knowledge-path handler and its application service are implemented behind an isolated route-composition seam, but the default runtime does not yet inject that service or expose the route. Live retrieval and guided knowledge views remain unimplemented runtime capabilities.
 
 ## Contents
 
@@ -390,11 +390,51 @@ Returns up to three independently verified paths of at most three hops between t
   "from": {"kind": "concept", "id": "concept_coriolis_force"},
   "to": {"kind": "concept", "id": "concept_weather_system"},
   "target_language": "en",
-  "content_release": "knowledge-2026-09"
+  "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1"
 }
 ```
 
-Normal outcomes are `connected` and `no_verified_path`. `no_verified_path` means the bounded search found no path whose every edge had an exact eligible fact revision successfully hydrated in the pinned release; it does not prove that no relationship exists outside the searched bounds, in another release, or in unpublished knowledge. Every path step names one hydrated assertion, direction, conditions, relevance, evidence references, and release. Similarity-only candidates may be returned in a separate exploratory section but never as a path step.
+The request body and both nested node references reject unknown fields. Node kinds use the closed canonical family catalog; lexeme roots and invented family names are rejected. `target_language` is a strict BCP-47 tag, and the immutable release plus canonical schema form the full pin used by the shared request context.
+
+```json
+{
+  "data": {
+    "outcome": "connected",
+    "from": {"kind": "concept", "id": "concept_coriolis_force"},
+    "to": {"kind": "concept", "id": "concept_weather_system"},
+    "target_language": "en",
+    "paths": [{
+      "order": 1,
+      "steps": [{
+        "edge_id": "edge_weather_17",
+        "relationship_revision": 2,
+        "assertion_id": "assertion_weather_17",
+        "assertion_revision": 3,
+        "traversal_id": "traversal_cause_effect",
+        "relation": "has_subtype",
+        "relation_registry_revision": 1,
+        "direction": "forward",
+        "source": {"kind": "concept", "id": "concept_coriolis_force"},
+        "target": {"kind": "concept", "id": "concept_weather_system"},
+        "conditions": [],
+        "evidence_ids": ["evidence_weather_4"],
+        "content_release": "knowledge-2026-09",
+        "canonical_schema_version": "canonical-v1"
+      }]
+    }]
+  },
+  "meta": {
+    "request_id": "01JPATHREQUEST0000000000000",
+    "schema_version": "knowledge-path-result-v1",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
+
+Normal outcomes are `connected` and `no_verified_path`; the latter returns an empty `paths` array in the same success envelope. `no_verified_path` means the bounded search found no path whose every edge had an exact eligible fact revision successfully hydrated in the pinned release; it does not prove that no relationship exists outside the searched bounds, in another release, or in unpublished knowledge. Every path step names one hydrated assertion, declared forward direction, structured conditions, relation relevance, evidence references, and full release pin. Similarity-only candidates never become path steps.
+
+Malformed JSON or content type returns `400 invalid_json`; invalid fields return `422 invalid_knowledge_path_request`; a retired pin returns `409 content_release_unavailable`; dependency and incomplete-search failures return retryable `503` problems; deadline exhaustion returns retryable `504 deadline_exceeded`; and contradictory immutable proof returns `502 invalid_knowledge_proof`. Every success and problem response uses `Cache-Control: no-store`; errors never echo node IDs or dependency payloads.
 
 The former target drafts `POST /api/v1/graph/get` and `POST /api/v1/graph/neighbors` are removed from the revised target contract. Transitional `GET /v1/graph...` handlers in the current executable remain implementation compatibility behavior until migrated or removed; their existence does not make them target v1 routes.
 

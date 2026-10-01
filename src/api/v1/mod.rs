@@ -14,6 +14,11 @@ pub(crate) mod basic_card;
 pub(crate) mod capabilities;
 pub(crate) mod graph;
 pub mod knowledge_views;
+#[allow(
+  dead_code,
+  reason = "the isolated knowledge-path route is wired by the later runtime composition slice"
+)]
+pub(crate) mod knowledge_paths;
 pub(crate) mod lookup;
 pub(crate) mod probe;
 pub(crate) mod sense;

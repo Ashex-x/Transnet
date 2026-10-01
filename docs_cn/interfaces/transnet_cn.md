@@ -4,7 +4,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本合同定义目标 island-port 到 Transnet 接口及内部共享 HTTP/1.1-over-UDS 规则。Island-port 负责互联网传输、认证、用户状态、文件接入、文档重建和最终展示。Transnet 不接收终端用户身份，也不持久化实时请求内容。
 
-状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。翻译边界现在严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；text 会进入当前 orchestrator，而有效的 segment 与 image 请求在结果组合落地前返回 `501 translation_capability_unavailable`。迁移期间可以通过显式配置保留 loopback listener。实时检索、引导式知识视图和知识路径仍未实现。
+状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。翻译边界现在严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；text 会进入当前 orchestrator，而有效的 segment 与 image 请求在结果组合落地前返回 `501 translation_capability_unavailable`。迁移期间可以通过显式配置保留 loopback listener。严格 knowledge-path handler 及其 application service 已在隔离 route-composition seam 后实现，但默认 runtime 尚未注入该 service 或公开 route。实时检索与引导式知识视图仍未实现为 runtime capability。
 
 ## 目录
 
@@ -382,11 +382,51 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
   "from": {"kind": "concept", "id": "concept_coriolis_force"},
   "to": {"kind": "concept", "id": "concept_weather_system"},
   "target_language": "en",
-  "content_release": "knowledge-2026-09"
+  "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1"
 }
 ```
 
-正常 outcome 为 `connected` 与 `no_verified_path`。`no_verified_path` 表示有界搜索没有找到每条 edge 都能在固定发布中成功补全精确合格事实修订的路径；它不证明搜索边界之外、其他发布或未发布知识中不存在关系。每个 path step 命名一个已补全 assertion、方向、条件、relevance、证据引用与 release。只基于相似度的候选可以在独立 exploratory 分区返回，但绝不成为 path step。
+request body 与两个嵌套 node reference 都拒绝未知字段。Node kind 使用闭合 canonical family catalog；lexeme root 与虚构 family name 会被拒绝。`target_language` 是严格 BCP-47 tag，不可变 release 与 canonical schema 组成共享 request context 使用的完整 pin。
+
+```json
+{
+  "data": {
+    "outcome": "connected",
+    "from": {"kind": "concept", "id": "concept_coriolis_force"},
+    "to": {"kind": "concept", "id": "concept_weather_system"},
+    "target_language": "en",
+    "paths": [{
+      "order": 1,
+      "steps": [{
+        "edge_id": "edge_weather_17",
+        "relationship_revision": 2,
+        "assertion_id": "assertion_weather_17",
+        "assertion_revision": 3,
+        "traversal_id": "traversal_cause_effect",
+        "relation": "has_subtype",
+        "relation_registry_revision": 1,
+        "direction": "forward",
+        "source": {"kind": "concept", "id": "concept_coriolis_force"},
+        "target": {"kind": "concept", "id": "concept_weather_system"},
+        "conditions": [],
+        "evidence_ids": ["evidence_weather_4"],
+        "content_release": "knowledge-2026-09",
+        "canonical_schema_version": "canonical-v1"
+      }]
+    }]
+  },
+  "meta": {
+    "request_id": "01JPATHREQUEST0000000000000",
+    "schema_version": "knowledge-path-result-v1",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
+
+正常 outcome 为 `connected` 与 `no_verified_path`；后者在相同 success envelope 中返回空 `paths` array。`no_verified_path` 表示有界搜索没有找到每条 edge 都能在固定发布中成功补全精确合格事实修订的路径；它不证明搜索边界之外、其他发布或未发布知识中不存在关系。每个 path step 命名一个已补全 assertion、已声明 forward direction、结构化 condition、relation relevance、证据引用与完整 release pin。只基于相似度的候选绝不成为 path step。
+
+畸形 JSON 或 content type 返回 `400 invalid_json`；无效字段返回 `422 invalid_knowledge_path_request`；退役 pin 返回 `409 content_release_unavailable`；dependency 与 incomplete-search failure 返回可重试 `503` problem；deadline 耗尽返回可重试 `504 deadline_exceeded`；矛盾不可变 proof 返回 `502 invalid_knowledge_proof`。每个 success 与 problem response 都使用 `Cache-Control: no-store`；错误绝不回显 node ID 或 dependency payload。
 
 旧目标草案 `POST /api/v1/graph/get` 与 `POST /api/v1/graph/neighbors` 已从修订目标合同移除。当前可执行文件中的过渡期 `GET /v1/graph...` handler 在迁移或移除前仍是实现兼容行为；它们的存在不使其成为目标 v1 路由。
 
