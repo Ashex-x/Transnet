@@ -52,7 +52,9 @@ mod v1;
 
 pub use envelope::{SuccessEnvelope, SuccessMeta};
 pub use readiness::{
-  AlwaysReady, CanonicalDependencyReadiness, KnowledgeProjectionReadiness, Readiness,
+  AlwaysReady, CanonicalDependencyReadiness, CompositeKnowledgeReadiness,
+  KnowledgeProjectionReadiness, KnowledgeReadinessComponents, Readiness, ReadinessComponentState,
+  ReadinessReport,
 };
 pub use v1::knowledge_views::{route as knowledge_view_route, KnowledgeViewRouteState};
 
@@ -343,6 +345,12 @@ impl AppState {
     self
   }
 
+  /// Replaces the content-free capability declaration derived by runtime composition.
+  pub fn with_capabilities(mut self, capabilities: ServiceCapabilities) -> Self {
+    self.capabilities = capabilities;
+    self
+  }
+
   pub(crate) fn canonical_lookup_service(&self) -> Option<&Arc<CanonicalLookupService>> {
     self.canonical_lookup.as_ref()
   }
@@ -416,7 +424,9 @@ fn build_router(
   max_request_body_bytes: usize,
   cors: Option<CorsLayer>,
 ) -> Router {
-  state.capabilities = ServiceCapabilities::current(max_request_body_bytes);
+  state.capabilities = state
+    .capabilities
+    .with_max_request_body_bytes(max_request_body_bytes);
   let router = Router::new()
     .route("/health", get(health))
     .route("/livez", get(livez))

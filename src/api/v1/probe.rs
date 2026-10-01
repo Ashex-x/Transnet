@@ -11,13 +11,19 @@ use serde_json::Value;
 
 use crate::domain::request_context::RequestContext;
 
-use super::super::{envelope::SuccessEnvelope, problem, AppState};
+use super::super::{envelope::SuccessEnvelope, problem, AppState, KnowledgeReadinessComponents};
 
 const PROBE_SCHEMA_VERSION: &str = "probe-v1";
 
 #[derive(Debug, Serialize)]
 struct ProbeData {
   status: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct ReadinessData {
+  status: &'static str,
+  components: KnowledgeReadinessComponents,
 }
 
 pub(crate) async fn health(
@@ -42,7 +48,8 @@ pub(crate) async fn readyz(
   if let Some(response) = invalid_payload(&context, payload) {
     return response;
   }
-  if !state.readiness.is_ready().await {
+  let report = state.readiness.report().await;
+  if !report.is_ready() {
     return problem::response(
       StatusCode::SERVICE_UNAVAILABLE,
       "dependency_unavailable",
@@ -53,7 +60,17 @@ pub(crate) async fn readyz(
       Vec::new(),
     );
   }
-  success(&context, "ready")
+  problem::no_store(
+    Json(SuccessEnvelope::new(
+      ReadinessData {
+        status: "ready",
+        components: report.components,
+      },
+      &context,
+      PROBE_SCHEMA_VERSION,
+    ))
+    .into_response(),
+  )
 }
 
 fn probe_success(

@@ -29,9 +29,10 @@ pub mod types;
 pub use adapters::learning_model::OpenAiLearningModel;
 pub use adapters::model_runtime::{OpenAiEmbeddingAdapter, OpenAiGenerationAdapter};
 pub use api::{
-  app_router, app_router_with_http_config, AlwaysReady, AppState, GraphCursorProtectionKey,
-  GraphCursorProtectionKeyError, KnowledgeProjectionReadiness, Readiness, SuccessEnvelope,
-  SuccessMeta, MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES,
+  app_router, app_router_with_http_config, AlwaysReady, AppState, CompositeKnowledgeReadiness,
+  GraphCursorProtectionKey, GraphCursorProtectionKeyError, KnowledgeProjectionReadiness,
+  KnowledgeReadinessComponents, Readiness, ReadinessComponentState, ReadinessReport,
+  SuccessEnvelope, SuccessMeta, MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES,
 };
 pub use application::canonical_lookup::{CanonicalLookupError, CanonicalLookupService};
 pub use application::observability::{
@@ -43,9 +44,9 @@ pub use config::{
 };
 pub use domain::capabilities::{
   AnnotationFamilyCapability, CapabilityLimits, GenerationProfileCapability,
-  ImageMediaTypeCapability, InputTypeCapability, KnowledgeLensCapability, LiveRetrievalCapability,
-  LiveRetrievalDefault, PurposeCapability, SchemaVersionCapability, ServiceCapabilities,
-  SourceLanguageCapability, TargetLanguageCapability,
+  ImageMediaTypeCapability, InputTypeCapability, KnowledgeCapabilityBundle,
+  KnowledgeLensCapability, LiveRetrievalCapability, LiveRetrievalDefault, PurposeCapability,
+  SchemaVersionCapability, ServiceCapabilities, SourceLanguageCapability, TargetLanguageCapability,
 };
 pub use domain::model_runtime::{
   CancellationSignal, EmbeddingInput, EphemeralEmbedding, GenerationInput, GenerationOutput,

@@ -244,6 +244,8 @@ Each displayed item is the root or includes an explicit path to the root, a conc
 
 Returns currently implemented BCP 47 language selectors, input kinds, image types, purposes, annotation families, knowledge lenses, body and semantic limits, live-retrieval availability, generation profiles, and schema versions. Empty closed sets explicitly mean that the current runtime does not implement that capability. It exposes no credentials, provider URLs, socket paths, concurrency state, or private feature flags.
 
+Knowledge-lens activation is atomic. A runtime may advertise exactly `meaning`, `contrast`, `usage`, `form`, `origin`, and `domain` only after the canonical read port, retrieval read port, active-trio authority, guided-view service, stable cursor key, and HTTP route are all configured as one bundle. `mechanism` and `application` remain absent because their explicit technical relation policies are not executable. A partial bundle advertises no knowledge lenses.
+
 Capabilities follows the interface-wide response policy: every response carries `Cache-Control: no-store`. Callers may refresh it when they need current deployment information, but the contract promises no HTTP caching or validator semantics.
 
 Request: `{}`
@@ -285,7 +287,7 @@ Response data: `{"status":"alive"}`.
 
 ## POST /api/v1/readyz
 
-Returns `200` only when every configured required dependency can safely serve new work. Optional canonical, retrieval, embedding, vision, reasoning, or live-retrieval capabilities are reported as closed component states and do not become required unless configuration says so.
+Returns `200` only when every configured required dependency can safely serve new work. The knowledge bundle reports only `canonical_data`, `retrieval_data`, and `knowledge_projection` with the closed values `available`, `unavailable`, or `disabled`; it exposes no release identifiers, collection identifiers, hashes, or endpoints. A configured bundle is available only when the active-trio authority returns the exact full canonical pin and immutable node/edge projection tuple expected by the view services. Any missing, invalid, or different tuple makes the whole atomic bundle unavailable. An unconfigured bundle reports all three components as disabled and does not affect readiness.
 
 Request: `{}`
 
@@ -294,12 +296,9 @@ Request: `{}`
   "data": {
     "status": "ready",
     "components": {
-      "generation_fast": "available",
-      "generation_reasoning": "available",
-      "embedding": "available",
       "canonical_data": "disabled",
       "retrieval_data": "disabled",
-      "live_retrieval": "disabled"
+      "knowledge_projection": "disabled"
     }
   },
   "meta": {"request_id": "req_example"}

@@ -71,6 +71,37 @@ impl ServiceCapabilities {
       schema_versions: vec![SchemaVersionCapability::TranslationResultV1],
     }
   }
+
+  /// Activates only the lenses backed by one fully composed canonical/retrieval/view bundle.
+  pub fn with_knowledge_bundle(mut self, bundle: KnowledgeCapabilityBundle) -> Self {
+    if bundle == KnowledgeCapabilityBundle::FullyConfigured {
+      self.knowledge_lenses = vec![
+        KnowledgeLensCapability::Meaning,
+        KnowledgeLensCapability::Contrast,
+        KnowledgeLensCapability::Usage,
+        KnowledgeLensCapability::Form,
+        KnowledgeLensCapability::Origin,
+        KnowledgeLensCapability::Domain,
+      ];
+    }
+    self
+  }
+
+  /// Rebinds the configured HTTP body limit without changing activated capabilities.
+  pub fn with_max_request_body_bytes(mut self, max_request_body_bytes: usize) -> Self {
+    self.limits.max_request_body_bytes = max_request_body_bytes;
+    self
+  }
+}
+
+/// Atomic runtime composition state for the executable guided-view dependency bundle.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum KnowledgeCapabilityBundle {
+  /// One or more canonical, retrieval, projection-authority, view-service, or route pieces are absent.
+  #[default]
+  Disabled,
+  /// Canonical and retrieval ports, active-trio authority, view service, cursor key, and route exist.
+  FullyConfigured,
 }
 
 /// Supported source-language selectors.
@@ -118,9 +149,49 @@ pub enum PurposeCapability {}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum AnnotationFamilyCapability {}
 
-/// Knowledge lenses; intentionally uninhabited until target knowledge views are implemented.
+/// Guided-view lenses with an executable relation policy in the current implementation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub enum KnowledgeLensCapability {}
+#[serde(rename_all = "snake_case")]
+pub enum KnowledgeLensCapability {
+  /// Definitions, equivalence, and taxonomy around the selected meaning.
+  Meaning,
+  /// Explicit opposition, near-equivalence, and reviewed confusion.
+  Contrast,
+  /// Reviewed construction, collocation, and suitability relationships.
+  Usage,
+  /// Inflectional and derivational form relationships.
+  Form,
+  /// Reviewed historical derivation relationships.
+  Origin,
+  /// Explicit domain membership and domain-scoped relationships.
+  Domain,
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn knowledge_lenses_activate_only_as_one_complete_bundle() {
+    assert!(ServiceCapabilities::current(1_024)
+      .with_knowledge_bundle(KnowledgeCapabilityBundle::Disabled)
+      .knowledge_lenses
+      .is_empty());
+    assert_eq!(
+      ServiceCapabilities::current(1_024)
+        .with_knowledge_bundle(KnowledgeCapabilityBundle::FullyConfigured)
+        .knowledge_lenses,
+      vec![
+        KnowledgeLensCapability::Meaning,
+        KnowledgeLensCapability::Contrast,
+        KnowledgeLensCapability::Usage,
+        KnowledgeLensCapability::Form,
+        KnowledgeLensCapability::Origin,
+        KnowledgeLensCapability::Domain,
+      ]
+    );
+  }
+}
 
 /// Numeric bounds enforced by the current translation and HTTP paths.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]

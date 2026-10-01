@@ -244,6 +244,8 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 
 返回当前已实现的 BCP 47 语言 selector、输入类型、图片类型、purpose、annotation family、知识 lens、body 与语义限制、实时检索可用性、generation profile 和 schema 版本。空的闭合集明确表示当前 runtime 尚未实现该能力。它不暴露凭据、provider URL、socket 路径、并发状态或私有 feature flag。
 
+知识 lens 的激活是原子的。只有当规范读取 port、检索读取 port、活动 trio authority、引导式 view service、稳定 cursor key 与 HTTP route 被配置为同一个完整 bundle 时，runtime 才可以准确公布 `meaning`、`contrast`、`usage`、`form`、`origin` 和 `domain`。`mechanism` 与 `application` 仍不公布，因为其显式技术关系策略尚不可执行。部分配置的 bundle 不公布任何知识 lens。
+
 Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cache-Control: no-store`。调用方可以在需要当前部署信息时重新获取，但合同不承诺 HTTP cache 或 validator 语义。
 
 请求：`{}`
@@ -277,7 +279,7 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 
 ## POST /api/v1/readyz
 
-仅当每个已配置必需依赖都能安全服务新请求时返回 `200`。可选规范、检索、embedding、vision、reasoning 或实时检索 capability 以闭合 component state 报告；只有配置要求时才成为必需依赖。
+仅当每个已配置必需依赖都能安全服务新请求时返回 `200`。知识 bundle 只报告 `canonical_data`、`retrieval_data` 与 `knowledge_projection`，其闭合值为 `available`、`unavailable` 或 `disabled`；响应不暴露 release ID、collection ID、hash 或 endpoint。只有活动 trio authority 返回 view service 所期望的准确完整规范 pin 与不可变 node/edge projection tuple 时，已配置 bundle 才可用。任何缺失、无效或不一致的 tuple 都使整个原子 bundle 不可用。未配置的 bundle 把三个 component 都报告为 disabled，且不影响 readiness。
 
 请求：`{}`
 
@@ -286,12 +288,9 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
   "data": {
     "status": "ready",
     "components": {
-      "generation_fast": "available",
-      "generation_reasoning": "available",
-      "embedding": "available",
       "canonical_data": "disabled",
       "retrieval_data": "disabled",
-      "live_retrieval": "disabled"
+      "knowledge_projection": "disabled"
     }
   },
   "meta": {"request_id": "req_example"}
