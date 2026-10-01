@@ -122,7 +122,7 @@ async fn composed_vlm_truthfully_activates_image_capabilities() {
   let value = body(response).await;
   assert_eq!(
     value["data"]["input_types"],
-    json!(["text", "image_regions"])
+    json!(["text", "segments", "image_regions"])
   );
   assert_eq!(
     value["data"]["image_media_types"],

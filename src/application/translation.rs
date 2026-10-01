@@ -12,12 +12,11 @@ use crate::{
   domain::translation_turn::{
     AnnotationFamily, FreshnessPolicy, ImageRegionTranslationResult, LexicalTurnDraft,
     ProjectedTranslationResult, ResponseLevel, RoutingConfidence, SegmentFormat,
-    SegmentTranslationResult, TerminologyPolicy, TranslationAnnotation,
-    TranslationAnnotationCode, TranslationInput, TranslationIntentClassifier,
-    TranslationNormalizer, TranslationReview, TranslationSegment,
-    TranslationTurn, TranslationTurnResult, TranslationUnit, TranslationVersionMetadata,
-    TurnLanguage, TurnTranslation, NORMALIZER_VERSION, PROJECTION_VERSION,
-    TRANSLATION_RESULT_SCHEMA_VERSION,
+    SegmentTranslationResult, TerminologyPolicy, TranslationAnnotation, TranslationAnnotationCode,
+    TranslationInput, TranslationIntentClassifier, TranslationNormalizer, TranslationReview,
+    TranslationSegment, TranslationTurn, TranslationTurnResult, TranslationUnit,
+    TranslationVersionMetadata, TurnLanguage, TurnTranslation, NORMALIZER_VERSION,
+    PROJECTION_VERSION, TRANSLATION_RESULT_SCHEMA_VERSION,
   },
   domain::{
     model_runtime::{

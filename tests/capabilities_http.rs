@@ -145,7 +145,7 @@ async fn reports_only_implemented_content_free_capabilities() {
 }
 
 #[tokio::test]
-async fn segment_capability_activates_only_with_the_translation_orchestrator() {
+async fn structured_capabilities_activate_only_with_the_translation_orchestrator() {
   let response = app_with_state(8_192, |state| {
     state.with_translation_orchestrator(Arc::new(TranslationOrchestrator::new(Arc::new(
       UnusedGeneration,
@@ -157,7 +157,11 @@ async fn segment_capability_activates_only_with_the_translation_orchestrator() {
   let (_, json) = body(response).await;
   assert_eq!(
     json["data"]["input_types"],
-    serde_json::json!(["text", "segments"])
+    serde_json::json!(["text", "segments", "image_regions"])
+  );
+  assert_eq!(
+    json["data"]["image_media_types"],
+    serde_json::json!(["image/png", "image/jpeg", "image/webp"])
   );
   assert_eq!(
     json["data"]["annotation_families"],
