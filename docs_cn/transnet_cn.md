@@ -179,7 +179,7 @@ LLM 选择有用内容，并解释关系为何重要。规范 assertion 标记�
 
 ## LLM 如何构建关系页面
 
-LLM 是页面组织者，而不是每个事实的权威来源。目标流程为：
+LLM 是页面组织者，而不是每个事实的权威来源。relationship page 只嵌入 `POST /api/v1/translations` 的 lexical word 或 established-phrase 结果，不新增独立公开 route。Passage 结果不包含该页面；BasicCard、knowledge-view 与 knowledge-path route 继续作为诊断性 release-pinned read，而不是第二套 page API。目标流程为：
 
 ```mermaid
 flowchart LR
@@ -195,7 +195,7 @@ flowchart LR
 
 模型负责需要语言推理的任务：用有界上下文消歧并解析词汇词义或领域概念；判断领域展开是否有价值并提出候选领域；决定哪些关系分区确有帮助；用自然语言对比近义表达；在明确标注为生成内容时生成短例句；调整讲解语言和详细程度；在证据或上下文不足时说明不确定性。
 
-在组织页面时，模型可检测预期关系的缺失，并向离线内容审核流程输出结构化缺口提案，其中包含建议端点、关系类型、理由和候选证据。实时查询绝不会发布、持久化该提案，也不会将其展示为已验证边。
+在组织页面时，模型可检测预期关系的缺失。在线 domain 只能向离线内容审核流程输出 opaque request-local nomination 与理由；它不能分配规范 endpoint、relation type、evidence identity 或 edge identity。独立离线 workflow 必须先在同一个不可变 release 下解析并校验这些 claim，之后才能审核。实时查询绝不会发布、持久化该 nomination，也不会将其展示为已验证边。
 
 确定性代码负责规范化、精确匹配、稳定 ID、发布过滤、图范围、必需字段和证据资格。无效结构化输出仅进行有界修复，否则安全失败。
 

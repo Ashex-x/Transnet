@@ -94,6 +94,8 @@ English: [Transnet delivery plan](../docs/todo.md)
 
 ## 里程碑 5：组织关系型翻译维基页面
 
+所有权已经冻结：组合页面是 lexical word 或 established-phrase `/api/v1/translations` 结果的可选字段，绝不新增公开 route。BasicCard、knowledge-view 与 knowledge-path endpoint 继续作为诊断性 read。
+
 - [ ] 在词义解析后添加有界领域评估，返回闭合结果 `existing`、`proposed_new`、`general` 或 `uncertain`，并带经过验证的规范领域 ID 与精简理由。
 - [ ] 在评估前检索已有领域清单与 RAG 覆盖；只有清单成功且提供范围均不适用时才返回 `proposed_new`，不提供 live 创建 endpoint。
 - [ ] 发布并补全原子基本事实、领域知识 profile 和第一类语义尺度；LLM bootstrap 只能通过隔离离线候选进入。

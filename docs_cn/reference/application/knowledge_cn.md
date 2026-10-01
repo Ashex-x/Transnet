@@ -4,7 +4,7 @@ English: [Knowledge application](../../../docs/reference/application/knowledge.m
 
 本模块负责单词与固定短语请求的词义解析、领域评估、发布固定检索、关系排序、页面组织与确定性投影。
 
-状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。有界领域评估基础与严格出站 inventory client 已实现，但尚未由默认在线 composition 暴露。新的有界 root-retrieval application boundary 已组合注入式 canonical root resolver、共享 canonical-data knowledge-node hydration client、ephemeral embedding、query lexical encoding 与严格 retrieval-data port。Root resolver 当前仍只有 fake 实现，且该流程尚未暴露公开 route。闭合 knowledge-lens catalog、server-owned traversal 与 item budget、已校验 view superset 及有界 verified-path result 已实现为 domain 与 application policy。Guided-view 与 path-search application service 现已校验不可变 projection proof、从 canonical-data 补全精确 assertion traversal 与展示 node，并返回确定性的显式路径。Transport handler 与完整 relationship-page composition 仍属于目标行为。
+状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。有界领域评估基础与严格出站 inventory client 已实现，但尚未由默认在线 composition 暴露。新的有界 root-retrieval application boundary 已组合注入式 canonical root resolver、共享 canonical-data knowledge-node hydration client、ephemeral embedding、query lexical encoding 与严格 retrieval-data port。Root resolver 当前仍只有 fake 实现，且该流程尚未暴露公开 route。Guided-view 与 path-search application service 会校验不可变 projection proof 并补全精确 canonical assertion。Relationship-page application composer 现会把这些 verified output 纳入已校验 page superset，并只在 lexical translation result 旁嵌入 projection。默认 translation orchestration 与 wire serialization 仍属于目标行为。
 
 canonical-only 服务从权威端选择一次发布 pin，再通过读取 port 组合已审核翻译候选、确定性排序的词汇候选和无歧义的词义详情。它使用带 canonical-only content pin 的现有 lookup-card 类型，不伪造向量集合，也不把有意的纯词法读取误称为向量故障降级。可执行文件只在显式配置时构造并保存该依赖，用 active-release 只读探针检查就绪，并通过冻结的 BasicCard lookup 与固定发布 sense 路由提供该能力。外部 island-port server 仍需实现匹配的内部合同。请求局部查询形式有界且去重：基线规范化形式最强，谨慎的空白或外围标点变体只是较低优先级的拼写候选。已发布别名、形态、转写和语义归属由权威端确定，不从查询字符串猜测。
 
@@ -41,6 +41,8 @@ path-search service 会先从 canonical data 补全并类型检查两个选定 r
 每个被提名的 edge 在扩展 frontier 之前，都必须批量补全为准确 assertion revision 与已声明 binary traversal。service 要求 projection edge、relationship revision、assertion identity 与 revision、traversal identity、带类型的已声明 source/target、registry revision 以及非空且允许 API redistribution 的 evidence 完全一致。它只沿已声明的 source-to-target 方向遍历，绝不把 similarity edge 当作证明。缺失补全、pagination 或 expansion 耗尽、陈旧 pin、畸形 projection echo、dependency failure、timeout 或 cancellation 都是显式失败；这些情况都不得转换为 `no_verified_path`。只有完整的合格有界搜索结束且没有补全后的连接时，才返回该正常空 outcome。
 
 `brief`、`standard` 与 `full` 是同一个已校验超集的投影。响应级别只改变广度，不改变事实选择或真实性状态。
+
+relationship-page domain 基础在不增加 transport orchestration 的情况下拥有这个更大的 lexical superset。它把 BasicCard 或 concept-summary authority receipt、闭合 domain profile、精确 hydrated fact、完整 semantic scale、确定性 relationship group 与 path、带标签的 request-local generated 或 inferred 材料、exploratory nomination、显式请求的 alternative，以及仅供 offline 使用的 gap nomination 绑定到同一个 root 与完整 release pin。显示的 relationship 必须以它命名的精确 hydrated fact 为第一步，通过完整 pin 的 path 校验，并符合闭合 relation-to-group policy；不受支持的 mechanism 与 application group 会 fail closed。完整 scale 与其被接纳的 taxonomy group 原子化投影。Alternative 在确定性选择前绑定所属 stable translation ID 与 order。Gap nomination 是 opaque 且非权威的，在线 projection 有意不包含 gap 字段。Application composer 接收 domain、view 与 path service 的输出，拒绝混合 root 或 release，从 factual group 排除未 verified 的 view nomination，并在没有 verified relationship 时报告显式 canonical-only outcome。它只把该 projection 嵌入 word 或 established-phrase translation 结果；不存在独立 page route。含内容的 debug output 会被脱敏。
 
 ## 验证
 

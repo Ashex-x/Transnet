@@ -445,7 +445,7 @@ fn project_outcome(
     }
   }
   ProjectedTranslationResult {
-    translation: superset.project(response_level),
+    translation: superset,
     metadata: TranslationVersionMetadata {
       schema_version: TRANSLATION_RESULT_SCHEMA_VERSION,
       normalizer_version: NORMALIZER_VERSION,
@@ -458,7 +458,9 @@ fn project_outcome(
       retrieval_version: None,
       content_release: None,
     },
+    external_sources: Vec::new(),
   }
+  .project(response_level)
 }
 
 #[derive(Serialize)]

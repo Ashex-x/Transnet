@@ -30,12 +30,16 @@ pub mod knowledge_publication;
 pub mod knowledge_release;
 /// Validated guided knowledge views and bounded evidence-backed paths.
 pub mod knowledge_view;
+/// Bounded request-local live-search, fetch, and citation values.
+pub mod live_retrieval;
 /// Bounded canonical lookup-card presentation values with assertion-level provenance.
 pub mod lookup_card;
 /// Provider-neutral model runtime values and request-local call policy.
 pub mod model_runtime;
 /// Closed, redacted metric names and categorical event dimensions.
 pub mod observability;
+/// Relationship-centered lexical-page supersets and deterministic disclosure policy.
+pub mod relationship_page;
 /// Offline release-control proofs, audit ordering, and receipt invariants.
 pub mod release_control;
 /// Request-scoped correlation, deadline, schema, and release context.

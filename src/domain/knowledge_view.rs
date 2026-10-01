@@ -250,11 +250,19 @@ impl UsefulRootPath {
     validate_path(&self.item, &self.root, &self.steps, None)
   }
 
-  fn validate_for(
+  pub(crate) fn validate_for(
     &self,
     release: &CanonicalReleasePin,
   ) -> Result<(), KnowledgeViewValidationError> {
     validate_path(&self.item, &self.root, &self.steps, Some(release))
+  }
+
+  /// Returns whether the first directed step is the named assertion from the displayed item.
+  pub(crate) fn starts_with_projection(&self, projection: &HydratedAssertionProjection) -> bool {
+    self
+      .steps
+      .first()
+      .is_some_and(|step| step.source() == &self.item && step.projection() == projection)
   }
 }
 

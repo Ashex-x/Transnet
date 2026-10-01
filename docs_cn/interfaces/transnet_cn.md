@@ -4,7 +4,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本合同定义目标 island-port 到 Transnet 接口及内部共享 HTTP/1.1-over-UDS 规则。Island-port 负责互联网传输、认证、用户状态、文件接入、文档重建和最终展示。Transnet 不接收终端用户身份，也不持久化实时请求内容。
 
-状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。翻译边界现在严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；text 会进入当前 orchestrator，而有效的 segment 与 image 请求在结果组合落地前返回 `501 translation_capability_unavailable`。迁移期间可以通过显式配置保留 loopback listener。严格 knowledge-path handler 及其 application service 已在隔离 route-composition seam 后实现，但默认 runtime 尚未注入该 service 或公开 route。实时检索与引导式知识视图仍未实现为 runtime capability。
+状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。翻译边界现在严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；text 会进入当前 orchestrator，而有效的 segment 与 image 请求在结果组合落地前返回 `501 translation_capability_unavailable`。迁移期间可以通过显式配置保留 loopback listener。严格 knowledge-path handler 及其 application service 已在隔离 route-composition seam 后实现，但默认 runtime 尚未注入该 service 或公开 route。实时检索现在具备下文描述的请求级 policy orchestrator 与强化的生产 page-fetch adapter，但尚无生产 search adapter 或 runtime composition；因此 capability 继续将其报告为不可用。引导式知识视图仍未实现为 runtime capability。
 
 ## 目录
 
@@ -124,7 +124,7 @@ HTTP boundary 已在过渡期与目标 path 上实现请求上下文基础。若
 }
 ```
 
-视觉输入包含经清理的 inline 图片与归一化矩形。坐标是 0 至 1 的有限十进制值，从左上角测量。每个 region ID 在所属图片内唯一；矩形必须具有正面积且位于边界内；`reading_order` 恰好引用每个 region 一次。若涉及文件或 PDF，island-port 在请求前完成渲染与选页。
+视觉输入包含经清理的 inline 图片与归一化矩形。调用方提供的 segment、image 与 region ID 是非空 opaque value，最多 128 个 Unicode scalar；image 与 region ID 不得包含 `:`，因为 `reading_order` 使用无歧义的 `image_id:region_id` 形式。坐标是 0 至 1 的有限十进制值，从左上角测量。每个 region ID 在所属图片内唯一；矩形必须具有正面积且位于边界内；`reading_order` 恰好引用每个 region 一次。若涉及文件或 PDF，island-port 在请求前完成渲染与选页。
 
 ```json
 {
@@ -180,19 +180,20 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 
 ## 翻译输出
 
-文本输出保留现有按含义区分的有序翻译列表。Segment 与 image-region 输出保留请求顺序与 ID。每个 unit 有一个主译文及不超过请求数量且实质有用的 alternative。
+结果由 `unit` 判别：`word`、`phrase`、`passage`、`segment` 或 `image_region`。Word、phrase 与 passage 保留现有有序 `translations`；每个 choice 都有从位置确定的 `translation_id` 与零起始 `order`，并在各投影间保持稳定。Segment 与 image-region 结果保留调用方 ID 及显式的零起始 `order`；每个内层 unit 携带检测语言、主译文、typed annotation 与不变的 review outcome。结构化结果还携带实际执行的有序请求级 `terminology_decisions`。每个 unit 以后可以携带不超过请求数量且实质有用的带标签 alternative；在确定性 evaluator 完成组合前，该 Milestone 5 能力仍不可用。
 
 ```json
 {
   "translation": {
-    "input_type": "segments",
-    "detected_source_languages": ["en"],
+    "unit": "segment",
     "segments": [
       {
         "segment_id": "seg_title",
-        "translations": [{"text": "发布 {product_name}", "language": "zh-CN"}],
+        "order": 0,
+        "detected_source_language": "en",
+        "translations": [{"translation_id": "translation_0", "order": 0, "text": "发布 {product_name}", "language": "zh-CN"}],
         "annotations": [
-          {"type": "terminology", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
+          {"type": "format", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
         ],
         "review": {"state": "clean", "issues": []}
       }
@@ -202,15 +203,21 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 }
 ```
 
-图片输出使用含 `image_id`、`region_id`、检测语言、翻译、annotation 与 review 的 `regions`。它不返回图片或无限制 OCR transcript。Review state 为 `clean` 或 `review_recommended`；闭合 issue code 包括 `low_confidence`、`source_ambiguous`、`terminology_conflict`、`format_risk`、`protected_content_mismatch`、`visual_order_uncertain` 与 `live_source_incomplete`。
+图片输出使用 `unit: "image_region"`，其 `regions` 含 `image_id`、`region_id`、零起始阅读 `order`、检测语言、翻译、annotation 与 review。它不返回图片或无限制 OCR transcript。Review state 为 `clean` 或 `review_recommended`；闭合 issue code 包括 `low_confidence`、`source_ambiguous`、`terminology_conflict`、`format_risk`、`protected_content_mismatch`、`visual_order_uncertain` 与 `live_source_incomplete`。
 
 `brief`、`standard` 与 `full` 是一个已验证超集的确定性投影。较低级别移除支持详情，但绝不改变所选含义、译文、protected content、证据状态或 review outcome。空分区省略。
+
+Typed annotation 使用闭合 family `ambiguity`、`terminology`、`register`、`culture`、`format` 与 `review`；闭合 code 为 `ambiguity_detected`、`term_selected`、`protected_content_preserved`、`register_applied`、`cultural_context`、`format_preserved` 与 `review_required`。每项 annotation 均包含有界 display message 及可选的响应级 citation reference。`data.external_sources` 如存在，只包含被这些 citation 引用的 source；source 与 fragment ID 只在本次响应内有效，绝不是规范证据。当前 offline 文本路径不返回 external source。结果校验会在序列化前拒绝未知 citation target、重复 source ID、identity/order 缺口、重复 review issue、与 issue 矛盾的 clean review state，以及空主译文。
+
+HTTP 序列化之前会执行 request-bound validation：structured result 的 ID 与顺序必须精确匹配原始 segment 或 image reading order；每条 translation 必须使用请求的 target language；显式声明的 source language 必须被保留。Translation ID 必须严格为 `translation_<zero-based order>`。Passage、segment 与 image-region unit 只有一条 primary connected-text translation，且不携带 lexical meaning/detail object；word 与 phrase unit 保留有界 meaning label，并且只允许与自身类型一致的 generated exploratory detail shape。Annotation code 只能属于一个闭合 family，review issue 严格排序，且 `review_required` 仅且必须出现在 `review_recommended` unit。Projection 删除最后一条 citation 被移除后不再被引用的 source descriptor。Schema、normalizer、projector、model、prompt、profile、retrieval 与 release metadata 都会接受边界和一致性校验，不会未经检查直接透传。
 
 ## 实时检索
 
 `guidance.freshness` 接受 `offline`、`allowed` 或 `required`。`offline` 是默认值并禁止网络检索。`allowed` 是显式许可，只在确定性分类发现时效性 claim 时检索。`required` 始终尝试检索；若有界操作无法安全完成，返回 `503 live_retrieval_unavailable`。
 
 实时检索是受编排的 search/fetch port，不是无限制模型浏览。它最多执行一轮搜索、选择五个结果、并发抓取三个页面，并遵守配置的子 deadline。Fetcher 只允许公开 HTTP(S)，解析并校验每次 redirect，拒绝 loopback、link-local、私有、保留及 Unix-socket 目标，限制响应 byte，并只接受配置的文本 media type。
+
+`required` 始终消耗唯一一次检索轮次，并且只有至少一个安全抓取页面产生可用文本时才成功。`allowed` 只有在确定性分类发现 freshness-sensitive claim 且 canonical material 不足时才消耗该轮次。只要至少一个页面安全，部分抓取成功即可使用。Redirect 上限为三次；每页上限为 512 KiB，全部页面合计上限为 1 MiB，每个保留 fragment 上限为 8,192 个 Unicode scalar。允许的 media type 为 `text/plain`、`text/html` 与 `application/xhtml+xml`。Live sub-deadline 默认为五秒，不得超过十五秒，并始终受请求剩余 budget 限制。
 
 抓取内容是不可信数据。它不能修改系统指令、请求其他 URL、泄露凭据、绕过发布 filter 或成为规范证据。Embedding 模型可在内存中排序抓取片段；片段与向量均随请求丢弃。
 
@@ -302,6 +309,8 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 接受上述翻译 input、语言 tag、response level、可选 guidance 与可选 history。它自动选择词汇知识、连续文本、结构化 segment 或视觉 region 处理。调用方绝不选择模型、推理 profile、chunk policy、规范发布、检索策略或 repair policy。
 
 成功 metadata 包含实际参与的 result、normalizer、projection、model 与 prompt 版本；可选 `content_release`、`retrieval_version`、`embedding_version` 与 `live_retrieval` 只在使用时出现。`inference_profiles` 有序且去重。`reasoning_escalated` 报告安全策略结果而不暴露 reasoning 内容。
+
+只有已解析的 word 与 established-phrase 结果可以嵌入 relationship-page object。Passage、segment 与 image-region 结果绝不包含它。页面先给出绑定完整 release pin 的 BasicCard 或 concept-summary authority receipt，再对受支持 direct group、完整 semantic scale、可选 verified short path、带标签的 generated example 与 inferred explanation，以及视觉上独立的 exploratory section 应用确定性 progressive disclosure。Verified group 保留精确的第一步 hydration proof，且只接纳闭合 grouping policy 声明的 relation；不受支持的 mechanism 与 application claim 会 fail closed。完整 semantic scale 与被接纳的 taxonomy group 原子化包含。显式请求的 labeled alternative 每个 lexical unit 最多两个，绑定 stable translation ID 与 order，并说明改变的维度、实际后果与 usefulness reason；它们不是 alias 或 normalized lookup form。request-local relationship-gap nomination 不携带规范 endpoint、relation 或 evidence authority，不进入在线 response，只作为独立 offline review workflow 的输入。系统不新增公开 relationship-page route。
 
 闭合路由错误还包括 `invalid_translation_request`、`constraint_conflict`、`unsupported_input_type`、`unsupported_language_pair`、`invalid_image`、`invalid_model_output`、`translation_model_unavailable` 与 `live_retrieval_unavailable`。
 

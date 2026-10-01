@@ -26,12 +26,16 @@ pub mod knowledge_publication;
 pub mod knowledge_view_policy;
 /// Release-pinned guided view composition over authoritative assertion proofs.
 pub mod knowledge_views;
+/// One-shot bounded live-retrieval policy and orchestration.
+pub mod live_retrieval;
 /// Structured lookup orchestration.
 pub mod lookup;
 /// Bounded response-neutral delivery of closed metric events.
 pub mod observability;
 /// Explicit offline publication and release-control composition.
 pub mod offline_publication;
+/// Relationship-centered lexical-page assembly from already verified application outputs.
+pub mod relationship_page;
 /// Canonical hybrid retrieval and lexical-only fallback.
 pub mod retrieval;
 /// Canonical-root-first bounded hybrid nomination and authoritative hydration.

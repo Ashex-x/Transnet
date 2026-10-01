@@ -181,6 +181,8 @@ Only translations deliberately selected as reusable shared knowledge may be stor
 
 The LLM is the page composer, not the source of truth for every fact. The target pipeline is:
 
+The relationship page is embedded only in lexical word or established-phrase results from `POST /api/v1/translations`. It is not a separate public route. Passage results do not contain this page, while the BasicCard, knowledge-view, and knowledge-path routes remain diagnostic release-pinned reads rather than a second page API.
+
 ```mermaid
 flowchart LR
   input["Lookup + context"] --> route["Intent and language routing"]
@@ -203,7 +205,7 @@ The model performs the tasks where language reasoning adds value:
 - adapt explanation language and detail; and
 - state uncertainty when evidence or context is insufficient.
 
-During composition, the model may detect that an expected relationship is absent. It may emit a structured gap proposal for the offline content-review workflow, including proposed endpoints, relation type, rationale, and candidate evidence. A live lookup never publishes, persists, or presents that proposal as a verified edge.
+During composition, the model may detect that an expected relationship is absent. The online domain may emit only an opaque request-local nomination and rationale for the offline content-review workflow; it cannot assign canonical endpoints, relation types, evidence identities, or edge identity. The separate offline workflow must resolve and validate those claims against one immutable release before review. A live lookup never publishes, persists, or presents the nomination as a verified edge.
 
 Deterministic code owns normalization, exact matching, stable IDs, release filters, graph bounds, required fields, and evidence eligibility. Invalid structured output receives bounded repair and otherwise fails safely.
 

@@ -4,7 +4,7 @@
 
 This contract defines the target island-port-to-Transnet interface and the shared internal HTTP/1.1-over-UDS rules. Island-port owns internet transport, authentication, user state, file ingestion, document reconstruction, and final presentation. Transnet receives no end-user identity and persists no live request content.
 
-Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 through the target inbound UDS and implements target capability discovery and health, liveness, and dependency-readiness probes plus the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. The translation boundary now strictly validates tagged text, structured segments, image regions, history, and professional guidance; text reaches the current orchestrator, while valid segment and image requests return `501 translation_capability_unavailable` until their result composition lands. Explicit configuration may retain the loopback listener during migration. The strict knowledge-path handler and its application service are implemented behind an isolated route-composition seam, but the default runtime does not yet inject that service or expose the route. Live retrieval and guided knowledge views remain unimplemented runtime capabilities.
+Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 through the target inbound UDS and implements target capability discovery and health, liveness, and dependency-readiness probes plus the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. The translation boundary now strictly validates tagged text, structured segments, image regions, history, and professional guidance; text reaches the current orchestrator, while valid segment and image requests return `501 translation_capability_unavailable` until their result composition lands. Explicit configuration may retain the loopback listener during migration. The strict knowledge-path handler and its application service are implemented behind an isolated route-composition seam, but the default runtime does not yet inject that service or expose the route. Live retrieval now has the request-local policy orchestrator and hardened production page-fetch adapter described below, but no production search adapter or runtime composition; capabilities therefore continue to report it unavailable. Guided knowledge views remain an unimplemented runtime capability.
 
 ## Contents
 
@@ -124,7 +124,7 @@ Structured document and localization input uses ordered segments. Segment IDs ar
 }
 ```
 
-Vision input contains sanitized inline images and normalized rectangles. Coordinates are finite decimal values from 0 through 1, measured from the top-left. Each region ID is unique within its image, rectangles must have positive area and remain in bounds, and `reading_order` references every region exactly once. If a file or PDF is involved, island-port renders and selects pages before this request.
+Vision input contains sanitized inline images and normalized rectangles. Caller-owned segment, image, and region IDs are nonblank opaque values of at most 128 Unicode scalars; image and region IDs exclude `:` because `reading_order` uses the unambiguous `image_id:region_id` form. Coordinates are finite decimal values from 0 through 1, measured from the top-left. Each region ID is unique within its image, rectangles must have positive area and remain in bounds, and `reading_order` references every region exactly once. If a file or PDF is involved, island-port renders and selects pages before this request.
 
 ```json
 {
@@ -180,19 +180,20 @@ Until guidance-aware orchestration is composed, valid execution-dependent guidan
 
 ## Translation output
 
-Text output preserves the existing meaning-specific ordered translation list. Segment and image-region outputs preserve request order and IDs. Every unit has one primary translation and up to the requested number of materially useful alternatives.
+The result is discriminated by `unit`: `word`, `phrase`, `passage`, `segment`, or `image_region`. Word, phrase, and passage keep the existing ordered `translations`; every choice has a position-derived `translation_id` and zero-based `order` that remain stable across projections. Segment and image-region results preserve caller IDs and an explicit zero-based `order`; each nested unit carries its detected language, primary translations, typed annotations, and invariant review outcome. Structured results also carry the ordered request-scoped `terminology_decisions` that were actually enforced. Every unit may later carry up to the requested number of materially useful labeled alternatives; that Milestone 5 capability remains unavailable until its deterministic evaluator is composed.
 
 ```json
 {
   "translation": {
-    "input_type": "segments",
-    "detected_source_languages": ["en"],
+    "unit": "segment",
     "segments": [
       {
         "segment_id": "seg_title",
-        "translations": [{"text": "发布 {product_name}", "language": "zh-CN"}],
+        "order": 0,
+        "detected_source_language": "en",
+        "translations": [{"translation_id": "translation_0", "order": 0, "text": "发布 {product_name}", "language": "zh-CN"}],
         "annotations": [
-          {"type": "terminology", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
+          {"type": "format", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
         ],
         "review": {"state": "clean", "issues": []}
       }
@@ -202,15 +203,21 @@ Text output preserves the existing meaning-specific ordered translation list. Se
 }
 ```
 
-Image output uses `regions` with `image_id`, `region_id`, detected language, translations, annotations, and review. It does not return the image or an unrestricted OCR transcript. Review state is `clean` or `review_recommended`; issue codes are closed and include `low_confidence`, `source_ambiguous`, `terminology_conflict`, `format_risk`, `protected_content_mismatch`, `visual_order_uncertain`, and `live_source_incomplete`.
+Image output uses `unit: "image_region"` and `regions` with `image_id`, `region_id`, zero-based reading `order`, detected language, translations, annotations, and review. It does not return the image or an unrestricted OCR transcript. Review state is `clean` or `review_recommended`; issue codes are closed and include `low_confidence`, `source_ambiguous`, `terminology_conflict`, `format_risk`, `protected_content_mismatch`, `visual_order_uncertain`, and `live_source_incomplete`.
 
 `brief`, `standard`, and `full` are deterministic projections of one validated superset. A lower level removes supporting detail but never changes the selected meaning, translation, protected content, evidence state, or review outcome. Empty sections are omitted.
+
+Typed annotations use the closed families `ambiguity`, `terminology`, `register`, `culture`, `format`, and `review`; closed codes are `ambiguity_detected`, `term_selected`, `protected_content_preserved`, `register_applied`, `cultural_context`, `format_preserved`, and `review_required`. Each annotation has a bounded display message and optional response-local citation references. `data.external_sources`, when present, contains only sources referenced by those citations; source and fragment IDs are response-local and never canonical evidence. The current offline text path returns no external sources. Result validation rejects unknown citation targets, duplicate source IDs, identity/order gaps, duplicate review issues, contradictory clean review state, and empty primary translations before serialization.
+
+Validation is request-bound before HTTP serialization: structured result IDs and order must exactly equal the originating segment or image reading order, every translation must use the requested target language, and a declared source language must be preserved. Translation IDs are exactly `translation_<zero-based order>`. Passage, segment, and image-region units have one primary connected-text translation and no lexical meaning/detail object; word and phrase units retain bounded meaning labels and may carry only their matching generated exploratory detail shape. Annotation codes have one closed family, review issues are strictly ordered, and `review_required` appears exactly for `review_recommended` units. Projection prunes source descriptors when their last citation is removed. Schema, normalizer, projector, model, prompt, profile, retrieval, and release metadata are bounded and validated rather than passed through unchecked.
 
 ## Live retrieval
 
 `guidance.freshness` accepts `offline`, `allowed`, or `required`. `offline` is the default and prohibits network retrieval. `allowed` is explicit permission to retrieve only when deterministic classification finds a freshness-sensitive claim. `required` always attempts retrieval and returns `503 live_retrieval_unavailable` if the bounded operation cannot complete safely.
 
 Live retrieval is an orchestrated search/fetch port, not unrestricted model browsing. It performs at most one search round, selects at most five results, fetches at most three pages concurrently, and obeys a configured sub-deadline. The fetcher allows only public HTTP(S), resolves and validates every redirect, rejects loopback, link-local, private, reserved, and Unix-socket destinations, bounds response bytes, and accepts only configured textual media types.
+
+`required` always spends the single round and succeeds only when at least one safely fetched page yields usable text. `allowed` spends it only when deterministic classification finds a freshness-sensitive claim and canonical material is insufficient. Partial fetch success is usable when at least one page is safe. The redirect cap is three, each page is limited to 512 KiB, all pages together to 1 MiB, and each retained fragment to 8,192 Unicode scalars. Accepted media types are `text/plain`, `text/html`, and `application/xhtml+xml`. The live sub-deadline defaults to five seconds, cannot exceed fifteen seconds, and is always capped by the request's remaining budget.
 
 Fetched content is untrusted data. It cannot modify system instructions, request another URL, expose credentials, bypass release filters, or become canonical evidence. The embedding model may rank fetched fragments in memory; both fragments and vectors are discarded with the request.
 
@@ -310,6 +317,8 @@ Request: `{}`
 Accepts the translation input, language tags, response level, optional guidance, and optional history defined above. It automatically chooses lexical knowledge, connected-text, structured-segment, or visual-region processing. The caller never selects a model, inference profile, chunk policy, canonical release, retrieval strategy, or repair policy.
 
 Successful metadata includes result, normalizer, projection, model, and prompt versions that actually participated; optional `content_release`, `retrieval_version`, `embedding_version`, and `live_retrieval` appear only when used. `inference_profiles` is ordered and de-duplicated. `reasoning_escalated` reports the safe policy outcome without exposing reasoning content.
+
+Only resolved word and established-phrase results may embed the relationship-page object. Passage, segment, and image-region results never do. The page begins with a full-release-pinned BasicCard or concept-summary authority receipt, then applies deterministic progressive disclosure to supported direct groups, complete semantic scales, optional verified short paths, labeled generated examples and inferred explanations, and a visibly separate exploratory section. Verified groups retain the exact first-step hydration proof and admit only relations declared by the closed grouping policy; unsupported mechanism and application claims fail closed. A complete semantic scale is included atomically with its admitted taxonomy group. Explicitly requested labeled alternatives are capped at two per lexical unit, bind a stable translation ID and order, and name the changed dimension, practical consequence, and usefulness reason; they are not aliases or normalized lookup forms. Request-local relationship-gap nominations carry no canonical endpoint, relation, or evidence authority, are excluded from the online response, and remain input only to a separate offline review workflow. No additional public relationship-page route exists.
 
 Closed route errors additionally include `invalid_translation_request`, `constraint_conflict`, `unsupported_input_type`, `unsupported_language_pair`, `invalid_image`, `invalid_model_output`, `translation_model_unavailable`, and `live_retrieval_unavailable`.
 
