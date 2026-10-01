@@ -16,6 +16,8 @@ pub mod domain_assessment;
 pub mod graph;
 /// Public bounded graph-topology snapshot caching with version-pinned cache keys.
 pub mod graph_topology_cache;
+/// Deterministic bounded search over fully hydrated canonical assertion projections.
+pub mod knowledge_paths;
 /// Deterministic release-pinned knowledge projection preparation.
 pub mod knowledge_projection;
 /// Resumable node-first knowledge publication orchestration without activation.
