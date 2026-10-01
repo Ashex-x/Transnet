@@ -215,6 +215,8 @@ Typed annotations use the closed families `ambiguity`, `terminology`, `register`
 
 Live retrieval is an orchestrated search/fetch port, not unrestricted model browsing. It performs at most one search round, selects at most five results, fetches at most three pages concurrently, and obeys a configured sub-deadline. The fetcher allows only public HTTP(S), resolves and validates every redirect, rejects loopback, link-local, private, reserved, and Unix-socket destinations, bounds response bytes, and accepts only configured textual media types.
 
+`required` always spends the single round and succeeds only when at least one safely fetched page yields usable text. `allowed` spends it only when deterministic classification finds a freshness-sensitive claim and canonical material is insufficient. Partial fetch success is usable when at least one page is safe. The redirect cap is three, each page is limited to 512 KiB, all pages together to 1 MiB, and each retained fragment to 8,192 Unicode scalars. Accepted media types are `text/plain`, `text/html`, and `application/xhtml+xml`. The live sub-deadline defaults to five seconds, cannot exceed fifteen seconds, and is always capped by the request's remaining budget.
+
 Fetched content is untrusted data. It cannot modify system instructions, request another URL, expose credentials, bypass release filters, or become canonical evidence. The embedding model may rank fetched fragments in memory; both fragments and vectors are discarded with the request.
 
 Claims based on live retrieval reference response-local sources. Live sources are labeled `live_external`, not `verified`.

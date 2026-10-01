@@ -30,6 +30,8 @@ pub mod knowledge_publication;
 pub mod knowledge_release;
 /// Validated guided knowledge views and bounded evidence-backed paths.
 pub mod knowledge_view;
+/// Bounded request-local live-search, fetch, and citation values.
+pub mod live_retrieval;
 /// Bounded canonical lookup-card presentation values with assertion-level provenance.
 pub mod lookup_card;
 /// Provider-neutral model runtime values and request-local call policy.

@@ -30,6 +30,7 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 unicode-normalization = "0.1"
 ulid = "1.2"
+url = "2.5"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

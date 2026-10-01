@@ -22,6 +22,8 @@ pub mod graph_repository;
 pub mod knowledge_publication;
 /// Structured learning-model interface.
 pub mod learning_model;
+/// Request-local live search, public fetch, and DNS boundaries.
+pub mod live_retrieval;
 /// Closed, redacted backend metric-event recording interface.
 pub mod metrics;
 /// Provider-neutral generation and ephemeral embedding operations.

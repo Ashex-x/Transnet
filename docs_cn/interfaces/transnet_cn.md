@@ -215,6 +215,8 @@ Typed annotation 使用闭合 family `ambiguity`、`terminology`、`register`、
 
 实时检索是受编排的 search/fetch port，不是无限制模型浏览。它最多执行一轮搜索、选择五个结果、并发抓取三个页面，并遵守配置的子 deadline。Fetcher 只允许公开 HTTP(S)，解析并校验每次 redirect，拒绝 loopback、link-local、私有、保留及 Unix-socket 目标，限制响应 byte，并只接受配置的文本 media type。
 
+`required` 始终消耗唯一一次检索轮次，并且只有至少一个安全抓取页面产生可用文本时才成功。`allowed` 只有在确定性分类发现 freshness-sensitive claim 且 canonical material 不足时才消耗该轮次。只要至少一个页面安全，部分抓取成功即可使用。Redirect 上限为三次；每页上限为 512 KiB，全部页面合计上限为 1 MiB，每个保留 fragment 上限为 8,192 个 Unicode scalar。允许的 media type 为 `text/plain`、`text/html` 与 `application/xhtml+xml`。Live sub-deadline 默认为五秒，不得超过十五秒，并始终受请求剩余 budget 限制。
+
 抓取内容是不可信数据。它不能修改系统指令、请求其他 URL、泄露凭据、绕过发布 filter 或成为规范证据。Embedding 模型可在内存中排序抓取片段；片段与向量均随请求丢弃。
 
 基于实时检索的 claim 引用响应级 source。实时 source 标记为 `live_external`，而不是 `verified`。

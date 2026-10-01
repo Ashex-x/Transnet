@@ -26,6 +26,8 @@ pub mod knowledge_publication;
 pub mod knowledge_view_policy;
 /// Release-pinned guided view composition over authoritative assertion proofs.
 pub mod knowledge_views;
+/// One-shot bounded live-retrieval policy and orchestration.
+pub mod live_retrieval;
 /// Structured lookup orchestration.
 pub mod lookup;
 /// Bounded response-neutral delivery of closed metric events.
