@@ -204,6 +204,38 @@ async fn caller_capabilities_cannot_drop_composed_translation_features() {
 }
 
 #[tokio::test]
+async fn structured_capabilities_follow_composition_across_builder_order() {
+  let response = app_with_state(8_192, |state| {
+    state
+      .with_translation_orchestrator(Arc::new(TranslationOrchestrator::new(Arc::new(
+        UnusedGeneration,
+      ))))
+      .with_capabilities(ServiceCapabilities::current(8_192))
+  })
+  .oneshot(post("{}"))
+  .await
+  .unwrap();
+  let (_, json) = body(response).await;
+  assert_eq!(
+    json["data"]["input_types"],
+    serde_json::json!(["text", "segments", "image_regions"])
+  );
+
+  let advertised_without_runtime = ServiceCapabilities::current(8_192)
+    .with_image_region_translation()
+    .with_segment_translation(true);
+  let response = app_with_state(8_192, |state| {
+    state.with_capabilities(advertised_without_runtime)
+  })
+  .oneshot(post("{}"))
+  .await
+  .unwrap();
+  let (_, json) = body(response).await;
+  assert_eq!(json["data"]["input_types"], serde_json::json!(["text"]));
+  assert_eq!(json["data"]["image_media_types"], serde_json::json!([]));
+}
+
+#[tokio::test]
 async fn rejects_nonempty_or_malformed_requests_without_caching() {
   for payload in [r#"{"extra":true}"#, "null", "[]", "", "not-json"] {
     let response = app(8_192).oneshot(post(payload)).await.unwrap();

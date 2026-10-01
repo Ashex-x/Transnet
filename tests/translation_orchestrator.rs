@@ -10,6 +10,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use time::OffsetDateTime;
 use transnet::{
   application::translation::{
@@ -32,6 +33,7 @@ struct RecordedCall {
   input: String,
   deadline: OffsetDateTime,
   image_count: usize,
+  images: Vec<Vec<u8>>,
 }
 
 struct FakeGeneration {
@@ -144,6 +146,11 @@ impl GenerationPort for FakeGeneration {
       input: request.input.as_str().to_string(),
       deadline: context.request.deadline_at(),
       image_count: request.images.len(),
+      images: request
+        .images
+        .iter()
+        .map(|image| image.bytes().to_vec())
+        .collect(),
     });
     let current = self.in_flight.fetch_add(1, Ordering::AcqRel) + 1;
     self.peak.fetch_max(current, Ordering::AcqRel);
@@ -201,13 +208,31 @@ fn turn(text: &str) -> TranslationTurn {
 fn image_turn() -> TranslationTurn {
   let request: TranslationTurnRequest = serde_json::from_value(serde_json::json!({
     "input":{"type":"image_regions","images":[{"image_id":"page",
-      "media_type":"image/png","data":"iVBORw0KGgoAAAAAAAAAAAAAAAEAAAAB",
+      "media_type":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
       "regions":[{"region_id":"title","x":0.0,"y":0.0,"width":1.0,"height":1.0}]}],
       "reading_order":["page:title"]},
     "source_language":"auto","target_language":"zh-CN","response_level":"standard"
   }))
   .unwrap();
   TranslationTurn::new(request).unwrap()
+}
+
+fn split_color_image_turn() -> TranslationTurn {
+  let mut source = image::RgbaImage::new(2, 1);
+  source.put_pixel(0, 0, image::Rgba([12, 34, 56, 255]));
+  source.put_pixel(1, 0, image::Rgba([250, 1, 2, 255]));
+  let mut bytes = std::io::Cursor::new(Vec::new());
+  image::DynamicImage::ImageRgba8(source)
+    .write_to(&mut bytes, image::ImageFormat::Png)
+    .unwrap();
+  let request = serde_json::json!({
+    "input":{"type":"image_regions","images":[{"image_id":"page",
+      "media_type":"image/png","data":BASE64.encode(bytes.into_inner()),
+      "regions":[{"region_id":"left","x":0.0,"y":0.0,"width":0.5,"height":1.0}]}],
+      "reading_order":["page:left"]},
+    "source_language":"auto","target_language":"zh-CN","response_level":"standard"
+  });
+  TranslationTurn::new(serde_json::from_value(request).unwrap()).unwrap()
 }
 
 fn guided_turn(text: &str) -> TranslationTurn {
@@ -752,6 +777,54 @@ async fn image_regions_use_one_bounded_vlm_call_and_preserve_reading_order() {
   assert_eq!(calls.len(), 1);
   assert_eq!(calls[0].image_count, 1);
   assert!(!calls[0].input.contains("iVBOR"));
+  let crop = image::load_from_memory(&calls[0].images[0]).unwrap();
+  assert_eq!((crop.width(), crop.height()), (1, 1));
+}
+
+#[tokio::test]
+async fn image_region_attachment_excludes_pixels_outside_the_declared_rectangle() {
+  let fake = Arc::new(FakeGeneration::new([Ok(
+    serde_json::json!({"regions":[{"image_id":"page","region_id":"left",
+      "detected_source_language":"en","translation":"安全"}]})
+    .to_string(),
+  )]));
+  TranslationOrchestrator::new(fake.clone())
+    .translate(
+      &context(5),
+      Arc::new(CancellationSignal::default()),
+      &split_color_image_turn(),
+    )
+    .await
+    .unwrap();
+  let calls = fake.calls();
+  let crop = image::load_from_memory(&calls[0].images[0])
+    .unwrap()
+    .to_rgba8();
+  assert_eq!((crop.width(), crop.height()), (1, 1));
+  assert_eq!(crop.get_pixel(0, 0).0, [12, 34, 56, 255]);
+  assert!(!calls[0].input.contains("250"));
+}
+
+#[tokio::test]
+async fn image_guidance_is_rejected_before_pixels_reach_the_model() {
+  let fake = Arc::new(FakeGeneration::new([Ok("unused".into())]));
+  let request = serde_json::json!({
+    "input":{"type":"image_regions","images":[{"image_id":"page",
+      "media_type":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "regions":[{"region_id":"title","x":0.0,"y":0.0,"width":1.0,"height":1.0}]}],
+      "reading_order":["page:title"]},
+    "source_language":"auto","target_language":"zh-CN","response_level":"standard",
+    "guidance":{"register":"formal"}
+  });
+  let turn = TranslationTurn::new(serde_json::from_value(request).unwrap()).unwrap();
+  assert_eq!(
+    TranslationOrchestrator::new(fake.clone())
+      .translate(&context(5), Arc::new(CancellationSignal::default()), &turn,)
+      .await
+      .unwrap_err(),
+    TranslationOrchestrationError::UnsupportedImageGuidance
+  );
+  assert!(fake.calls().is_empty());
 }
 
 #[tokio::test]

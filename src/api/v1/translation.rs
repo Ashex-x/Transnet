@@ -10,19 +10,21 @@ use serde::Serialize;
 
 use crate::{
   application::translation::TranslationOrchestrationError,
+  domain::request_context::RequestContext,
   domain::translation_turn::{
     ProjectedTranslationResult, ResponseLevel, TranslationInputKind, TranslationTurn,
     TranslationTurnRequest, TranslationTurnResult, TurnValidationError,
   },
-  domain::{model_runtime::CancellationSignal, request_context::RequestContext},
 };
 
 use super::super::{problem, problem::FieldError, request_id::RequestId, AppState};
+use super::knowledge_paths::RequestCancellationFactory;
 
 pub(crate) async fn translate(
   State(state): State<AppState>,
   Extension(request_id): Extension<RequestId>,
   Extension(context): Extension<RequestContext>,
+  Extension(cancellations): Extension<RequestCancellationFactory>,
   payload: Result<Json<TranslationTurnRequest>, JsonRejection>,
 ) -> Response {
   let Json(request) = match payload {
@@ -63,12 +65,9 @@ pub(crate) async fn translate(
     return translation_model_unavailable(&request_id);
   };
 
+  let cancellation = cancellations.start();
   match orchestrator
-    .translate(
-      &context,
-      std::sync::Arc::new(CancellationSignal::default()),
-      &turn,
-    )
+    .translate(&context, cancellation.signal_arc(), &turn)
     .await
   {
     Ok(result) => success(result, &turn, &request_id),
@@ -80,6 +79,12 @@ pub(crate) async fn translate(
     }
     Err(TranslationOrchestrationError::UnsupportedInput) => {
       unsupported_capability("input", &request_id)
+    }
+    Err(TranslationOrchestrationError::UnsupportedImageGuidance) => {
+      unsupported_capability("guidance", &request_id)
+    }
+    Err(TranslationOrchestrationError::InvalidImageData) => {
+      invalid_translation_field("input.images.data", &request_id)
     }
     Err(TranslationOrchestrationError::ModelUnavailable) => {
       translation_model_unavailable(&request_id)

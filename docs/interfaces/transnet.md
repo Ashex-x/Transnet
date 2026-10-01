@@ -150,7 +150,7 @@ Vision input contains sanitized inline images and normalized rectangles. Caller-
 
 Text is limited to 131,072 Unicode scalars. Segmented input accepts at most 256 segments, 8,192 scalars per segment, and 131,072 aggregate scalars. Each segment accepts at most 128 protected ranges. These limits are subordinate to the encoded body limit.
 
-The current runtime accepts both the tagged text shape and the legacy top-level `text` field during migration; callers must send exactly one. After validation, the request domain retains the complete tagged input, guidance, and history only for that request. Segment orchestration sends one strict structure-aware prompt per segment through the neutral generation port with bounded parallel fast-profile calls and at most one request-wide reasoning repair. It restores caller order and IDs deterministically, then rejects output unless every protected scalar range remains verbatim and ordered, newline count is unchanged, and Markdown delimiters or HTML tags match exactly. Image-region requests receive bounded structural, media-header, decoded-byte, dimension, rectangle, and exact reading-order validation, then make one deadline- and cancellation-bound VLM call with decoded images and a strict metadata prompt. Output must match every caller image/region ID in reading order and uses the requested target language; invalid or reordered output fails closed. Image bytes, prompt material, OCR-like text, and output are discarded with the request.
+The current runtime accepts both the tagged text shape and the legacy top-level `text` field during migration; callers must send exactly one. After validation, the request domain retains the complete tagged input, guidance, and history only for that request. Segment orchestration sends one strict structure-aware prompt per segment through the neutral generation port with bounded parallel fast-profile calls and at most one request-wide reasoning repair. It restores caller order and IDs deterministically, then rejects output unless every protected scalar range remains verbatim and ordered, newline count is unchanged, and Markdown delimiters or HTML tags match exactly. Image-region requests receive bounded structural, media-header, decoded-byte, dimension, rectangle, and exact reading-order validation. Transnet decodes each image locally, crops every declared region into a bounded attachment, discards pixels outside those rectangles before provider submission, and makes one deadline- and cancellation-bound VLM call with a strict attachment-to-region binding. Output must match every caller image/region ID in reading order and uses the requested target language; invalid or reordered output fails closed. Image bytes, crops, prompt material, OCR-like text, and output are discarded with the request.
 
 `history` is optional and chronological. Each item contains only previous source text, translated text, and language tags. It has no turn ID, time, user ID, feedback, model metadata, or save state. There is no separate item-count limit, but the JSON encoding of history plus guidance is limited to 8,192 bytes so every accepted text request fits the 65,536-byte generation-input contract. An oversized aggregate returns `422 invalid_translation_request` with the content-free field `generation_context` before any model call.
 
@@ -176,7 +176,7 @@ The current runtime accepts both the tagged text shape and the legacy top-level 
 
 Guidance constrains the current result but never creates a profile, translation memory, or canonical term. Contradictory required terms, protected ranges, or format rules return `422 constraint_conflict` rather than silently dropping a constraint.
 
-Until guidance-aware orchestration is composed, valid execution-dependent guidance returns `501 translation_capability_unavailable`; the runtime never silently ignores an accepted constraint. Explicit `offline` freshness by itself is accepted because it preserves the default no-network behavior.
+Until guidance-aware orchestration is composed for an input family, valid execution-dependent guidance returns `501 translation_capability_unavailable`; the runtime never silently ignores an accepted constraint. Text and segment workflows execute their documented guidance. The current image-region workflow rejects execution-dependent guidance before decoding or model invocation. Explicit `offline` freshness by itself is accepted because it preserves the default no-network behavior.
 
 ## Translation output
 
@@ -264,10 +264,10 @@ Request: `{}`
   "data": {
     "source_languages": ["auto", "en", "zh-CN"],
     "target_languages": ["en", "zh-CN"],
-    "input_types": ["text"],
-    "image_media_types": [],
+    "input_types": ["text", "segments", "image_regions"],
+    "image_media_types": ["image/png", "image/jpeg", "image/webp"],
     "purposes": [],
-    "annotation_families": [],
+    "annotation_families": ["format"],
     "knowledge_lenses": [],
     "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_generation_context_bytes": 8192, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
     "live_retrieval": {"available": false, "default": "offline"},

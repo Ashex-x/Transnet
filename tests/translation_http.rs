@@ -403,7 +403,8 @@ async fn segment_postcondition_failure_returns_redacted_bad_gateway() {
 async fn validated_image_regions_return_ordered_translation_without_image_bytes() {
   let image_id = "private-image-991";
   let region_id = "private-region-992";
-  let encoded = "iVBORw0KGgoAAAAAAAAAAAAAAAEAAAAB";
+  let encoded =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
   let response = app(Ok(connected_output()), Ok(lexical_output()))
     .oneshot(request(json!({
       "input":{"type":"image_regions","images":[{"image_id":image_id,
@@ -434,8 +435,32 @@ async fn validated_image_regions_return_ordered_translation_without_image_bytes(
 }
 
 #[tokio::test]
+async fn image_guidance_fails_closed_as_unavailable_without_echoing_content() {
+  let secret = "private-visual-term-913";
+  let encoded =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input":{"type":"image_regions","images":[{"image_id":"page",
+        "media_type":"image/png","data":encoded,"regions":[{"region_id":"title",
+        "x":0.0,"y":0.0,"width":1.0,"height":1.0}]}],
+        "reading_order":["page:title"]},
+      "source_language":"auto","target_language":"en","response_level":"brief",
+      "guidance":{"terminology":[{"source":secret,"target":"safe","policy":"required"}]}
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  let problem = body(response).await;
+  assert_eq!(problem["code"], "translation_capability_unavailable");
+  assert!(!problem.to_string().contains(secret));
+  assert!(!problem.to_string().contains(encoded));
+}
+
+#[tokio::test]
 async fn image_dependency_failure_never_echoes_image_or_region_content() {
-  let encoded = "iVBORw0KGgoAAAAAAAAAAAAAAAEAAAAB";
+  let encoded =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
   let response = app(Err(ModelOperationError::Unavailable), Ok(lexical_output()))
     .oneshot(request(json!({
       "input":{"type":"image_regions","images":[{"image_id":"private-image-771",

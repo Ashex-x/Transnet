@@ -1,5 +1,7 @@
 //! Version 1 lexical-knowledge HTTP routing and common failures.
 
+use std::sync::Arc;
+
 use axum::{
   extract::Extension,
   http::StatusCode,
@@ -24,6 +26,10 @@ pub(crate) mod translation;
 pub(crate) fn target_router(
   knowledge: Option<knowledge_views::KnowledgeRouteDependencies>,
 ) -> Router<AppState> {
+  let runtime_cancellation = knowledge
+    .as_ref()
+    .map(knowledge_views::KnowledgeRouteDependencies::runtime_cancellation)
+    .unwrap_or_else(|| Arc::new(crate::domain::model_runtime::CancellationSignal::default()));
   let router = Router::new()
     .route("/capabilities", post(capabilities::get))
     .route("/health", post(probe::health))
@@ -39,6 +45,9 @@ pub(crate) fn target_router(
   router
     .fallback(not_found)
     .method_not_allowed_fallback(method_not_allowed)
+    .layer(Extension(knowledge_paths::RequestCancellationFactory::new(
+      runtime_cancellation,
+    )))
 }
 
 /// Builds the versioned API router before application state is attached.

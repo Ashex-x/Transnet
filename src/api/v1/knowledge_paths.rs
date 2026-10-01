@@ -191,7 +191,7 @@ fn parse_node(value: NodeRefDto) -> Result<CanonicalNodeId, ()> {
 
 /// Cancels in-flight path work whenever its owning request future is dropped.
 #[derive(Clone)]
-pub(super) struct RequestCancellationFactory {
+pub(crate) struct RequestCancellationFactory {
   runtime: Arc<CancellationSignal>,
 }
 
@@ -200,7 +200,7 @@ impl RequestCancellationFactory {
     Self { runtime }
   }
 
-  fn start(&self) -> RequestCancellation {
+  pub(super) fn start(&self) -> RequestCancellation {
     let signal = Arc::new(CancellationSignal::default());
     if self.runtime.is_cancelled() {
       signal.cancel();
@@ -215,7 +215,7 @@ impl RequestCancellationFactory {
   }
 }
 
-struct RequestCancellation {
+pub(super) struct RequestCancellation {
   signal: Arc<CancellationSignal>,
   watcher: tokio::task::JoinHandle<()>,
 }
@@ -223,6 +223,10 @@ struct RequestCancellation {
 impl RequestCancellation {
   fn signal(&self) -> &CancellationSignal {
     &self.signal
+  }
+
+  pub(super) fn signal_arc(&self) -> Arc<CancellationSignal> {
+    self.signal.clone()
   }
 }
 
@@ -793,6 +797,18 @@ mod tests {
     .await
     .unwrap();
     assert!(request.signal().is_cancelled());
+  }
+
+  #[tokio::test]
+  async fn dropping_request_guard_cancels_in_flight_work() {
+    let runtime = Arc::new(CancellationSignal::default());
+    let request = RequestCancellationFactory::new(runtime).start();
+    let signal = request.signal_arc();
+    drop(request);
+    tokio::time::timeout(std::time::Duration::from_secs(1), signal.cancelled())
+      .await
+      .unwrap();
+    assert!(signal.is_cancelled());
   }
 
   #[tokio::test]
