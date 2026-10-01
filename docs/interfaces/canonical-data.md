@@ -4,7 +4,7 @@
 
 This contract defines island-port's storage-neutral HTTP endpoints for shared canonical translations, words, phrases, senses, domains, evidence metadata, and immutable content releases. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. MySQL is the planned island-port implementation, not part of this wire contract.
 
-Status: target island-port server contract with implemented Transnet read client. The executable can optionally compose the strict outbound `canonical-data-v1` client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The implemented client covers active-release, translation-candidate, basic-card-candidate, and sense-detail reads with the common envelope and strict response-echo validation described here. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, domain/fact/scale reads, and real end-to-end acceptance remain unimplemented outside this repository.
+Status: target island-port server contract with implemented Transnet read client. The executable can optionally compose the strict outbound `canonical-data-v1` client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The implemented client covers active-release, translation-candidate, basic-card-candidate, sense-detail, and bounded domain-inventory reads with the common envelope and strict response-echo validation described here. The domain-assessment application foundation is not yet exposed as an online route. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, fact/scale reads, and real end-to-end acceptance remain unimplemented outside this repository.
 
 The checked-in M3 publication foundation models Qdrant build lifecycle, idempotency, compatibility receipts, and reconciliation hashes. Its outbound publication port and strict island-port client carry the bounded build contract, while `KnowledgePublicationService` drives authoritative status-based resume through node and edge publication and reconciliation without keeping local progress. Successful reconciliation returns only a typed activation candidate. The offline-only `OfflinePublicationService` and strict `release-control-v1` client explicitly submit that candidate or select a retained rollback target through island-port; they are absent from online `AppState` and never mutate the active pointer themselves. The repository does not add an island-port publication server, MySQL build/reconciliation persistence, active-pointer transaction, or rollback implementation; those authority-owned operations remain external requirements.
 
@@ -379,10 +379,18 @@ Request:
 
 ```json
 {
-  "normalized_labels": ["meteorology", "weather"],
-  "scope_key": "earth-atmosphere-weather",
-  "content_release": "knowledge-2026-09",
-  "limit": 5
+  "context": {
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+    "deadline_at": "2026-09-18T12:00:02Z",
+    "schema_version": "canonical-data-v1",
+    "content_release": "knowledge-2026-09"
+  },
+  "input": {
+    "normalized_labels": ["meteorology", "weather"],
+    "scope_key": "earth-atmosphere-weather",
+    "languages": ["en", "zh-CN"],
+    "limit": 5
+  }
 }
 ```
 
@@ -390,29 +398,37 @@ Response:
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "canonical-data-v1",
   "outcome": "ok",
+  "content_release": "knowledge-2026-09",
   "value": {
+    "catalog_complete": true,
     "candidates": [
       {
         "domain_id": "domain_weather",
-        "canonical_label": "weather",
-        "definition": "Conditions of the atmosphere at a place and time.",
-        "inclusion_scope": ["temperature", "precipitation", "wind", "humidity"],
+        "revision": 4,
+        "labels": [{"language": "en", "text": "weather"}, {"language": "zh-CN", "text": "天气"}],
+        "aliases": [{"language": "en", "text": "meteorological weather"}],
+        "definitions": [{"language": "en", "text": "Conditions of the atmosphere at a place and time."}, {"language": "zh-CN", "text": "某一地点和时间的大气状态。"}],
+        "inclusion_scope": ["humidity", "precipitation", "temperature", "wind"],
         "exclusion_scope": ["long-term climate classification"],
         "broader_domain_ids": ["domain_earth_science"],
         "knowledge_profile": {
-          "available_fact_families": ["definition", "taxonomy", "terminology", "measurement"],
+          "available_fact_families": ["definition", "measurement", "taxonomy", "terminology"],
           "languages": ["en", "zh-CN"],
           "verified_fact_count": 184,
           "coverage_state": "partial"
-        },
-        "revision": 4
+        }
       }
     ]
-  },
-  "content_release": "knowledge-2026-09"
+  }
 }
 ```
+
+The request and response are bounded to 32 candidates, 8 labels, 16 aliases, 8 definitions, 16 inclusion items, 16 exclusion items, 8 broader domains, 16 fact families, and 8 profile languages per record. Lists that participate in identity or deterministic comparison are sorted and unique. Every candidate belongs to the echoed immutable release, and `domain_id` plus `broader_domain_ids` use canonical `DomainId` values rather than labels.
+
+`catalog_complete` means island-port examined the complete eligible published catalog for this bounded query; it does not claim that human knowledge is complete. Transnet validates all selected IDs against exactly this returned allowlist. An unavailable, malformed, cross-release, or otherwise failed inventory produces the application outcome `uncertain`. A request-local `proposed_new` outcome is permitted only when `catalog_complete` is true, and its optional broader IDs must also come from this allowlist. Neither operation writes a domain.
 
 ## POST /api/v1/knowledge-facts/get
 

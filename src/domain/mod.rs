@@ -10,6 +10,8 @@ pub mod canonical_translation;
 pub mod capabilities;
 /// Immutable content-release staging, validation, publication, and rollback invariants.
 pub mod content_release;
+/// Bounded canonical-domain inventory and request-local assessment values.
+pub mod domain_assessment;
 /// Release-pinned authoritative material and canonical embedding-input contracts.
 pub mod embedding_input;
 /// Typed, evidence-backed graph topology and traversal limits.

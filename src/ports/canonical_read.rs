@@ -9,6 +9,7 @@ use crate::domain::{
   canonical::{CanonicalReleasePin, EvidenceUse, LanguageTag, SenseId},
   canonical_content::CanonicalSenseDetails,
   canonical_translation::{CanonicalTranslationRevision, DomainId, SourceFingerprint},
+  domain_assessment::DomainInventory,
   retrieval::{LexicalMatchKind, RepositoryMatch},
 };
 
@@ -109,6 +110,18 @@ pub struct CanonicalSenseQuery {
   pub evidence_use: EvidenceUse,
 }
 
+/// Bounded release-pinned selectors for the canonical domain inventory.
+pub struct CanonicalDomainQuery {
+  /// Normalized multilingual labels that nominated domain assessment.
+  pub normalized_labels: Vec<String>,
+  /// Optional stable request-local scope discriminator.
+  pub scope_key: Option<String>,
+  /// Languages useful for labels and RAG coverage.
+  pub languages: Vec<LanguageTag>,
+  /// Maximum canonical records returned; application validation applies the domain inventory cap.
+  pub limit: usize,
+}
+
 /// Read-only authority capability; every downstream call accepts the same explicit pin.
 #[async_trait]
 pub trait CanonicalReadPort: Send + Sync {
@@ -141,4 +154,17 @@ pub trait CanonicalReadPort: Send + Sync {
     pin: &CanonicalReleasePin,
     query: CanonicalSenseQuery,
   ) -> Result<CanonicalSenseDetails, CanonicalReadError>;
+
+  /// Returns the bounded canonical domain inventory and explicit catalog-completeness signal.
+  ///
+  /// The default preserves compatibility for authorities that have not implemented domain reads;
+  /// application assessment maps that failure to `uncertain` rather than inferring novelty.
+  async fn domains(
+    &self,
+    _context: &CanonicalReadContext,
+    _pin: &CanonicalReleasePin,
+    _query: CanonicalDomainQuery,
+  ) -> Result<DomainInventory, CanonicalReadError> {
+    Err(CanonicalReadError::SchemaIncompatible)
+  }
 }

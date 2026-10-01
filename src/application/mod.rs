@@ -10,6 +10,8 @@ pub mod canonical_read;
 pub mod canonical_sense_details;
 /// Content-release staging, validation, publication, rollback, and source quarantine.
 pub mod content_release;
+/// Deterministic request-local domain assessment over one canonical release pin.
+pub mod domain_assessment;
 /// Typed bounded canonical graph reads and neighbor expansion.
 pub mod graph;
 /// Public bounded graph-topology snapshot caching with version-pinned cache keys.

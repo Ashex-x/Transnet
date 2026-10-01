@@ -4,7 +4,7 @@ English: [Knowledge application](../../../docs/reference/application/knowledge.m
 
 本模块负责单词与固定短语请求的词义解析、领域评估、发布固定检索、关系排序、页面组织与确定性投影。
 
-状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。下文的领域评估与完整页面组织属于目标行为，尚未接入默认运行时。
+状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。有界领域评估基础与严格出站 inventory client 已实现，但尚未由默认在线 composition 暴露；下文完整页面组织仍属于目标行为。
 
 canonical-only 服务从权威端选择一次发布 pin，再通过读取 port 组合已审核翻译候选、确定性排序的词汇候选和无歧义的词义详情。它使用带 canonical-only content pin 的现有 lookup-card 类型，不伪造向量集合，也不把有意的纯词法读取误称为向量故障降级。可执行文件只在显式配置时构造并保存该依赖，用 active-release 只读探针检查就绪，并通过冻结的 BasicCard lookup 与固定发布 sense 路由提供该能力。外部 island-port server 仍需实现匹配的内部合同。请求局部查询形式有界且去重：基线规范化形式最强，谨慎的空白或外围标点变体只是较低优先级的拼写候选。已发布别名、形态、转写和语义归属由权威端确定，不从查询字符串猜测。
 
@@ -18,7 +18,9 @@ canonical-only 服务从权威端选择一次发布 pin，再通过读取 port �
 
 每个非语义权威匹配都必须在排序前针对固定发布候选完成验证。稳定 form ID、精确存储 surface form、active 生命周期、lexeme ownership 与 form role 必须支持所声明的匹配类别。相互矛盾的来源证明会使 canonical-only 读取失败，不能静默变成未找到或获得较弱类别。明确的 canonical-only 操作携带自己的 canonical release pin，与 hybrid 检索显式的 vector-degraded 结果严格区分。
 
-领域评估使用有界已发布清单，并返回 `existing`、`proposed_new`、`general` 或 `uncertain`。清单失败产生 `uncertain`，不能证明领域是新的。提案只在请求内存在，且仅在 full 响应允许的位置出现。
+领域评估在调用方单一不可变发布 pin 下使用有界已发布清单，并返回 `existing`、`proposed_new`、`general` 或 `uncertain`。权威端提供多语言 label、alias 与 definition、inclusion/exclusion scope、规范 broader ID，以及包含 fact family、language、verified count 和 `seed`、`partial` 或 `curated` coverage 的 knowledge profile。确定性校验只接受该精确 allowlist 中的稳定 ID。
+
+任何 inventory 调用失败都产生 `uncertain`，不能证明领域是新的。成功但不完整的 catalog 同样不能产生 `proposed_new`。只有明确 complete 的 catalog 才允许结构化提案，且其 broader ID 必须属于所提供 allowlist。提案没有稳定 identity，仅在请求内存在，不由该流程持久化，且只在后续 full 响应允许的位置出现。Application 不暴露 live domain-creation capability。
 
 ## 检索与组织
 

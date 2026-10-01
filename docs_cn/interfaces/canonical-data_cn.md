@@ -4,7 +4,7 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
 
 本合同定义 island-port 提供的存储无关 HTTP endpoint，涵盖共享规范翻译、单词、短语、词义、领域、证据元数据和不可变内容发布。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。MySQL 是计划中的 island-port 实现，不属于本线上合同。
 
-状态：目标 island-port 服务端合同，Transnet 读取 client 已实现。可执行文件可选地组合严格出站 `canonical-data-v1` client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。已实现 client 按本文通用 envelope 与严格 response echo 校验覆盖 active-release、translation candidate、basic-card candidate 和 sense-detail 读取。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留、domain/fact/scale 读取及真实端到端验收仍需在本仓库之外完成。
+状态：目标 island-port 服务端合同，Transnet 读取 client 已实现。可执行文件可选地组合严格出站 `canonical-data-v1` client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。已实现 client 按本文通用 envelope 与严格 response echo 校验覆盖 active-release、translation candidate、basic-card candidate、sense-detail 和有界 domain-inventory 读取。Domain-assessment application 基础尚未作为在线 route 暴露。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留、fact/scale 读取及真实端到端验收仍需在本仓库之外完成。
 
 仓库内 M3 publication foundation 建模 Qdrant build lifecycle、idempotency、compatibility receipt 与 reconciliation hash。其出站 publication port 与严格 island-port client 承载有界 build contract；`KnowledgePublicationService` 基于权威 status 恢复，驱动 node/edge publication 直至 reconciliation，且不保存本地 progress。Reconciliation 成功后只返回强类型 activation candidate。仅离线的 `OfflinePublicationService` 与严格 `release-control-v1` client 显式向 island-port 提交该 candidate，或选择已保留的 rollback target；它们不进入在线 `AppState`，也不自行修改 active pointer。仓库没有新增 island-port publication server、MySQL build/reconciliation persistence、active-pointer transaction 或 rollback implementation；这些 authority-owned operation 仍是外部要求。
 
@@ -371,10 +371,18 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 ```json
 {
-  "normalized_labels": ["meteorology", "weather"],
-  "scope_key": "earth-atmosphere-weather",
-  "content_release": "knowledge-2026-09",
-  "limit": 5
+  "context": {
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+    "deadline_at": "2026-09-18T12:00:02Z",
+    "schema_version": "canonical-data-v1",
+    "content_release": "knowledge-2026-09"
+  },
+  "input": {
+    "normalized_labels": ["meteorology", "weather"],
+    "scope_key": "earth-atmosphere-weather",
+    "languages": ["en", "zh-CN"],
+    "limit": 5
+  }
 }
 ```
 
@@ -382,29 +390,37 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "canonical-data-v1",
   "outcome": "ok",
+  "content_release": "knowledge-2026-09",
   "value": {
+    "catalog_complete": true,
     "candidates": [
       {
         "domain_id": "domain_weather",
-        "canonical_label": "weather",
-        "definition": "Conditions of the atmosphere at a place and time.",
-        "inclusion_scope": ["temperature", "precipitation", "wind", "humidity"],
+        "revision": 4,
+        "labels": [{"language": "en", "text": "weather"}, {"language": "zh-CN", "text": "天气"}],
+        "aliases": [{"language": "en", "text": "meteorological weather"}],
+        "definitions": [{"language": "en", "text": "Conditions of the atmosphere at a place and time."}, {"language": "zh-CN", "text": "某一地点和时间的大气状态。"}],
+        "inclusion_scope": ["humidity", "precipitation", "temperature", "wind"],
         "exclusion_scope": ["long-term climate classification"],
         "broader_domain_ids": ["domain_earth_science"],
         "knowledge_profile": {
-          "available_fact_families": ["definition", "taxonomy", "terminology", "measurement"],
+          "available_fact_families": ["definition", "measurement", "taxonomy", "terminology"],
           "languages": ["en", "zh-CN"],
           "verified_fact_count": 184,
           "coverage_state": "partial"
-        },
-        "revision": 4
+        }
       }
     ]
-  },
-  "content_release": "knowledge-2026-09"
+  }
 }
 ```
+
+每条记录的 request 与 response 上限分别为 32 个 candidate、8 个 label、16 个 alias、8 个 definition、16 个 inclusion item、16 个 exclusion item、8 个 broader domain、16 个 fact family 与 8 个 profile language。参与 identity 或确定性比较的 list 必须排序且唯一。每个 candidate 均属于回显的不可变发布，`domain_id` 与 `broader_domain_ids` 使用规范 `DomainId`，绝不使用 label 充当 identity。
+
+`catalog_complete` 表示 island-port 已检查本次有界查询下完整的合格已发布 catalog；它不声称人类知识完整。Transnet 仅依据这份精确返回的 allowlist 校验全部所选 ID。清单不可用、畸形、跨发布或以其他方式失败时，application 结果必须为 `uncertain`。只有 `catalog_complete` 为 true 时才允许请求级 `proposed_new`，其可选 broader ID 也必须来自该 allowlist。两个操作均不写入领域。
 
 ## POST /api/v1/knowledge-facts/get
 

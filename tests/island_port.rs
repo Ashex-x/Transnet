@@ -9,8 +9,9 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use transnet::{
   adapters::island_port::{
-    BasicCardResolveInput, IslandPortCallContext, IslandPortCanonicalClient, IslandPortClientError,
-    IslandPortTransport, LookupFormInput, SenseGetInput, TranslationResolveInput,
+    BasicCardResolveInput, DomainResolveInput, IslandPortCallContext, IslandPortCanonicalClient,
+    IslandPortClientError, IslandPortTransport, LookupFormInput, SenseGetInput,
+    TranslationResolveInput,
   },
   domain::{
     canonical::{CanonicalId, EvidenceUse, LanguageTag},
@@ -22,6 +23,112 @@ use transnet::{
 struct FakeTransport {
   response: Vec<u8>,
   request: Mutex<Option<(&'static str, Value, Duration)>>,
+}
+
+#[tokio::test]
+async fn domain_inventory_is_strict_bounded_and_release_pinned() {
+  let transport = Arc::new(FakeTransport::new(json!({
+    "request_id": "req_stage_3",
+    "schema_version": "canonical-data-v1",
+    "outcome": "ok",
+    "content_release": "knowledge-2026-09",
+    "value": {
+      "catalog_complete": true,
+      "candidates": [{
+        "domain_id": "domain_weather",
+        "revision": 4,
+        "labels": [
+          {"language": "en", "text": "weather"},
+          {"language": "zh-CN", "text": "天气"}
+        ],
+        "aliases": [{"language": "en", "text": "meteorology weather"}],
+        "definitions": [
+          {"language": "en", "text": "Conditions of the atmosphere."},
+          {"language": "zh-CN", "text": "大气状态。"}
+        ],
+        "inclusion_scope": ["meteorology", "temperature"],
+        "exclusion_scope": ["long-term climate"],
+        "broader_domain_ids": ["domain_earth_science"],
+        "knowledge_profile": {
+          "available_fact_families": ["definition", "taxonomy"],
+          "languages": ["en", "zh-CN"],
+          "verified_fact_count": 184,
+          "coverage_state": "partial"
+        }
+      }]
+    }
+  })));
+  let inventory = IslandPortCanonicalClient::new(transport.clone())
+    .resolve_domains(
+      &context(),
+      &id("knowledge-2026-09"),
+      DomainResolveInput {
+        normalized_labels: vec!["weather".to_string()],
+        scope_key: Some("earth-atmosphere-weather".to_string()),
+        languages: vec![language("en"), language("zh-CN")],
+        limit: 5,
+      },
+    )
+    .await
+    .unwrap();
+  assert!(inventory.catalog_complete());
+  assert_eq!(inventory.domains().len(), 1);
+  assert_eq!(
+    inventory.domains()[0].domain_id().as_str(),
+    "domain_weather"
+  );
+  assert_eq!(inventory.domains()[0].labels().len(), 2);
+  assert_eq!(inventory.domains()[0].definitions().len(), 2);
+  assert_eq!(
+    inventory.domains()[0]
+      .knowledge_profile()
+      .verified_fact_count(),
+    184
+  );
+
+  let request = transport.request.lock().unwrap();
+  let (path, body, _) = request.as_ref().unwrap();
+  assert_eq!(*path, "/api/v1/domains/resolve");
+  assert_eq!(body["context"]["content_release"], "knowledge-2026-09");
+  assert_eq!(body["input"]["languages"], json!(["en", "zh-CN"]));
+  assert_eq!(body["input"]["limit"], 5);
+}
+
+#[tokio::test]
+async fn domain_inventory_rejects_unknown_or_incomplete_wire_data() {
+  let cases = [
+    json!({
+      "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+      "content_release":"knowledge-2026-09",
+      "value":{"catalog_complete":true,"candidates":[],"extra":"not-allowed"}
+    }),
+    json!({
+      "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+      "content_release":"knowledge-2026-09", "value":{"candidates":[]}
+    }),
+    json!({
+      "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+      "content_release":"other-release", "value":{"catalog_complete":true,"candidates":[]}
+    }),
+  ];
+  for response in cases {
+    let result = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))
+      .resolve_domains(
+        &context(),
+        &id("knowledge-2026-09"),
+        DomainResolveInput {
+          normalized_labels: vec!["weather".to_string()],
+          scope_key: None,
+          languages: vec![language("en")],
+          limit: 5,
+        },
+      )
+      .await;
+    let Err(error) = result else {
+      panic!("invalid domain wire data must fail closed");
+    };
+    assert_eq!(error, IslandPortClientError::InconsistentData);
+  }
 }
 
 impl FakeTransport {
