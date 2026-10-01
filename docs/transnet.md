@@ -233,6 +233,8 @@ The service does not perform arbitrary-depth traversal or return every neighbor.
 
 Transnet is stateless and runs behind a private gateway or service mesh. Live request text, context, provider output, and intermediate analysis exist only for the request lifetime and must not be written to MySQL, Qdrant, caches, logs, metrics, traces, telemetry, vectors, or durable queues. This prohibition does not apply to separate, rights-cleared canonical content submitted by authenticated publication tooling. Callers must not send user identities, profiles, private history, or end-user credentials.
 
+The [observability contract](reference/observability.md) defines content-free structured events, distributed traces, aggregate metrics, and separate publication audits for the whole system. Export is bounded and non-blocking on the online path; telemetry failure cannot change a translation result.
+
 Prompts, schemas, models, normalizers, retrieval configuration, evidence policy, and knowledge releases are versioned. Quality evaluation covers sense selection, relationship precision, omission and fabrication, translation fidelity, naturalness, terminology, register, cultural scope, degraded reads, prompt injection resistance, and request non-persistence. Human review and curated challenge sets remain necessary; vector similarity, round-trip translation, and LLM judging are signals rather than sole authorities.
 
 The design succeeds when a user can translate connected text or deeply understand one selected lexical sense or domain concept through concise, accurate, useful relationships—without being overwhelmed by unrelated knowledge or misled by unsupported LLM output.
@@ -243,5 +245,6 @@ The design succeeds when a user can translate connected text or deeply understan
 - [Canonical-data interface](interfaces/canonical-data.md)
 - [Retrieval-data interface](interfaces/retrieval-data.md)
 - [Service behavior](product/service-behavior.md)
+- [Observability contract](reference/observability.md)
 - [Content publishing](guides/content-publishing.md)
 - [Quality assurance](guides/quality-assurance.md)

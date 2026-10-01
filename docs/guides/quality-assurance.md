@@ -14,6 +14,8 @@ Every result identifies schema, prompt, model role, normalizer, MySQL card relea
 
 Measure lexical-unit versus sentence-or-passage routing behind the single translation endpoint, including ambiguous short fragments. A routing error must choose the least intrusive useful response and create no durable state. Translation evaluation covers meaning, completeness, tone, register, structure, names, terminology, numbers, negation, idioms, and dialect. Multi-turn suites vary history length and verify reference resolution and terminology continuity without silent truncation of an accepted request. Ambiguity suites require materially different meanings and reject padded synonym lists.
 
+Professional-input suites cover segment ID and order preservation, protected ranges, terminology constraints, bounded alternatives, image-region coordinates and reading order, mixed visual/text content, and unsupported-media rejection. They measure zero-model canonical hits, ordinary fast calls, bounded chunk calls, and at most one reasoning escalation against latency budgets. Live-retrieval suites enforce explicit opt-in, one search round, result/fetch limits, public-network-only fetches, redirect and DNS-rebinding checks, prompt-injection resistance, citation coverage, and disposal of queries and pages.
+
 Projection tests build one canonical superset and compare `brief`, `standard`, and `full` responses. Lower levels must be strict field-and-item subsets except for envelope metadata, while preserving the same ranked meanings, canonical IDs, translation text, evidence states, and degradation signals. Tips are penalized unless material and responses are checked for the two-tip limit.
 
 ## Canonical retrieval evaluation
@@ -22,11 +24,17 @@ Measure exact sense and concept resolution, language detection, morphology, spel
 
 Relationship tests verify endpoint existence, release compatibility, direction, applicable sense and domain, conditions, evidence, language, region, period, confidence, provenance, and verification state. Taxonomy suites validate `is_a` direction, `has_subtype` inverses, cycle rejection, and sense qualification. Semantic-scale suites validate named dimensions, ordering, conditions, evidence, unequal position spacing, and complete `warm → hot → sweltering → scorching` rendering. Adversarial cases ensure intensity is not taxonomy and vector proximity is not promoted to translation, synonymy, hierarchy, causation, shared mechanism, or cultural fact. Page-composition tests start from one selected root, omit weak sections, rank groups by purpose, validate every step of a short connection path, and keep verified, inferred, and exploratory results visibly separate.
 
+Assertion tests validate relation-registry versioning, arity, participant roles, literal/entity exclusivity, binary projection eligibility, and lossless linkage from every projected edge to its authoritative assertion. Guided-view tests exercise learning, terminology, mechanism, comparison, and application lenses; enforce root, depth, item, evidence, and cycle bounds; and prove that a tree presentation never changes assertion truth or duplicates a canonical fact.
+
 ## Content, privacy, and injection safety
 
 Publication tests validate deterministic IDs, immutable collections, manifest reconciliation, quarantine, activation, and rollback. Bootstrap tests prove generated candidates remain quarantined until evidence or an approved editorial-source policy, rights checks, deterministic validation, and review succeed; model output alone can never become verified. Privacy tests prove that current text, translation history, caller identity, generated provider bodies, and user-related state do not enter MySQL, Qdrant, caches, logs, traces, metrics, backups, queues, or vectors.
 
 Treat request text, retrieved documents, evidence, and model output as untrusted data. Injection suites attempt to replace instructions, exfiltrate credentials, bypass release filters, fabricate evidence, or add hidden persistence.
+
+## Telemetry verification
+
+Capture log, trace, metric, and audit sinks for every request class and seed recognizable secrets into text, segments, images, history, prompts, provider responses, web queries, pages, citations, and errors. No seed or deterministic fingerprint may appear. Enforce the [observability contract](../reference/observability.md): closed low-cardinality labels, static span names and routes, trace continuity, exactly one request completion event, bounded queues, visible drop counters, append-only audit ordering, and unchanged business responses when exporters fail.
 
 ## Reliability and release gates
 
@@ -40,3 +48,4 @@ A release passes only when translation, routing, canonical-card, sense and conce
 - [Service behavior](../product/service-behavior.md)
 - [Content publishing](content-publishing.md)
 - [Transnet service interface](../interfaces/transnet.md)
+- [Observability contract](../reference/observability.md)

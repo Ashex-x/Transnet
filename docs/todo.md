@@ -114,6 +114,7 @@ Exit criteria: general vocabulary, compounds, ambiguous technical senses, and mu
 - [ ] Test relationship-family semantics, including taxonomy versus intensity, phrase versus component meaning, sense applicability, inverse direction, conditional validity, and verified/inferred/exploratory separation.
 - [ ] Exercise model, MySQL, Qdrant, stale-release, partial-publication, invalid-output, rate-limit, timeout, and rollback failures with safe degradation and bounded repair.
 - [ ] Prove non-persistence across MySQL, Qdrant, caches, logs, traces, metrics, queues, backups, provider telemetry, and derived vectors.
+- [ ] Implement the versioned whole-system observability contract with content-free NDJSON events, distributed trace continuity, closed low-cardinality metrics, bounded non-blocking export, drop counters, and separate append-only publication audits.
 - [ ] Gate releases on formatting, linting, tests, rustdoc, contract checks, publication reconciliation, rollback drills, and bilingual documentation checks.
 
 Exit criteria: a user can translate connected text or deeply understand one selected lexical sense or domain concept through concise, accurate relationships without irrelevant graph expansion or unsupported model claims.

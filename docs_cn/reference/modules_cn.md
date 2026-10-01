@@ -16,6 +16,7 @@ English: [Module reference](../../docs/reference/modules.md)
 - [Adapter](adapters_cn.md)：模型 provider 与 island-port 协议实现。
 - [模型运行时](model-runtime_cn.md)：单 VLM fast/reasoning profile、embedding 操作、调用预算与视觉边界。
 - [持久化](persistence_cn.md)：application port、UDS adapter、数据库 repository、物理 schema 与发布一致性。
+- [可观测性](observability_cn.md)：全系统结构化事件、trace、指标、审计记录、隐私与失败行为。
 - [运维](operations_cn.md)：可观测性、容错、就绪信号与离线发布。
 
 ## 依赖规则

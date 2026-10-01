@@ -6,7 +6,7 @@ The operations module owns safe observability, dependency resilience, and offlin
 
 ## Observability
 
-Logs, metrics, and traces may contain operation names, matched route templates, safe status classes, latency, bounded retry counts, circuit state, and coarse payload-size buckets. They must not contain request text, history, translations, prompts, model output, credentials, provider bodies, canonical content bodies, capabilities, or stable user-correlatable identifiers. Metric labels are closed and low-cardinality.
+The [observability contract](observability.md) owns the versioned event schema, allowed dimensions, prohibited content, sampling, buffering, audit boundaries, and verification. Logs, metrics, and traces use closed content-free fields; audit events are restricted to offline publication and control transitions. Telemetry failure never changes an online result.
 
 Liveness reports process health. Readiness reports whether the service can safely accept work and distinguishes required dependencies from optional enrichment.
 
@@ -24,4 +24,4 @@ Live translation and lookup never invoke publication, create durable proposals, 
 
 ## Verification
 
-Test telemetry redaction, closed labels, deadline budgets, retry classification, cancellation, permit release, circuit transitions, readiness degradation, publication reconciliation, activation gates, quarantine, rollback, and the absence of any online path to mutation.
+Test the complete observability contract, deadline budgets, retry classification, cancellation, permit release, circuit transitions, readiness degradation, publication reconciliation, activation gates, quarantine, rollback, and the absence of any online path to mutation.

@@ -17,7 +17,8 @@ English: [Transnet documentation](../docs/documentation-index.md)
 
 ## 参考
 
-- [模块参考](reference/modules_cn.md)：按模块归属组织的运行时、传输、application、domain、port、adapter 与运维页面目录。
+- [模块参考](reference/modules_cn.md)：按模块归属组织的运行时、传输、application、domain、port、adapter、持久化、可观测性与运维页面目录。
+- [可观测性合同](reference/observability_cn.md)：全系统结构化日志、trace、指标、审计事件、隐私排除项与失败行为。
 
 ## 指南
 

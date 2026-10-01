@@ -26,6 +26,8 @@ Provider Trace 只包含静态 Provider 边界、操作名、尝试次数、结�
 
 目标遥测还只记录闭合推理 profile（`fast` 或 `reasoning`）、输入类型分类及是否发生 reasoning 升级。它绝不记录图片数据、prompt、隐藏 reasoning、embedding、实时搜索 query、抓取内容或生成输出。
 
+目标 `[telemetry]` 设置选择 NDJSON 标准输出或本地 collector、有界队列容量、导出 timeout、固定成功/失败采样分类及可选的仅开发滚动文件。指标 label 与事件 attribute 是代码编译的闭合集合，而不是任意配置。审计 sink 设置属于离线 publisher 组合，不得使在线翻译 readiness 依赖 exporter。详见[可观测性合同](../reference/observability_cn.md)；在对应类型化实现存在前，不向仓库配置增加这些目标 key。
+
 结构化 `/v1/lookups` 切片使用 `[gemma4]` Provider，并请求严格 JSON Schema 输出。配置的服务必须支持 OpenAI-compatible `response_format.type = "json_schema"` 请求字段，并在第一条 Assistant Message 中返回 JSON 文本。
 
 `[canonical]` 是可选启用的生产 canonical-only 读取依赖。仓库配置为 `enabled = false`：进程不构造 island-port client，模型翻译保持原行为，readiness 也不声称 canonical 可用。在 Unix 主机启用时，设置 `enabled = true`、island-port 的绝对 `socket_path`（例如 `/run/island-port/island-port.sock`），以及 1 至 30,000 的 `timeout_ms`。Unix socket 路径不得超过 107 字节，不得含空白或 `..` 路径组件；配置 Debug 与错误不会输出该路径。启用时缺失或无效配置会拒绝启动；非 Unix 主机启用会因没有生产 UDS transport 而拒绝启动。
@@ -34,4 +36,4 @@ Provider Trace 只包含静态 Provider 边界、操作名、尝试次数、结�
 
 Transnet-side canonical 公开交付已由上述两个路由实现，包括发布/schema 失败映射和 attribution/证据投影。island-port canonical server、生产 MySQL migration、publisher/write 操作、真实发布、激活、回滚与隔离、不可变旧发布服务验证，以及 island-port/MySQL 端到端验收仍属外部目标能力。Embedding、候选检索及其评估属于后续 milestone；见[规范数据 endpoint](../interfaces/canonical-data_cn.md)、[检索数据 endpoint](../interfaces/retrieval-data_cn.md)和 [Transnet](../transnet_cn.md)合同。不得把凭据或请求内容写入仓库配置。
 
-相关：[设计](../transnet_cn.md)、[Transnet 服务接口](../interfaces/transnet_cn.md)和[开发](development_cn.md)。
+相关：[设计](../transnet_cn.md)、[Transnet 服务接口](../interfaces/transnet_cn.md)、[可观测性](../reference/observability_cn.md)和[开发](development_cn.md)。

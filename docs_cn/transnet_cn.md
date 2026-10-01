@@ -225,6 +225,8 @@ flowchart LR
 
 Transnet 是无状态服务，运行在私有网关或服务网格之后。实时请求文本、上下文、provider 输出和中间分析只在请求生命期内存在，不得写入 MySQL、Qdrant、缓存、日志、指标、Trace、遥测、向量或持久队列。该禁令不适用于由经过认证的发布工具单独提交、权利明确的规范内容。调用方不得发送用户身份、画像、私有历史或终端用户凭据。
 
+[可观测性合同](reference/observability_cn.md)为全系统定义无内容结构化事件、分布式 trace、聚合指标与独立发布审计。在线路径的导出有界且非阻塞；遥测失败不得改变翻译结果。
+
 Prompt、Schema、模型、Normalizer、检索配置、证据策略和知识发布均版本化。质量评估覆盖词义选择、关系精度、遗漏与编造、翻译忠实度、自然度、术语、语域、文化范围、降级读取、Prompt 注入抵抗和请求不持久化。人工评审与精选挑战集仍然必要；向量相似度、回译和 LLM 裁判都只是信号，而非唯一权威。
 
 当用户既可以翻译连续文本，也可以通过精简、准确、有用的关系深入理解一个选定词汇词义或领域概念，同时不被无关知识淹没、不被缺乏支持的 LLM 输出误导时，设计即成功。
@@ -235,5 +237,6 @@ Prompt、Schema、模型、Normalizer、检索配置、证据策略和知识发�
 - [规范数据接口](interfaces/canonical-data_cn.md)
 - [检索数据接口](interfaces/retrieval-data_cn.md)
 - [服务行为](product/service-behavior_cn.md)
+- [可观测性合同](reference/observability_cn.md)
 - [内容发布](guides/content-publishing_cn.md)
 - [质量保证](guides/quality-assurance_cn.md)
