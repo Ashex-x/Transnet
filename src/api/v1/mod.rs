@@ -11,6 +11,7 @@ use axum::{
 use super::{problem, request_id::RequestId, AppState};
 
 pub(crate) mod basic_card;
+pub(crate) mod capabilities;
 pub(crate) mod graph;
 pub(crate) mod lookup;
 pub(crate) mod sense;
@@ -19,6 +20,7 @@ pub(crate) mod translation;
 /// Builds the target `/api/v1` routes implemented by the current loopback runtime.
 pub(crate) fn target_router() -> Router<AppState> {
   Router::new()
+    .route("/capabilities", post(capabilities::get))
     .route("/translations", post(translation::translate))
     .route("/basic-cards/lookup", post(basic_card::lookup))
     .route("/senses/get", post(basic_card::sense))

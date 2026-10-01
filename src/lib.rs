@@ -35,6 +35,12 @@ pub use config::{
   AppConfig, HttpConfig, HttpConfigError, ProviderApiKey, ProviderConfig, ProviderResilienceConfig,
   ProviderResilienceConfigs, TranslationConfig,
 };
+pub use domain::capabilities::{
+  AnnotationFamilyCapability, CapabilityLimits, GenerationProfileCapability,
+  ImageMediaTypeCapability, InputTypeCapability, KnowledgeLensCapability, LiveRetrievalCapability,
+  LiveRetrievalDefault, PurposeCapability, SchemaVersionCapability, ServiceCapabilities,
+  SourceLanguageCapability, TargetLanguageCapability,
+};
 pub use domain::request_context::{RequestContext, RequestContextError, RequestId};
 pub use provider::{TranslationError, TranslationProviderMetrics, TranslationService};
 pub use resilience::{ProviderMetricsSnapshot, ProviderPolicy, ProviderPolicyError};

@@ -4,7 +4,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本合同定义目标 island-port 到 Transnet 接口及内部共享 HTTP/1.1-over-UDS 规则。Island-port 负责互联网传输、认证、用户状态、文件接入、文档重建和最终展示。Transnet 不接收终端用户身份，也不持久化实时请求内容。
 
-状态：修订后的目标 v1 合同。仓库中的可执行文件仍使用回环 HTTP，且只实现已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。结构化 segment、image region、capability、实时检索、目标入站 UDS、引导式知识视图和知识路径，必须等 handler、组合、测试与文档共同落地后才算已实现。
+状态：修订后的目标 v1 合同。仓库中的可执行文件仍使用回环 HTTP，且实现已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片，以及目标 capability discovery。结构化 segment、image region、实时检索、目标入站 UDS、引导式知识视图和知识路径，必须等 handler、组合、测试与文档共同落地后才算已实现。
 
 ## 目录
 
@@ -238,7 +238,7 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 
 ## POST /api/v1/capabilities
 
-返回已配置 BCP 47 语言对、输入类型、图片类型、purpose、annotation family、知识 lens、body 与语义限制、实时检索可用性和 schema 版本。它不暴露凭据、provider URL、socket 路径、并发状态或私有 feature flag。
+返回当前已实现的 BCP 47 语言 selector、输入类型、图片类型、purpose、annotation family、知识 lens、body 与语义限制、实时检索可用性、generation profile 和 schema 版本。空的闭合集明确表示当前 runtime 尚未实现该能力。它不暴露凭据、provider URL、socket 路径、并发状态或私有 feature flag。
 
 Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cache-Control: no-store`。调用方可以在需要当前部署信息时重新获取，但合同不承诺 HTTP cache 或 validator 语义。
 
@@ -249,11 +249,15 @@ Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cac
   "data": {
     "source_languages": ["auto", "en", "zh-CN"],
     "target_languages": ["en", "zh-CN"],
-    "input_types": ["text", "segments", "image_regions"],
-    "image_media_types": ["image/png", "image/jpeg", "image/webp"],
-    "knowledge_lenses": ["meaning", "contrast", "usage", "form", "origin", "domain", "mechanism", "application"],
+    "input_types": ["text"],
+    "image_media_types": [],
+    "purposes": [],
+    "annotation_families": [],
+    "knowledge_lenses": [],
+    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
     "live_retrieval": {"available": false, "default": "offline"},
-    "schema_versions": ["translation-result-v1", "knowledge-view-v1"]
+    "generation_profiles": ["fast"],
+    "schema_versions": ["translation-result-v1"]
   },
   "meta": {"request_id": "req_example"}
 }

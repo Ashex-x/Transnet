@@ -4,7 +4,7 @@
 
 This contract defines the target island-port-to-Transnet interface and the shared internal HTTP/1.1-over-UDS rules. Island-port owns internet transport, authentication, user state, file ingestion, document reconstruction, and final presentation. Transnet receives no end-user identity and persists no live request content.
 
-Status: revised target v1 contract. The checked-in executable still uses loopback HTTP and implements only the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. Structured segments, image regions, capabilities, live retrieval, target inbound UDS, guided knowledge views, and knowledge paths are not implemented until their handlers, composition, tests, and documentation land together.
+Status: revised target v1 contract. The checked-in executable still uses loopback HTTP and implements the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices plus target capability discovery. Structured segments, image regions, live retrieval, target inbound UDS, guided knowledge views, and knowledge paths are not implemented until their handlers, composition, tests, and documentation land together.
 
 ## Contents
 
@@ -238,7 +238,7 @@ Each displayed item is the root or includes an explicit path to the root, a conc
 
 ## POST /api/v1/capabilities
 
-Returns configured BCP 47 language pairs, input kinds, image types, purposes, annotation families, knowledge lenses, body and semantic limits, live-retrieval availability, and schema versions. It exposes no credentials, provider URLs, socket paths, concurrency state, or private feature flags.
+Returns currently implemented BCP 47 language selectors, input kinds, image types, purposes, annotation families, knowledge lenses, body and semantic limits, live-retrieval availability, generation profiles, and schema versions. Empty closed sets explicitly mean that the current runtime does not implement that capability. It exposes no credentials, provider URLs, socket paths, concurrency state, or private feature flags.
 
 Capabilities follows the interface-wide response policy: every response carries `Cache-Control: no-store`. Callers may refresh it when they need current deployment information, but the contract promises no HTTP caching or validator semantics.
 
@@ -249,11 +249,15 @@ Request: `{}`
   "data": {
     "source_languages": ["auto", "en", "zh-CN"],
     "target_languages": ["en", "zh-CN"],
-    "input_types": ["text", "segments", "image_regions"],
-    "image_media_types": ["image/png", "image/jpeg", "image/webp"],
-    "knowledge_lenses": ["meaning", "contrast", "usage", "form", "origin", "domain", "mechanism", "application"],
+    "input_types": ["text"],
+    "image_media_types": [],
+    "purposes": [],
+    "annotation_families": [],
+    "knowledge_lenses": [],
+    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
     "live_retrieval": {"available": false, "default": "offline"},
-    "schema_versions": ["translation-result-v1", "knowledge-view-v1"]
+    "generation_profiles": ["fast"],
+    "schema_versions": ["translation-result-v1"]
   },
   "meta": {"request_id": "req_example"}
 }

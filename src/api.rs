@@ -31,6 +31,7 @@ use crate::{
     translation::TranslationOrchestrator,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
+  domain::capabilities::ServiceCapabilities,
   domain::observability::MetricEvent,
   ports::{
     active_content_reader::ActiveContentReader, learning_model::LearningModel,
@@ -158,6 +159,7 @@ pub struct AppState {
   graph_cursor_protection_key: GraphCursorProtectionKey,
   metrics: Option<Arc<ClosedMetricsDispatcher>>,
   readiness: Arc<dyn Readiness>,
+  capabilities: ServiceCapabilities,
 }
 
 impl AppState {
@@ -179,6 +181,7 @@ impl AppState {
       graph_cursor_protection_key: GraphCursorProtectionKey::ephemeral(),
       metrics: None,
       readiness: Arc::new(AlwaysReady),
+      capabilities: ServiceCapabilities::current(DEFAULT_MAX_REQUEST_BODY_BYTES),
     }
   }
 
@@ -373,6 +376,10 @@ impl AppState {
     self.graph_cursor_protection_key.as_bytes()
   }
 
+  pub(crate) fn capabilities(&self) -> &ServiceCapabilities {
+    &self.capabilities
+  }
+
   fn has_graph_service(&self) -> bool {
     self.graph.is_some()
   }
@@ -400,7 +407,12 @@ pub fn app_router_with_http_config(
   Ok(build_router(state, config.max_request_body_bytes, cors))
 }
 
-fn build_router(state: AppState, max_request_body_bytes: usize, cors: Option<CorsLayer>) -> Router {
+fn build_router(
+  mut state: AppState,
+  max_request_body_bytes: usize,
+  cors: Option<CorsLayer>,
+) -> Router {
+  state.capabilities = ServiceCapabilities::current(max_request_body_bytes);
   let router = Router::new()
     .route("/health", get(health))
     .route("/livez", get(livez))

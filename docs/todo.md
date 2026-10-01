@@ -44,7 +44,7 @@ Repository-side admission, request/result Debug redaction, closed telemetry, and
 - [ ] Implement the simple text, source-language, target-language, response-level, and optional minimal-history request plus the discriminated word, phrase, and passage `TranslationResult` response.
 - [ ] Extend the same entry point with bounded professional segment and image-region inputs; keep file parsing, OCR policy, and durable document ownership in island-port.
 - [ ] Add request-local purpose, audience, register, protected-range, terminology, annotation, alternative-count, and freshness guidance without creating a profile or translation memory.
-- [ ] Publish a cacheable capabilities response so island-port can discover supported input kinds, limits, retrieval policy, and fast/reasoning availability without trial requests.
+- [x] Publish a no-store capabilities response so island-port can discover currently implemented input kinds, limits, retrieval policy, and generation-profile availability without trial requests.
 - [ ] Implement a versioned request-local normalizer with Unicode normalization, language-aware case folding, whitespace and punctuation handling, meaningful-symbol preservation, and bounded derived forms.
 - [ ] Behind one translation entry point, route a confident word, term, idiom, phrasal verb, or established phrase to lexical composition and route clauses, sentences, passages, and ambiguous short fragments to connected-text translation.
 - [ ] Align `POST /api/v1/translations` with the target response while preserving meaning, tone, terminology, register, paragraph structure, protected spans, and formatting.
