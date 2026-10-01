@@ -687,6 +687,9 @@ fn guidance_requires_execution(guidance: &TranslationGuidance) -> bool {
 }
 
 fn validate_guidance(guidance: &TranslationGuidance) -> Result<(), TurnValidationError> {
+  if !guidance.annotations.is_empty() {
+    return Err(TurnValidationError::Unsupported("guidance.annotations"));
+  }
   if guidance.max_alternatives > 2 {
     return Err(TurnValidationError::Field("guidance.max_alternatives"));
   }

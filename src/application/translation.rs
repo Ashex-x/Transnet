@@ -5,6 +5,7 @@ use std::{collections::BTreeMap, ops::Range, sync::Arc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::task::JoinSet;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::{
   domain::translation_turn::{
@@ -305,7 +306,7 @@ impl TranslationOrchestrator {
           versions.push(operation_version(&repaired, GenerationProfile::Reasoning));
           value
         }
-        Ok(_) | Err(_) => return Err(TranslationOrchestrationError::InvalidModelOutput),
+        Ok(_) | Err(_) => return Err(TranslationOrchestrationError::GuidanceViolation),
       };
       assembled.push_str(&translation);
       assembled.push_str(&text[chunk.separator]);
@@ -424,16 +425,27 @@ fn lexical_guidance_satisfied(turn: &TranslationTurn, draft: &LexicalTurnDraft) 
 
 fn guidance_satisfied(turn: &TranslationTurn, source: &str, translated: &str) -> bool {
   let terminology_ok = turn.guidance().terminology.iter().all(|term| {
-    if !source.contains(&term.source) {
+    if !contains_term(source, &term.source) {
       return true;
     }
     match term.policy {
-      TerminologyPolicy::Required => translated.contains(&term.target),
+      TerminologyPolicy::Required => contains_term(translated, &term.target),
       TerminologyPolicy::Preferred => true,
-      TerminologyPolicy::Forbidden => !translated.contains(&term.target),
+      TerminologyPolicy::Forbidden => !contains_term(translated, &term.target),
     }
   });
   terminology_ok && line_break_signature(source) == line_break_signature(translated)
+}
+
+fn contains_term(haystack: &str, needle: &str) -> bool {
+  let haystack = haystack.nfkc().flat_map(char::to_lowercase).collect::<String>();
+  let needle = needle.nfkc().flat_map(char::to_lowercase).collect::<String>();
+  haystack.match_indices(&needle).any(|(start, value)| {
+    let end = start + value.len();
+    let left = haystack[..start].chars().next_back();
+    let right = haystack[end..].chars().next();
+    !left.is_some_and(char::is_alphanumeric) && !right.is_some_and(char::is_alphanumeric)
+  })
 }
 
 fn line_break_signature(value: &str) -> Vec<bool> {
@@ -568,7 +580,7 @@ fn repair_prompt(
   original: &GenerationInput,
 ) -> Result<GenerationInput, TranslationOrchestrationError> {
   GenerationInput::new(format!(
-    "{}\nRepair the prior invalid or ambiguous result once. Return only the requested strict JSON conclusion; do not include analysis, scratch work, or hidden reasoning.",
+    "{}\nRepair the prior invalid, ambiguous, terminology-violating, or format-violating result once. Re-check every required and forbidden term and preserve paragraph structure. Return only the requested strict JSON conclusion; do not include analysis, scratch work, or hidden reasoning.",
     original.as_str()
   ))
   .map_err(|_| TranslationOrchestrationError::ChunkPlanLimit)
