@@ -1474,12 +1474,12 @@ mod tests {
   }
 
   #[test]
-  fn history_and_current_text_share_the_one_mebibyte_bound() {
+  fn history_context_and_current_text_use_their_documented_bounds() {
     let mut oversized_history = request();
     oversized_history.history = vec![history("x".repeat(MAX_TURN_BYTES))];
     assert_eq!(
       TranslationTurn::new(oversized_history).unwrap_err(),
-      TurnValidationError::TooLarge
+      TurnValidationError::Field("generation_context")
     );
 
     let mut oversized_text = request();

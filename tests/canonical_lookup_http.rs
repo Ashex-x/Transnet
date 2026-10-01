@@ -75,17 +75,30 @@ fn candidate() -> CanonicalCandidate {
       definition_evidence_ids: vec![evidence_id.clone()],
       status: CanonicalStatus::Active,
     },
-    forms: vec![WordForm {
-      id: id("form-hotter"),
-      lexeme_id,
-      release_id: release_id.clone(),
-      form: "hotter".to_string(),
-      normalized_form: "hotter".to_string(),
-      kind: FormKind::Inflection,
-      morphology: Some("comparative".to_string()),
-      evidence_ids: vec![evidence_id.clone()],
-      status: CanonicalStatus::Active,
-    }],
+    forms: vec![
+      WordForm {
+        id: id("form-hotter"),
+        lexeme_id: lexeme_id.clone(),
+        release_id: release_id.clone(),
+        form: "hotter".to_string(),
+        normalized_form: "hotter".to_string(),
+        kind: FormKind::Inflection,
+        morphology: Some("comparative".to_string()),
+        evidence_ids: vec![evidence_id.clone()],
+        status: CanonicalStatus::Active,
+      },
+      WordForm {
+        id: id("form-hot-lemma"),
+        lexeme_id,
+        release_id: release_id.clone(),
+        form: "hot".to_string(),
+        normalized_form: "hot".to_string(),
+        kind: FormKind::Lemma,
+        morphology: None,
+        evidence_ids: vec![evidence_id.clone()],
+        status: CanonicalStatus::Active,
+      },
+    ],
     evidence: vec![EvidenceFragment {
       id: evidence_id,
       source_id: id("source-licensed"),
@@ -243,9 +256,14 @@ async fn injected_canonical_lookup_returns_separated_evidence_backed_fields() {
     body["matches"][0]["sense"]["definition"]["kind"],
     "definition"
   );
-  assert_eq!(body["matches"][0]["forms"][0]["kind"], "inflection");
+  let inflection = body["matches"][0]["forms"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .find(|form| form["kind"] == "inflection")
+    .unwrap();
   assert_eq!(
-    body["matches"][0]["forms"][0]["assertion"]["evidence"][0]["provenance"]["source_id"],
+    inflection["assertion"]["evidence"][0]["provenance"]["source_id"],
     "source-licensed"
   );
   assert_eq!(
