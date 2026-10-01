@@ -32,7 +32,7 @@ sequenceDiagram
   alt Connected passage
     O->>P: Translate with request-local context
     P->>A: Model operation
-    A->>X: Gemma4-27B fast call
+    A->>X: Gemma provider call
     X-->>A: Candidate translation
     A-->>O: Bounded model result
   else Word or established phrase
@@ -43,7 +43,7 @@ sequenceDiagram
     A-->>O: Hydrated canonical bundle
     O->>P: Optional bounded composition
     P->>A: Structured model operation
-    A->>X: Gemma4-27B fast or bounded reasoning call
+    A->>X: Gemma provider call
     X-->>A: Candidate organization
     A-->>O: Bounded model result
   end
@@ -69,11 +69,9 @@ The orchestrator owns call order, remaining-time allocation, cancellation, and d
 
 ## Connected-text branch
 
-The translation application derives the model operation. Sufficient canonical matches use no generation. Ordinary text, segment, and image-region work uses the configured Gemma4-27B fast profile. Longer input uses a request-local chunk plan, bounded parallel fast calls, and a disposable terminology ledger on that same model. Length never selects another generator. The orchestrator may make one reasoning-profile escalation under the closed policy in the [model-runtime reference](../model-runtime.md).
+The translation application derives the model operation. Short input uses the configured Gemma 4 role; longer input uses TranslateGemma and may use a request-local chunk plan and terminology ledger. The model port carries validated input and the remaining deadline to the provider adapter.
 
 The adapter creates the provider-specific HTTP request, applies resilience policy, bounds and decodes the result, and returns a closed outcome. Application logic checks coverage, order, terminology consistency, and output validity before adding the translation to the superset result.
-
-If and only if request freshness is `allowed` or `required` and canonical content is insufficient, the orchestrator may spend one bounded live-retrieval round. Search and public-page fetches share the original deadline, reject private-network destinations and unsafe redirects, and supply untrusted excerpts to the same application operation. Live-dependent output carries `live_external` citations. Retrieval failure remains an explicit unavailable/degraded outcome; it never silently triggers more searches or reasoning calls.
 
 ## Lexical-knowledge branch
 
@@ -100,7 +98,7 @@ Transport serializes the validated application outcome using the interface envel
 - **Translation domain:** validates language, history, response-level, and translation-result invariants.
 - **Lexical-knowledge domain:** owns canonical identity, typed relationships, evidence semantics, and graph invariants.
 - **Release domain:** owns compatible immutable release identity and valid degraded states.
-- **Model ports:** expose bounded fast/reasoning generation and embedding operations without provider protocol.
+- **Model ports:** expose bounded translation and structured-generation operations without provider protocol.
 - **Data ports:** expose use-case-specific canonical and vector reads without database-native requests.
 - **Provider adapters:** implement OpenAI-compatible requests, model roles, response decoding, and dependency failure mapping.
 - **Island-port adapters:** implement UDS data calls while preserving deadline, release, and closed outcomes.
@@ -109,7 +107,7 @@ Transport serializes the validated application outcome using the interface envel
 
 ## Request-lifetime data
 
-Request text, segments, images, history, guidance, normalized forms derived from private input, chunk plans, terminology ledgers, provider input and output, live-search queries and pages, intermediate candidates, inferred explanations, citations, and proposed domains live only for the bounded request. They are dropped on success, failure, timeout, or cancellation and never enter durable caches, queues, MySQL, Qdrant, logs, metrics, or traces.
+Request text, history, normalized forms derived from private input, chunk plans, terminology ledgers, provider input and output, intermediate candidates, inferred explanations, and proposed domains live only for the bounded request. They are dropped on success, failure, timeout, or cancellation and never enter durable caches, queues, MySQL, Qdrant, logs, metrics, or traces.
 
 Published canonical IDs, release identifiers, reviewed facts, and aggregate operational counters are not request-content persistence. Cacheable data must be canonical, release-pinned, and independent of private request influence.
 

@@ -24,10 +24,8 @@ Vector similarity nominates candidates and never establishes a fact. Every displ
 
 A model may organize supplied facts and write concise explanations, but cannot invent endpoints or change fact metadata. Deterministic validation checks every reference. Empty or weak sections are omitted.
 
-Canonical knowledge is an assertion graph, not a stored tree. A versioned relation registry defines participant roles and which n-ary assertions permit a binary traversal projection. The application turns that graph into bounded guided views: learning, terminology, mechanism, comparison, and application lenses choose a reviewed root, ordered sections, depth and item budgets, and evidence policy. Tree-like presentation therefore remains explainable without duplicating facts or pretending that every relation is hierarchical. `knowledge/paths` returns short named paths only when each assertion independently satisfies the request scope.
-
 `brief`, `standard`, and `full` are projections of the same validated superset. Response level changes breadth, not fact choice or truth status.
 
 ## Verification
 
-Test candidate precedence, ambiguity, closed domain outcomes, unavailable inventory, release consistency, hydration, relation-registry compatibility, n-ary participant validation, lens budgets, path evidence, cycle-safe presentation, evidence filtering, graph bounds, hallucinated references, empty sections, and projection monotonicity.
+Test candidate precedence, ambiguity, closed domain outcomes, unavailable inventory, release consistency, hydration, evidence filtering, graph bounds, hallucinated references, empty sections, and projection monotonicity.

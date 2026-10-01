@@ -2,75 +2,121 @@
 
 中文：[Transnet 服务接口](../../docs_cn/interfaces/transnet_cn.md)
 
-This contract defines the target island-port-to-Transnet interface and the shared internal HTTP/1.1-over-UDS rules. Island-port owns internet transport, authentication, user state, file ingestion, document reconstruction, and final presentation. Transnet receives no end-user identity and persists no live request content.
+This contract defines how island-port requests translation and relationship knowledge from Transnet and receives the information needed to build a client response. It is an internal service interface, not the internet-facing WebUI API. Island-port owns HTTPS/WSS client transport, authentication, user data, personalization, response merging, and the final public response. Transnet receives no end-user identity or user-owned state.
 
-Status: revised target v1 contract. The checked-in executable still uses loopback HTTP and implements only the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. Structured segments, image regions, capabilities, live retrieval, target inbound UDS, guided knowledge views, and knowledge paths are not implemented until their handlers, composition, tests, and documentation land together.
+This document also defines the transport shared by every internal process boundary involving Transnet. It is normative for island-port, Transnet, publication tooling, and deployment tooling.
+
+Status: target contract with explicitly noted current-runtime coverage. The current runtime still uses transitional loopback HTTP; unified translation, BasicCard lookup, and release-pinned sense follow-up are composed. Target inbound UDS, the external island-port/MySQL implementation and production acceptance, and later vector/relationship capabilities remain incomplete.
+
+
+The current transitional runtime enforces the stateless boundary before handler dispatch. It rejects Cookie, Cookie2, Authorization, Proxy-Authorization, X-API-Key, Lookup-Capability, Remote-User, X-Authenticated-User, X-Forwarded-User, and X-User-*, X-Learner-*, X-Account-*, X-Owner-*, and X-Session-* headers without echoing their values. Only the existing graph routes accept their strictly decoded query parameters; other routes reject query strings. Boundary failures return HTTP 400 with the `invalid_service_request` problem code and a request ID. Responses carry `Cache-Control: no-store`. Outbound model-provider credentials remain separate from incoming end-user credentials.
+
+Current `POST /translate` accepts exactly `text`, `source_lang`, and `target_lang`. The loopback runtime also exposes the unified `POST /api/v1/translations` request and response contract defined below; migration to the target UDS listener remains unimplemented. Current `POST /v1/lookups` accepts `query`, `source_language`, `target_language`, `context`, `explanation_language`, `english_dialect`, `detail`, and `include`; target language remains `en`, detail remains `brief` or `full`, and include accepts only `relations` and `word_history`. Unknown fields, including `learner_level`, are rejected, as is `practice_preview`. There is no lookup-job polling route or reusable learner, practice, private-feedback, saved-layout, or durable request-job module.
+
+Canonical lookup performs release-pinned reads for each request with no query snapshot cache, query fingerprint, or persistence dependency. The remaining topology cache contains canonical graph data keyed by canonical node identity and release metadata. Canonical pronunciation and usage-pitfall facts remain lexical content, not speech training or personal learner state.
 
 ## Contents
 
-- [Connection and wire rules](#connection-and-wire-rules)
-- [Privacy and request lifetime](#privacy-and-request-lifetime)
-- [Deadlines and call budget](#deadlines-and-call-budget)
-- [Success and error envelopes](#success-and-error-envelopes)
-- [Translation input](#translation-input)
-- [Professional guidance](#professional-guidance)
-- [Translation output](#translation-output)
-- [Live retrieval](#live-retrieval)
-- [Knowledge views](#knowledge-views)
-- [POST /api/v1/capabilities](#post-apiv1capabilities)
-- [POST /api/v1/health](#post-apiv1health)
-- [POST /api/v1/livez](#post-apiv1livez)
-- [POST /api/v1/readyz](#post-apiv1readyz)
-- [POST /api/v1/translations](#post-apiv1translations)
-- [POST /api/v1/basic-cards/lookup](#post-apiv1basic-cardslookup)
-- [POST /api/v1/senses/get](#post-apiv1sensesget)
-- [POST /api/v1/knowledge/views](#post-apiv1knowledgeviews)
-- [POST /api/v1/knowledge/paths](#post-apiv1knowledgepaths)
-- [Related documents](#related-documents)
+- [Transnet service interface](#transnet-service-interface)
+  - [Contents](#contents)
+  - [Connection contract](#connection-contract)
+  - [HTTP and JSON rules](#http-and-json-rules)
+  - [Deadlines, limits, and lifecycle](#deadlines-limits-and-lifecycle)
+  - [Example](#example)
+  - [Service boundary](#service-boundary)
+  - [Shared wire rules](#shared-wire-rules)
+  - [Simple translation request](#simple-translation-request)
+  - [Request-scoped translation history](#request-scoped-translation-history)
+  - [Shared translation result](#shared-translation-result)
+  - [Response levels](#response-levels)
+  - [Translation persistence](#translation-persistence)
+  - [Relationship assessment metadata](#relationship-assessment-metadata)
+  - [POST /api/v1/health](#post-apiv1health)
+  - [POST /api/v1/livez](#post-apiv1livez)
+  - [POST /api/v1/readyz](#post-apiv1readyz)
+  - [POST /api/v1/translations](#post-apiv1translations)
+  - [POST /api/v1/basic-cards/lookup](#post-apiv1basic-cardslookup)
+  - [POST /api/v1/senses/get](#post-apiv1sensesget)
+  - [POST /api/v1/graph/get](#post-apiv1graphget)
+  - [POST /api/v1/graph/neighbors](#post-apiv1graphneighbors)
+  - [Related documents](#related-documents)
 
-## Connection and wire rules
+## Connection contract
 
-Transnet listens on `/run/transnet/transnet.sock`; Transnet data adapters call `/run/island-port/island-port.sock`. Deployments may relocate sockets through configuration, but endpoint paths and payloads do not change. Socket owners create the parent directory, prove a stale socket is inactive before removing it, bind with mode `0660`, and rely on filesystem workload identity rather than forwarded user headers.
+Every internal interface involving Transnet uses HTTP/1.1 over a Unix domain stream socket (UDS). TCP listeners, host names, and port numbers are not part of these internal contracts. Island-port calls Transnet through `/run/transnet/transnet.sock`; Transnet calls island-port's structured, vector, and graph endpoints through `/run/island-port/island-port.sock`. Deployments may relocate sockets through configuration, but endpoint paths and payload schemas do not change. Client-to-island-port traffic is outside this UDS rule and uses island-port's public HTTPS/WSS contract.
 
-Every operation uses HTTP/1.1, an origin-form `/api/v1/...` path, `Host: localhost`, UTF-8 JSON, and `POST`. Empty input is `{}`. Clients send `Content-Type: application/json`, `Accept: application/json`, a bounded `Content-Length`, and optionally `X-Request-Id`. Query strings, chunked request bodies, multipart bodies, upgrades, and response streaming are rejected. Servers reject unknown JSON fields and return `X-Request-Id` plus `Cache-Control: no-store`.
+The process that owns a socket creates its parent directory, removes only its own stale socket after proving no listener is active, binds with mode `0660`, and runs under a dedicated service account. The configured group grants caller access. Socket directory permissions prevent path replacement. Services reject requests forwarded from TCP and do not trust identity headers supplied by clients.
 
-The default body limit is 1 MiB. A translation request containing inline images may use the route-specific 12 MiB encoded-body limit. At most four decoded images are accepted, each no larger than 2 MiB or 4096 by 4096 pixels, with at most sixteen regions across the request. Supported image media types are `image/png`, `image/jpeg`, and `image/webp`.
+Socket ownership authenticates the calling workload on a single host. These Transnet and database-port interfaces are UDS-only and are not exposed to internet clients.
 
-IDs are opaque URL-safe strings. Timestamps are UTC RFC 3339 with microsecond precision. Language values are canonical BCP 47 tags advertised by capabilities; `auto` is accepted only for the source language.
+```mermaid
+flowchart LR
+  client["WebUI / internet client"] -->|"HTTPS or WSS"| port["island-port"]
+  port -->|"Transnet socket: api/v1"| transnet["Transnet"]
+  transnet -->|"island-port socket: api/v1"| port
+  port --> database["MySQL / Qdrant"]
+  port -->|"Merge Transnet result with user data"| client
+```
 
-## Privacy and request lifetime
+## HTTP and JSON rules
 
-Transnet accepts no user, learner, account, owner, session, cookie, bearer token, profile, preference, save state, mastery state, or durable history. Island-port may send current text, bounded inline images, professional guidance, and a chronological list of minimal prior translations as request-scoped linguistic context.
+Requests use HTTP/1.1 with an origin-form path and `Host: localhost`; the Host value is ignored for routing. Request and response bodies use UTF-8 JSON with `Content-Type: application/json`. Every operation, including reads and probes, uses `POST` and carries one JSON object; an empty input is `{}`. Query strings, form data, multipart bodies, upgrades, and streaming responses are rejected.
 
-Text, segments, images, protected ranges, terminology, history, normalized forms, chunk plans, provider input and output, hidden reasoning, live-search queries and results, inferred explanations, and online embeddings exist only for the request. They never enter MySQL, Qdrant, logs, traces, metrics, caches, durable queues, backups, publication candidates, or later training data.
+Every internal HTTP interface uses the common `/api/v1/...` prefix. The connected UDS, not a path segment, identifies the owning service: requests on `/run/transnet/transnet.sock` use the Transnet routes in this document, while requests on `/run/island-port/island-port.sock` use the structured-data or vector-data routes in their owning contracts. Resource names distinguish route domains on the same socket. Versioning the shared prefix keeps clients predictable and leaves storage technology names out of the wire API.
 
-Canonical content enters storage only through the authenticated offline publication workflow. A live result never publishes itself. Product-owned saves, edits, feedback, and document state remain in island-port.
+Clients send `Accept: application/json`, a bounded `Content-Length`, and optionally `X-Request-Id`. Chunked request bodies are rejected. Servers return `X-Request-Id`, reject unknown JSON fields, and close the connection after a bounded number of requests. IDs are opaque URL-safe strings and timestamps are UTC RFC 3339 with microsecond precision.
 
-## Deadlines and call budget
+Application success and error schemas belong to each interface contract. HTTP status reports transport-level acceptance; a data operation may additionally return its documented closed outcome in JSON. Island-port propagates a request ID across both directions but never forwards user identity or user-owned state to Transnet. Malformed JSON, an unsupported media type, an unknown endpoint, or an unsupported method fails before application dispatch.
 
-One caller deadline covers the complete operation. Canonical reads, embeddings, generation, and permitted live retrieval receive sub-deadlines capped by the remaining time and cannot extend the request.
+## Deadlines, limits, and lifecycle
 
-A sufficient canonical match uses zero generation calls. Ordinary translation, visual reading, classification, and grounded composition use the Gemma4-27B `fast` profile. Long input uses bounded semantic chunks, bounded parallel fast calls, one request-local terminology ledger, and deterministic reassembly on the same model.
+Internal data requests carry `deadline_at` in their documented request context. Public Transnet requests inherit the server's bounded deadline unless their endpoint schema explicitly accepts one. A receiver rejects an expired deadline and never extends it when calling another service. Retryable operations are explicitly identified by their owning contract; mutation retries require an idempotency key.
 
-One request may use the `reasoning` profile at most once, only for unresolved material ambiguity, conflicting terminology or formatting constraints, a verified multi-hop explanation that fast composition cannot safely express, or one invalid structured fast result. Input length alone never triggers reasoning. Hidden reasoning is never returned. Exact policy belongs to the [model-runtime reference](../reference/model-runtime.md).
+The default maximum body is 1,048,576 bytes unless an endpoint specifies a smaller bound. Servers bound response size, concurrency, parsing time, and connection lifetime. They stop accepting new connections during graceful shutdown, finish admitted requests within their deadlines, close the listener, and then unlink their own socket.
 
-## Success and error envelopes
+Request bodies, response bodies, canonical text, vectors, credentials, and socket peer details are excluded from logs and metrics. Observability may record the request ID, static endpoint template, outcome class, byte counts, and elapsed time.
 
-Success uses `data` and `meta`. `meta.request_id` matches the response header. Optional metadata appears only when the component participated.
+## Example
+
+The following call uses curl's Unix-socket support; the URL host is a placeholder and does not open a TCP connection.
+
+```bash
+curl --unix-socket /run/transnet/transnet.sock \
+  --request POST http://localhost/api/v1/health \
+  --header 'content-type: application/json' \
+  --header 'accept: application/json' \
+  --data '{}'
+```
+
+This document is the primary interface contract for Transnet. Transnet is a shared, user-agnostic translation and relationship-knowledge service: it translates connected text and builds bounded meaning-specific detail around one or more materially plausible lexical senses or domain concepts. Calling products own their users, private state, and presentation workflows.
+
+Status: target service contract. The current runtime still uses a transitional loopback TCP listener and legacy paths; runtime availability is stated here.
+
+## Service boundary
+
+Transnet accepts no user ID, learner ID, account ID, cookie, end-user bearer token, profile, preference set, saved-item state, mastery state, or durable personal-history record. It accepts only the minimal prior translation turns that island-port selects as request-scoped linguistic context. Learning profiles, lessons, exercises, mastery, review scheduling, coaching, progress tracking, writing evaluation, speech, and pronunciation are not Transnet modules.
+
+Current text and translation history are request payloads, not user records. They may exist in memory only for the bounded request lifetime and must not be written to MySQL, Qdrant, logs, metrics, traces, caches, or durable queues. Island-port owns history selection and every association between a response and an end user.
+
+Transnet exposes HTTP/1.1 only over `/run/transnet/transnet.sock` by default and does not bind a TCP port or terminate TLS. Filesystem ownership authenticates local calling services, never end users. A cross-host gateway authenticates remote callers and connects through the local socket.
+
+## Shared wire rules
+
+Requests and responses use JSON. Every response returns `X-Request-Id`. Timestamps are UTC RFC 3339 with microsecond precision. IDs are opaque URL-safe strings; clients must not infer type or order from them. Unknown request fields are rejected.
+
+Successful application responses use `data` and `meta`. `meta.request_id` matches the response header. Canonical reads also return the immutable content release used to answer the request.
 
 ```json
 {
   "data": {},
   "meta": {
     "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-    "schema_version": "translation-result-v1",
-    "inference_profiles": ["fast"],
-    "reasoning_escalated": false
+    "content_release": "knowledge-2026-09"
   }
 }
 ```
 
-Errors use `application/problem+json`, never echo private content, and reject unknown fields.
+Errors use one safe RFC 9457-style problem envelope with `Content-Type: application/problem+json` and never echo request text, context, credentials, provider bodies, vectors, prompts, or storage internals. `request_id` matches the `X-Request-Id` response header. `errors` is an empty array when no field-specific diagnostic applies.
 
 ```json
 {
@@ -81,276 +127,598 @@ Errors use `application/problem+json`, never echo private content, and reject un
   "detail": "One or more translation fields are invalid.",
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
   "retryable": false,
-  "errors": [{"field": "target_language", "message": "is not supported by this deployment."}]
-}
-```
-
-Common statuses are `400` malformed JSON or unknown fields, `401` failed workload authentication, `404` unknown canonical resource, `409` unavailable pinned release, `413` body too large, `415` unsupported image type, `422` invalid semantic input, `429` bounded capacity, `502` invalid dependency result, `503` required dependency unavailable, and `504` deadline exceeded.
-
-## Translation input
-
-`input` is a tagged union. `text` is the simplest default.
-
-```json
-{
-  "input": {"type": "text", "text": "The launch date is still up in the air."},
-  "source_language": "auto",
-  "target_language": "zh-CN",
-  "response_level": "standard"
-}
-```
-
-Structured document and localization input uses ordered segments. Segment IDs are request-local and returned unchanged. `role` accepts `title`, `paragraph`, `list_item`, `caption`, `ui`, or `subtitle`; `format` accepts `plain`, `markdown`, or `html`. Protected ranges use zero-based Unicode scalar offsets, are start-inclusive and end-exclusive, must not overlap, and must be reproduced exactly.
-
-```json
-{
-  "input": {
-    "type": "segments",
-    "segments": [
-      {
-        "segment_id": "seg_title",
-        "text": "Launch {product_name}",
-        "role": "title",
-        "format": "plain",
-        "protected_ranges": [{"start": 7, "end": 21}]
-      }
-    ]
-  },
-  "source_language": "en",
-  "target_language": "zh-CN",
-  "response_level": "standard"
-}
-```
-
-Vision input contains sanitized inline images and normalized rectangles. Coordinates are finite decimal values from 0 through 1, measured from the top-left. Each region ID is unique within its image, rectangles must have positive area and remain in bounds, and `reading_order` references every region exactly once. If a file or PDF is involved, island-port renders and selects pages before this request.
-
-```json
-{
-  "input": {
-    "type": "image_regions",
-    "images": [
-      {
-        "image_id": "page_1",
-        "media_type": "image/png",
-        "data": "<base64-encoded PNG>",
-        "regions": [
-          {"region_id": "heading", "x": 0.05, "y": 0.06, "width": 0.9, "height": 0.12}
-        ]
-      }
-    ],
-    "reading_order": ["page_1:heading"]
-  },
-  "source_language": "auto",
-  "target_language": "en",
-  "response_level": "standard"
-}
-```
-
-Text is limited to 131,072 Unicode scalars. Segmented input accepts at most 256 segments, 8,192 scalars per segment, and 131,072 aggregate scalars. Each segment accepts at most 128 protected ranges. These limits are subordinate to the encoded body limit.
-
-`history` is optional and chronological. Each item contains only previous source text, translated text, and language tags. It has no turn ID, time, user ID, feedback, model metadata, or save state. The common body limit bounds history; there is no separate item-count limit.
-
-## Professional guidance
-
-`guidance` is optional and request-scoped. Omitted values use `general`, `general`, `preserve`, zero alternatives, the response-level default annotations, and `offline` freshness.
-
-```json
-{
-  "purpose": "technical",
-  "audience": "specialist",
-  "register": "preserve",
-  "terminology": [
-    {"source": "torque", "target": "扭矩", "policy": "required"}
-  ],
-  "max_alternatives": 1,
-  "annotations": ["ambiguity", "terminology", "register", "culture"],
-  "freshness": "offline"
-}
-```
-
-`purpose` accepts `general`, `publication`, `technical`, `localization`, or `subtitles`. `audience` accepts `general`, `professional`, `specialist`, or `young_reader`. `register` accepts `preserve`, `neutral`, `formal`, or `informal`. Terminology policy accepts `required`, `preferred`, or `forbidden`; at most 128 entries are accepted, and source and target values are each limited to 256 scalars. `max_alternatives` is 0 through 2.
-
-Guidance constrains the current result but never creates a profile, translation memory, or canonical term. Contradictory required terms, protected ranges, or format rules return `422 constraint_conflict` rather than silently dropping a constraint.
-
-## Translation output
-
-Text output preserves the existing meaning-specific ordered translation list. Segment and image-region outputs preserve request order and IDs. Every unit has one primary translation and up to the requested number of materially useful alternatives.
-
-```json
-{
-  "translation": {
-    "input_type": "segments",
-    "detected_source_languages": ["en"],
-    "segments": [
-      {
-        "segment_id": "seg_title",
-        "translations": [{"text": "发布 {product_name}", "language": "zh-CN"}],
-        "annotations": [
-          {"type": "terminology", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
-        ],
-        "review": {"state": "clean", "issues": []}
-      }
-    ],
-    "terminology_decisions": []
-  }
-}
-```
-
-Image output uses `regions` with `image_id`, `region_id`, detected language, translations, annotations, and review. It does not return the image or an unrestricted OCR transcript. Review state is `clean` or `review_recommended`; issue codes are closed and include `low_confidence`, `source_ambiguous`, `terminology_conflict`, `format_risk`, `protected_content_mismatch`, `visual_order_uncertain`, and `live_source_incomplete`.
-
-`brief`, `standard`, and `full` are deterministic projections of one validated superset. A lower level removes supporting detail but never changes the selected meaning, translation, protected content, evidence state, or review outcome. Empty sections are omitted.
-
-## Live retrieval
-
-`guidance.freshness` accepts `offline`, `allowed`, or `required`. `offline` is the default and prohibits network retrieval. `allowed` is explicit permission to retrieve only when deterministic classification finds a freshness-sensitive claim. `required` always attempts retrieval and returns `503 live_retrieval_unavailable` if the bounded operation cannot complete safely.
-
-Live retrieval is an orchestrated search/fetch port, not unrestricted model browsing. It performs at most one search round, selects at most five results, fetches at most three pages concurrently, and obeys a configured sub-deadline. The fetcher allows only public HTTP(S), resolves and validates every redirect, rejects loopback, link-local, private, reserved, and Unix-socket destinations, bounds response bytes, and accepts only configured textual media types.
-
-Fetched content is untrusted data. It cannot modify system instructions, request another URL, expose credentials, bypass release filters, or become canonical evidence. The embedding model may rank fetched fragments in memory; both fragments and vectors are discarded with the request.
-
-Claims based on live retrieval reference response-local sources. Live sources are labeled `live_external`, not `verified`.
-
-```json
-{
-  "external_sources": [
+  "errors": [
     {
-      "source_id": "live_1",
-      "title": "Example current terminology notice",
-      "publisher": "Example standards body",
-      "url": "https://example.org/notices/current-term",
-      "published_at": "2026-09-20T00:00:00.000000Z",
-      "retrieved_at": "2026-10-01T08:00:00.000000Z",
-      "evidence_state": "live_external"
+      "field": "target_language",
+      "message": "must be one of `en` or `zh-CN`."
     }
   ]
 }
 ```
 
-## Knowledge views
+Common statuses are `400` malformed JSON or unknown fields, `401` failed deployment authentication, `404` unknown canonical resource, `409` release conflict, `413` body too large, `422` invalid semantic input, `429` bounded capacity, `502` invalid provider result, `503` required dependency unavailable, and `504` deadline exceeded.
 
-Canonical knowledge is an evidence-backed assertion graph. A knowledge tree is a deterministic, root-specific projection through one lens; it is never stored as canonical parentage. The same stable node may appear in several lens branches without acquiring a second identity.
+## Simple translation request
 
-Closed lenses are `meaning`, `contrast`, `usage`, `form`, `origin`, `domain`, `mechanism`, and `application`. Initial lexical translations may return `available_lenses`; follow-up requests choose one returned lens. Transnet derives relationship families, bounds, and ranking from the lens and response level. Callers do not submit raw relation filters, graph depth, node limits, vector selectors, or arbitrary traversal queries.
-
-Each displayed item is the root or includes an explicit path to the root, a concise relevance reason, assertion and evidence references, and one of `verified`, `inferred`, or `exploratory`. Only hydrated `verified` assertions may form a factual connection path. Inferred and exploratory material is request-local and visually separate.
-
-## POST /api/v1/capabilities
-
-Returns configured BCP 47 language pairs, input kinds, image types, purposes, annotation families, knowledge lenses, body and semantic limits, live-retrieval availability, and schema versions. It exposes no credentials, provider URLs, socket paths, concurrency state, or private feature flags.
-
-Request: `{}`
+Ease of use is a contract requirement. The WebUI asks for the text, source language, target language, and response level only. It does not ask the user to choose translation versus lookup, a domain, dialect, audience, purpose, register, formatting policy, retrieval filters, or model. Island-port forwards the same four fields and may append request-scoped history; Transnet derives every other decision.
 
 ```json
 {
-  "data": {
-    "source_languages": ["auto", "en", "zh-CN"],
-    "target_languages": ["en", "zh-CN"],
-    "input_types": ["text", "segments", "image_regions"],
-    "image_media_types": ["image/png", "image/jpeg", "image/webp"],
-    "knowledge_lenses": ["meaning", "contrast", "usage", "form", "origin", "domain", "mechanism", "application"],
-    "live_retrieval": {"available": false, "default": "offline"},
-    "schema_versions": ["translation-result-v1", "knowledge-view-v1"]
-  },
-  "meta": {"request_id": "req_example"}
+  "text": "What does ‘hot’ mean here?",
+  "source_language": "auto",
+  "target_language": "zh-CN",
+  "response_level": "standard"
 }
 ```
+
+For the initial version, `source_language` accepts `auto`, `en`, or `zh-CN`; `target_language` accepts `en` or `zh-CN`. The WebUI may display “Chinese” or “CN,” but the wire value remains the valid language tag `zh-CN`. `response_level` accepts `brief`, `standard`, or `full`. Island-port validates these closed values before calling Transnet, and Transnet validates them again.
+
+## Request-scoped translation history
+
+Island-port may append `history` to support several translation turns. The array is chronological, oldest first, and each item contains only the previous source text, translated text, and their languages. There is no protocol-level item-count limit: island-port owns selection, truncation, and the amount sent. The common maximum request-body size still applies, so “unlimited” means no separate history-count cap rather than an unbounded HTTP body.
+
+```json
+{
+  "text": "Make that more natural.",
+  "source_language": "en",
+  "target_language": "zh-CN",
+  "response_level": "standard",
+  "history": [
+    {
+      "source_text": "The launch date is still up in the air.",
+      "translated_text": "发布日期仍未确定。",
+      "source_language": "en",
+      "target_language": "zh-CN"
+    }
+  ]
+}
+```
+
+History is linguistic context, not stored history. It contains no turn ID, time, user ID, feedback, preference, domain tag, model output metadata, or saved-item state. Transnet uses it only for reference resolution, terminology consistency, tone continuity, and follow-up instructions, then discards it with the current request. It never returns the history verbatim.
+
+## Shared translation result
+
+Every successful translation returns one `TranslationResult` at `data.translation`. `translations` is an ordered array rather than one string because a word or phrase may require several materially different meanings. The first item is the preferred interpretation given the current text and history. Additional items appear only when ambiguity matters; the service does not pad the response with trivial synonyms.
+
+Each item has a stable `text` and `language`. `meaning` distinguishes choices when more than one is returned. `canonical` appears only for reviewed content from the named immutable release. `details` is a meaning-specific projection selected by `response_level`; it is not a separate database record.
+
+Brief word response with two necessary meanings:
+
+```json
+{
+  "translation": {
+    "unit": "word",
+    "detected_source_language": "en",
+    "translations": [
+      {
+        "text": "热的",
+        "language": "zh-CN",
+        "meaning": "having a high temperature"
+      },
+      {
+        "text": "热门的",
+        "language": "zh-CN",
+        "meaning": "currently popular or receiving much attention"
+      }
+    ]
+  }
+}
+```
+
+Full word response from the same canonical record:
+
+```json
+{
+  "translation": {
+    "unit": "word",
+    "detected_source_language": "en",
+    "translations": [
+      {
+        "text": "酷热的",
+        "language": "zh-CN",
+        "meaning": "uncomfortably hot, especially because of the weather",
+        "canonical": {
+          "translation_id": "tr_sweltering_zh_cn_01",
+          "sense_id": "sense_sweltering_hot_01",
+          "release": "knowledge-2026-09"
+        },
+        "details": {
+          "type": "word",
+          "part_of_speech": "adjective",
+          "aliases": ["oppressively hot"],
+          "pronunciations": [{"dialect": "en-US", "ipa": "/ˈswɛltərɪŋ/"}],
+          "examples": [
+            {
+              "source_text": "It was a sweltering afternoon.",
+              "translated_text": "那是一个酷热难耐的下午。"
+            }
+          ],
+          "domain_assessment": {
+            "classification": "domain_specific",
+            "resolution": "existing",
+            "selected_domain_ids": ["domain_weather"]
+          },
+          "domain_facts": [
+            {
+              "fact_id": "fact_sweltering_degree_scorching_01",
+              "statement": "For environmental heat, scorching usually indicates greater intensity than sweltering.",
+              "evidence_ids": ["evidence_dictionary_1042"],
+              "evidence_state": "verified"
+            }
+          ],
+          "taxonomy": {
+            "hypernyms": ["hot"],
+            "hyponyms": []
+          },
+          "intensity_scales": [
+            {
+              "dimension": "temperature_intensity",
+              "items": ["warm", "hot", "sweltering", "scorching"],
+              "selected_index": 2
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+Standard phrase response:
+
+```json
+{
+  "translation": {
+    "unit": "phrase",
+    "detected_source_language": "en",
+    "translations": [
+      {
+        "text": "悬而未决",
+        "language": "zh-CN",
+        "meaning": "not yet decided or settled",
+        "details": {
+          "type": "phrase",
+          "phrase_type": "idiom",
+          "usage_notes": ["Used for plans or questions whose outcome is uncertain."],
+          "examples": [
+            {
+              "source_text": "Our travel dates are still up in the air.",
+              "translated_text": "我们的旅行日期仍未确定。"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+Standard passage response:
+
+```json
+{
+  "translation": {
+    "unit": "passage",
+    "detected_source_language": "en",
+    "translations": [
+      {
+        "text": "那个计划仍然悬而未决。",
+        "language": "zh-CN"
+      }
+    ]
+  }
+}
+```
+
+These examples show the reusable inner payload without the outer `data` and `meta` success envelope. Endpoint examples below are complete response bodies.
+
+## Response levels
+
+All response levels may use the same MySQL card and canonical translation records plus the same eligible Qdrant facts. A deterministic response projector selects fields and applies size caps after sense resolution; it never asks the model to invent a smaller schema.
+
+| Level | Always returned | Additional eligible content |
+| --- | --- | --- |
+| `brief` | Unit, detected source language, ordered translations, and one meaning label per lexical sense | No examples, tips, or relationship expansion |
+| `standard` | Everything in `brief` | Concise definition or phrase usage, at most one example per meaning, and only a material contrast or relationship |
+| `full` | Everything in `standard` | Pronunciation, aliases, morphology, more examples and usage notes, domain facts, provenance, taxonomy, hypernyms, hyponyms, intensity scales, and other bounded relationship groups |
+
+Multiple meanings override brevity when omission would make the translation misleading. Empty fields and empty relationship groups are omitted at every level. A lower level never changes the ranked meanings or their translations; it only projects fewer supporting fields.
+
+Passage tips and labeled alternatives are planned application capabilities, not fields in the milestone 1 HTTP contract. A later milestone must define their domain semantics before a transport projection may expose them.
+
+Domain assessment uses the closed `resolution` values `existing`, `proposed_new`, `general`, and `uncertain`. A `proposed_new` result has no domain ID and may include a request-local label, definition, broader-domain candidates, and reason only at `full` level. It is never represented as verified knowledge. Failure to load the existing-domain inventory always produces `uncertain`, not `proposed_new`.
+
+## Translation persistence
+
+A live translation result is ephemeral and has no save flag. Transnet first may resolve an exact reviewed canonical translation from the pinned MySQL release; otherwise it calls a provider and discards the request, response, and intermediate terminology ledger after the bounded request. It never stores a provider result as a side effect of traffic or decides importance from user behavior.
+
+There are two meanings of important and they have different owners. A translation saved, starred, or labeled important by an end user is private product data and island-port stores the association outside Transnet. A translation important to the shared language product is a canonical-content candidate: authorized publication tooling stages it with provenance and rights metadata, reviewers approve it, and a later immutable content release makes it readable by Transnet. The [SQL data endpoint contract](mysql.md) owns that storage and publication design.
+
+## Relationship assessment metadata
+
+Every canonical stored edge that island-port may expose for WebUI assessment includes an `assessment` object. `allowed_judgments` is a closed set containing `confirm` and `challenge`: `confirm` means the relationship appears correct as presented, while `challenge` means it should be reviewed. These are product-feedback judgments, not editorial approval states, evidence states, or instructions to mutate canonical content. `relation_version` pins the exact revision being judged.
+
+The WebUI-to-island-port submission route is outside this internal interface, but its semantic request must contain exactly this target and judgment shape; the public island-port contract chooses its route, authentication headers, idempotency mechanism, and envelope:
+
+```json
+{
+  "target": {
+    "edge_id": "edge_sweltering_scorching_01",
+    "relation_version": 3,
+    "content_release": "knowledge-2026-09"
+  },
+  "judgment": "challenge"
+}
+```
+
+Island-port rejects an unknown edge, a relation-version or release mismatch, a judgment outside the edge's `allowed_judgments`, and reuse of an idempotency key with a different semantic request. Island-port owns the public endpoint, authentication, abuse controls, retention, aggregation, and any user association. It must not forward an individual judgment or user identity to Transnet. A later publishing workflow may consume a separately reviewed aggregate or moderation signal, but no individual judgment directly verifies, rejects, or republishes an edge.
+
+Transnet may receive only a k-anonymous aggregate snapshot for a stored edge. The minimum threshold is five eligible judgments; below it, the aggregate is omitted and the adjustment is zero. Let `c` be eligible confirms, `h` eligible challenges, and `n = c + h`. The versioned `relationship-distance-v1` algorithm uses a symmetric Beta prior of four judgments per side, a saturation threshold of twenty eligible judgments, and a maximum distance adjustment of 1,500 basis points:
+
+```text
+support = (c + 4) / (n + 8)
+weight = min(1, n / 20)
+adjustment = round((2 * support - 1) * weight * 1500)
+effective_distance = clamp(base_distance - adjustment, 0, 10000)
+```
+
+Positive `adjustment` means net confirmation and shortens the rendered or traversal distance; a negative value means net challenge and lengthens it. Equal evidence produces zero adjustment, and low volume remains close to neutral. `base_distance` comes only from the evidence- and relation-type ranker. The community adjustment may change display order and graph layout, but it cannot make an ineligible edge eligible, change its type or direction, alter evidence or verification state, or create a canonical fact. Every cache key and cursor whose ordering uses effective distance includes `aggregate_version` and `algorithm_version`.
+
+The `assessment` object is omitted from inferred, exploratory, derived, visual-only, and otherwise non-canonical relationships. The WebUI therefore enables the control only when this object is present; it must not infer eligibility from `verification_state`, confidence, relation type, or the shape of an edge ID.
 
 ## POST /api/v1/health
 
-Returns `200` when the process can answer. It does not probe dependencies.
+Returns process health without probing dependencies or revealing configuration.
 
-Request: `{}`
+Request:
 
-Response data: `{"status":"ok"}`.
+```json
+{}
+```
 
-## POST /api/v1/livez
-
-Returns `200` while the event loop and listener are alive. It does not report readiness.
-
-Request: `{}`
-
-Response data: `{"status":"alive"}`.
-
-## POST /api/v1/readyz
-
-Returns `200` only when every configured required dependency can safely serve new work. Optional canonical, retrieval, embedding, vision, reasoning, or live-retrieval capabilities are reported as closed component states and do not become required unless configuration says so.
-
-Request: `{}`
+Response `200`:
 
 ```json
 {
   "data": {
-    "status": "ready",
-    "components": {
-      "generation_fast": "available",
-      "generation_reasoning": "available",
-      "embedding": "available",
-      "canonical_data": "disabled",
-      "retrieval_data": "disabled",
-      "live_retrieval": "disabled"
-    }
+    "status": "ok"
   },
-  "meta": {"request_id": "req_example"}
+  "meta": {
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX"
+  }
 }
 ```
+
+## POST /api/v1/livez
+
+Returns success while the process event loop is responsive.
+
+Request:
+
+```json
+{}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "status": "ok"
+  },
+  "meta": {
+    "request_id": "req_01K4Z8Q8X2A6B7C4D9E0F3G5HJ"
+  }
+}
+```
+
+## POST /api/v1/readyz
+
+Returns `200` only when dependencies required by enabled routes are ready. Optional capabilities may be degraded without making the process unready.
+
+Request:
+
+```json
+{}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "status": "ok",
+    "dependencies": {
+      "mysql": "ready",
+      "qdrant": "ready",
+      "translation_provider": "ready"
+    },
+    "capabilities": {
+      "translation": "available",
+      "canonical_lookup": "available",
+      "relationship_pages": "available"
+    }
+  },
+  "meta": {
+    "request_id": "req_01K4Z8R4CX7E2J6K1M9N3P5Q8S"
+  }
+}
+```
+
+Response `503` uses the standard error envelope with code `not_ready`. It may name a dependency class but must not expose a host, credential, collection name, or provider response.
 
 ## POST /api/v1/translations
 
-Accepts the translation input, language tags, response level, optional guidance, and optional history defined above. It automatically chooses lexical knowledge, connected-text, structured-segment, or visual-region processing. The caller never selects a model, inference profile, chunk policy, canonical release, retrieval strategy, or repair policy.
+This is the single entry point for a new translation turn. It translates a word, phrase, sentence, or passage and automatically chooses a lexical structured draft or connected-text translation. The WebUI and island-port never select that mode. The request uses the simple fields above; `history` is optional and defaults to an empty array.
 
-Successful metadata includes result, normalizer, projection, model, and prompt versions that actually participated; optional `content_release`, `retrieval_version`, `embedding_version`, and `live_retrieval` appear only when used. `inference_profiles` is ordered and de-duplicated. `reasoning_escalated` reports the safe policy outcome without exposing reasoning content.
+Request:
 
-Closed route errors additionally include `invalid_translation_request`, `constraint_conflict`, `unsupported_input_type`, `unsupported_language_pair`, `invalid_image`, `invalid_model_output`, `translation_model_unavailable`, and `live_retrieval_unavailable`.
+```json
+{
+  "text": "That plan is still up in the air.",
+  "source_language": "auto",
+  "target_language": "zh-CN",
+  "response_level": "standard",
+  "history": []
+}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "translation": {
+      "unit": "passage",
+      "detected_source_language": "en",
+      "translations": [
+        {
+          "text": "那个计划仍然悬而未决。",
+          "language": "zh-CN"
+        }
+      ]
+    }
+  },
+  "meta": {
+    "request_id": "req_01K4Z8S1AK6C8D2F0G4H7J9M3N",
+    "response_level": "standard",
+    "schema_version": "translation-result-v1",
+    "normalizer_version": "translation-lookup-nfc-v1",
+    "projection_version": "translation-projection-v1",
+    "model_versions": ["translate-2026-09"],
+    "prompt_versions": ["connected-text-prompt-v1"]
+  }
+}
+```
+
+The milestone 1 HTTP contract exposes only fields produced by the composed translation application. Model-only lexical details may contain `type`, `part_of_speech` or `phrase_type`, `aliases`, `examples`, `usage_notes`, `generated`, and `evidence_state`. Passage tips, labeled alternatives, canonical IDs, pronunciation, morphology, taxonomy, domain facts, provenance, and relationship groups are later-milestone capabilities and are not fabricated by this handler. Any chunk plan or terminology ledger used for long text is discarded with the request.
+
+`meta.model_versions` and `meta.prompt_versions` are ordered, de-duplicated arrays because one long request may involve more than one actual model operation. `schema_version`, `normalizer_version`, and `projection_version` identify the result, normalization, and projection contracts. `retrieval_version` and `content_release` are omitted unless those components actually participated; the milestone 1 model-only path does not invent them.
+
+Translation-specific failures use `invalid_json` with `400`, `payload_too_large` with `413`, `invalid_translation_request` with `422`, `invalid_model_output` with `502`, and `translation_model_unavailable` with `503`. Capacity, internal, and deadline statuses remain reserved until the corresponding closed application outcomes exist.
 
 ## POST /api/v1/basic-cards/lookup
 
-Performs a canonical-data-only, release-pinned lexical lookup. The request accepts `query`, `source_language`, and `target_language`; it accepts no release, derived form, ranker, index, or vector selector. Normal outcomes are `resolved`, `clarification_required`, and `not_found`. A resolved result returns the canonical root, eligible translations, evidence-backed definition, coverage, available knowledge lenses, and immutable content pin.
+Performs a MySQL-only, release-pinned canonical lookup. The request is closed and accepts no release, derived form, ranking, index, or vector selector. `query` is limited to 100 Unicode characters; Transnet derives at most four deterministic lookup forms internally.
 
-This route remains a direct diagnostic and compatibility read. New translation turns use `/api/v1/translations`.
+```json
+{
+  "query": "sweltering",
+  "source_language": "en",
+  "target_language": "zh-CN"
+}
+```
+
+All normal business outcomes return `200`; clients branch on `data.resolution`, whose closed values are `resolved`, `clarification_required`, and `not_found`. A resolved result has exactly one usable match. Ambiguity retains all equally ranked usable matches without silently selecting a sense. Not found returns an empty `matches` array.
+
+```json
+{
+  "data": {
+    "resolution": "resolved",
+    "matches": [{
+      "rank": 1,
+      "lexeme": {"id": "lexeme_sweltering", "lemma": "sweltering", "language": "en", "part_of_speech": "adjective"},
+      "sense": {"id": "sense_sweltering_hot", "sense_key": "weather-hot", "definition": {"text": "uncomfortably hot", "evidence": []}},
+      "translations": [],
+      "forms": [],
+      "evidence": [{"id": "evidence_dictionary_1042", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "source": {"source_id": "source_dictionary", "attribution": "Dictionary publisher (2026)", "source_reference": "entry:1", "language": "en"}}]
+    }],
+    "coverage": {
+      "retrieval": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "lexemes": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "parts_of_speech": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "senses": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "definitions": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
+      "forms": {"state": "missing", "available_items": 0, "missing_items": 1, "filtered_items": 0, "truncated_items": 0},
+      "evidence": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0}
+    }
+  },
+  "meta": {"request_id": "req_example", "content_release": "knowledge-2026-09", "canonical_schema_version": "canonical-v1"}
+}
+```
+
+Matches are limited to 12, forms per match to 24, reviewed translations per match to 8, and evidence per assertion to 8. Evidence text is limited to 4,096 characters, source reference to 256 characters, and the complete JSON response to 1 MiB. A resolved card requires a permitted evidence-backed definition or a reviewed translation. Attribution is authority-supplied human-readable text; internal hashes, permission bits, fingerprints, fusion scores, ranking/index/vector versions, socket paths, and transport metadata are never exposed.
 
 ## POST /api/v1/senses/get
 
-Reads one canonical sense under the exact `content_release` and `canonical_schema_version` returned by a prior result. It never reselects active content or silently upgrades the pin. The request accepts `sense_id`, `target_language`, `content_release`, and `canonical_schema_version`.
+Reads one canonical sense under the exact immutable pin returned by BasicCard lookup. It never selects the active release again and never upgrades an R1 request to R2.
 
-## POST /api/v1/knowledge/views
-
-Returns one guided tree-lens projection for a canonical root.
+Request:
 
 ```json
 {
-  "root": {"kind": "sense", "id": "sense_sweltering_hot_01"},
-  "lens": "contrast",
+  "sense_id": "sense_sweltering_hot_01",
   "target_language": "zh-CN",
-  "response_level": "full",
   "content_release": "knowledge-2026-09",
-  "cursor": null
+  "canonical_schema_version": "canonical-v1"
 }
 ```
 
-The response contains the root, lens, ordered branches, stable nodes, explicit paths, relevance reasons, assertion and evidence references, evidence states, truncation, and an opaque next cursor. Cursors bind the root, lens, language, response level, release, projection version, and ordering version and contain no request text.
-
-## POST /api/v1/knowledge/paths
-
-Returns up to three independently verified paths of at most three hops between two canonical roots. The server chooses and enforces relation eligibility and does not perform arbitrary-depth or shortest-path inference.
+Response `200`:
 
 ```json
 {
-  "from": {"kind": "concept", "id": "concept_coriolis_force"},
-  "to": {"kind": "concept", "id": "concept_weather_system"},
-  "target_language": "en",
-  "content_release": "knowledge-2026-09"
+  "data": {
+    "sense": {
+      "schema_version": "1.0",
+      "target": {"lexeme_id": "lexeme_sweltering", "sense_id": "sense_sweltering_hot_01", "release_id": "knowledge-2026-09", "language": "en"},
+      "localized_glosses": [], "pronunciations": [], "usage_labels": [], "grammar_patterns": [], "collocations": [], "examples": [], "pitfalls": [], "etymologies": [], "history": [],
+      "provenance": {"release_id": "knowledge-2026-09", "evidence_use": "api_redistribution", "evidence_backed": true}
+    }
+  },
+  "meta": {
+    "request_id": "req_01K4Z8V2DE5F7G9H1J3K6M8NPQ",
+    "content_release": "knowledge-2026-09",
+    "canonical_schema_version": "canonical-v1"
+  }
 }
 ```
 
-Normal outcomes are `connected` and `no_verified_path`. Every path step names one hydrated assertion, direction, conditions, relevance, evidence references, and release. Similarity-only candidates may be returned in a separate exploratory section but never as a path step.
+Both requests reject unknown fields. Malformed JSON uses `400 invalid_json`; oversized request bodies use `413 payload_too_large`; invalid fields use `422 invalid_canonical_request`; an unavailable pinned release uses `409 content_release_unavailable`; schema incompatibility and malformed authority data use `502 canonical_schema_incompatible` or `502 invalid_canonical_response`; disabled/unavailable capability and deadline expiry use `503 canonical_dependency_unavailable` or `503 canonical_dependency_timeout`. `clarification_required` and `not_found` are never problems. Responses use the existing request-ID header and `Cache-Control: no-store`. The capability remains unavailable until the external island-port server implements the matching internal contract.
 
-The former target drafts `POST /api/v1/graph/get` and `POST /api/v1/graph/neighbors` are removed from the revised target contract. Transitional `GET /v1/graph...` handlers in the current executable remain implementation compatibility behavior until migrated or removed; their existence does not make them target v1 routes.
+## POST /api/v1/graph/get
+
+Reads a bounded canonical subgraph rooted at one sense, concept node, or domain. The port derives its filters from the selected resource and response level; these fields are not WebUI controls. `depth` is limited to the configured shallow maximum. Results remain rooted, typed, and scope-filtered; this endpoint is not a general graph-query language or an unrestricted neighbor dump.
+
+Request:
+
+```json
+{
+  "root_kind": "sense",
+  "root_id": "sense_sweltering_hot_01",
+  "depth": 1,
+  "relation_types": ["lower_degree", "higher_degree", "collocation"],
+  "verification_state": "verified",
+  "node_limit": 20,
+  "edge_limit": 30,
+  "release": "knowledge-2026-09"
+}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "root": {
+      "kind": "sense",
+      "id": "sense_sweltering_hot_01",
+      "node_id": "node_sweltering_hot_01"
+    },
+    "nodes": [
+      {
+        "node_id": "node_sweltering_hot_01",
+        "node_type": "lexical_sense",
+        "label": "sweltering"
+      },
+      {
+        "node_id": "node_scorching_heat_01",
+        "node_type": "lexical_sense",
+        "label": "scorching"
+      }
+    ],
+    "edges": [
+      {
+        "edge_id": "edge_sweltering_scorching_01",
+        "source_node_id": "node_sweltering_hot_01",
+        "target_node_id": "node_scorching_heat_01",
+        "relation_type": "higher_degree",
+        "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
+        "restrictions": {"dimension": "temperature_intensity"},
+        "evidence_state": "verified",
+        "confidence": 0.96,
+        "provenance": ["evidence_dictionary_1042"],
+        "verification_state": "verified",
+        "assessment": {
+          "relation_version": 3,
+          "allowed_judgments": ["confirm", "challenge"],
+          "distance": {
+            "base_basis_points": 400,
+            "adjustment_basis_points": 120,
+            "effective_basis_points": 280,
+            "aggregate_version": "relationship-assessments-2026-09-13T08:00:00Z",
+            "algorithm_version": "relationship-distance-v1"
+          }
+        }
+      }
+    ],
+    "truncated": false
+  },
+  "meta": {
+    "request_id": "req_01K4Z8W9RS2T4V6X0Y1Z3A5BCD",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
+
+## POST /api/v1/graph/neighbors
+
+Pages direct incoming and outgoing relationships for one canonical node. The cursor is scoped to the root, filters, and release and must not contain request text.
+
+Request:
+
+```json
+{
+  "kind": "knowledge_node",
+  "id": "node_sweltering_hot_01",
+  "direction": "both",
+  "relation_types": ["lower_degree", "higher_degree"],
+  "verification_state": "verified",
+  "limit": 10,
+  "cursor": null,
+  "release": "knowledge-2026-09"
+}
+```
+
+Response `200`:
+
+```json
+{
+  "data": {
+    "root_node_id": "node_sweltering_hot_01",
+    "neighbors": [
+      {
+        "edge": {
+          "edge_id": "edge_hot_sweltering_01",
+          "source_node_id": "node_hot_temperature_01",
+          "target_node_id": "node_sweltering_hot_01",
+          "relation_type": "higher_degree",
+          "explanation": "Sweltering expresses a more uncomfortable degree of heat than hot.",
+          "restrictions": {"dimension": "temperature_intensity"},
+          "evidence_state": "verified",
+          "confidence": 0.96,
+          "provenance": ["evidence_dictionary_1042"],
+          "verification_state": "verified",
+          "assessment": {
+            "relation_version": 3,
+            "allowed_judgments": ["confirm", "challenge"],
+            "distance": {
+              "base_basis_points": 400,
+              "adjustment_basis_points": 120,
+              "effective_basis_points": 280,
+              "aggregate_version": "relationship-assessments-2026-09-13T08:00:00Z",
+              "algorithm_version": "relationship-distance-v1"
+            }
+          }
+        },
+        "node": {
+          "node_id": "node_hot_temperature_01",
+          "node_type": "lexical_sense",
+          "label": "hot"
+        }
+      }
+    ],
+    "next_cursor": null
+  },
+  "meta": {
+    "request_id": "req_01K4Z8X6FG1H3J5K7M9N2P4QRS",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
 
 ## Related documents
 
 - [System design](../transnet.md)
-- [Canonical-data interface](canonical-data.md)
-- [Retrieval-data interface](retrieval-data.md)
-- [Model runtime](../reference/model-runtime.md)
-- [Persistence boundaries](../reference/persistence.md)
-- [Quality assurance](../guides/quality-assurance.md)
+- [MySQL interface](mysql.md)
+- [Qdrant interface](qdrant.md)

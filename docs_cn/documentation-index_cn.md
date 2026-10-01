@@ -12,14 +12,12 @@ English: [Transnet documentation](../docs/documentation-index.md)
 
 - [接口目录](interfaces/README_cn.md)：本目录的目录、边界与建议阅读顺序。
 - [Transnet 服务接口](interfaces/transnet_cn.md)：island-port 到 Transnet 的合同及共享内部 UDS 传输规则。
-- [规范数据 endpoint](interfaces/canonical-data_cn.md)：通过 UDS JSON 提供与存储技术无关的规范卡片、翻译、事实、发布与内容发布操作。
-- [检索数据 endpoint](interfaces/retrieval-data_cn.md)：通过 UDS JSON 提供与存储技术无关的候选节点、关系、尺度与投影操作。
-- [MySQL 迁移策略](interfaces/tables/migrations_cn.md)：物理 schema 兼容、在线 rollout、backfill、回滚与迁移 ledger 规则。
+- [Island-port SQL endpoint](interfaces/mysql_cn.md)：规范卡片和精选翻译存储，以及 `api/v1` 下的 UDS JSON 操作；调用方不得直接访问 MySQL 或提交 SQL。
+- [Island-port 向量 endpoint](interfaces/qdrant_cn.md)：`api/v1` 下的 UDS JSON 操作；调用方不得直接访问 Qdrant。
 
 ## 参考
 
-- [模块参考](reference/modules_cn.md)：按模块归属组织的运行时、传输、application、domain、port、adapter、持久化、可观测性与运维页面目录。
-- [可观测性合同](reference/observability_cn.md)：全系统结构化日志、trace、指标、审计事件、隐私排除项与失败行为。
+- [模块参考](reference/modules_cn.md)：按模块归属组织的运行时、传输、application、domain、port、adapter 与运维页面目录。
 
 ## 指南
 

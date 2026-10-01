@@ -16,7 +16,7 @@ The important idea is: **each resolved meaning is its own anchor, but the experi
 The project concentrates on these innovations:
 
 1. **Relationship-first exploration.** A lookup produces a small, typed, purpose-ranked subgraph rather than a dictionary entry followed by a flat list of related words.
-2. **LLM composition grounded by canonical knowledge.** The model selects, orders, contrasts, and explains; canonical-data authority and retrieval-data projections supply versioned facts and relationship candidates.
+2. **LLM composition grounded by canonical knowledge.** The model selects, orders, contrasts, and explains; MySQL and Qdrant supply versioned facts and relationship candidates.
 3. **Adaptive domain expansion.** The LLM judges whether the resolved meaning is domain-specific and, when useful, opens a technical knowledge neighborhood across languages and disciplines.
 4. **Relationship precision.** Taxonomy, degree, synonymy, collocation, syntax, morphology, cultural extension, and exploratory association remain distinct rather than being flattened into “related words.”
 5. **Concise, evidence-aware output.** Only useful, supported sections appear; uncertainty and scope are stated instead of filled with plausible-sounding content.
@@ -29,7 +29,7 @@ Learning profiles, lessons, exercises, mastery, review scheduling, coaching, and
 
 A word, term, idiom, phrasal verb, or established lexical phrase receives translation plus an appropriate translation-wiki projection. A clause, sentence, or passage receives connected-text translation. One service entry point classifies the unit and chooses the workflow; neither the user nor island-port selects an endpoint, model, domain, or retrieval strategy.
 
-The simple path asks only for text, source language, target language, and response level. Professional workflows may instead provide ordered document/localization segments or bounded image regions and request-scoped purpose, audience, register, terminology, alternatives, annotations, and freshness guidance. The deployment advertises supported BCP 47 language pairs. Transnet still derives sense, domain, inference profile, retrieval policy, chunking, and useful sections automatically; current inputs and history are discarded after the request.
+The user enters text and chooses only source language, target language, and response level. The initial product supports English and Simplified Chinese, with automatic source-language detection. Island-port may add a chronological list of minimal previous source/translation pairs. Transnet derives sense, domain, register, formatting, provider, and useful sections automatically; current text and history are discarded after the request.
 
 History may change reference resolution, terminology continuity, sense ranking, and wording, but it never changes canonical identity or silently rewrites relationship facts. There is no separate turn-count cap; island-port controls the history list within the common request-body and deadline bounds.
 
@@ -43,7 +43,7 @@ Canonical IDs use the versioned `canonical-id-v1` publisher policy and are never
 
 ## Words, terms, and lexical phrases
 
-A translation-wiki page begins with the concise canonical-data basic card, then enriches it with candidates from the retrieval-data projection. Distinct meanings and parts of speech remain separate so examples, relationships, grammar, pronunciation, and usage guidance stay attached to the applicable sense.
+A translation-wiki page begins with the concise MySQL basic card, then enriches it with related knowledge from Qdrant. Distinct meanings and parts of speech remain separate so examples, relationships, grammar, pronunciation, and usage guidance stay attached to the applicable sense.
 
 `brief`, `standard`, and `full` responses are deterministic projections from one release-pinned superset aggregate. Brief keeps the translation and any meaning labels needed to avoid ambiguity. Standard adds the most useful definition, usage, example, tip, or relationship. Full adds all bounded eligible lexical, domain, evidence, taxonomy, and intensity detail. A response level changes breadth, never the selected facts or their truth status.
 
@@ -127,7 +127,7 @@ Resolution is concept-first and multilingual. Labels such as `地转偏向力`, 
 
 RAG has two explicit jobs. First, it supplies the existing-domain inventory from which the LLM chooses or detects that none fits. Second, after domain selection, it retrieves the basic facts stored for that domain. A domain knowledge profile names available fact families, languages, verified fact count, and `seed`, `partial`, or `curated` coverage. The profile tells the model what the active release contains; it never claims the field is complete.
 
-A basic fact is atomic, independently evidence-addressable, sense- and domain-scoped canonical content. It records a subject, typed predicate, participants or literal value, human-readable statement, conditions, evidence IDs, provenance IDs, verification state, immutable revision, and release. The canonical-data authority or signed release artifact is authoritative; the retrieval-data store contains searchable projections. Similarity selects candidates, then structured hydration confirms exact facts and evidence before the LLM sees a bounded fact bundle.
+A basic fact is atomic, independently evidence-addressable, sense- and domain-scoped canonical content. It records a subject, typed predicate, object or literal value, human-readable statement, conditions, evidence IDs, provenance IDs, verification state, immutable revision, and release. MySQL or the signed release artifact is authoritative; Qdrant contains searchable projections. Retrieval similarity selects candidates, then structured hydration confirms exact facts and evidence before the LLM sees a bounded fact bundle.
 
 Initial knowledge may be bootstrapped by an LLM in the offline publication workflow. Generated output begins as a candidate with model, prompt, schema, run ID, and generation time. Model output is provenance, not evidence. It becomes runtime-visible basic fact data only after independent evidence or an explicitly approved editorial-source policy, rights checks, deterministic validation, and review. Live translation traffic never writes domains or facts.
 
@@ -155,11 +155,9 @@ The result uses progressive disclosure rather than dumping a graph:
 3. Answer “how are these connected?” with a short, evidence-backed path such as `term → phenomenon → mechanism → application`; every intermediate step has a named relation and independently valid evidence.
 4. Keep cross-domain or similarity-based candidates in a visibly separate exploratory section.
 
-The LLM chooses what is useful and explains why a relationship matters. Canonical assertions are labeled `verified`; evidence-grounded synthesis that is not yet canonical is labeled `inferred`; vector or model proposals are labeled `exploratory`. Inferred and exploratory items are request-local, cannot be silently phrased as facts, and never write themselves into the graph.
+The LLM chooses what is useful and explains why a relationship matters. Canonical edges are labeled `verified`; evidence-grounded synthesis that is not yet canonical is labeled `inferred`; vector or model proposals are labeled `exploratory`. Inferred and exploratory items are request-local, cannot be silently phrased as facts, and never write themselves into the graph.
 
-A guided knowledge view projects the assertion graph through one closed lens: meaning, contrast, usage, form, origin, domain, mechanism, or application. This projection is the product's knowledge tree. It is generated for one root and purpose, not stored as canonical parentage; a stable node may appear in several branches while retaining one identity. Each item keeps its explicit path to the root, relevance reason, applicability, evidence, provenance, and release.
-
-Product feedback on a displayed relationship remains entirely island-port-owned. It is not editorial approval or a truth-state transition, and Transnet receives no individual judgment or user identity. A later publisher may consume separately governed aggregate signals, but no live assessment directly changes canonical content, evidence state, relation meaning, or publication state.
+The WebUI may invite a person to `confirm` or `challenge` an eligible canonical relationship. This assessment is product feedback, not editorial approval or a truth-state transition. Island-port owns its authenticated submission, retention, moderation, aggregation, and user association; Transnet supplies only the release-pinned edge identity and eligibility metadata. After a minimum privacy threshold, a versioned anonymous aggregate may make the relationship's bounded display distance shorter for net confirmation or longer for net challenge. Evidence remains the dominant eligibility signal, and no individual assessment directly changes canonical content, evidence status, relation meaning, or publication state. The [Transnet interface](interfaces/transnet.md#relationship-assessment-metadata) owns the request handoff and exact distance algorithm.
 
 For example, a lookup of `地转偏向力` should first resolve the concept and show `Coriolis force` plus the alias `科里奥利力`. It can then expose relevant fields, its rotating-reference-frame mechanism, governing quantities or equations, observable phenomena, common misconceptions, and professional usage. A lookup of `卷绳效应` should resolve `rope-coiling effect` and build a fluid-mechanics neighborhood. The system connects those two roots only if a named, supported relation exists; co-retrieval or visual similarity is not enough.
 
@@ -170,10 +168,6 @@ The translated text is always the primary result. Translation preserves meaning,
 At most two one-sentence tips appear, and only for a material ambiguity, idiom, consequential register choice, or cultural context. When context is insufficient, the response may include one clearly labeled alternative. Detailed lexical exploration stays in the separate word-page experience.
 
 Long or difficult text may use request-local chunk planning and a terminology ledger to keep names, abbreviations, and repeated terms consistent. This ledger is discarded after the response and is not a persistent user translation memory.
-
-Professional document input uses ordered segments with request-local IDs, roles, markup modes, and protected Unicode ranges. Visual translation uses sanitized inline image regions through the same Gemma4-27B VLM. Island-port owns file upload, PDF rendering, document reconstruction, and oversized-document batching; Transnet never downloads a caller URL or persists image bytes, OCR-like output, or layout state.
-
-Current-information retrieval is explicitly opt-in. One bounded search/fetch operation may supply request-local `live_external` citations under strict network, media, byte, redirect, injection, and deadline controls. Live material is never canonical evidence and never enters publication automatically.
 
 Only translations deliberately selected as reusable shared knowledge may be stored. Authorized publication tooling stages a word, established phrase, or bounded reference passage with provenance, publication rights, scope, and review evidence; an immutable release makes approved content canonical. A live request never promotes itself. User-saved or starred translations, including their ownership and retention, remain product data in island-port rather than Transnet knowledge.
 
@@ -209,9 +203,9 @@ Deterministic code owns normalization, exact matching, stable IDs, release filte
 
 ## Canonical knowledge and relationship model
 
-**Canonical data** is authoritative for compact cards and deliberately selected translations: senses, forms, aliases, definitions, reviewed source-target choices, pronunciation, morphology, examples, usage notes, domains, evidence metadata, immutable revisions, and release manifests. The target island-port repository implements this authority in MySQL, but the application and wire contracts do not expose SQL. Word and phrase translations link to their applicable sense; reusable passages remain bounded release content and do not become graph nodes merely because they were published.
+**MySQL canonical content** is authoritative for compact cards and deliberately selected translations: senses, forms, aliases, definitions, reviewed source-target choices, pronunciation, morphology, examples, usage notes, domains, evidence metadata, immutable revisions, and release manifests. Word and phrase translations link to their applicable sense; reusable passages remain bounded release content and do not become graph nodes merely because they were published.
 
-**Retrieval data** is a rebuildable, release-pinned projection implemented by the target island-port repository in Qdrant. Nodes represent senses, phrases, terms, concepts, entities, phenomena, mechanisms, processes, equations, quantities, instruments, methods, technologies, applications, standards, idioms, metaphors, grammar patterns, collocations, misconceptions, and domains. Relationship points are searchable projections of authoritative assertions. They carry endpoints, direction, relation type, restrictions, domain and sense scope, evidence references, confidence, verification state, provenance, and release.
+**Qdrant** is a rebuildable, release-pinned projection. Nodes represent senses, phrases, terms, concepts, entities, phenomena, mechanisms, processes, equations, quantities, instruments, methods, technologies, applications, standards, idioms, metaphors, grammar patterns, collocations, misconceptions, and domains. Edges are searchable explanations of typed relationships. Every edge records endpoints, direction, relation type, restrictions, domain and sense scope, evidence, confidence, verification state, provenance, and release.
 
 Relationship families include:
 
@@ -225,15 +219,13 @@ Relationship families include:
 - domain membership, mechanism, causation, dependency, implementation, application, measurement, standardization, and terminology conventions; and
 - clearly separated exploratory associations.
 
-Lookup resolves canonical data first, then performs exact, hybrid, endpoint, and bounded lens retrieval. Filters apply before limiting by release, publication state, language, dialect, region, period, domain, evidence, and verification state. Vector similarity proposes candidates only; it never proves translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
+Lookup resolves MySQL first, then performs exact, hybrid, endpoint, and shallow graph retrieval. Filters apply before limiting by release, publication state, language, dialect, region, period, domain, evidence, and verification state. Vector similarity proposes candidates only; it never proves translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
 
-The service does not perform arbitrary-depth traversal or return every neighbor. Relationship direction, comparison dimension, applicable sense, and usage restrictions must remain visible. If retrieval data is unavailable, a resolved canonical-data card may be returned with explicit degraded metadata and no invented relationships.
+The service does not perform arbitrary-depth traversal or return every neighbor. Relationship direction, comparison dimension, applicable sense, and usage restrictions must remain visible. If Qdrant is unavailable, a resolved MySQL card may be returned with explicit degraded metadata and no invented relationships.
 
 ## Service boundary and quality, briefly
 
 Transnet is stateless and runs behind a private gateway or service mesh. Live request text, context, provider output, and intermediate analysis exist only for the request lifetime and must not be written to MySQL, Qdrant, caches, logs, metrics, traces, telemetry, vectors, or durable queues. This prohibition does not apply to separate, rights-cleared canonical content submitted by authenticated publication tooling. Callers must not send user identities, profiles, private history, or end-user credentials.
-
-The [observability contract](reference/observability.md) defines content-free structured events, distributed traces, aggregate metrics, and separate publication audits for the whole system. Export is bounded and non-blocking on the online path; telemetry failure cannot change a translation result.
 
 Prompts, schemas, models, normalizers, retrieval configuration, evidence policy, and knowledge releases are versioned. Quality evaluation covers sense selection, relationship precision, omission and fabrication, translation fidelity, naturalness, terminology, register, cultural scope, degraded reads, prompt injection resistance, and request non-persistence. Human review and curated challenge sets remain necessary; vector similarity, round-trip translation, and LLM judging are signals rather than sole authorities.
 
@@ -242,9 +234,8 @@ The design succeeds when a user can translate connected text or deeply understan
 ## Related documents
 
 - [Transnet service interface](interfaces/transnet.md)
-- [Canonical-data interface](interfaces/canonical-data.md)
-- [Retrieval-data interface](interfaces/retrieval-data.md)
+- [MySQL interface](interfaces/mysql.md)
+- [Qdrant interface](interfaces/qdrant.md)
 - [Service behavior](product/service-behavior.md)
-- [Observability contract](reference/observability.md)
 - [Content publishing](guides/content-publishing.md)
 - [Quality assurance](guides/quality-assurance.md)

@@ -1,21 +1,21 @@
-# Canonical-data endpoint interface
+# SQL data endpoint interface
 
-中文：[规范数据 endpoint 接口](../../docs_cn/interfaces/canonical-data_cn.md)
+中文：[SQL 数据 endpoint 接口](../../docs_cn/interfaces/mysql_cn.md)
 
-This contract defines island-port's storage-neutral HTTP endpoints for shared canonical translations, words, phrases, senses, domains, evidence metadata, and immutable content releases. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. MySQL is the planned island-port implementation, not part of this wire contract.
+This contract defines island-port's structured-data HTTP endpoints for shared canonical translations, words, phrases, senses, domains, evidence metadata, and immutable content releases. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies.
 
-Status: target island-port server contract. The executable can optionally compose the existing strict outbound canonical-read client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. That implemented client still identifies its transitional wire as `mysql-adapter-v1`; it does not implement the renamed `canonical-data-v1` target until a later migration changes code and tests. The external island-port server has not been verified against either contract, and production MySQL migrations, publisher/write operations, old-release retention, and real end-to-end acceptance remain unimplemented outside this repository.
+Status: target island-port server contract with an implemented Transnet client boundary. The executable can optionally compose the strict outbound canonical-read client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, and real end-to-end acceptance remain unimplemented outside this repository.
 
 The checked-in M3 publication foundation models Qdrant build lifecycle, idempotency, compatibility receipts, and reconciliation hashes. Its outbound publication port and strict island-port client carry the bounded build contract, while `KnowledgePublicationService` drives authoritative status-based resume through node and edge publication and reconciliation without keeping local progress. Successful reconciliation returns only a typed activation candidate. An external authenticated publisher or control plane must submit that candidate to island-port for atomic active-trio selection. The repository does not add an island-port publication server, MySQL build/reconciliation persistence, activation pointer mutation, or rollback implementation; those authority-owned operations remain external requirements.
 
 ## Contents
 
-- [Canonical-data endpoint interface](#canonical-data-endpoint-interface)
+- [SQL data endpoint interface](#sql-data-endpoint-interface)
   - [Contents](#contents)
   - [Endpoint reference](#endpoint-reference)
   - [Storage boundary](#storage-boundary)
   - [Curated translation storage](#curated-translation-storage)
-  - [Domain assertions and semantic scales](#domain-assertions-and-semantic-scales)
+  - [Domain facts and semantic scales](#domain-facts-and-semantic-scales)
   - [Common operation envelope](#common-operation-envelope)
   - [POST /api/v1/translations/resolve](#post-apiv1translationsresolve)
   - [POST /api/v1/translations/stage](#post-apiv1translationsstage)
@@ -37,7 +37,7 @@ Every route uses the shared `/api/v1` prefix. The island-port socket and the res
 
 ## Storage boundary
 
-The canonical-data authority behind this endpoint is the authoritative store for compact, structured lexical content, deliberately selected canonical translations, and publication state. The target island-port implementation uses the separately documented `transnet_canonical` MySQL schema. The authority contains no user, learner, account, profile, preference, history, saved item, bookmark, practice, answer, mastery, schedule, graph layout, feedback, privacy request, or ownership record. It never retains live translation requests, lookup queries, disambiguating context, or unreviewed provider output. Canonical source and target text may be stored only through the publication workflow described below. Island-port may use a separately authorized product store for private state, but that store is outside this endpoint and inaccessible to Transnet.
+The `transnet_canonical` MySQL schema behind this endpoint is the authoritative store for compact, structured lexical content, deliberately selected canonical translations, and publication state. It contains no user, learner, account, profile, preference, history, saved item, bookmark, practice, answer, mastery, schedule, graph layout, feedback, privacy request, or ownership record. It never retains live translation requests, lookup queries, disambiguating context, or unreviewed provider output. Canonical source and target text may be stored only through the publication workflow described below. Island-port may use a separately authorized product schema for private state, but that schema is outside this endpoint and inaccessible to Transnet.
 
 Allowed Transnet service data includes:
 
@@ -51,7 +51,7 @@ Allowed Transnet service data includes:
 
 Use `utf8mb4`, UTC timestamps with microsecond precision, opaque stable public IDs, explicit foreign keys where both sides have one concrete type, and immutable published revisions. Credentials and encryption keys remain outside MySQL.
 
-The target schema deliberately uses a hybrid relational model. Stable identity, lifecycle, release membership, relationship endpoints, assessment eligibility, and frequent lookup keys are typed and indexed columns. Bounded fields that vary by content family use closed, versioned JSON payload schemas. This avoids a table per card child or domain attribute without turning core joins and filters into JSON scans. `entity_type_revision` makes new content families data-driven rather than requiring an `ALTER TABLE`; publication validates the pinned type definition, payload schema, references, and polymorphic `release_member` target before a release can become active.
+The target schema deliberately uses a hybrid relational model. Stable identity, lifecycle, release membership, relationship endpoints, assessment eligibility, and frequent lookup keys are typed and indexed columns. Bounded fields that vary by content family use closed, versioned JSON payload schemas. This avoids a table per card child or domain attribute without turning core joins and filters into JSON scans. Publication validates payload schemas, referenced entity types, evidence references, and the polymorphic `release_member` target before a release can become active.
 
 ## Curated translation storage
 
@@ -63,11 +63,8 @@ erDiagram
   CANONICAL_ENTITY o|--o{ CANONICAL_ENTITY : owns
   CONTENT_RELEASE ||--o{ RELEASE_MEMBER : contains
   CANONICAL_ENTITY_REVISION ||--o{ RELEASE_MEMBER : pins
-  CANONICAL_SOURCE ||--o{ CANONICAL_SOURCE_REVISION : has
-  CANONICAL_SOURCE_REVISION ||--o{ EVIDENCE_REVISION : supports
+  CANONICAL_SOURCE ||--o{ EVIDENCE_REVISION : supports
 ```
-
-Source citation, rights, and lifecycle data are immutable `canonical_source_revision` rows. Evidence pins one exact source revision, and a release pins both exact source and evidence revisions. Updating attribution or withdrawing rights therefore creates a new source revision and release; it cannot silently change the provenance seen by an older retained release.
 
 Canonical public IDs follow `canonical-id-v1`: a family prefix identifies the entity kind and the remaining opaque value is publisher-assigned, never derived from normalized text or a content hash. A published translation revision is uniquely selected within a release by source language, `translation-source-v1` fingerprint, target language, and its explicit sense or scope key. The stable translation ID survives corrections, while each correction creates a new positive immutable revision and later release membership rather than modifying published content. The stored source text is retained so Transnet can compare an exact candidate after retrieval; a fingerprint match alone is never sufficient. Lexical scope preserves sense, part of speech, phrase-level versus compositional meaning, and bounded canonical domains so homographs and field-specific meanings do not collide. Passage entries have a configured length bound and must be reusable reference content rather than personal correspondence or arbitrary submitted text.
 
@@ -75,15 +72,13 @@ Importance is an editorial decision with an auditable reason such as approved te
 
 User saves are a separate concern. When an end user stars or saves a translation, island-port stores that private record in its product-owned database and may retain the rendered result under its own consent and retention policy. It must not send the user ID, save state, or private source text to these canonical publication endpoints.
 
-## Domain assertions and semantic scales
+## Domain facts and semantic scales
 
-Canonical data also owns domain knowledge profiles, atomic assertions, and semantic scales. A domain revision stores multilingual labels and aliases, definition, inclusion and exclusion scope, broader domain IDs, and a knowledge profile containing available fact families, languages, verified fact count, and coverage state (`seed`, `partial`, or `curated`). Coverage describes the active release and never asserts completeness.
+MySQL also owns canonical domain knowledge profiles, atomic basic facts, and semantic scales. A domain revision stores multilingual labels and aliases, definition, inclusion and exclusion scope, broader domain IDs, and a knowledge profile containing available fact families, languages, verified fact count, and coverage state (`seed`, `partial`, or `curated`). Coverage describes the active release and never asserts completeness.
 
-A fact uses `canonical_entity` with `entity_type = 'fact'`. Its immutable `canonical_entity_revision` stores the relation type and registry version, statement, qualifiers, applicability, evidence references, provenance, and verification data. `canonical_assertion_participant` is authoritative for its ordered schema-defined entity or typed-literal roles, allowing binary and n-ary assertions without duplicating subject/object values inside one JSON blob. Assertions remain independently reviewable and release-addressable.
+A fact uses `canonical_entity` with `entity_type = 'fact'`. Its immutable `canonical_entity_revision` payload stores the subject, typed predicate, object node or typed literal, statement, applicable senses and domains, conditions, evidence references, provenance, and verification data. Facts remain independently reviewable and release-addressable. Qdrant edges and fact-search points reference the authoritative entity revision rather than becoming a second source of truth.
 
-`relation_type_revision` is the versioned relation registry. It defines directionality, inverse behavior, symmetric and transitive policy, causality, allowed participant roles, endpoint-type compatibility, and validation schema. A release pins the exact registry revision; neither the UI nor the model infers these properties from a label.
-
-A `canonical_relationship_revision` is a validated binary traversal projection of one exact assertion revision. It maps one stable public edge ID and positive relation version to source and target endpoints, the pinned relation-registry version, direction, restrictions, and assessment eligibility. Endpoint and relation fields remain indexed columns; explanations and bounded scope/support lists use the versioned payload. This projection supports efficient knowledge views without becoming a second source of truth. Relationship judgments and aggregates remain in the separately authorized island-port product schema defined by the [target MySQL implementation](tables/mysql.sql); Transnet cannot access the private rows.
+A `canonical_relationship_revision` maps one stable public edge ID and positive relation version to the exact fact revision, endpoints, relation type, direction, restrictions, and assessment eligibility published in a release. Endpoint and relation fields remain indexed columns; explanations and bounded scope/support lists use the versioned payload. This mapping lets island-port validate a WebUI assessment target without treating the judgment as canonical content. Relationship judgments and aggregates remain in the separately authorized island-port product schema defined by the [target MySQL schema](tables/sql.sql); Transnet cannot access the private rows.
 
 A semantic scale uses `canonical_entity` with `entity_type = 'semantic_scale'`. Its immutable revision payload stores the named dimension, increasing or decreasing direction, applicable domains and conditions, ordered sense-qualified node members, and evidence references. Member positions define order only. Publication rejects duplicate positions, missing members, mixed incompatible senses, absent evidence, and any attempt to encode a scale as `is_a` taxonomy. Basic cards, facts, profiles, and scales all join a release through `release_member`.
 
@@ -99,7 +94,7 @@ The exact request body is `{"context": RequestContext, "input": EndpointInput}`.
 {
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
   "deadline_at": "2026-09-12T10:30:05.000000Z",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "content_release": "knowledge-2026-09"
 }
 ```
@@ -109,7 +104,7 @@ Closed error response:
 ```json
 {
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "content_release": "knowledge-2026-09",
   "outcome": "content_release_unavailable",
   "error": {
@@ -137,7 +132,7 @@ Stage 4 selects the active immutable canonical release once at the start of an a
   "context": {
     "request_id": "req_example",
     "deadline_at": "2099-01-01T00:00:00Z",
-    "schema_version": "canonical-data-v1"
+    "schema_version": "mysql-adapter-v1"
   },
   "input": {}
 }
@@ -146,7 +141,7 @@ Stage 4 selects the active immutable canonical release once at the start of an a
 ```json
 {
   "request_id": "req_example",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "content_release": "release_example",
@@ -186,7 +181,7 @@ Response. Lexical matches require `scope`; reusable passage matches require `sco
 ```json
 {
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "matches": [
@@ -288,7 +283,7 @@ Response:
 ```json
 {
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "matches": [
@@ -341,7 +336,7 @@ Response:
 ```json
 {
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "content_release": "knowledge-2026-09",
   "value": {
@@ -588,7 +583,7 @@ Quarantine, withdrawal, and correction create new publication state or a new rel
 ## Related documents
 
 - [Shared UDS JSON transport and Transnet interface](transnet.md)
-- [Target MySQL implementation](tables/mysql.sql)
+- [Target MySQL schema](tables/sql.sql)
 - [Transnet design and external interface](../transnet.md)
-- [Retrieval-data interface](retrieval-data.md)
+- [Qdrant interface](qdrant.md)
 - [Content publishing](../guides/content-publishing.md)

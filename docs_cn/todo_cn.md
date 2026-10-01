@@ -38,13 +38,8 @@ English: [Transnet delivery plan](../docs/todo.md)
 
 ## 里程碑 1：冻结翻译与意图路由
 
-- [ ] 用一个暴露内部 fast/reasoning profile 的 Gemma4-27B VLM 加一个 embedding port，替换过渡期 Gemma 4/TranslateGemma 长度路由器。
-- [ ] 普通与分块翻译保持使用 fast profile，每个请求最多允许一次闭合策略 reasoning 升级，并证明隐藏 reasoning 绝不返回或记录。
 - [ ] 实现共享成功/错误 Envelope、严格未知字段拒绝、语言标签验证、请求元数据及安全状态映射。
 - [ ] 实现简单的文本、源语言、目标语言、响应级别与可选最小历史请求，以及判别式单词、短语和段落 `TranslationResult` 响应。
-- [ ] 在同一入口增加有界专业分段与图像区域输入；文件解析、OCR 策略及持久文档归属继续由 island-port 负责。
-- [ ] 增加请求内用途、受众、语域、受保护范围、术语、标注、备选数量及新鲜度指导，不创建用户画像或翻译记忆。
-- [ ] 发布可缓存的能力响应，使 island-port 无需试探请求即可发现受支持输入类型、限制、检索策略及 fast/reasoning 可用性。
 - [ ] 实现版本化请求内 Normalizer，包括 Unicode 规范化、语言感知大小写折叠、空白与标点处理、有意义符号保留和有界派生形式。
 - [ ] 在一个翻译入口之后，将高置信单词、术语、习语、短语动词或固定短语路由到词汇组织，并将分句、句子、篇章和歧义短片段路由到连续文本翻译。
 - [ ] 对齐 `POST /api/v1/translations`，同时保留含义、语气、术语、语域、段落结构、受保护片段和格式。
@@ -88,7 +83,6 @@ English: [Transnet delivery plan](../docs/todo.md)
 - [ ] 将任意深度遍历、无限制邻居倾倒、最短路径推断和可变图事务排除在服务合同之外。
 - [ ] 在存储、响应、排序与展示中分离规范已验证边、请求内推断综合及探索性向量/模型提案。
 - [ ] Qdrant 不可用时返回明确的 MySQL-only 降级卡，不生成替代关系。
-- [ ] 用有界 `knowledge/views` lens 与证据支持的 `knowledge/paths` 替代公开原始图过滤，使同一断言图可支持树状学习、术语、机理和对比视图。
 
 退出标准：检索有界、锁定发布、过滤安全，且对一个选定根有用；对抗测试证明相似度绝不建立翻译、同义、层级、因果、共同机理或文化含义。
 
@@ -103,8 +97,6 @@ English: [Transnet delivery plan](../docs/todo.md)
 - [ ] 对 Router、Resolver、领域评估器、Ranker、Composer、Prompt、Schema 和修复策略进行版本化；确定性校验结构、范围、证据标签、简洁度和不确定性。
 - [ ] 仅在明确标注时允许请求内生成例句和推断解释；绝不持久化或作为已验证事实展示。
 - [ ] 只把结构化关系缺口提案发送到离线审核；实时查询不得将其发布或展示为规范边。
-- [ ] 在规范数据中发布版本化关系注册表与 n 元断言参与者，同时只为检索派生明确声明的二元遍历投影。
-- [ ] 最多允许一次显式请求的实时搜索轮次，限制结果与抓取数量，采用 SSRF 安全抓取并返回引文，且不得自动发布或持久化。
 
 退出标准：通用词、复合表达、歧义技术词义和多语言领域概念都生成精简页面，其分组与路径相关、范围正确、证据透明且可复现。
 
@@ -114,7 +106,6 @@ English: [Transnet delivery plan](../docs/todo.md)
 - [ ] 测试关系族语义，包括分类与强度、短语与组件意义、词义适用性、逆向方向、条件有效性及 `verified`/`inferred`/`exploratory` 分离。
 - [ ] 注入模型、MySQL、Qdrant、过期发布、局部发布、无效输出、限流、超时和回滚失败，验证安全降级及有界修复。
 - [ ] 证明 MySQL、Qdrant、缓存、日志、Trace、指标、队列、备份、Provider 遥测和派生向量均不持久化请求内容。
-- [ ] 实现版本化全系统可观测性合同，包括无内容 NDJSON 事件、分布式 trace 连续性、闭合低基数指标、有界非阻塞导出、丢弃计数器，以及独立追加式发布审计。
 - [ ] 以格式化、Lint、测试、Rustdoc、合同检查、发布对账、回滚演练和双语文档检查作为发布门禁。
 
 退出标准：用户可翻译连续文本，或通过精简准确的关系深入理解一个选定词义/领域概念，且不会遇到无关图展开或无支持模型断言。
@@ -133,7 +124,7 @@ English: [Transnet delivery plan](../docs/todo.md)
 
 - [系统设计](transnet_cn.md)
 - [服务行为](product/service-behavior_cn.md)
-- [规范数据 endpoint](interfaces/canonical-data_cn.md)
-- [检索数据 endpoint](interfaces/retrieval-data_cn.md)
+- [Island-port SQL endpoint](interfaces/mysql_cn.md)
+- [Island-port 向量 endpoint](interfaces/qdrant_cn.md)
 - [内容发布](guides/content-publishing_cn.md)
 - [质量保证](guides/quality-assurance_cn.md)

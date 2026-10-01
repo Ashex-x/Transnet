@@ -46,7 +46,7 @@ Stable point IDs and content hashes use the versioned `knowledge-projection-hash
 
 Vector failure may yield an explicitly degraded MySQL-backed basic card, but never invented relationships or hidden missing knowledge families. Missing authoritative content or incompatible releases fail safely. Live requests cannot create aliases, cards, facts, domains, edges, revisions, or releases.
 
-Exact persisted payloads belong to the [canonical-data](../interfaces/canonical-data.md) and [retrieval-data](../interfaces/retrieval-data.md) interfaces.
+Exact persisted payloads belong to the [SQL](../interfaces/mysql.md) and [vector](../interfaces/qdrant.md) interfaces.
 
 ## Verification
 

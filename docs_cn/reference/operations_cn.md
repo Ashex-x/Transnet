@@ -6,7 +6,7 @@ English: [Operations module](../../docs/reference/operations.md)
 
 ## 可观测性
 
-[可观测性合同](observability_cn.md)负责版本化事件 Schema、允许维度、禁止内容、采样、缓冲、审计边界与验证。日志、指标和 trace 使用闭合且不含内容的字段；审计事件限于离线发布与控制转换。遥测失败绝不改变在线结果。
+日志、指标与 trace 可包含操作名称、匹配路由模板、安全状态分类、延迟、有界重试次数、断路器状态与粗粒度 payload 大小分桶。它们不得包含请求文本、历史、译文、prompt、模型输出、凭据、provider body、规范内容正文、capability 或可稳定关联用户的标识符。指标标签必须闭合且低基数。
 
 Liveness 报告进程健康。Readiness 报告服务能否安全接收工作，并区分必需依赖与可选增强。
 
@@ -24,4 +24,4 @@ Publisher 是单独组合根，也是唯一允许接收可变更数据 port 的�
 
 ## 验证
 
-测试完整可观测性合同、deadline 预算、重试分类、取消、permit 释放、断路器转换、就绪降级、发布核对、激活门禁、隔离、回滚及在线路径无法访问 mutation。
+测试遥测脱敏、闭合标签、deadline 预算、重试分类、取消、permit 释放、断路器转换、就绪降级、发布核对、激活门禁、隔离、回滚及在线路径无法访问 mutation。

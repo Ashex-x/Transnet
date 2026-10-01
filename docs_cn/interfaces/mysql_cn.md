@@ -1,21 +1,21 @@
-# 规范数据 endpoint 接口
+# SQL 数据 endpoint 接口
 
-English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-data.md)
+English: [SQL data endpoint interface](../../docs/interfaces/mysql.md)
 
-本合同定义 island-port 提供的存储无关 HTTP endpoint，涵盖共享规范翻译、单词、短语、词义、领域、证据元数据和不可变内容发布。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。MySQL 是计划中的 island-port 实现，不属于本线上合同。
+本合同定义 island-port 提供的结构化数据 HTTP endpoint，涵盖共享规范翻译、单词、短语、词义、领域、证据元数据和不可变内容发布。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。
 
-状态：目标 island-port 服务端合同。可执行文件可选地组合现有严格出站 canonical-read client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。该已实现 client 仍把过渡线上标识为 `mysql-adapter-v1`；在后续 migration 修改代码与测试前，它尚未实现改名后的 `canonical-data-v1` 目标。外部 island-port server 尚未按任一合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留及真实端到端验收仍需在本仓库之外完成。
+状态：目标 island-port 服务端合同，Transnet client 边界已经实现。可执行文件可选地组合严格的出站 canonical-read client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留及真实端到端验收仍需在本仓库之外完成。
 
 仓库内 M3 publication foundation 建模 Qdrant build lifecycle、idempotency、compatibility receipt 与 reconciliation hash。其出站 publication port 与严格 island-port client 承载有界 build contract；`KnowledgePublicationService` 基于权威 status 恢复，驱动 node/edge publication 直至 reconciliation，且不保存本地 progress。Reconciliation 成功后只返回强类型 activation candidate；外部已认证 publisher 或 control plane 必须将该 candidate 提交给 island-port，才能原子切换 active trio。仓库没有新增 island-port publication server、MySQL build/reconciliation persistence、activation pointer mutation 或 rollback implementation；这些 authority-owned operation 仍是外部要求。
 
 ## 目录
 
-- [规范数据 endpoint 接口](#规范数据-endpoint-接口)
+- [SQL 数据 endpoint 接口](#sql-数据-endpoint-接口)
   - [目录](#目录)
   - [endpoint 参考](#endpoint-参考)
   - [存储边界](#存储边界)
   - [精选翻译存储](#精选翻译存储)
-  - [领域 assertion 与语义尺度](#领域-assertion-与语义尺度)
+  - [领域事实与语义尺度](#领域事实与语义尺度)
   - [通用操作 envelope](#通用操作-envelope)
   - [POST /api/v1/translations/resolve](#post-apiv1translationsresolve)
   - [POST /api/v1/translations/stage](#post-apiv1translationsstage)
@@ -30,6 +30,25 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
   - [相关文档](#相关文档)
 
 ## endpoint 参考
+
+- [SQL 数据 endpoint 接口](#sql-数据-endpoint-接口)
+  - [目录](#目录)
+  - [endpoint 参考](#endpoint-参考)
+  - [存储边界](#存储边界)
+  - [精选翻译存储](#精选翻译存储)
+  - [领域事实与语义尺度](#领域事实与语义尺度)
+  - [通用操作 envelope](#通用操作-envelope)
+  - [POST /api/v1/translations/resolve](#post-apiv1translationsresolve)
+  - [POST /api/v1/translations/stage](#post-apiv1translationsstage)
+  - [POST /api/v1/basic-cards/resolve](#post-apiv1basic-cardsresolve)
+  - [POST /api/v1/senses/get](#post-apiv1sensesget)
+  - [POST /api/v1/domains/resolve](#post-apiv1domainsresolve)
+  - [POST /api/v1/knowledge-facts/get](#post-apiv1knowledge-factsget)
+  - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
+  - [领域提案处理](#领域提案处理)
+  - [POST /api/v1/cards/revisions/stage](#post-apiv1cardsrevisionsstage)
+  - [POST /api/v1/releases/activate](#post-apiv1releasesactivate)
+  - [相关文档](#相关文档)
 
 Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 UDS JSON 传输](transnet_cn.md)。调用方绝不直接连接 MySQL 或提交 SQL；查询、事务、schema 兼容性、凭据和连接池均由 island-port 负责。只有 Transnet 运行时和经过认证的发布工具可以访问套接字。运行时调用方具有读取权限；变更 endpoint 还要求 publisher 服务账户。授权来自套接字文件系统凭据，而不是 JSON 字段或转发的 header。
 
@@ -51,7 +70,7 @@ Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 
 
 使用 `utf8mb4`、UTC 微秒时间、不透明稳定公开 ID、在两端均为单一具体类型时使用显式外键，以及不可变已发布修订。凭据和加密密钥置于 MySQL 之外。
 
-目标 schema 有意采用关系型与 JSON 混合模型。稳定身份、生命周期、发布成员关系、关系 endpoint、评估资格和高频查询键使用有类型且带索引的列；随内容族变化的有界字段使用闭合且带版本的 JSON payload schema。这样既避免为每种卡片子项或领域属性建立一张表，也不会让核心 join 和过滤退化成 JSON 扫描。`entity_type_revision` 使新增内容族由数据驱动，无需 `ALTER TABLE`；发布进入活动状态前，必须校验固定的类型定义、payload schema、引用及多态 `release_member` 目标。
+目标 schema 有意采用关系型与 JSON 混合模型。稳定身份、生命周期、发布成员关系、关系 endpoint、评估资格和高频查询键使用有类型且带索引的列；随内容族变化的有界字段使用闭合且带版本的 JSON payload schema。这样既避免为每种卡片子项或领域属性建立一张表，也不会让核心 join 和过滤退化成 JSON 扫描。发布进入活动状态前，必须校验 payload schema、被引用实体类型、证据引用，以及多态 `release_member` 的目标。
 
 ## 精选翻译存储
 
@@ -63,11 +82,8 @@ erDiagram
   CANONICAL_ENTITY o|--o{ CANONICAL_ENTITY : owns
   CONTENT_RELEASE ||--o{ RELEASE_MEMBER : contains
   CANONICAL_ENTITY_REVISION ||--o{ RELEASE_MEMBER : pins
-  CANONICAL_SOURCE ||--o{ CANONICAL_SOURCE_REVISION : has
-  CANONICAL_SOURCE_REVISION ||--o{ EVIDENCE_REVISION : supports
+  CANONICAL_SOURCE ||--o{ EVIDENCE_REVISION : supports
 ```
-
-来源引文、权利与生命周期数据使用不可变 `canonical_source_revision` 行。Evidence 固定一个精确 source revision，发布同时固定精确 source 与 evidence 修订。因此，更新署名或撤回权利会创建新的 source revision 与发布，不能静默改变旧保留发布看到的来源。
 
 规范公共 ID 遵循 `canonical-id-v1`：实体族前缀标识实体种类，其余不透明值由 publisher 分配，绝不能由规范化文本或内容 hash 派生。在一个发布中，已发布翻译修订由源语言、`translation-source-v1` fingerprint、目标语言及其显式词义或范围键唯一选择。稳定 translation ID 在修正时保持不变；每次修正创建新的正数不可变修订及后续发布成员关系，而不是修改已发布内容。存储源文以便 Transnet 在检索后进行精确比较；仅 fingerprint 匹配绝不充分。词汇范围保留 sense、词性、短语级或组合式含义，以及有界规范领域，从而避免同形词与领域特定含义发生碰撞。Passage 条目有配置长度上限，且必须是可复用参考内容，不能是私人通信或任意提交文本。
 
@@ -75,15 +91,13 @@ erDiagram
 
 用户保存是另一项职责。终端用户加星或保存翻译时，island-port 在其产品数据库中存储该私有记录，并依其同意与保留政策决定是否保留展示结果。它不得把用户 ID、保存状态或私有源文发送到这些规范发布 endpoint。
 
-## 领域 assertion 与语义尺度
+## 领域事实与语义尺度
 
-规范数据还拥有领域知识 profile、原子 assertion 和语义尺度。领域修订存储多语言名称与别名、定义、包含/排除范围、上层领域 ID，以及包含可用事实族、语言、已验证事实数和覆盖状态（`seed`、`partial` 或 `curated`）的知识 profile。覆盖描述活动发布，绝不声称完整。
+MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。领域修订存储多语言名称与别名、定义、包含/排除范围、上层领域 ID，以及包含可用事实族、语言、已验证事实数和覆盖状态（`seed`、`partial` 或 `curated`）的知识 profile。覆盖描述活动发布，绝不声称完整。
 
-事实使用 `entity_type = 'fact'` 的 `canonical_entity`。其不可变 `canonical_entity_revision` 存储关系类型与 registry 版本、陈述、qualifier、适用范围、证据引用、来源及验证数据。`canonical_assertion_participant` 是有序 schema-defined 实体或有类型字面值角色的权威来源，从而支持二元与 n-ary assertion，且不在单个 JSON blob 中重复 subject/object 值。Assertion 仍可独立审核并按发布寻址。
+事实使用 `entity_type = 'fact'` 的 `canonical_entity`。其不可变 `canonical_entity_revision` payload 存储主体、有类型谓词、客体节点或有类型字面值、陈述、适用词义与领域、条件、证据引用、来源及验证数据。事实仍可独立审核并按发布寻址。Qdrant 边与事实检索 point 引用权威实体修订，不成为第二权威来源。
 
-`relation_type_revision` 是版本化关系 registry。它定义方向、inverse 行为、对称与传递策略、因果性、允许的 participant role、endpoint 类型兼容性与校验 schema。发布固定精确 registry 修订；UI 与模型都不得从 label 推断这些属性。
-
-`canonical_relationship_revision` 是一个精确 assertion 修订的已校验二元 traversal 投影。它把稳定公开 edge ID 和正关系版本映射到 source/target endpoint、固定 relation-registry 版本、方向、限制与评估资格。Endpoint 和关系字段保留为索引列；解释及有界范围/支持列表使用带版本 payload。该投影支持高效知识视图，但不成为第二权威来源。关系判断与聚合保留在[目标 MySQL 实现](../../docs/interfaces/tables/mysql.sql)定义的独立授权 island-port 产品 schema 中；Transnet 无法访问私有行。
+`canonical_relationship_revision` 将稳定公开边 ID 和正关系版本映射到发布中的准确事实修订、endpoint、关系类型、方向、限制及评估资格。Endpoint 和关系字段保留为索引列；解释及有界范围/支持列表使用带版本 payload。Island-port 因此可以校验 WebUI 评估目标，而不会把判断视为规范内容。关系判断与聚合保留在[目标 MySQL schema](../../docs/interfaces/tables/sql.sql)定义的独立授权 island-port 产品 schema 中；Transnet 无法访问私有行。
 
 语义尺度使用 `entity_type = 'semantic_scale'` 的 `canonical_entity`。其不可变修订 payload 存储命名维度、递增或递减方向、适用领域与条件、有序词义限定节点成员及证据引用。成员位置只定义顺序。发布拒绝重复位置、缺失成员、混合不兼容词义、缺失证据，以及把尺度编码成 `is_a` 分类的行为。基础卡、事实、profile 与尺度均通过 `release_member` 加入发布。
 
@@ -97,7 +111,7 @@ erDiagram
 {
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
   "deadline_at": "2026-09-12T10:30:05.000000Z",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "content_release": "knowledge-2026-09"
 }
 ```
@@ -109,7 +123,7 @@ Stage 3 Transnet client 要求每个响应在顶层回显 `request_id` 和 `sche
 ```json
 {
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "content_release": "knowledge-2026-09",
   "outcome": "content_release_unavailable",
   "error": {
@@ -129,7 +143,7 @@ Stage 4 在 application 请求开始时只选择一次 active 不可变规范发
   "context": {
     "request_id": "req_example",
     "deadline_at": "2099-01-01T00:00:00Z",
-    "schema_version": "canonical-data-v1"
+    "schema_version": "mysql-adapter-v1"
   },
   "input": {}
 }
@@ -138,7 +152,7 @@ Stage 4 在 application 请求开始时只选择一次 active 不可变规范发
 ```json
 {
   "request_id": "req_example",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "content_release": "release_example",
@@ -178,7 +192,7 @@ island-port server 不在当前仓库，仍需实现该 operation、原子选择
 ```json
 {
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "matches": [
@@ -280,7 +294,7 @@ island-port server 不在当前仓库，仍需实现该 operation、原子选择
 ```json
 {
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "value": {
     "matches": [
@@ -333,7 +347,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 ```json
 {
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-  "schema_version": "canonical-data-v1",
+  "schema_version": "mysql-adapter-v1",
   "outcome": "ok",
   "content_release": "knowledge-2026-09",
   "value": {
@@ -580,7 +594,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 ## 相关文档
 
 - [共享 UDS JSON 传输与 Transnet 接口](transnet_cn.md)
-- [目标 MySQL 实现](../../docs/interfaces/tables/mysql.sql)
+- [目标 MySQL schema](../../docs/interfaces/tables/sql.sql)
 - [Transnet 设计与外部接口](../transnet_cn.md)
-- [检索数据接口](retrieval-data_cn.md)
+- [Qdrant 接口](qdrant_cn.md)
 - [内容发布](../guides/content-publishing_cn.md)

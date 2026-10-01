@@ -46,7 +46,7 @@ Stage 3 preparation foundation 将 active 的权威 lexeme 与 sense 转换为�
 
 向量失败时可返回带显式降级的 MySQL 基础卡，但不得虚构关系或隐藏缺失知识族。权威内容缺失或发布不兼容必须安全失败。实时请求不能创建别名、卡片、事实、领域、边、修订或发布。
 
-精确持久 payload 由[规范数据](../interfaces/canonical-data_cn.md)与[检索数据](../interfaces/retrieval-data_cn.md)接口负责。
+精确持久 payload 由 [SQL](../interfaces/mysql_cn.md) 与[向量](../interfaces/qdrant_cn.md)接口负责。
 
 ## 验证
 

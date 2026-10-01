@@ -14,9 +14,6 @@ Status: the current executable uses transitional loopback HTTP. Target pages des
 - [Domain](domain.md): translation values, lexical knowledge, relationships, releases, and degradation invariants.
 - [Ports](ports.md): model and data operations required by application services.
 - [Adapters](adapters.md): model-provider and island-port protocol implementations.
-- [Model runtime](model-runtime.md): single-VLM fast and reasoning profiles, embedding operations, call budgets, and vision boundaries.
-- [Persistence](persistence.md): application ports, UDS adapters, database repositories, physical schemas, and release consistency.
-- [Observability](observability.md): whole-system structured events, traces, metrics, audit records, privacy, and failure behavior.
 - [Operations](operations.md): observability, resilience, readiness signals, and offline publication.
 
 ## Dependency rule

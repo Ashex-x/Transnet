@@ -38,11 +38,9 @@ flowchart LR
 
 仅为已审核、可复用的共享内容创建规范翻译修订。记录其单词、短语或段落单元，带语言标签的精确源文与译文，适用词义、方言、语域和领域范围，来源与证据，发布权利声明，选择理由，审核决定，normalizer 版本及内容 hash。绝不从请求日志产生候选，也绝不摄取私有用户保存内容。基础卡引用与精确翻译解析相同的已发布翻译身份。
 
-目标 MySQL schema 通过共享稳定的 `canonical_entity` 身份和不可变 `canonical_entity_revision` 行表示 lexeme、词义、基础卡、翻译、领域、事实和语义尺度。高频过滤键保留为列；每个内容族使用闭合且带版本的 JSON payload schema 保存其有界字段。`entity_type_revision` 定义每个内容族的 parent、引用、索引字段与 payload 规则，因此新增内容族通常是 registry 发布而非 DDL。Publisher 拒绝声明类型、引用或 schema 版本不一致的 payload，然后通过 `release_member` 固定已批准的 source、evidence、registry、entity 与 relationship 修订。不得仅因增加一个有界内容字段就新建表。
+目标 MySQL schema 通过共享稳定的 `canonical_entity` 身份和不可变 `canonical_entity_revision` 行表示 lexeme、词义、基础卡、翻译、领域、事实和语义尺度。高频过滤键保留为列；每个内容族使用闭合且带版本的 JSON payload schema 保存其有界字段。Publisher 拒绝声明实体类型、引用或 schema 版本不一致的 payload，然后通过 `release_member` 固定已批准的实体与关系修订。不得仅因增加一个有界内容字段就新建表。
 
-来源引文、权利与生命周期变化创建不可变 `canonical_source_revision` 行。Evidence 引用精确 source revision。因此旧发布保留审核时的来源署名和权限；撤回或修正通过隔离与新发布交付，绝不原地改写 metadata。
-
-在构建向量投影前创建领域知识 profile 与原子断言。二元事实包含主体、有类型谓词、客体或字面值、陈述、范围、条件、证据、来源、验证状态和不可变修订。天然需要更多角色的关系——例如在特定条件下使用某方法测量某物理量——使用有序且具名角色的断言参与者，而不是有损的成对事实。每个 profile 列出可用事实族及诚实的 `seed`、`partial` 或 `curated` 覆盖；缺失事实族保持显式缺失。
+在构建向量投影前创建领域知识 profile 与原子事实。每个事实只有一个主体、有类型谓词、客体或字面值、陈述、范围、条件、证据、来源、验证状态和不可变修订。每个 profile 列出可用事实族及诚实的 `seed`、`partial` 或 `curated` 覆盖；缺失事实族保持显式缺失。
 
 语义尺度独立于分类创建。尺度命名其维度、方向、条件、领域、证据及有序词义限定成员。位置表示顺序，不表示相等距离。校验器拒绝分类环、逆关系不一致、重复尺度位置、不兼容成员词义、缺失证据，以及 `is_a` 与程度关系间的任何转换。
 
@@ -54,21 +52,19 @@ flowchart LR
 
 ## 构建与校验边
 
-节点先于边构建。每条规范断言指定关系注册表版本、角色参与者、陈述、适用词义与领域、条件、语言、方言、地区、时代、证据状态、置信度、来源、验证状态和发布。Registry 定义元数、角色约束、逆关系、对称性、传递性、因果性及允许的二元遍历投影，不从标签猜测。不存在新的权威关系解释 prose：每个 Qdrant edge 都是一个已声明二元投影，其带版本 input 由冻结 endpoint lexical input、typed wire relation、已接纳 structured scope 与 verified evidence metadata 确定性组装，并保留来源断言身份。
+节点先于边构建。每条边指定两端、类型、方向、适用词义与领域、条件、语言、方言、地区、时代、证据状态、置信度、来源、验证状态和发布。不存在新的权威关系解释 prose：带版本的 edge input 由冻结 endpoint lexical input、typed wire relation、已接纳 structured scope 与 verified evidence metadata 确定性组装。版本化关系注册表定义逆关系、对称性、传递性和因果性，不从标签猜测。校验拒绝孤立端点、跨发布引用、无效方向、重复边、缺失证据与不兼容词义。强度不得冒充分类，探索邻居与已验证边分开。
 
 已实现的 admission foundation 还要求精确且已冻结的 Qdrant wire 映射、精确 inverse 声明、规范端点 kind 与发布所有权、verified lifecycle，以及 evidence ID 到具有 storage/embedding permission 的 active、source-qualified lineage 的一对一解析。对称输入只为 identity 进行规范化；publisher 不合成 inverse record。重复 typed assertion 不受输入顺序或替代 edge ID 影响，均被确定性拒绝。在 canonical domain ID 和 condition schema 冻结前，字符串 domain scope 与自由文本 condition 闭合失败，不进入投影 payload。
 
 ## 构建不可变 Qdrant 集合
 
-为发布创建一个不可变节点集合和一个不可变边集合，同时使用具名稠密/稀疏向量和[检索数据合同](../interfaces/retrieval-data_cn.md)的 Payload 索引。在 Manifest 中记录维度、规范化、嵌入模型、哈希、Schema、数量和端点覆盖率。Edge dense/lexical input 绑定两端冻结 input hash 与完整的已接纳结构化关系；island-port 解析端点输入并应用精确批准的 compatibility-registry entry。重建探索邻居不会修改已验证内容。
+为发布创建一个不可变节点集合和一个不可变边集合，同时使用具名稠密/稀疏向量和 [Qdrant 合同](../interfaces/qdrant_cn.md)的 Payload 索引。在 Manifest 中记录维度、规范化、嵌入模型、哈希、Schema、数量和端点覆盖率。Edge dense/lexical input 绑定两端冻结 input hash 与完整的已接纳结构化关系；island-port 解析端点输入并应用精确批准的 compatibility-registry entry。重建探索邻居不会修改已验证内容。
 
-Execution baseline 为 `semantic` vector 使用 1,024 维的 `Qwen/Qwen3-Embedding-0.6B`，但在部署提供精确不可变 artifact revision 且 island-port 能证明其实际加载的 revision 之前，publication 仍然闭合失败。Lexical publication 使用非神经的 `transnet-lexical-bm25-v1` encoder 与 `lexical` sparse vector。它保留 NFC spelling、大小写以及附着的技术符号 `+`/`#`，从按 UTF-8 排序的 term 构造无碰撞 release-local index，仅在完整 collection 冻结后计算 document-side BM25 term-frequency saturation，并将依赖 collection 的 IDF 交给 Qdrant `idf` modifier。IDF 绝不改变 canonical input hash。精确 tokenizer、dictionary、数值和执行边界由[检索数据合同](../interfaces/retrieval-data_cn.md#lexical-encoder-合同)规定。
+Execution baseline 为 `semantic` vector 使用 1,024 维的 `Qwen/Qwen3-Embedding-0.6B`，但在部署提供精确不可变 artifact revision 且 island-port 能证明其实际加载的 revision 之前，publication 仍然闭合失败。Lexical publication 使用非神经的 `transnet-lexical-bm25-v1` encoder 与 `lexical` sparse vector。它保留 NFC spelling、大小写以及附着的技术符号 `+`/`#`，从按 UTF-8 排序的 term 构造无碰撞 release-local index，仅在完整 collection 冻结后计算 document-side BM25 term-frequency saturation，并将依赖 collection 的 IDF 交给 Qdrant `idf` modifier。IDF 绝不改变 canonical input hash。精确 tokenizer、dictionary、数值和执行边界由 [Qdrant 合同](../interfaces/qdrant_cn.md#lexical-encoder-合同)规定。
 
 仓库内 publication foundation 会校验 node-first lifecycle、稳定 build/batch identity、冲突 retry、execution receipt、dictionary proof 以及 input/projection/persisted/manifest hash hierarchy。其出站 publication port 与严格 island-port client 通过共享 UDS transport 承载 begin、有界 node/edge batch、freeze receipt、reconciliation、status 与 abort。`KnowledgePublicationService` 从不可变 projection 工件驱动该合同，始终以 island-port 权威 status 恢复，不保留本地 publication progress，并且只在 reconciliation 成功后返回 typed activation candidate。Failed 或 abandoned build 不能成为 candidate，reconciliation 也不会激活 release。Production 仍受阻于已部署的不可变 Qwen revision 与 attestation、真实 dense/lexical execution、island-port build/status 与 reconciliation persistence、Qdrant node/edge collection 创建和 mutation、production collection verification 与 persisted hash、真实 MySQL/Qdrant reconciliation，以及 release-trio E2E 验收。
 
 Publisher 必须先完成并验证确定性节点投影，再冻结节点 manifest，并针对该精确节点哈希构建边。对账比较规范根、规范 schema、强类型物理 collection ID、payload schema、嵌入修订与维度、节点/边哈希和数量以及完整端点覆盖。成员缺失、活动 alias、跨发布引用、未解析的关系 wire 映射或未验证 collection 均阻止激活。
-
-实时检索响应绝不作为发布输入。如果编辑者独立将某个引文来源推进离线工作流，仍必须通过正常的许可、证据、schema 与审核门禁，且不得自动复制请求文本、查询、抓取页面或生成答案。
 
 ## 对账与评估
 
@@ -82,8 +78,6 @@ Transnet 在线请求路径只有读取权限。Transnet publication orchestrati
 
 回滚通过同一个 island-port authority 重新激活此前已验证且保留的不可变三件套。它不改写旧 canonical release，也不重建旧 immutable Qdrant collection。目标必须仍处于 verified、retained 且可寻址状态；build GC 绝不能删除 active 或 retained rollback target。Production retention 与 rollback 行为仍需外部验证。
 
-数据库 rollout 遵循 [MySQL 迁移策略](../interfaces/tables/migrations_cn.md)。Schema 扩展、有界 backfill、reader/writer 切换与破坏性收缩属于独立部署；激活内容发布不能替代 schema 兼容检查。
-
 ## 修正、隔离与删除
 
 紧急隔离先使受影响卡、节点和边不合格，再删除派生向量并对账。Transnet 没有需要迁移或再生成的私有记录。普通修正创建新不可变发布并保留证据谱系；只有有证据的发布决策才能改变已验证边。来源移除遵循许可流程，并覆盖派生别名、向量、边、例句和缓存工件。
@@ -91,6 +85,6 @@ Transnet 在线请求路径只有读取权限。Transnet publication orchestrati
 ## 相关文档
 
 - [系统设计](../transnet_cn.md)
-- [规范数据接口](../interfaces/canonical-data_cn.md)
-- [检索数据接口](../interfaces/retrieval-data_cn.md)
+- [MySQL](../interfaces/mysql_cn.md)
+- [Qdrant](../interfaces/qdrant_cn.md)
 - [质量保证](quality-assurance_cn.md)
