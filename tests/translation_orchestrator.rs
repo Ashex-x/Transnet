@@ -230,13 +230,13 @@ async fn text_guidance_is_executed_and_checked() {
   let fake = Arc::new(FakeGeneration::new([Ok(lexical("扭矩"))]));
   let orchestrator = TranslationOrchestrator::new(fake.clone());
   let result = orchestrator
-      .translate(
-        &context(30),
-        Arc::new(CancellationSignal::default()),
-        &guided_turn("torque"),
-      )
-      .await
-      .unwrap();
+    .translate(
+      &context(30),
+      Arc::new(CancellationSignal::default()),
+      &guided_turn("torque"),
+    )
+    .await
+    .unwrap();
   assert_eq!(result.translation.kind(), TranslationResultKind::Word);
   assert_eq!(fake.calls().len(), 1);
   assert!(fake.calls()[0].input.contains("technical"));

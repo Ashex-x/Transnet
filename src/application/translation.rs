@@ -8,11 +8,10 @@ use tokio::task::JoinSet;
 
 use crate::{
   domain::translation_turn::{
-    LexicalTurnDraft, ProjectedTranslationResult, RoutingConfidence, TranslationIntentClassifier,
-    FreshnessPolicy, TerminologyPolicy, TranslationNormalizer, TranslationTurn,
+    FreshnessPolicy, LexicalTurnDraft, ProjectedTranslationResult, RoutingConfidence,
+    TerminologyPolicy, TranslationIntentClassifier, TranslationNormalizer, TranslationTurn,
     TranslationTurnResult, TranslationUnit, TranslationVersionMetadata, TurnLanguage,
-    NORMALIZER_VERSION, PROJECTION_VERSION,
-    TRANSLATION_RESULT_SCHEMA_VERSION,
+    NORMALIZER_VERSION, PROJECTION_VERSION, TRANSLATION_RESULT_SCHEMA_VERSION,
   },
   domain::{
     model_runtime::{CancellationSignal, GenerationInput, GenerationProfile, ReasoningBudget},
