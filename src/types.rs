@@ -1,40 +1,5 @@
 //! Minimal JSON contracts exposed by the translation service.
 
-use serde::{Deserialize, Serialize};
-
-/// Translation request accepted by `POST /translate`.
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct TranslateRequest {
-  /// Nonblank source text.
-  pub text: String,
-  /// BCP-47-shaped source language code.
-  pub source_lang: String,
-  /// BCP-47-shaped target language code.
-  pub target_lang: String,
-}
-
-/// Successful translation response.
-#[derive(Clone, Deserialize, Serialize, PartialEq, Eq)]
-pub struct TranslateResponse {
-  /// Text returned by the selected model.
-  pub translation: String,
-}
-
-/// Process health response.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct HealthResponse {
-  /// Stable process status.
-  pub status: &'static str,
-}
-
-/// Error response returned by the HTTP API.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct ErrorResponse {
-  /// Human-readable error description.
-  pub error: String,
-}
-
 /// Returns whether `value` has a conservative BCP-47 language-tag shape.
 pub fn is_language_code(value: &str) -> bool {
   if value.is_empty() || value.len() > 35 {
@@ -55,18 +20,6 @@ pub fn is_language_code(value: &str) -> bool {
       && subtag.len() <= 8
       && subtag.bytes().all(|byte| byte.is_ascii_alphanumeric())
   })
-}
-
-impl std::fmt::Debug for TranslateRequest {
-  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    formatter.write_str("TranslateRequest(REDACTED)")
-  }
-}
-
-impl std::fmt::Debug for TranslateResponse {
-  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    formatter.write_str("TranslateResponse(REDACTED)")
-  }
 }
 
 #[cfg(test)]

@@ -30,7 +30,7 @@ use transnet::{
     CanonicalCandidateQuery, CanonicalReadContext, CanonicalReadError, CanonicalReadPort,
     CanonicalSenseQuery, CanonicalTranslationQuery,
   },
-  AppState, ProviderConfig, TranslationConfig, TranslationService,
+  AppState,
 };
 
 #[derive(Clone, Copy)]
@@ -216,36 +216,16 @@ impl CanonicalReadPort for Authority {
   }
 }
 
-fn legacy_service() -> TranslationService {
-  let provider = |model: &str| ProviderConfig {
-    base_url: "http://127.0.0.1:9/v1".into(),
-    model: model.into(),
-    api_key: "unused".into(),
-  };
-  TranslationService::new(
-    TranslationConfig {
-      long_text_chars: 4000,
-      timeout_seconds: 1,
-      max_retries: 0,
-      retry_delay_ms: 0,
-    },
-    provider("short"),
-    provider("long"),
-  )
-  .unwrap()
-}
 fn router(mode: Mode) -> axum::Router {
   let authority = Arc::new(Authority {
     mode,
     active: Mutex::new(0),
     sensed: Mutex::new(Vec::new()),
   });
-  app_router(
-    AppState::new(legacy_service()).with_canonical_read_service_timeout(
-      Arc::new(CanonicalReadService::new(authority)),
-      Duration::from_secs(1),
-    ),
-  )
+  app_router(AppState::new().with_canonical_read_service_timeout(
+    Arc::new(CanonicalReadService::new(authority)),
+    Duration::from_secs(1),
+  ))
 }
 async fn body(response: Response) -> Value {
   serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
@@ -346,7 +326,7 @@ async fn canonical_failures_map_to_distinct_redacted_problems() {
     assert_eq!(response.status(), status);
     assert_eq!(body(response).await["code"], code);
   }
-  let response = app_router(AppState::new(legacy_service()))
+  let response = app_router(AppState::new())
     .oneshot(lookup_request(""))
     .await
     .unwrap();
@@ -365,7 +345,7 @@ async fn pinned_sense_uses_caller_release_and_never_selects_active() {
     sensed: Mutex::new(Vec::new()),
   });
   let router = app_router(
-    AppState::new(legacy_service())
+    AppState::new()
       .with_canonical_read_service(Arc::new(CanonicalReadService::new(authority.clone()))),
   );
   let response=router.oneshot(Request::post("/api/v1/senses/get").header("content-type","application/json").body(Body::from(r#"{"sense_id":"sense-s0","content_release":"release-r1","canonical_schema_version":"canonical-v1","target_language":"zh-CN"}"#)).unwrap()).await.unwrap();
@@ -409,7 +389,7 @@ async fn pinned_sense_maps_release_schema_validation_and_disabled_capability() {
     .unwrap();
   assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-  let response = app_router(AppState::new(legacy_service()))
+  let response = app_router(AppState::new())
     .oneshot(request(r#"{"sense_id":"sense-s0","content_release":"release-r1","canonical_schema_version":"canonical-v1","target_language":"zh-CN"}"#))
     .await
     .unwrap();

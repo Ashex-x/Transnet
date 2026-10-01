@@ -26,7 +26,7 @@ use transnet::{
     CanonicalCandidateQuery, CanonicalReadContext, CanonicalReadError, CanonicalReadPort,
     CanonicalSenseQuery, CanonicalTranslationQuery,
   },
-  AppConfig, AppState, ProviderConfig, TranslationConfig, TranslationService,
+  AppConfig, AppState,
 };
 
 #[derive(Clone, Copy)]
@@ -122,25 +122,6 @@ impl CanonicalReadPort for FakeAuthority {
   }
 }
 
-fn legacy_service() -> TranslationService {
-  let provider = |model: &str| ProviderConfig {
-    base_url: "http://127.0.0.1:9/v1".into(),
-    model: model.into(),
-    api_key: "unused-test-credential".into(),
-  };
-  TranslationService::new(
-    TranslationConfig {
-      long_text_chars: 4_000,
-      timeout_seconds: 1,
-      max_retries: 0,
-      retry_delay_ms: 0,
-    },
-    provider("short"),
-    provider("long"),
-  )
-  .unwrap()
-}
-
 async fn json(response: Response) -> Value {
   serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
 }
@@ -209,7 +190,7 @@ async fn strict_outbound_client_can_back_opt_in_service_and_readiness() {
   ] {
     let transport = Arc::new(ActiveReleaseTransport { schema_version });
     let authority: Arc<dyn CanonicalReadPort> = Arc::new(IslandPortCanonicalClient::new(transport));
-    let state = AppState::new(legacy_service())
+    let state = AppState::new()
       .with_canonical_read_service(Arc::new(CanonicalReadService::new(authority.clone())))
       .with_readiness(Arc::new(CanonicalDependencyReadiness::new(
         authority,
@@ -231,7 +212,7 @@ async fn strict_outbound_client_can_back_opt_in_service_and_readiness() {
 
 #[tokio::test]
 async fn disabled_runtime_keeps_model_only_readiness_and_no_canonical_dependency() {
-  let state = AppState::new(legacy_service());
+  let state = AppState::new();
   assert!(state.canonical_read_service().is_none());
   let response = app_router(state)
     .oneshot(
@@ -259,7 +240,7 @@ async fn enabled_runtime_reuses_one_authority_for_service_and_read_only_probe() 
   ] {
     let authority: Arc<dyn CanonicalReadPort> = Arc::new(FakeAuthority(outcome));
     let timeout = Duration::from_millis(10);
-    let state = AppState::new(legacy_service())
+    let state = AppState::new()
       .with_canonical_read_service(Arc::new(CanonicalReadService::new(authority.clone())))
       .with_readiness(Arc::new(CanonicalDependencyReadiness::new(
         authority, timeout,

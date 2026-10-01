@@ -7,7 +7,7 @@ use axum::{
   http::StatusCode,
   middleware,
   response::{IntoResponse, Response},
-  Json, Router,
+  Router,
 };
 use tower_http::{
   limit::RequestBodyLimitLayer,
@@ -22,8 +22,6 @@ use crate::{
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
   domain::capabilities::{KnowledgeCapabilityBundle, ServiceCapabilities},
-  provider::TranslationService,
-  types::ErrorResponse,
 };
 
 mod envelope;
@@ -53,7 +51,6 @@ use request_id::RequestId;
 /// Shared dependencies used by request handlers.
 #[derive(Clone)]
 pub struct AppState {
-  _service: Arc<TranslationService>,
   translation_orchestrator: Option<Arc<TranslationOrchestrator>>,
   relationship_page_runtime: Option<Arc<RelationshipPageRuntime>>,
   canonical_read: Option<Arc<CanonicalReadService>>,
@@ -64,11 +61,16 @@ pub struct AppState {
   runtime_cancellation: Arc<crate::domain::model_runtime::CancellationSignal>,
 }
 
+impl Default for AppState {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl AppState {
   /// Creates application state for the target translation service.
-  pub fn new(service: TranslationService) -> Self {
+  pub fn new() -> Self {
     Self {
-      _service: Arc::new(service),
       translation_orchestrator: None,
       relationship_page_runtime: None,
       canonical_read: None,
@@ -270,10 +272,7 @@ fn trace_route<B>(request: &Request<B>) -> &str {
 }
 
 async fn payload_limit_response(request: Request, next: middleware::Next) -> Response {
-  let is_v1 = request.uri().path() == "/v1"
-    || request.uri().path().starts_with("/v1/")
-    || request.uri().path() == "/api/v1"
-    || request.uri().path().starts_with("/api/v1/");
+  let is_v1 = request.uri().path() == "/api/v1" || request.uri().path().starts_with("/api/v1/");
   let request_id = request.extensions().get::<RequestId>().cloned();
   let response = next.run(request).await;
   if response.status() != StatusCode::PAYLOAD_TOO_LARGE {
@@ -285,17 +284,7 @@ async fn payload_limit_response(request: Request, next: middleware::Next) -> Res
       return problem::payload_too_large(&request_id);
     }
   }
-  error(StatusCode::PAYLOAD_TOO_LARGE, "request body too large")
-}
-
-fn error(status: StatusCode, message: impl Into<String>) -> Response {
-  (
-    status,
-    Json(ErrorResponse {
-      error: message.into(),
-    }),
-  )
-    .into_response()
+  StatusCode::NOT_FOUND.into_response()
 }
 
 #[cfg(test)]

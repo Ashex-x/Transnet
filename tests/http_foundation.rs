@@ -8,36 +8,14 @@ use axum::{
 use serde_json::Value;
 use time::{format_description::well_known::Rfc3339, Duration as TimeDuration, OffsetDateTime};
 use tower::ServiceExt;
-use transnet::{
-  app_router, app_router_with_http_config, AppState, HttpConfig, ProviderConfig, TranslationConfig,
-  TranslationService,
-};
-
-fn service() -> TranslationService {
-  let provider = ProviderConfig {
-    base_url: "http://127.0.0.1:1/v1".to_string(),
-    model: "unused".to_string(),
-    api_key: "unused".into(),
-  };
-  TranslationService::new(
-    TranslationConfig {
-      long_text_chars: 4_000,
-      timeout_seconds: 1,
-      max_retries: 0,
-      retry_delay_ms: 0,
-    },
-    provider.clone(),
-    provider,
-  )
-  .unwrap()
-}
+use transnet::{app_router, app_router_with_http_config, AppState, HttpConfig};
 
 fn app() -> Router {
-  app_router(AppState::new(service()))
+  app_router(AppState::new())
 }
 
 fn configured_app(config: HttpConfig) -> Router {
-  app_router_with_http_config(AppState::new(service()), &config).unwrap()
+  app_router_with_http_config(AppState::new(), &config).unwrap()
 }
 
 async fn json(response: axum::response::Response) -> Value {
@@ -68,6 +46,22 @@ async fn transitional_public_routes_are_absent() {
       .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path}");
   }
+}
+
+#[tokio::test]
+async fn retired_v1_routes_stay_absent_for_oversized_bodies() {
+  let response = configured_app(HttpConfig {
+    max_request_body_bytes: 16,
+  })
+  .oneshot(
+    Request::post("/v1/lookups")
+      .header(header::CONTENT_TYPE, "application/json")
+      .body(Body::from("x".repeat(128)))
+      .unwrap(),
+  )
+  .await
+  .unwrap();
+  assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

@@ -4,7 +4,7 @@
 
 This plan turns the authoritative [Transnet design](transnet.md) into ordered, verifiable delivery slices. It tracks repository state rather than aspiration: an item is checked only when its code, tests, and applicable contracts agree.
 
-Status: active implementation plan. The checked-in runtime provides loopback translation, model-backed structured lookup, and opt-in Transnet-side canonical reads with public BasicCard and pinned-sense delivery. The branch also contains Transnet-side M3 projection and publication foundations: a strict outbound publication client and stateless application orchestration through authoritative reconciliation and typed activation-candidate production. It does not contain the island-port publication server, production embedding or lexical encoding, Qdrant mutation and verification, reconciliation persistence, activation or rollback transactions, or production release-trio end-to-end acceptance. The external island-port/MySQL implementation and real Milestone 2 acceptance also remain incomplete; relationship-first page composition and domain-aware expansion remain later target capabilities.
+Status: active implementation plan. The checked-in runtime serves the target API on one owned Unix socket, uses one provider-neutral Gemma4-27B generation boundary, and optionally composes canonical and knowledge reads. Transnet-side publication and relationship-page contracts exist, but production relationship-page authority composition remains disabled. Island-port server behavior, production MySQL/Qdrant execution, activation/rollback, retention, and production acceptance remain external or unverified.
 
 ## Delivery rules
 
@@ -17,9 +17,9 @@ Status: active implementation plan. The checked-in runtime provides loopback tra
 
 ## Verified baseline
 
-- [x] Private loopback HTTP process, request bounds, exact-origin CORS, request IDs, health probes, graceful shutdown, and redacted structured tracing.
-- [x] Length-based translation-provider routing with bounded resilience and aggregate operational metrics.
-- [x] Model-backed structured lexical lookup in the default executable.
+- [x] UDS-only HTTP process, request bounds, request IDs, health probes, graceful shutdown, and redacted structured tracing.
+- [x] One neutral fast/reasoning generation provider with bounded resilience and operational metrics.
+- [x] Target translation plus opt-in canonical and knowledge route composition.
 - [x] Library foundations and process-local test adapters for canonical lookup, sense detail, content releases, and bounded graph reads; these are not production storage composition.
 - [x] Target human contracts for translation, lookup, sense detail, and bounded graph reads.
 - [ ] Production MySQL and Qdrant adapters, publication and paired activation, relationship-page composition, and complete target wire semantics.
@@ -38,7 +38,8 @@ Repository-side admission, request/result Debug redaction, closed telemetry, and
 
 ## Milestone 1: freeze translation and intent routing
 
-- [ ] Replace the transitional Gemma 4/TranslateGemma length router with one Gemma4-27B VLM exposing internal fast and reasoning profiles plus one request-local nomination embedding port; publication embedding remains island-port-owned.
+- [x] Replace the transitional length router with one Gemma4-27B VLM exposing internal fast and reasoning profiles.
+- [ ] Compose the request-local nomination embedding port in production where semantic nomination is enabled; publication embedding remains island-port-owned.
 - [ ] Keep ordinary and chunked translation on the fast profile, permit at most one closed-policy reasoning escalation per request, and prove hidden reasoning is never returned or logged.
 - [ ] Implement shared success and error envelopes, strict unknown-field rejection, language-tag validation, request metadata, and safe status mapping.
 - [ ] Implement the simple text, source-language, target-language, response-level, and optional minimal-history request plus the discriminated word, phrase, and passage `TranslationResult` response.

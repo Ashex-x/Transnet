@@ -76,7 +76,6 @@ async fn model(responses: Vec<String>) -> (OpenAiLearningModel, MockState) {
   tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
   let settings = TranslationConfig {
-    long_text_chars: 4_000,
     timeout_seconds: 2,
     max_retries: 0,
     retry_delay_ms: 0,

@@ -543,11 +543,9 @@ mod tests {
   use super::*;
   use crate::{
     api::AppState,
-    config::{ProviderApiKey, ProviderConfig, TranslationConfig},
     domain::{
       knowledge_hydration::HydratedAssertionProjection, knowledge_view::VerifiedKnowledgePath,
     },
-    provider::TranslationService,
   };
 
   #[derive(Clone, Copy)]
@@ -632,24 +630,7 @@ mod tests {
   }
 
   fn state() -> AppState {
-    let provider = ProviderConfig {
-      base_url: "http://127.0.0.1:1/v1".into(),
-      model: "unused".into(),
-      api_key: ProviderApiKey::new("unused"),
-    };
-    AppState::new(
-      TranslationService::new(
-        TranslationConfig {
-          long_text_chars: 4_000,
-          timeout_seconds: 1,
-          max_retries: 0,
-          retry_delay_ms: 0,
-        },
-        provider.clone(),
-        provider,
-      )
-      .unwrap(),
-    )
+    AppState::new()
   }
 
   fn id(value: &str) -> CanonicalId {

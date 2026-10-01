@@ -1,84 +1,31 @@
-//! OpenAI-compatible provider clients and text-length routing.
+//! Resilient OpenAI-compatible Gemma4-27B generation provider.
 
-use anyhow::Context;
-use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-  config::{ProviderConfig, ProviderResilienceConfig, TranslationConfig},
-  domain::translation_turn::TurnLanguage,
-  ports::translation_model::{
-    ConnectedTextModel, ConnectedTextOutput, ConnectedTextRequest, ModelOperationVersions,
-    TranslationModelError,
-  },
+  config::ProviderConfig,
   resilience::{
     response_failure, status_failure, transport_failure, ProviderAttemptError,
     ProviderMetricsSnapshot, ProviderPolicy, ProviderResilience,
   },
-  types::{is_language_code, TranslateRequest, TranslateResponse},
 };
 
 use crate::domain::model_runtime::GenerationProfile;
 
 /// Failure returned by translation validation or model communication.
 #[derive(Debug, Error)]
-pub enum TranslationError {
-  /// The caller supplied an invalid request.
-  #[error("{0}")]
-  Validation(String),
+pub enum GenerationProviderError {
   /// The selected model could not produce a translation.
   #[error("translation provider unavailable")]
   Provider,
 }
 
-#[async_trait]
-impl ConnectedTextModel for TranslationService {
-  async fn translate_connected_text(
-    &self,
-    request: ConnectedTextRequest<'_>,
-    source_language: TurnLanguage,
-  ) -> Result<ConnectedTextOutput, TranslationModelError> {
-    let operation = self
-      .translate_operation_with_context(
-        TranslateRequest {
-          text: request.text.to_string(),
-          source_lang: source_language.as_str().to_string(),
-          target_lang: request.turn.target_language().as_str().to_string(),
-        },
-        request.terminology,
-        request.preceding_translation,
-      )
-      .await
-      .map_err(|error| match error {
-        TranslationError::Provider => TranslationModelError::Unavailable,
-        TranslationError::Validation(_) => TranslationModelError::InvalidOutput,
-      })?;
-    Ok(ConnectedTextOutput {
-      translation: operation.translation,
-      versions: ModelOperationVersions {
-        model_version: operation.model_version,
-        prompt_version: CONNECTED_TEXT_PROMPT_VERSION,
-      },
-    })
-  }
-}
-
-/// Version of the connected-text prompt contract used by both provider roles.
-pub const CONNECTED_TEXT_PROMPT_VERSION: &str = "connected-text-prompt-v1";
-
-struct TranslationOperation {
-  translation: String,
-  model_version: String,
-}
-
-/// Translation service backed by Gemma 4 and TranslateGemma.
+/// Generation service backed by one Gemma4-27B endpoint.
 #[derive(Clone)]
-pub struct TranslationService {
-  translation: TranslationConfig,
+pub struct GemmaGenerationProvider {
   gemma4: TranslationProvider,
-  translate_gemma: TranslationProvider,
 }
 
 #[derive(Clone)]
@@ -88,25 +35,22 @@ struct TranslationProvider {
   resilience: ProviderResilience,
 }
 
-/// Redacted provider counters for the two direct-translation routes.
+/// Redacted provider counters for the generation boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TranslationProviderMetrics {
+pub struct GenerationProviderMetrics {
   /// Counters for requests routed to Gemma 4.
   pub gemma4: ProviderMetricsSnapshot,
-  /// Counters for requests routed to TranslateGemma.
-  pub translate_gemma: ProviderMetricsSnapshot,
 }
 
-impl TranslationService {
+impl GemmaGenerationProvider {
   /// Runs one provider-neutral operation against the transitional Gemma 4 endpoint.
   ///
-  /// This compatibility hook does not select TranslateGemma and is intended for the target
-  /// generation adapter while legacy translation orchestration remains in place.
+  /// Both closed profiles use the same configured model identity.
   pub(crate) async fn generate_with_profile(
     &self,
     profile: GenerationProfile,
     input: &str,
-  ) -> Result<(String, String), TranslationError> {
+  ) -> Result<(String, String), GenerationProviderError> {
     let instruction = match profile {
       GenerationProfile::Fast => "Complete the requested operation accurately and concisely.",
       GenerationProfile::Reasoning => {
@@ -132,7 +76,7 @@ impl TranslationService {
       .resilience
       .execute("generate", || self.gemma4.send(&body))
       .await
-      .map_err(|_| TranslationError::Provider)?;
+      .map_err(|_| GenerationProviderError::Provider)?;
     Ok((output, self.gemma4.config.model.clone()))
   }
 
@@ -142,7 +86,7 @@ impl TranslationService {
     profile: GenerationProfile,
     input: &str,
     images: &[(String, String)],
-  ) -> Result<(String, String), TranslationError> {
+  ) -> Result<(String, String), GenerationProviderError> {
     let instruction = match profile {
       GenerationProfile::Fast => "Complete the requested operation accurately and concisely.",
       GenerationProfile::Reasoning => {
@@ -181,144 +125,27 @@ impl TranslationService {
       .resilience
       .execute("generate", || self.gemma4.send(&body))
       .await
-      .map_err(|_| TranslationError::Provider)?;
+      .map_err(|_| GenerationProviderError::Provider)?;
     Ok((output, self.gemma4.config.model.clone()))
   }
 
-  /// Creates a reusable translation service.
-  ///
-  /// # Errors
-  ///
-  /// Returns an error when the configured HTTP client cannot be built.
-  pub fn new(
-    translation: TranslationConfig,
-    gemma4: ProviderConfig,
-    translate_gemma: ProviderConfig,
-  ) -> anyhow::Result<Self> {
-    let defaults = ProviderResilienceConfig::default();
-    let gemma4_policy = defaults
-      .resolve(&translation)
-      .context("invalid default Gemma 4 provider resilience policy")?;
-    let translate_gemma_policy = defaults
-      .resolve(&translation)
-      .context("invalid default TranslateGemma provider resilience policy")?;
-    Self::with_provider_policies(
-      translation,
-      gemma4,
-      gemma4_policy,
-      translate_gemma,
-      translate_gemma_policy,
-    )
-  }
-
-  /// Creates a reusable translation service with independent policy state for each provider.
+  /// Creates a reusable generation service with one resilience policy.
   ///
   /// # Errors
   ///
   /// Returns an error when a provider HTTP client cannot be built.
-  pub fn with_provider_policies(
-    translation: TranslationConfig,
-    gemma4: ProviderConfig,
-    gemma4_policy: ProviderPolicy,
-    translate_gemma: ProviderConfig,
-    translate_gemma_policy: ProviderPolicy,
-  ) -> anyhow::Result<Self> {
+  pub fn new(gemma4: ProviderConfig, gemma4_policy: ProviderPolicy) -> anyhow::Result<Self> {
     Ok(Self {
-      translation,
       gemma4: TranslationProvider::new("gemma4", gemma4, gemma4_policy)?,
-      translate_gemma: TranslationProvider::new(
-        "translate_gemma",
-        translate_gemma,
-        translate_gemma_policy,
-      )?,
     })
   }
 
   /// Returns redacted counters for direct translation provider boundaries.
-  pub fn provider_metrics(&self) -> TranslationProviderMetrics {
-    TranslationProviderMetrics {
+  pub fn provider_metrics(&self) -> GenerationProviderMetrics {
+    GenerationProviderMetrics {
       gemma4: self.gemma4.resilience.metrics().snapshot(),
-      translate_gemma: self.translate_gemma.resilience.metrics().snapshot(),
     }
   }
-
-  /// Validates and translates one request with the provider selected by text length.
-  ///
-  /// # Errors
-  ///
-  /// Returns [`TranslationError::Validation`] for invalid caller input and
-  /// [`TranslationError::Provider`] after all provider attempts fail.
-  pub async fn translate(
-    &self,
-    request: TranslateRequest,
-  ) -> Result<TranslateResponse, TranslationError> {
-    self.translate_with_context(request, &[], None).await
-  }
-
-  async fn translate_with_context(
-    &self,
-    request: TranslateRequest,
-    terminology: &[String],
-    preceding_translation: Option<&str>,
-  ) -> Result<TranslateResponse, TranslationError> {
-    let operation = self
-      .translate_operation_with_context(request, terminology, preceding_translation)
-      .await?;
-    Ok(TranslateResponse {
-      translation: operation.translation,
-    })
-  }
-
-  async fn translate_operation_with_context(
-    &self,
-    request: TranslateRequest,
-    terminology: &[String],
-    preceding_translation: Option<&str>,
-  ) -> Result<TranslationOperation, TranslationError> {
-    validate_request(&request)?;
-
-    let use_translate_gemma = request.text.chars().count() > self.translation.long_text_chars;
-    let consistency = consistency_instruction(terminology, preceding_translation);
-    let (provider, body) = if use_translate_gemma {
-      (
-        &self.translate_gemma,
-        translate_gemma_body_with_context(
-          &self.translate_gemma.config.model,
-          &request,
-          consistency,
-        ),
-      )
-    } else {
-      (
-        &self.gemma4,
-        gemma4_body_with_context(&self.gemma4.config.model, &request, consistency),
-      )
-    };
-    let translation = provider
-      .resilience
-      .execute("translate", || provider.send(&body))
-      .await
-      .map_err(|_| TranslationError::Provider)?;
-    Ok(TranslationOperation {
-      translation,
-      model_version: provider.config.model.clone(),
-    })
-  }
-}
-
-fn consistency_instruction(
-  terminology: &[String],
-  preceding_translation: Option<&str>,
-) -> Option<String> {
-  if terminology.is_empty() && preceding_translation.is_none() {
-    return None;
-  }
-  let terms = serde_json::to_string(terminology).unwrap_or_else(|_| "[]".to_string());
-  let previous = preceding_translation.unwrap_or("");
-  Some(format!(
-    "Maintain terminology consistently across this request. Repeated source terms: {terms}. \
-Use the preceding translated segment only as linguistic context: {previous}"
-  ))
 }
 
 impl TranslationProvider {
@@ -369,92 +196,6 @@ impl TranslationProvider {
   }
 }
 
-fn validate_request(request: &TranslateRequest) -> Result<(), TranslationError> {
-  if request.text.trim().is_empty() {
-    return Err(TranslationError::Validation(
-      "text must not be blank".to_string(),
-    ));
-  }
-  if !is_language_code(&request.source_lang) {
-    return Err(TranslationError::Validation(
-      "source_lang must be a BCP-47 language code".to_string(),
-    ));
-  }
-  if !is_language_code(&request.target_lang) {
-    return Err(TranslationError::Validation(
-      "target_lang must be a BCP-47 language code".to_string(),
-    ));
-  }
-  Ok(())
-}
-
-#[cfg(test)]
-fn gemma4_body(model: &str, request: &TranslateRequest) -> ChatCompletionRequest {
-  gemma4_body_with_context(model, request, None)
-}
-
-fn gemma4_body_with_context(
-  model: &str,
-  request: &TranslateRequest,
-  consistency: Option<String>,
-) -> ChatCompletionRequest {
-  let mut system = "Translate accurately and return only the translated text.".to_string();
-  if let Some(consistency) = consistency {
-    system.push(' ');
-    system.push_str(&consistency);
-  }
-  ChatCompletionRequest {
-    model: model.to_string(),
-    messages: vec![
-      ChatMessage {
-        role: "system",
-        content: MessageContent::Text(system),
-      },
-      ChatMessage {
-        role: "user",
-        content: MessageContent::Text(format!(
-          "Translate from {} to {}:\n{}",
-          request.source_lang, request.target_lang, request.text
-        )),
-      },
-    ],
-    temperature: 0.0,
-  }
-}
-
-#[cfg(test)]
-fn translate_gemma_body(model: &str, request: &TranslateRequest) -> ChatCompletionRequest {
-  translate_gemma_body_with_context(model, request, None)
-}
-
-fn translate_gemma_body_with_context(
-  model: &str,
-  request: &TranslateRequest,
-  consistency: Option<String>,
-) -> ChatCompletionRequest {
-  let mut messages = Vec::with_capacity(2);
-  if let Some(consistency) = consistency {
-    messages.push(ChatMessage {
-      role: "system",
-      content: MessageContent::Text(consistency),
-    });
-  }
-  messages.push(ChatMessage {
-    role: "user",
-    content: MessageContent::Structured(vec![TranslateGemmaContent {
-      content_type: "text",
-      source_lang_code: request.source_lang.clone(),
-      target_lang_code: request.target_lang.clone(),
-      text: request.text.clone(),
-    }]),
-  });
-  ChatCompletionRequest {
-    model: model.to_string(),
-    messages,
-    temperature: 0.0,
-  }
-}
-
 #[derive(Serialize)]
 struct ChatCompletionRequest {
   model: String,
@@ -472,7 +213,6 @@ struct ChatMessage {
 #[serde(untagged)]
 enum MessageContent {
   Text(String),
-  Structured(Vec<TranslateGemmaContent>),
   Vlm(Vec<VlmContent>),
 }
 
@@ -486,15 +226,6 @@ enum VlmContent {
 #[derive(Serialize)]
 struct ImageUrl {
   url: String,
-}
-
-#[derive(Serialize)]
-struct TranslateGemmaContent {
-  #[serde(rename = "type")]
-  content_type: &'static str,
-  source_lang_code: String,
-  target_lang_code: String,
-  text: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -517,43 +248,6 @@ mod tests {
   use serde_json::json;
 
   use super::*;
-
-  fn request(text: String) -> TranslateRequest {
-    TranslateRequest {
-      text,
-      source_lang: "en".to_string(),
-      target_lang: "zh-CN".to_string(),
-    }
-  }
-
-  #[test]
-  fn test_gemma4_body_uses_standard_chat_messages() {
-    let value = serde_json::to_value(gemma4_body("Gemma4", &request("hello".to_string()))).unwrap();
-    assert_eq!(value["model"], "Gemma4");
-    assert!(value["messages"][1]["content"]
-      .as_str()
-      .unwrap()
-      .contains("hello"));
-  }
-
-  #[test]
-  fn test_translate_gemma_body_uses_structured_content() {
-    let value = serde_json::to_value(translate_gemma_body(
-      "TranslateGemma",
-      &request("long text".to_string()),
-    ))
-    .unwrap();
-    assert_eq!(value["model"], "TranslateGemma");
-    assert_eq!(
-      value["messages"][0]["content"][0],
-      json!({
-        "type": "text",
-        "source_lang_code": "en",
-        "target_lang_code": "zh-CN",
-        "text": "long text"
-      })
-    );
-  }
 
   #[test]
   fn vlm_content_uses_standard_text_and_image_url_parts() {

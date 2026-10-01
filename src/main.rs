@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use transnet::{
   app_router_with_http_config, application::translation::TranslationOrchestrator, logger,
-  AppConfig, AppState, CancellationSignal, OpenAiGenerationAdapter, TranslationService,
+  AppConfig, AppState, CancellationSignal, GemmaGenerationProvider, OpenAiGenerationAdapter,
 };
 
 #[cfg(unix)]
@@ -63,22 +63,11 @@ async fn run(config: AppConfig) -> Result<()> {
     .gemma4
     .resolve(&config.translation)
     .context("invalid Gemma 4 provider resilience policy")?;
-  let translate_gemma_policy = config
-    .provider_resilience
-    .translate_gemma
-    .resolve(&config.translation)
-    .context("invalid TranslateGemma provider resilience policy")?;
-  let service = TranslationService::with_provider_policies(
-    config.translation,
-    config.gemma4,
-    gemma4_policy,
-    config.translate_gemma,
-    translate_gemma_policy,
-  )?;
+  let service = GemmaGenerationProvider::new(config.gemma4, gemma4_policy)?;
   let orchestrator =
     TranslationOrchestrator::new(Arc::new(OpenAiGenerationAdapter::new(service.clone())));
   let runtime_cancellation = Arc::new(CancellationSignal::default());
-  let state = AppState::new(service)
+  let state = AppState::new()
     .with_runtime_cancellation(runtime_cancellation.clone())
     .with_translation_orchestrator(Arc::new(orchestrator));
   let state = match canonical {

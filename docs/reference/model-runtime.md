@@ -4,7 +4,7 @@
 
 This subsystem owns target inference policy for the one configured Gemma4-27B vision-language model and the separate embedding model. It does not expose provider brands, reasoning controls, prompts, or embedding payloads through the service interface.
 
-Status: foundational model-runtime types, adapters, and text-translation orchestration are implemented. The public Rust boundary provides closed `fast` and `reasoning` profiles, bounded redacted input/output/version values, deadline and cooperative-cancellation hooks, and an atomic one-reasoning-call guard. The target translation route uses only the provider-neutral generation port; the legacy direct translation route retains the transitional two-provider split until final route removal.
+Status: the executable and public Rust boundary use one provider-neutral generation port with closed `fast` and `reasoning` profiles, bounded redacted values, deadlines, cooperative cancellation, and an atomic one-reasoning-call guard. The legacy direct translation API and two-provider length router are removed.
 
 ## Generation profiles
 

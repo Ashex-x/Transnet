@@ -12,13 +12,13 @@ Transnet 仅通过必填的绝对 `socket_path` 服务 HTTP/1.1，并在关闭�
 
 `[translation]` 配置 Unicode 字符数路由边界，以及 Provider 单次超时、首次之后重试次数和重试延迟的旧版默认值。Provider 专属覆盖优先。
 
-`[gemma4]` 和 `[translate_gemma]` 分别配置 OpenAI-compatible `base_url`、`model` 和 `api_key`。默认指向 18011 端口的 Gemma 4 和 18007 端口的 TranslateGemma。真实凭据必须在不提交 Git 的情况下提供；解析后的凭据会从 Rust `Debug` 诊断中脱敏，仅用于出站 Provider 请求。
+`[gemma4]` 配置单一 OpenAI-compatible Gemma4-27B 的 `base_url`、`model` 与 `api_key`。真实凭据不得提交 Git；解析后的凭据会从 Rust `Debug` 诊断中脱敏，仅用于出站请求。
 
 这些配置表描述当前过渡期运行时行为。目标配置用一个生成 endpoint 和一个 embedding endpoint 替代它们。生成设置命名一个 Gemma4-27B 模型及 provider 专属 fast/reasoning 控制；application 策略选择 profile，而不是选择第二个 endpoint。独立有界设置覆盖 fast 推理、reasoning 升级、embedding 调用与可选实时检索。在匹配 Rust 类型与组合存在前，仓库配置不会采用这些目标 key。
 
 Provider client 直接连接所配置的 endpoint，不继承操作系统或环境代理设置。这样可避免回环与私有模型流量（包括 Bearer 凭据）进入无关代理进程。
 
-`[provider_resilience.gemma4]` 和 `[provider_resilience.translate_gemma]` 配置独立容错边界。`timeout_seconds`、`max_retries` 与 `retry_delay_ms` 可覆盖 `[translation]`；`max_retry_delay_ms` 限制 Provider `Retry-After` 延迟；`max_concurrent_requests` 是快速失败 Bulkhead；`circuit_failure_threshold` 是打开熔断器的连续瞬时逻辑调用失败次数；`circuit_open_ms` 是半开探测前的开放时长。省略表时使用 Rust 默认值：8 个并发尝试、阈值 5、开放 30 秒、重试延迟上限 5 秒；仓库中的 TranslateGemma 策略把并发收紧到 4。
+`[provider_resilience.gemma4]` 配置 generation 容错边界。`timeout_seconds`、`max_retries` 与 `retry_delay_ms` 可覆盖 `[translation]`；其余字段限制 retry delay、并发与 circuit 行为。
 
 仅请求超时、建连失败、`429`、`500`、`502`、`503`、`504` 和不可用的成功 Envelope 会重试。有效 `Retry-After` 代替配置延迟，但受 `max_retry_delay_ms` 限制；其他客户端、服务端或歧义传输失败不再发起请求。熔断器打开或 Bulkhead 已满时，相关请求迅速失败并映射到现有 unavailable 响应。
 

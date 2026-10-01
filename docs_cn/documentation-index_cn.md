@@ -43,7 +43,7 @@ English: [Transnet documentation](../docs/documentation-index.md)
 - **发布三元组：**一份兼容的 MySQL 卡片发布版本，加上配对的不可变 Qdrant 节点集合和边集合。每个请求同时固定这三个版本。
 - **MySQL：**目标架构中用于规范卡片、经审慎选择的翻译、发布元数据和发布状态的权威关系型存储。
 - **Qdrant：**目标架构中用于检索已发布规范节点和有类型边的、可重建的向量与 Payload 索引投影。
-- **Gemma 4 / TranslateGemma：**当前运行时使用的 OpenAI-compatible 模型 Provider。Gemma 4 处理短文本翻译和结构化查询；TranslateGemma 处理较长的翻译请求。
+- **Gemma4-27B：**当前运行时通过闭合 fast 与 reasoning profile 使用的单一 OpenAI-compatible generation provider。
 - **`verified` / `inferred` / `exploratory`：**分别是已发布的规范关系、仅限当前请求的有证据推断说明，以及向量或模型候选。只有 `verified` 是规范事实；后两者绝不作为事实持久化。
 - **关系状态字段：**公共页面将上述三种标签命名为 `evidence_state`。在 Qdrant 存储合同中，`evidence_state` 表示附带证据是否支持某条边（例如 `supported`），而 `verification_state` 表示存储的边是否为规范边（`verified`）或探索性边。它们相关，但不可互换。
 

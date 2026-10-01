@@ -23,8 +23,8 @@ pub mod resilience;
 /// Owned Unix-domain listener lifecycle and HTTP serving.
 #[cfg(unix)]
 pub mod server;
-/// Public HTTP request and response types.
-pub mod types;
+/// Crate-private compatibility-free HTTP helpers.
+mod types;
 
 pub use adapters::learning_model::OpenAiLearningModel;
 pub use adapters::model_runtime::{OpenAiEmbeddingAdapter, OpenAiGenerationAdapter};
@@ -66,6 +66,5 @@ pub use ports::model_runtime::{
   EmbeddingPort, EmbeddingRequest, GenerationPort, GenerationRequest, GenerationResponse,
   ModelOperationContext, ModelOperationError,
 };
-pub use provider::{TranslationError, TranslationProviderMetrics, TranslationService};
+pub use provider::{GemmaGenerationProvider, GenerationProviderError, GenerationProviderMetrics};
 pub use resilience::{ProviderMetricsSnapshot, ProviderPolicy, ProviderPolicyError};
-pub use types::{TranslateRequest, TranslateResponse};

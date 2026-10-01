@@ -25,8 +25,6 @@ pub struct AppConfig {
   pub translation: TranslationConfig,
   /// Provider used for short text.
   pub gemma4: ProviderConfig,
-  /// Provider used for long text.
-  pub translate_gemma: ProviderConfig,
   /// Per-provider timeout, retry, bulkhead, and circuit-breaker policy.
   #[serde(default)]
   pub provider_resilience: ProviderResilienceConfigs,
@@ -451,8 +449,6 @@ pub enum HttpConfigError {
 /// Translation routing and provider-call settings.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TranslationConfig {
-  /// Maximum Unicode character count routed to Gemma 4.
-  pub long_text_chars: usize,
   /// Timeout for one provider request.
   pub timeout_seconds: u64,
   /// Retry count after the initial provider request.
@@ -471,8 +467,6 @@ pub struct TranslationConfig {
 pub struct ProviderResilienceConfigs {
   /// Policy for the short-text Gemma 4 provider and structured lexical-card requests.
   pub gemma4: ProviderResilienceConfig,
-  /// Policy for the long-text TranslateGemma provider.
-  pub translate_gemma: ProviderResilienceConfig,
 }
 
 /// Configurable resilience bounds for one outbound provider.
@@ -587,7 +581,6 @@ mod tests {
   #[test]
   fn provider_resilience_overrides_only_the_selected_provider_values() {
     let translation = TranslationConfig {
-      long_text_chars: 4_000,
       timeout_seconds: 60,
       max_retries: 3,
       retry_delay_ms: 250,
@@ -620,7 +613,6 @@ mod tests {
   #[test]
   fn provider_resilience_rejects_zero_critical_bounds() {
     let translation = TranslationConfig {
-      long_text_chars: 4_000,
       timeout_seconds: 60,
       max_retries: 0,
       retry_delay_ms: 0,
@@ -647,7 +639,6 @@ log_level = "info"
 log_format = "compact"
 
 [translation]
-long_text_chars = 4000
 timeout_seconds = 2
 max_retries = 0
 retry_delay_ms = 0
@@ -657,23 +648,15 @@ base_url = "http://127.0.0.1:18011/v1"
 model = "Gemma4"
 api_key = "GEMMA4_CREDENTIAL_SECRET"
 
-[translate_gemma]
-base_url = "http://127.0.0.1:18007/v1"
-model = "TranslateGemma"
-api_key = "TRANSLATE_GEMMA_CREDENTIAL_SECRET"
 "#,
     )
     .unwrap();
 
     let app_debug = format!("{config:?}");
     let provider_debug = format!("{:?}", config.gemma4);
-    for credential in [
-      "GEMMA4_CREDENTIAL_SECRET",
-      "TRANSLATE_GEMMA_CREDENTIAL_SECRET",
-    ] {
-      assert!(!app_debug.contains(credential));
-      assert!(!provider_debug.contains(credential));
-    }
+    let credential = "GEMMA4_CREDENTIAL_SECRET";
+    assert!(!app_debug.contains(credential));
+    assert!(!provider_debug.contains(credential));
     assert!(app_debug.contains("ProviderApiKey([REDACTED])"));
   }
 

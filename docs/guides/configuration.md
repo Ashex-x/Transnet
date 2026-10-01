@@ -10,15 +10,15 @@ Transnet serves HTTP/1.1 only on the required absolute `socket_path` and drains 
 
 `[http]` configures only `max_request_body_bytes`. The body limit applies before JSON is buffered and defaults to 1,048,576 bytes. CORS keys are rejected because browsers call a product gateway, not Transnet; end-user authentication remains owned by island-port.
 
-`[translation]` configures the Unicode-character routing boundary plus legacy defaults for a provider's per-attempt timeout, retry count after the first attempt, and retry delay. Provider-specific overrides take precedence.
+`[translation]` configures default per-attempt timeout, retry count after the first attempt, and retry delay for generation. Provider-specific overrides take precedence.
 
-`[gemma4]` and `[translate_gemma]` each configure an OpenAI-compatible `base_url`, `model`, and `api_key`. Defaults target Gemma 4 on port 18011 and TranslateGemma on port 18007. Real credentials must be provisioned without committing them to Git; parsed credentials are redacted from Rust `Debug` diagnostics and are used only for outbound provider requests.
+`[gemma4]` configures the single OpenAI-compatible Gemma4-27B `base_url`, `model`, and `api_key`. Real credentials must be provisioned without committing them to Git; parsed credentials are redacted from Rust `Debug` diagnostics and are used only for outbound provider requests.
 
 These tables describe current transitional runtime behavior. The target configuration replaces them with one generation endpoint and one embedding endpoint. The generation settings name one Gemma4-27B model and provider-specific fast/reasoning controls; application policy, not a second endpoint, selects the profile. Separate bounded settings cover fast inference, reasoning escalation, embedding calls, and optional live retrieval. The checked-in configuration does not adopt those target keys until the matching Rust types and composition exist.
 
 Provider clients connect directly to their configured endpoints and do not inherit operating-system or environment proxy settings. This keeps loopback and private model traffic, including bearer credentials, out of unrelated proxy processes.
 
-`[provider_resilience.gemma4]` and `[provider_resilience.translate_gemma]` configure independent provider bounds. `timeout_seconds`, `max_retries`, and `retry_delay_ms` are optional overrides of `[translation]`; `max_retry_delay_ms` caps a provider-supplied `Retry-After` delay, `max_concurrent_requests` is a fail-fast bulkhead, `circuit_failure_threshold` is the number of consecutive transient logical-call failures that opens the circuit, and `circuit_open_ms` is the open interval before one half-open probe. Omitted tables use the Rust defaults of 8 concurrent attempts, a threshold of 5, a 30-second open interval, and a five-second retry-delay cap; the checked-in TranslateGemma policy tightens concurrency to 4.
+`[provider_resilience.gemma4]` configures generation bounds. `timeout_seconds`, `max_retries`, and `retry_delay_ms` may override `[translation]`; the remaining fields bound retry delay, concurrency, and circuit behavior.
 
 Only request timeouts, connection-establishment failures, `429`, `500`, `502`, `503`, `504`, and unusable successful envelopes are retried. A valid `Retry-After` header is used instead of the configured retry delay, subject to `max_retry_delay_ms`; other client, server, and ambiguous transport failures fail without another request. An open circuit and full bulkhead fail the affected provider request promptly and map to the existing unavailable response.
 

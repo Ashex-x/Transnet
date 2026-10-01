@@ -5,27 +5,10 @@ use axum::{
   http::{header, Request, StatusCode},
 };
 use tower::ServiceExt;
-use transnet::{app_router, AppState, ProviderConfig, TranslationConfig, TranslationService};
+use transnet::{app_router, AppState};
 
 fn router() -> axum::Router {
-  let provider = ProviderConfig {
-    base_url: "http://127.0.0.1:1/v1".into(),
-    model: "unused".into(),
-    api_key: "unused".into(),
-  };
-  app_router(AppState::new(
-    TranslationService::new(
-      TranslationConfig {
-        long_text_chars: 4_000,
-        timeout_seconds: 1,
-        max_retries: 0,
-        retry_delay_ms: 0,
-      },
-      provider.clone(),
-      provider,
-    )
-    .unwrap(),
-  ))
+  app_router(AppState::new())
 }
 
 #[tokio::test]

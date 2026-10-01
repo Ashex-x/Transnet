@@ -17,7 +17,7 @@ English: [Transnet delivery plan](../docs/todo.md)
 
 ## 已验证基线
 
-- [x] 私有回环 HTTP 进程、请求边界、精确 Origin CORS、请求 ID、健康探针、优雅停机和脱敏结构化 Trace。
+- [x] 仅 UDS 的 HTTP 进程、请求边界、请求 ID、健康探针、优雅停机和脱敏结构化 Trace。
 - [x] 基于长度的翻译 Provider 路由、有界容错和聚合运行指标。
 - [x] 默认可执行文件中的模型驱动结构化词汇查询。
 - [x] 规范查询、词义详情、内容发布和有界图读取的库基础与进程内测试适配器；它们并非生产存储组合。
@@ -38,7 +38,8 @@ English: [Transnet delivery plan](../docs/todo.md)
 
 ## 里程碑 1：冻结翻译与意图路由
 
-- [ ] 用一个暴露内部 fast/reasoning profile 的 Gemma4-27B VLM 加一个请求级提名 embedding port，替换过渡期 Gemma 4/TranslateGemma 长度路由器；发布 embedding 仍归 island-port 所有。
+- [x] 用一个暴露内部 fast/reasoning profile 的 Gemma4-27B VLM 替换过渡期长度路由器。
+- [ ] 在启用 semantic nomination 的生产组合中接入请求级 embedding port；发布 embedding 仍归 island-port 所有。
 - [ ] 普通与分块翻译保持使用 fast profile，每个请求最多允许一次闭合策略 reasoning 升级，并证明隐藏 reasoning 绝不返回或记录。
 - [ ] 实现共享成功/错误 Envelope、严格未知字段拒绝、语言标签验证、请求元数据及安全状态映射。
 - [ ] 实现简单的文本、源语言、目标语言、响应级别与可选最小历史请求，以及判别式单词、短语和段落 `TranslationResult` 响应。

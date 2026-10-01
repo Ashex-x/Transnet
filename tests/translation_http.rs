@@ -22,7 +22,7 @@ use transnet::{
   domain::translation_turn::{ProjectedTranslationResult, TranslationTurn},
   AppState, CancellationSignal, GenerationOutput, GenerationPort, GenerationRequest,
   GenerationResponse, HttpConfig, ModelOperationContext, ModelOperationError, ModelVersion,
-  ProviderConfig, RequestContext, TranslationConfig, TranslationService,
+  RequestContext,
 };
 
 #[derive(Clone, Copy)]
@@ -97,31 +97,12 @@ fn lexical_output() -> String {
   .to_string()
 }
 
-fn legacy_service() -> TranslationService {
-  let provider = |model: &str| ProviderConfig {
-    base_url: "http://127.0.0.1:9/v1".to_string(),
-    model: model.to_string(),
-    api_key: "unused-test-credential".into(),
-  };
-  TranslationService::new(
-    TranslationConfig {
-      long_text_chars: 4_000,
-      timeout_seconds: 1,
-      max_retries: 0,
-      retry_delay_ms: 0,
-    },
-    provider("legacy-short"),
-    provider("legacy-long"),
-  )
-  .unwrap()
-}
-
 fn app(
   connected: Result<String, ModelOperationError>,
   lexical: Result<String, ModelOperationError>,
 ) -> Router {
   let orchestrator = TranslationOrchestrator::new(Arc::new(FakeGeneration { connected, lexical }));
-  app_router(AppState::new(legacy_service()).with_translation_orchestrator(Arc::new(orchestrator)))
+  app_router(AppState::new().with_translation_orchestrator(Arc::new(orchestrator)))
 }
 
 fn request(body: Value) -> Request<Body> {
@@ -281,7 +262,7 @@ async fn production_router_propagates_runtime_drain_to_translation() {
     lexical: Ok(lexical_output()),
   }));
   let app = app_router(
-    AppState::new(legacy_service())
+    AppState::new()
       .with_runtime_cancellation(runtime.clone())
       .with_translation_orchestrator(Arc::new(orchestrator)),
   );
@@ -739,7 +720,7 @@ async fn target_payload_limit_uses_the_shared_problem_contract() {
     lexical: Ok(lexical_output()),
   }));
   let router = app_router_with_http_config(
-    AppState::new(legacy_service()).with_translation_orchestrator(Arc::new(orchestrator)),
+    AppState::new().with_translation_orchestrator(Arc::new(orchestrator)),
     &HttpConfig {
       max_request_body_bytes: 32,
     },
@@ -761,7 +742,7 @@ async fn target_payload_limit_uses_the_shared_problem_contract() {
 
 #[tokio::test]
 async fn missing_orchestrator_fails_closed_on_the_target_route() {
-  let router = app_router(AppState::new(legacy_service()));
+  let router = app_router(AppState::new());
   let response = router
     .oneshot(request(json!({
       "text": "hot",

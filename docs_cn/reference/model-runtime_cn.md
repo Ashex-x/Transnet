@@ -4,7 +4,7 @@ English: [Model runtime](../../docs/reference/model-runtime.md)
 
 本子系统负责单个已配置 Gemma4-27B 视觉语言模型与独立 embedding 模型的目标推理策略。它不通过服务接口暴露 provider 品牌、reasoning 控制、prompt 或 embedding payload。
 
-状态：模型运行时基础类型、adapter 与文本翻译编排已实现。公开 Rust 边界提供闭合的 `fast` 与 `reasoning` profile、有界且脱敏的输入/输出/版本值、deadline 与协作式取消 hook，以及原子化的单次 reasoning guard。目标翻译 route 只使用 provider-neutral generation port；旧的直接翻译 route 在最终移除前仍保留过渡期双 provider 拆分。
+状态：可执行文件与公开 Rust 边界使用单一 provider-neutral generation port，提供闭合 `fast` 与 `reasoning` profile、有界脱敏值、deadline、协作式取消与原子单次 reasoning guard。旧 direct translation API 与双 provider 长度分流已移除。
 
 ## 生成 profile
 

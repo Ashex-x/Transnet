@@ -45,6 +45,6 @@ The system design is authoritative for product semantics. Interface documents ar
 - **Release trio:** one compatible MySQL card release plus its immutable Qdrant node and edge collections. Requests pin all three versions together.
 - **MySQL:** the authoritative relational store for canonical cards, deliberately selected translations, release metadata, and publication state in the target architecture.
 - **Qdrant:** the rebuildable vector and payload-index projection used to retrieve published canonical nodes and typed edges in the target architecture.
-- **Gemma 4 / TranslateGemma:** OpenAI-compatible model providers used by the current runtime. Gemma 4 handles short-text translation and structured lookup; TranslateGemma handles longer translation requests.
+- **Gemma4-27B:** the single OpenAI-compatible generation provider used through closed fast and reasoning profiles.
 - **Verified / inferred / exploratory:** respectively, a published canonical relationship; an evidence-grounded explanation generated only for the current request; and a vector or model candidate. Only verified content is canonical, and the latter two are never persisted as facts.
 - **Relationship status fields:** the public page calls that three-way label `evidence_state`. In the Qdrant storage contract, `evidence_state` instead records whether the attached evidence supports an edge (for example, `supported`), while `verification_state` records whether the stored edge is canonical (`verified`) or exploratory. The terms are related but are not interchangeable.

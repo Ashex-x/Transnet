@@ -25,15 +25,12 @@ flowchart LR
   island -->|"Transnet UDS: api/v1"| service["Transnet"]
   service -->|"island-port UDS: api/v1 structured/vector data"| island
   island --> databases["MySQL / Qdrant"]
-  service -->|"at most 4,000 characters"| gemma4["Gemma 4 :18011"]
-  service -->|"over 4,000 characters"| translate["TranslateGemma :18007"]
+  service -->|"fast / bounded reasoning"| gemma4["Gemma4-27B :18011"]
 ```
 
 ## Prerequisites
 
-Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start OpenAI-compatible Gemma 4 and TranslateGemma servers at the endpoints in `config/transnet.toml`. **Gemma 4** is the general-purpose provider used for short-text translation and the current structured lookup; **TranslateGemma** is the translation-specialized provider selected for longer text. The Gemma 4 endpoint used by structured lookup must support OpenAI-compatible strict JSON Schema output.
-
-This two-provider setup describes the current executable only. The target architecture uses one Gemma4-27B vision-language model with fast and bounded reasoning profiles plus one embedding model; see the [model-runtime reference](docs/reference/model-runtime.md).
+Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start the configured OpenAI-compatible Gemma4-27B vision-language endpoint. The application selects closed `fast` and bounded `reasoning` profiles through the neutral generation port; there is no length-based provider switch. A separate embedding model is used only by compositions that explicitly install request-local semantic nomination.
 
 ## Configure
 
