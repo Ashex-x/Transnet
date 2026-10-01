@@ -4,7 +4,7 @@
 
 This guide defines the proposed release workflow for MySQL basic cards and canonical translations plus paired Qdrant knowledge-node and knowledge-edge collections. It is intended for content engineers and release operators.
 
-Status: partially implemented on the Transnet side and not production-complete. The online runtime has no ingestion or mutation pipeline. Transnet has deterministic release-pinned projection preparation, a strict outbound publication client, and offline application orchestration through authoritative status-based resume and reconciliation. It does not generate production embeddings, allocate real collection IDs, write Qdrant, persist island-port build state, or activate a release.
+Status: partially implemented on the Transnet side and not production-complete. The online runtime has no ingestion or mutation pipeline. Transnet has deterministic release-pinned projection preparation, a strict outbound publication client, authoritative status-based resume and reconciliation, and an explicit offline-only release-control client for candidate submission and rollback selection. It does not generate production embeddings, allocate real collection IDs, write Qdrant, persist island-port build state, or execute an active-pointer transaction.
 
 ## Preconditions
 
@@ -88,7 +88,7 @@ Run the [quality-assurance guide](quality-assurance.md) against the exact staged
 
 Activate the MySQL card and canonical-translation release plus paired Qdrant node and edge versions as one logical release. Every request pins the same release identity across both stores. A partial build is never visible, and an alias is never the source of version authority.
 
-Transnet's online request path has read-only authority. Transnet publication orchestration stops at `PublicationActivationCandidate`. An external authenticated publisher/control-plane submits that candidate to island-port, which owns MySQL/Qdrant credentials, collection mutation, reconciliation persistence, and the atomic active pointer. Activation selects only a completely reconciled immutable trio.
+Transnet's online request path has read-only authority. `OfflinePublicationService` builds a `PublicationActivationCandidate` without automatically submitting it. An authenticated offline caller may then invoke the separate release-control operation, whose strict proof binds build/reconciliation identities, canonical content, both collection proofs, the manifest, idempotency, and append-only audit sequence. Island-port owns credentials, persistence, and the atomic active pointer. Activation selects only a completely reconciled immutable trio.
 
 Rollback re-activates one previously verified and retained immutable trio through the same island-port authority. It does not rewrite the old canonical release or rebuild its immutable Qdrant collections. The target must remain verified, retained, and addressable; build GC must never delete an active or retained rollback target. Production retention and rollback behavior still require external validation.
 

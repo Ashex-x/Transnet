@@ -16,7 +16,7 @@ Liveness 报告进程健康。Readiness 报告服务能否安全接收工作，�
 
 ## 离线发布
 
-Publisher 暂存结构化内容，校验 schema 与权利，检查证据和确定性不变量，写入权威修订，投影不可变向量 collection，核对精确计数与发布标识符，执行质量门禁并原子激活兼容发布。隔离、移除与回滚保留可审计性。
+已实现的 Transnet slice 准备 projection、通过 publication port 完成 reconciliation，并提供显式且仅离线的 release control，用于 candidate submission 与 retained rollback selection。Island-port 仍负责权威写入、collection mutation、持久 audit state 与原子 active-pointer transaction。Client 校验 idempotency、proof echo、封闭 outcome 与 append-only audit sequence receipt；它绝不接入在线 request handling。
 
 Publisher 是单独组合根，也是唯一允许接收可变更数据 port 的组件。生成候选不是证据；只有证据、权利、校验与审核策略通过后才成为规范内容。
 

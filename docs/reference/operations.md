@@ -16,7 +16,7 @@ All downstream work consumes one caller deadline; individual timeouts cannot ext
 
 ## Offline publication
 
-The publisher stages structured content, validates schema and rights, checks evidence and deterministic invariants, writes authoritative revisions, projects immutable vector collections, reconciles exact counts and release identifiers, evaluates quality gates, and activates a compatible release atomically. Quarantine, removal, and rollback preserve auditability.
+The implemented Transnet slice prepares projections, reconciles through the publication port, and exposes explicit offline-only release control for candidate submission and retained rollback selection. Island-port remains responsible for authoritative writes, collection mutation, durable audit state, and the atomic active-pointer transaction. The client validates idempotency, proof echoes, closed outcomes, and append-only audit sequence receipts; it is never wired into online request handling.
 
 The publisher is a separate composition root and the only component allowed mutation-capable data ports. Generated candidates are not evidence; they become canonical only after evidence, rights, validation, and review policies succeed.
 

@@ -22,6 +22,8 @@ pub mod knowledge_publication;
 pub mod lookup;
 /// Bounded response-neutral delivery of closed metric events.
 pub mod observability;
+/// Explicit offline publication and release-control composition.
+pub mod offline_publication;
 /// Canonical hybrid retrieval and lexical-only fallback.
 pub mod retrieval;
 /// Unified request-local translation orchestration and automatic intent routing.

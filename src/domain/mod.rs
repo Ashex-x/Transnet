@@ -26,6 +26,8 @@ pub mod lookup_card;
 pub mod model_runtime;
 /// Closed, redacted metric names and categorical event dimensions.
 pub mod observability;
+/// Offline release-control proofs, audit ordering, and receipt invariants.
+pub mod release_control;
 /// Request-scoped correlation, deadline, schema, and release context.
 pub mod request_context;
 /// Deterministic hybrid-retrieval values and candidate fusion.

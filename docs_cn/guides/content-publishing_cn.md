@@ -4,7 +4,7 @@ English: [Publish canonical knowledge content](../../docs/guides/content-publish
 
 本指南定义 MySQL 基础卡、规范翻译以及配对 Qdrant 知识节点/知识边集合的拟议发布流程，面向内容工程师和发布运维人员。
 
-状态：Transnet 侧已部分实现，但尚未 production-complete。在线 runtime 没有摄取或 mutation 流水线。Transnet 已具备确定性的固定发布 projection preparation、严格出站 publication client，以及通过权威 status 恢复并完成 reconciliation 的离线 application orchestration。它不生成 production embedding、不分配真实 collection ID、不写入 Qdrant、不持久化 island-port build state，也不激活 release。
+状态：Transnet 侧已部分实现，但尚未 production-complete。在线 runtime 没有摄取或 mutation 流水线。Transnet 已具备确定性的固定发布 projection preparation、严格出站 publication client、通过权威 status 恢复并完成 reconciliation 的 orchestration，以及用于 candidate submission 与 rollback selection 的显式离线 release-control client。它不生成 production embedding、不分配真实 collection ID、不写入 Qdrant、不持久化 island-port build state，也不执行 active-pointer transaction。
 
 ## 前置条件
 
@@ -78,7 +78,7 @@ Publisher 必须先完成并验证确定性节点投影，再冻结节点 manife
 
 MySQL 卡片与规范翻译发布以及配对 Qdrant 节点/边版本作为一个逻辑发布激活，每个请求在两个存储间钉住同一发布身份。部分构建不可见，别名不作为版本权威；已发布规范记录绝不静默改写。
 
-Transnet 在线请求路径只有读取权限。Transnet publication orchestration 在 `PublicationActivationCandidate` 处停止。外部认证 publisher/control-plane 将该 candidate 提交给 island-port；island-port 拥有 MySQL/Qdrant 凭据、collection mutation、对账持久化与原子活动指针。激活只能选择完全对账的不可变三件套。
+Transnet 在线请求路径只有读取权限。`OfflinePublicationService` 构建 `PublicationActivationCandidate`，但不会自动提交。认证离线 caller 随后可以显式调用独立 release-control operation；其严格 proof 绑定 build/reconciliation identity、canonical content、两个 collection proof、manifest、idempotency 与 append-only audit sequence。Island-port 拥有凭据、持久化与原子 active pointer。激活只能选择完全对账的不可变三件套。
 
 回滚通过同一个 island-port authority 重新激活此前已验证且保留的不可变三件套。它不改写旧 canonical release，也不重建旧 immutable Qdrant collection。目标必须仍处于 verified、retained 且可寻址状态；build GC 绝不能删除 active 或 retained rollback target。Production retention 与 rollback 行为仍需外部验证。
 

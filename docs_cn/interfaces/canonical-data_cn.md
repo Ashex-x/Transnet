@@ -6,7 +6,7 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
 
 状态：目标 island-port 服务端合同，Transnet 读取 client 已实现。可执行文件可选地组合严格出站 `canonical-data-v1` client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。已实现 client 按本文通用 envelope 与严格 response echo 校验覆盖 active-release、translation candidate、basic-card candidate 和 sense-detail 读取。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留、domain/fact/scale 读取及真实端到端验收仍需在本仓库之外完成。
 
-仓库内 M3 publication foundation 建模 Qdrant build lifecycle、idempotency、compatibility receipt 与 reconciliation hash。其出站 publication port 与严格 island-port client 承载有界 build contract；`KnowledgePublicationService` 基于权威 status 恢复，驱动 node/edge publication 直至 reconciliation，且不保存本地 progress。Reconciliation 成功后只返回强类型 activation candidate；外部已认证 publisher 或 control plane 必须将该 candidate 提交给 island-port，才能原子切换 active trio。仓库没有新增 island-port publication server、MySQL build/reconciliation persistence、activation pointer mutation 或 rollback implementation；这些 authority-owned operation 仍是外部要求。
+仓库内 M3 publication foundation 建模 Qdrant build lifecycle、idempotency、compatibility receipt 与 reconciliation hash。其出站 publication port 与严格 island-port client 承载有界 build contract；`KnowledgePublicationService` 基于权威 status 恢复，驱动 node/edge publication 直至 reconciliation，且不保存本地 progress。Reconciliation 成功后只返回强类型 activation candidate。仅离线的 `OfflinePublicationService` 与严格 `release-control-v1` client 显式向 island-port 提交该 candidate，或选择已保留的 rollback target；它们不进入在线 `AppState`，也不自行修改 active pointer。仓库没有新增 island-port publication server、MySQL build/reconciliation persistence、active-pointer transaction 或 rollback implementation；这些 authority-owned operation 仍是外部要求。
 
 ## 目录
 
@@ -26,7 +26,8 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
   - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
   - [领域提案处理](#领域提案处理)
   - [POST /api/v1/cards/revisions/stage](#post-apiv1cardsrevisionsstage)
-  - [POST /api/v1/releases/activate](#post-apiv1releasesactivate)
+  - [POST /api/v1/releases/activation-candidates/submit](#post-apiv1releasesactivation-candidatessubmit)
+  - [POST /api/v1/releases/rollback/select](#post-apiv1releasesrollbackselect)
   - [相关文档](#相关文档)
 
 ## endpoint 参考
@@ -548,9 +549,9 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 }
 ```
 
-## POST /api/v1/releases/activate
+## POST /api/v1/releases/activation-candidates/submit
 
-激活是原子的，必须引用兼容的不可变 Qdrant 节点/边发布。若任一卡片根、领域、证据记录、内容哈希或 Qdrant manifest 缺失或不兼容，激活失败。
+这个仅 publisher 可用的 island-port operation 接收已完成 reconciliation 的 activation proof。Island-port 执行原子选择，并拒绝缺失或不兼容的 canonical content、collection manifest、active-release precondition 或 append-only audit precondition。严格 Transnet client 提交 build 与 reconciliation identity、存储无关 canonical-content hash、两个不可变 collection proof、publication manifest、idempotency key 与精确的下一 audit sequence，并校验 receipt 的每个 echo。
 
 引用的 Qdrant manifest 是向量合同定义的完整强类型发布三件套：一个规范发布及 schema、一个已验证不可变节点 collection，以及一个针对该精确节点哈希构建的已验证不可变边 collection。激活不接受单个通用 vector collection ID、活动 alias、不完整 collection 对或 Transnet 本地 ranking version。所提供的 manifest hash 覆盖 collection ID、schema、嵌入修订、数量、哈希与完整端点覆盖。
 
@@ -558,11 +559,28 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 ```json
 {
+  "build_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "reconcile_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "release_id": "knowledge-2026-10",
+  "canonical_schema_version": "canonical-v1",
   "expected_active_release": "knowledge-2026-09",
-  "mysql_content_hash": "sha256:9c49d7f6...",
-  "qdrant_manifest_hash": "sha256:2e17a054...",
-  "idempotency_key": "activate-knowledge-2026-10"
+  "canonical_content_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "publication_manifest_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "node_collection_id": "knowledge_nodes__knowledge_2026_10",
+  "node_projection_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "node_persisted_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "node_point_count": 184220,
+  "edge_collection_id": "knowledge_edges__knowledge_2026_10",
+  "edge_projection_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "edge_persisted_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "edge_point_count": 612840,
+  "edge_verified_node_projection_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "expected_endpoint_count": 1225680,
+  "resolved_endpoint_count": 1225680,
+  "dense_artifact_revision": "deployment-supplied-immutable-revision",
+  "sparse_encoder_revision": "v1",
+  "idempotency_key": "activate-knowledge-2026-10",
+  "audit_sequence": 184
 }
 ```
 
@@ -570,16 +588,44 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 ```json
 {
+  "request_id": "req_activate_01",
+  "schema_version": "release-control-v1",
+  "content_release": "knowledge-2026-10",
   "outcome": "ok",
   "value": {
     "active_release": "knowledge-2026-10",
     "previous_release": "knowledge-2026-09",
-    "activated_at": "2026-10-01T00:00:00.000000Z"
-  }
+    "selected_at": "2026-10-01T00:00:00Z",
+    "audit_sequence": 184,
+    "publication_manifest_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "error": null
 }
 ```
 
 隔离、撤回和修正会创建新的发布状态或发布，绝不静默重写已发布行。
+
+## POST /api/v1/releases/rollback/select
+
+这个仅 publisher 可用的 island-port operation 选择一个此前已验证、已保留且可寻址的不可变 trio。严格 `release-control-v1` 请求给出 expected active release、目标 canonical-content 与 publication-manifest proof、idempotency key、精确的下一 audit sequence，以及 `verification_failure`、`canonical_defect`、`projection_defect` 或 `security_quarantine` 之一。它绝不改写目标。
+
+请求 `input`：
+
+```json
+{
+  "expected_active_release": "knowledge-2026-10",
+  "target_release": "knowledge-2026-09",
+  "target_canonical_content_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "target_publication_manifest_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "reason_code": "verification_failure",
+  "idempotency_key": "rollback-knowledge-2026-09",
+  "audit_sequence": 185
+}
+```
+
+响应使用 activation receipt shape，其中 `active_release` 为 `knowledge-2026-09`、`previous_release` 为 `knowledge-2026-10`，并精确回显 target manifest 与 audit sequence。
+
+两个 release-control operation 都使用共享 context envelope。封闭 outcome 是 `ok`、`invalid_payload`、`version_mismatch`、`conflict`、`missing`、`unavailable` 与 `timeout`；client 校验 outcome/code 配对而不解析 message。以同一 idempotency key 提交不同 proof、过期的 expected-active release、不连续的 audit sequence、未知字段、不匹配 echo、格式错误 timestamp 或矛盾 receipt 都闭合失败。
 
 ## 相关文档
 

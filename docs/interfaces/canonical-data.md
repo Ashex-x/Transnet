@@ -6,7 +6,7 @@ This contract defines island-port's storage-neutral HTTP endpoints for shared ca
 
 Status: target island-port server contract with implemented Transnet read client. The executable can optionally compose the strict outbound `canonical-data-v1` client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The implemented client covers active-release, translation-candidate, basic-card-candidate, and sense-detail reads with the common envelope and strict response-echo validation described here. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, domain/fact/scale reads, and real end-to-end acceptance remain unimplemented outside this repository.
 
-The checked-in M3 publication foundation models Qdrant build lifecycle, idempotency, compatibility receipts, and reconciliation hashes. Its outbound publication port and strict island-port client carry the bounded build contract, while `KnowledgePublicationService` drives authoritative status-based resume through node and edge publication and reconciliation without keeping local progress. Successful reconciliation returns only a typed activation candidate. An external authenticated publisher or control plane must submit that candidate to island-port for atomic active-trio selection. The repository does not add an island-port publication server, MySQL build/reconciliation persistence, activation pointer mutation, or rollback implementation; those authority-owned operations remain external requirements.
+The checked-in M3 publication foundation models Qdrant build lifecycle, idempotency, compatibility receipts, and reconciliation hashes. Its outbound publication port and strict island-port client carry the bounded build contract, while `KnowledgePublicationService` drives authoritative status-based resume through node and edge publication and reconciliation without keeping local progress. Successful reconciliation returns only a typed activation candidate. The offline-only `OfflinePublicationService` and strict `release-control-v1` client explicitly submit that candidate or select a retained rollback target through island-port; they are absent from online `AppState` and never mutate the active pointer themselves. The repository does not add an island-port publication server, MySQL build/reconciliation persistence, active-pointer transaction, or rollback implementation; those authority-owned operations remain external requirements.
 
 ## Contents
 
@@ -26,7 +26,8 @@ The checked-in M3 publication foundation models Qdrant build lifecycle, idempote
   - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
   - [Domain proposal handling](#domain-proposal-handling)
   - [POST /api/v1/cards/revisions/stage](#post-apiv1cardsrevisionsstage)
-  - [POST /api/v1/releases/activate](#post-apiv1releasesactivate)
+  - [POST /api/v1/releases/activation-candidates/submit](#post-apiv1releasesactivation-candidatessubmit)
+  - [POST /api/v1/releases/rollback/select](#post-apiv1releasesrollbackselect)
   - [Related documents](#related-documents)
 
 ## Endpoint reference
@@ -556,9 +557,9 @@ Response:
 }
 ```
 
-## POST /api/v1/releases/activate
+## POST /api/v1/releases/activation-candidates/submit
 
-Activation is atomic and references a compatible immutable Qdrant node/edge release. It fails if any card root, domain, evidence record, content hash, or Qdrant manifest is missing or incompatible.
+This publisher-only island-port operation accepts a reconciled activation proof. Island-port performs the atomic selection and rejects missing or incompatible canonical content, collection manifests, active-release preconditions, or append-only audit preconditions. The strict Transnet client submits build and reconciliation identities, the storage-neutral canonical-content hash, both immutable collection proofs, the publication manifest, idempotency key, and exact next audit sequence; it validates every receipt echo.
 
 The referenced Qdrant manifest is the complete typed release trio defined by the vector contract: one canonical release and schema, one verified immutable node collection, and one verified immutable edge collection built against the exact node hash. Activation never accepts one generic vector collection identifier, an active alias, an incomplete pair, or a local Transnet ranking version. The supplied manifest hash commits to collection identities, schemas, embedding revisions, counts, hashes, and complete endpoint coverage.
 
@@ -566,11 +567,28 @@ Request:
 
 ```json
 {
+  "build_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "reconcile_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "release_id": "knowledge-2026-10",
+  "canonical_schema_version": "canonical-v1",
   "expected_active_release": "knowledge-2026-09",
-  "mysql_content_hash": "sha256:9c49d7f6...",
-  "qdrant_manifest_hash": "sha256:2e17a054...",
-  "idempotency_key": "activate-knowledge-2026-10"
+  "canonical_content_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "publication_manifest_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "node_collection_id": "knowledge_nodes__knowledge_2026_10",
+  "node_projection_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "node_persisted_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "node_point_count": 184220,
+  "edge_collection_id": "knowledge_edges__knowledge_2026_10",
+  "edge_projection_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "edge_persisted_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "edge_point_count": 612840,
+  "edge_verified_node_projection_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "expected_endpoint_count": 1225680,
+  "resolved_endpoint_count": 1225680,
+  "dense_artifact_revision": "deployment-supplied-immutable-revision",
+  "sparse_encoder_revision": "v1",
+  "idempotency_key": "activate-knowledge-2026-10",
+  "audit_sequence": 184
 }
 ```
 
@@ -578,16 +596,44 @@ Response:
 
 ```json
 {
+  "request_id": "req_activate_01",
+  "schema_version": "release-control-v1",
+  "content_release": "knowledge-2026-10",
   "outcome": "ok",
   "value": {
     "active_release": "knowledge-2026-10",
     "previous_release": "knowledge-2026-09",
-    "activated_at": "2026-10-01T00:00:00.000000Z"
-  }
+    "selected_at": "2026-10-01T00:00:00Z",
+    "audit_sequence": 184,
+    "publication_manifest_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "error": null
 }
 ```
 
 Quarantine, withdrawal, and correction create new publication state or a new release; published rows are never silently rewritten.
+
+## POST /api/v1/releases/rollback/select
+
+This publisher-only island-port operation selects one previously verified, retained, and addressable immutable trio. The strict `release-control-v1` request names the expected active release, target canonical-content and publication-manifest proofs, an idempotency key, exact next audit sequence, and one closed reason: `verification_failure`, `canonical_defect`, `projection_defect`, or `security_quarantine`. It never rewrites the target.
+
+Request `input`:
+
+```json
+{
+  "expected_active_release": "knowledge-2026-10",
+  "target_release": "knowledge-2026-09",
+  "target_canonical_content_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "target_publication_manifest_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "reason_code": "verification_failure",
+  "idempotency_key": "rollback-knowledge-2026-09",
+  "audit_sequence": 185
+}
+```
+
+Response uses the activation receipt shape with `active_release` set to `knowledge-2026-09`, `previous_release` set to `knowledge-2026-10`, and the exact target manifest and audit sequence echoed.
+
+Both release-control operations use the shared context envelope. Closed outcomes are `ok`, `invalid_payload`, `version_mismatch`, `conflict`, `missing`, `unavailable`, and `timeout`; the client validates outcome/code pairs instead of parsing messages. A different proof under the same idempotency key, stale expected-active release, nonconsecutive audit sequence, unknown field, mismatched echo, malformed timestamp, or contradictory receipt fails closed.
 
 ## Related documents
 

@@ -29,6 +29,8 @@ use crate::{
 pub struct KnowledgePublicationPlan {
   /// Canonical release and schema shared by every publication operation.
   pub canonical: CanonicalReleasePin,
+  /// Storage-neutral hash of all canonical rows admitted to the immutable release.
+  pub canonical_content_hash: String,
   /// Complete deterministic node projection.
   pub nodes: NodeProjectionBuild,
   /// Complete deterministic edge projection bound to `nodes`.
@@ -258,6 +260,7 @@ impl KnowledgePublicationService {
           build_id,
           reconcile_id,
           canonical: plan.canonical.clone(),
+          canonical_content_hash: plan.canonical_content_hash.clone(),
           nodes: frozen_nodes,
           edges: frozen_edges,
           manifest_hash,
@@ -363,7 +366,8 @@ impl KnowledgePublicationService {
 }
 
 fn validate_plan(plan: &KnowledgePublicationPlan) -> Result<(), KnowledgeReleaseFailure> {
-  if plan.nodes.release_id != plan.canonical.release_id
+  if PublicationManifestHash::parse(plan.canonical_content_hash.clone()).is_err()
+    || plan.nodes.release_id != plan.canonical.release_id
     || plan.edges.release_id != plan.canonical.release_id
     || plan.nodes.embedding != plan.edges.embedding
     || plan.edges.verified_node_content_hash != plan.nodes.content_hash
@@ -941,7 +945,10 @@ mod tests {
       .map_err(|_| KnowledgeReleaseFailure::IncompleteTrio)?;
       state.candidate_count += 1;
       Ok(PublicationActivationCandidate {
+        build_id: request.build_id.clone(),
+        reconcile_id: request.reconcile_id.clone(),
         trio,
+        canonical_content_hash: request.canonical_content_hash.clone(),
         manifest_hash: request.manifest_hash.clone(),
         node_persisted_hash: request.nodes.persisted_hash.clone(),
         edge_persisted_hash: request.edges.persisted_hash.clone(),
@@ -1225,6 +1232,7 @@ mod tests {
     let edges = build_edge_projection(&nodes, embedding(), vec![relationship()]).unwrap();
     KnowledgePublicationPlan {
       canonical: CanonicalReleasePin::new(release, "canonical-v1".into()).unwrap(),
+      canonical_content_hash: format!("sha256:{}", "9".repeat(64)),
       nodes,
       edges,
       compatibility: compatibility(),

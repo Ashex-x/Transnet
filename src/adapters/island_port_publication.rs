@@ -775,6 +775,7 @@ struct ReconcileInputDto<'a> {
   build_id: &'a str,
   reconcile_id: &'a str,
   canonical_schema_version: &'a str,
+  canonical_content_hash: &'a str,
   node_collection_id: &'a str,
   edge_collection_id: &'a str,
   node_projection_hash: &'a str,
@@ -798,6 +799,7 @@ impl<'a> ReconcileInputDto<'a> {
       build_id: value.build_id.as_str(),
       reconcile_id: value.reconcile_id.as_str(),
       canonical_schema_version: &value.canonical.canonical_schema_version,
+      canonical_content_hash: &value.canonical_content_hash,
       node_collection_id: value.nodes.manifest.collection_id.as_str(),
       edge_collection_id: value.edges.manifest.collection_id.as_str(),
       node_projection_hash: &value.nodes.manifest.content_hash,
@@ -1338,6 +1340,7 @@ struct ReconcileValueDto {
   node_persisted_hash: String,
   edge_persisted_hash: String,
   publication_manifest_hash: String,
+  canonical_content_hash: String,
   state: StateDto,
 }
 
@@ -1351,6 +1354,7 @@ impl ReconcileValueDto {
       || self.node_persisted_hash != expected.nodes.persisted_hash.as_str()
       || self.edge_persisted_hash != expected.edges.persisted_hash.as_str()
       || self.publication_manifest_hash != expected.manifest_hash.as_str()
+      || self.canonical_content_hash != expected.canonical_content_hash
       || !matches!(self.state, StateDto::ActivationCandidate)
     {
       return Err(KnowledgeReleaseFailure::HashOrCountReconciliationFailed);
@@ -1383,7 +1387,10 @@ impl ReconcileValueDto {
     )
     .map_err(|_| KnowledgeReleaseFailure::IncompleteTrio)?;
     Ok(PublicationActivationCandidate {
+      build_id: expected.build_id.clone(),
+      reconcile_id: expected.reconcile_id.clone(),
       trio,
+      canonical_content_hash: expected.canonical_content_hash.clone(),
       manifest_hash: expected.manifest_hash.clone(),
       node_persisted_hash: expected.nodes.persisted_hash.clone(),
       edge_persisted_hash: expected.edges.persisted_hash.clone(),
@@ -2127,6 +2134,7 @@ mod tests {
       build_id: build_id.clone(),
       reconcile_id,
       canonical: pin(),
+      canonical_content_hash: hash('9'),
       nodes,
       edges,
       manifest_hash: manifest_hash.clone(),
@@ -2138,6 +2146,7 @@ mod tests {
       "value":{
         "build_id":hash('a'), "reconcile_id":request.reconcile_id.as_str(), "node_persisted_hash":hash('d'),
         "edge_persisted_hash":hash('e'), "publication_manifest_hash":hash('f'),
+        "canonical_content_hash":hash('9'),
         "state":"activation_candidate"
       }
     });

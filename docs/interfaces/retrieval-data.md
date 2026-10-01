@@ -495,6 +495,8 @@ Node freeze precedes edge admission. A freeze response supplies an island-port-a
 
 Reconcile binds both immutable collection IDs, both projection and persisted hashes, the edge-to-node projection binding, point and endpoint counts, validated receipts, and the publication manifest hash. Only complete endpoint coverage and exact cross-artifact agreement produce the closed `activation_candidate` state. This operation does not mutate the active release. Status is read-only; abort follows the domain state machine and cannot leave or abort an activation candidate.
 
+The returned candidate also binds stable build and reconciliation identities plus the storage-neutral canonical-content hash. The separate offline `release-control-v1` client may explicitly submit that complete proof; reconciliation itself never calls release control. Rollback selection names a previously verified retained manifest rather than rebuilding or mutating either collection.
+
 ```json
 {
   "context": {
