@@ -11,8 +11,8 @@ use transnet::{
   domain::{
     canonical::{
       CanonicalId, CanonicalReleasePin, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
-      EvidenceKind, EvidenceUse, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource, Sense,
-      SourcePermissions,
+      EvidenceKind, EvidenceUse, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource,
+      Sense, SourcePermissions, WordForm,
     },
     canonical_content::{CanonicalSenseDetails, CanonicalSenseDetailsInput, SenseContentTarget},
     canonical_translation::{
@@ -73,7 +73,17 @@ fn candidate(pin: &CanonicalReleasePin) -> CanonicalCandidate {
   CanonicalCandidate {
     lexeme,
     sense,
-    forms: Vec::new(),
+    forms: vec![WordForm {
+      id: CanonicalId::new("form-hello").unwrap(),
+      lexeme_id: CanonicalId::new("lexeme-hello").unwrap(),
+      release_id: pin.release_id.clone(),
+      form: "hello".into(),
+      normalized_form: "hello".into(),
+      kind: FormKind::Lemma,
+      morphology: None,
+      evidence_ids: vec![evidence_id.clone()],
+      status: CanonicalStatus::Active,
+    }],
     evidence: vec![EvidenceFragment {
       id: evidence_id,
       source_id: source_id.clone(),
@@ -184,6 +194,8 @@ impl CanonicalReadPort for SwitchingAuthority {
     Ok(if self.has_candidate {
       vec![RepositoryMatch {
         candidate: candidate(pin),
+        matched_form_id: Some(CanonicalId::new("form-hello").unwrap()),
+        matched_form: "hello".into(),
         kind: LexicalMatchKind::ExactCanonical,
         score: RetrievalScore::exact(),
       }]

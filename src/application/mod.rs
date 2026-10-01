@@ -10,6 +10,8 @@ pub mod canonical_read;
 pub mod canonical_sense_details;
 /// Content-release staging, validation, publication, rollback, and source quarantine.
 pub mod content_release;
+/// Deterministic request-local domain assessment over one canonical release pin.
+pub mod domain_assessment;
 /// Typed bounded canonical graph reads and neighbor expansion.
 pub mod graph;
 /// Public bounded graph-topology snapshot caching with version-pinned cache keys.
@@ -22,6 +24,8 @@ pub mod knowledge_publication;
 pub mod lookup;
 /// Bounded response-neutral delivery of closed metric events.
 pub mod observability;
+/// Explicit offline publication and release-control composition.
+pub mod offline_publication;
 /// Canonical hybrid retrieval and lexical-only fallback.
 pub mod retrieval;
 /// Unified request-local translation orchestration and automatic intent routing.

@@ -4,9 +4,9 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
 
 本合同定义 island-port 提供的存储无关 HTTP endpoint，涵盖共享规范翻译、单词、短语、词义、领域、证据元数据和不可变内容发布。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。MySQL 是计划中的 island-port 实现，不属于本线上合同。
 
-状态：目标 island-port 服务端合同，Transnet 读取 client 已实现。可执行文件可选地组合严格出站 `canonical-data-v1` client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。已实现 client 按本文通用 envelope 与严格 response echo 校验覆盖 active-release、translation candidate、basic-card candidate 和 sense-detail 读取。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留、domain/fact/scale 读取及真实端到端验收仍需在本仓库之外完成。
+状态：目标 island-port 服务端合同，Transnet 读取 client 已实现。可执行文件可选地组合严格出站 `canonical-data-v1` client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。已实现 client 按本文通用 envelope 与严格 response echo 校验覆盖 active-release、translation candidate、basic-card candidate、sense-detail 和有界 domain-inventory 读取。Domain-assessment application 基础尚未作为在线 route 暴露。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留、fact/scale 读取及真实端到端验收仍需在本仓库之外完成。
 
-仓库内 M3 publication foundation 建模 Qdrant build lifecycle、idempotency、compatibility receipt 与 reconciliation hash。其出站 publication port 与严格 island-port client 承载有界 build contract；`KnowledgePublicationService` 基于权威 status 恢复，驱动 node/edge publication 直至 reconciliation，且不保存本地 progress。Reconciliation 成功后只返回强类型 activation candidate；外部已认证 publisher 或 control plane 必须将该 candidate 提交给 island-port，才能原子切换 active trio。仓库没有新增 island-port publication server、MySQL build/reconciliation persistence、activation pointer mutation 或 rollback implementation；这些 authority-owned operation 仍是外部要求。
+仓库内 M3 publication foundation 建模 Qdrant build lifecycle、idempotency、compatibility receipt 与 reconciliation hash。其出站 publication port 与严格 island-port client 承载有界 build contract；`KnowledgePublicationService` 基于权威 status 恢复，驱动 node/edge publication 直至 reconciliation，且不保存本地 progress。Reconciliation 成功后只返回强类型 activation candidate。仅离线的 `OfflinePublicationService` 与严格 `release-control-v1` client 显式向 island-port 提交该 candidate，或选择已保留的 rollback target；它们不进入在线 `AppState`，也不自行修改 active pointer。仓库没有新增 island-port publication server、MySQL build/reconciliation persistence、active-pointer transaction 或 rollback implementation；这些 authority-owned operation 仍是外部要求。
 
 ## 目录
 
@@ -26,7 +26,8 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
   - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
   - [领域提案处理](#领域提案处理)
   - [POST /api/v1/cards/revisions/stage](#post-apiv1cardsrevisionsstage)
-  - [POST /api/v1/releases/activate](#post-apiv1releasesactivate)
+  - [POST /api/v1/releases/activation-candidates/submit](#post-apiv1releasesactivation-candidatessubmit)
+  - [POST /api/v1/releases/rollback/select](#post-apiv1releasesrollbackselect)
   - [相关文档](#相关文档)
 
 ## endpoint 参考
@@ -309,6 +310,8 @@ island-port server 不在当前仓库，仍需实现该 operation、原子选择
 
 唯一性由稳定的词形、卡片和词义 ID 及已发布规范形式/别名行维护，不依赖临时规范化检索字符串。最佳适用层级的所有合格冲突均须返回，由服务解析。
 
+`matched_form_id` 与 `matched_form` 是证明输入，不是展示提示。Transnet 要求该 ID 解析到返回 lexeme 所属的 active form，并要求 surface value 与存储 form 完全一致。声明的类别还必须符合权威 form role：`exact_canonical` 要求 lemma，`exact_alias` 要求已发布 spelling variant、alias 或 phrase，`inflection` 要求 inflection。拼写修正与转写结果仍须指明权威存储目标 form。任何不匹配都使整个权威响应闭合失败，而不会降级成 semantic nomination。
+
 每个候选必须为每条 evidence 提供权威且固定发布的 source 记录。`source.id` 必须等于 `evidence.source_id`；source 和 evidence 的权限均须允许请求用途，且 evidence 权限不得超过 source 权限。公开再分发所需的 `source.attribution` 必须是非空、经过权利审核的人类可读署名（最多 256 个 Unicode 字符），不能由 source ID 或名称拼接。缺失、重复、冲突、无许可或跨发布的 source/evidence 记录均闭合失败。适配器将严格私有 DTO 映射至已有 candidate/source/evidence domain 类型；真实交付前 island-port 必须补齐此数据链。content hash 和权限位仍仅供内部使用。
 
 `lexeme.lemma_evidence_ids` 是必填、排序且唯一的 1 至 8 个 evidence ID，专门支持 canonical lemma assertion。它不能借用 sense definition evidence，不暗示存在 `FormKind::Lemma`，也永不参与 lexeme identity。每个 ID 必须通过响应 evidence/source chain（或 `senses/get` 的 indexed `lineages` map）解析到同一发布及请求 permission；dangling、重复、冲突或未使用 lineage 均闭合失败。
@@ -368,10 +371,18 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 ```json
 {
-  "normalized_labels": ["meteorology", "weather"],
-  "scope_key": "earth-atmosphere-weather",
-  "content_release": "knowledge-2026-09",
-  "limit": 5
+  "context": {
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+    "deadline_at": "2026-09-18T12:00:02Z",
+    "schema_version": "canonical-data-v1",
+    "content_release": "knowledge-2026-09"
+  },
+  "input": {
+    "normalized_labels": ["meteorology", "weather"],
+    "scope_key": "earth-atmosphere-weather",
+    "languages": ["en", "zh-CN"],
+    "limit": 5
+  }
 }
 ```
 
@@ -379,29 +390,37 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "canonical-data-v1",
   "outcome": "ok",
+  "content_release": "knowledge-2026-09",
   "value": {
+    "catalog_complete": true,
     "candidates": [
       {
         "domain_id": "domain_weather",
-        "canonical_label": "weather",
-        "definition": "Conditions of the atmosphere at a place and time.",
-        "inclusion_scope": ["temperature", "precipitation", "wind", "humidity"],
+        "revision": 4,
+        "labels": [{"language": "en", "text": "weather"}, {"language": "zh-CN", "text": "天气"}],
+        "aliases": [{"language": "en", "text": "meteorological weather"}],
+        "definitions": [{"language": "en", "text": "Conditions of the atmosphere at a place and time."}, {"language": "zh-CN", "text": "某一地点和时间的大气状态。"}],
+        "inclusion_scope": ["humidity", "precipitation", "temperature", "wind"],
         "exclusion_scope": ["long-term climate classification"],
         "broader_domain_ids": ["domain_earth_science"],
         "knowledge_profile": {
-          "available_fact_families": ["definition", "taxonomy", "terminology", "measurement"],
+          "available_fact_families": ["definition", "measurement", "taxonomy", "terminology"],
           "languages": ["en", "zh-CN"],
           "verified_fact_count": 184,
           "coverage_state": "partial"
-        },
-        "revision": 4
+        }
       }
     ]
-  },
-  "content_release": "knowledge-2026-09"
+  }
 }
 ```
+
+每条记录的 request 与 response 上限分别为 32 个 candidate、8 个 label、16 个 alias、8 个 definition、16 个 inclusion item、16 个 exclusion item、8 个 broader domain、16 个 fact family 与 8 个 profile language。Candidate 必须按 `domain_id` 严格排序且唯一；label、alias 与 definition 必须先按规范 language tag、再按精确 text 严格排序且唯一。Inclusion scope、exclusion scope、broader-domain ID、fact family 与 profile language 也必须排序且唯一。每个 candidate 均属于回显的不可变发布，`domain_id` 与 `broader_domain_ids` 使用规范 `DomainId`，绝不使用 label 充当 identity。
+
+`catalog_complete` 表示 island-port 已检查本次有界查询下完整的合格已发布 catalog；它不声称人类知识完整。Transnet 仅依据这份精确返回的 allowlist 校验全部所选 ID。清单不可用、畸形、跨发布或以其他方式失败时，application 结果必须为 `uncertain`。只有 `catalog_complete` 为 true、可选 broader ID 来自该 allowlist，且规范 language-plus-label pair 不与所提供的任何 label 或 alias 精确冲突时，才允许请求级 `proposed_new`。两个操作均不写入领域。
 
 ## POST /api/v1/knowledge-facts/get
 
@@ -546,9 +565,9 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 }
 ```
 
-## POST /api/v1/releases/activate
+## POST /api/v1/releases/activation-candidates/submit
 
-激活是原子的，必须引用兼容的不可变 Qdrant 节点/边发布。若任一卡片根、领域、证据记录、内容哈希或 Qdrant manifest 缺失或不兼容，激活失败。
+这个仅 publisher 可用的 island-port operation 接收已完成 reconciliation 的 activation proof。Island-port 执行原子选择，并拒绝缺失或不兼容的 canonical content、collection manifest、active-release precondition 或 append-only audit precondition。严格 Transnet client 提交 build 与 reconciliation identity、存储无关 canonical-content hash、两个不可变 collection proof、publication manifest、idempotency key 与精确的下一 audit sequence，并校验 receipt 的每个 echo。
 
 引用的 Qdrant manifest 是向量合同定义的完整强类型发布三件套：一个规范发布及 schema、一个已验证不可变节点 collection，以及一个针对该精确节点哈希构建的已验证不可变边 collection。激活不接受单个通用 vector collection ID、活动 alias、不完整 collection 对或 Transnet 本地 ranking version。所提供的 manifest hash 覆盖 collection ID、schema、嵌入修订、数量、哈希与完整端点覆盖。
 
@@ -556,11 +575,29 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 ```json
 {
+  "build_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "reconcile_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "release_id": "knowledge-2026-10",
+  "canonical_schema_version": "canonical-v1",
   "expected_active_release": "knowledge-2026-09",
-  "mysql_content_hash": "sha256:9c49d7f6...",
-  "qdrant_manifest_hash": "sha256:2e17a054...",
-  "idempotency_key": "activate-knowledge-2026-10"
+  "canonical_content_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "publication_manifest_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "node_collection_id": "knowledge_nodes__knowledge_2026_10",
+  "node_projection_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "node_persisted_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "node_point_count": 184220,
+  "edge_collection_id": "knowledge_edges__knowledge_2026_10",
+  "edge_projection_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "edge_persisted_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "edge_point_count": 612840,
+  "edge_verified_node_projection_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "expected_endpoint_count": 1225680,
+  "resolved_endpoint_count": 1225680,
+  "dense_artifact_revision": "deployment-supplied-immutable-revision",
+  "sparse_encoder_revision": "v1",
+  "idempotency_key": "activate-knowledge-2026-10",
+  "prior_audit_sequence": 183,
+  "audit_sequence": 184
 }
 ```
 
@@ -568,16 +605,45 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 ```json
 {
+  "request_id": "req_activate_01",
+  "schema_version": "release-control-v1",
+  "content_release": "knowledge-2026-10",
   "outcome": "ok",
   "value": {
     "active_release": "knowledge-2026-10",
     "previous_release": "knowledge-2026-09",
-    "activated_at": "2026-10-01T00:00:00.000000Z"
-  }
+    "selected_at": "2026-10-01T00:00:00Z",
+    "audit_sequence": 184,
+    "publication_manifest_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "error": null
 }
 ```
 
 隔离、撤回和修正会创建新的发布状态或发布，绝不静默重写已发布行。
+
+## POST /api/v1/releases/rollback/select
+
+这个仅 publisher 可用的 island-port operation 选择一个此前已验证、已保留且可寻址的不可变 trio。严格 `release-control-v1` 请求给出 expected active release、目标 canonical-content 与 publication-manifest proof、idempotency key、精确的下一 audit sequence，以及 `verification_failure`、`canonical_defect`、`projection_defect` 或 `security_quarantine` 之一。它绝不改写目标。
+
+请求 `input`：
+
+```json
+{
+  "expected_active_release": "knowledge-2026-10",
+  "target_release": "knowledge-2026-09",
+  "target_canonical_content_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "target_publication_manifest_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "reason_code": "verification_failure",
+  "idempotency_key": "rollback-knowledge-2026-09",
+  "prior_audit_sequence": 184,
+  "audit_sequence": 185
+}
+```
+
+响应使用 activation receipt shape，其中 `active_release` 为 `knowledge-2026-09`、`previous_release` 为 `knowledge-2026-10`，并精确回显 target manifest 与 audit sequence。
+
+两个 release-control operation 都使用共享 context envelope。`prior_audit_sequence` 是离线 caller 最后观察到的 authority receipt，`audit_sequence` 必须恰好是其 checked successor；client 在 transport 前拒绝 gap，island-port 再原子检查该 precondition。封闭 outcome 是 `ok`、`invalid_payload`、`version_mismatch`、`conflict`、`missing`、`unavailable` 与 `timeout`；client 校验 outcome/code 配对而不解析 message。以同一 idempotency key 提交不同 proof、过期的 expected-active release、不连续的 audit sequence、未知字段、不匹配 echo、格式错误 timestamp 或矛盾 receipt 都闭合失败。
 
 ## 相关文档
 

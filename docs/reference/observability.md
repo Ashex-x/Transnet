@@ -57,7 +57,7 @@ Release-specific diagnosis uses bounded logs or traces rather than an unbounded 
 
 ## Audit events
 
-Audit events are limited to offline publication and control-plane actions: stage creation, validation, review decision, quarantine, activation, rollback, removal, configuration acceptance, and rejected security boundary events. They may identify the service actor or job, release and schema versions, transition, validation outcome, aggregate counts, manifest hash, reason code, and timestamp.
+Audit events are limited to offline publication and control-plane actions: stage creation, validation, review decision, quarantine, activation, rollback, removal, configuration acceptance, and rejected security boundary events. They may identify the service actor or job, release and schema versions, transition, validation outcome, aggregate counts, manifest hash, closed reason code, append-only audit sequence, and timestamp. The strict release-control client requires the authority receipt to echo the exact sequence and fails closed on gaps or conflicts.
 
 Audit events never contain source bodies, generated candidates, evidence text, prompts, query data, or reviewer free text. The publisher writes the audit event and state transition atomically when the deployment supports it; otherwise activation fails closed before becoming visible.
 

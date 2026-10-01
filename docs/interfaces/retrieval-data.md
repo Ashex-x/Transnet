@@ -4,7 +4,7 @@
 
 This contract defines island-port's storage-neutral candidate-retrieval and projection HTTP endpoints for versioned canonical nodes and relationships. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. Point examples describe the target Qdrant implementation without making it part of the wire contract.
 
-Status: target island-port contract with a checked-in Transnet publication client and application orchestrator, neither of which is composed into the online executable. Transnet contains the typed release-trio and relationship admission foundation plus deterministic pre-publication node/edge build artifacts. Preparation currently projects only authoritative active `Lexeme` and `Sense` records, resolves their embedding-authorized lexical evidence, freezes separate dense and lexical canonical inputs without generating vectors, and builds edges only after every endpoint resolves in the exact node artifact. Construction, scale, and the broader target catalog remain closed until publisher-owned canonical sources are frozen. The island-port publication server, production build/status and reconciliation persistence, embedding and lexical-encoder execution, Qdrant collection mutation and verification, activation, rollback, and production acceptance remain external work.
+Status: target island-port contract with checked-in strict Transnet read and publication clients; neither is composed into the online executable. The read client implements bounded `nodes`, `scales`, `edges`, and direct `neighbors` operations through an injected UDS transport, validates request-context and duplicate release equality, and fails closed on envelope, echo, relation-registry, eligibility, topology, and result-bound violations. Its fake transport tests do not implement the island-port server or prove production Qdrant behavior. Transnet also contains the typed release-trio and relationship admission foundation plus deterministic pre-publication node/edge build artifacts. Preparation currently projects only authoritative active `Lexeme` and `Sense` records, resolves their embedding-authorized lexical evidence, freezes separate dense and lexical canonical inputs without generating vectors, and builds edges only after every endpoint resolves in the exact node artifact. Construction, scale, and the broader target catalog remain closed until publisher-owned canonical sources are frozen. The island-port server, production build/status and reconciliation persistence, embedding and lexical-encoder execution, Qdrant collection mutation and verification, activation, rollback, and production acceptance remain external work.
 
 ## Contents
 
@@ -31,6 +31,12 @@ Island-port listens on `/run/island-port/island-port.sock` by default and follow
 Every route uses the shared `/api/v1` prefix. The island-port socket and the resource path identify this vector-data API; callers do not add `data`, `vec`, or a storage-vendor name to the path.
 
 Every exact request body has the shape `{"context": RequestContext, "input": EndpointInput}`. `RequestContext` contains `request_id`, `deadline_at`, `schema_version` set to `retrieval-data-v1`, and the pinned `content_release` when applicable. Endpoint examples below show only `EndpointInput`. Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`; publication may also return `conflict`.
+
+The checked-in client requires one pinned release for all four reads and requires every duplicate `filters.release_id`, top-level input `release_id`, and response `release_id` to equal that context pin. Limits are 1 through 50. Dense vectors contain exactly 1,024 finite values; sparse vectors contain 1 through 4,096 finite values with equal-length, strictly increasing indices. Filter lists contain at most 50 entries, cursors contain at most 512 ASCII-graphic bytes, and request and response bodies are each limited to 1 MiB. Relation filters use only exact frozen registry wire names; aliases and Rust enum spellings fail closed. Edge candidates must echo relationship-registry version `1` exactly.
+
+The closed node-family catalog is `lexical_sense`, `phrase`, `multilingual_term`, `concept`, `entity`, `phenomenon`, `mechanism`, `process`, `equation`, `quantity`, `material`, `instrument`, `method`, `technology`, `application`, `standard`, `organization`, `person`, `place`, `idiom`, `metaphor`, `grammar_pattern`, `collocation`, `misconception`, `domain`, and `semantic_scale`. Unknown families fail before transport when used as filters and fail closed when returned by island-port.
+
+Non-success envelopes use an exact closed outcome/code topology: `missing` -> `not_found`; `invalid_payload` -> `invalid_payload`; `version_mismatch` -> `schema_incompatible | content_release_unavailable`; `unavailable` -> `dependency_unavailable`; and `timeout` -> `timeout`. A success has a value and no error; a failure has an error and no value. Unknown codes, mismatched pairs, or contradictory value/error presence are inconsistent data; human messages never classify failures.
 
 ## Storage boundary
 
@@ -301,6 +307,8 @@ Response:
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
     "candidates": [
@@ -346,6 +354,8 @@ Response:
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
     "candidates": [
@@ -380,7 +390,7 @@ Request:
   "filters": {
     "release_id": "knowledge-2026-09",
     "publication_states": ["published"],
-    "relation_types": ["higher_degree", "lower_degree"],
+    "relation_types": ["higher_degree_than", "lower_degree_than"],
     "verification_states": ["verified"],
     "languages": ["en"],
     "dialects": ["en-US"],
@@ -398,6 +408,8 @@ Response:
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
     "candidates": [
@@ -430,7 +442,7 @@ Request:
 {
   "node_id": "node_sweltering_hot_01",
   "direction": "both",
-  "relation_types": ["higher_degree", "lower_degree", "collocation"],
+  "relation_types": ["higher_degree_than", "lower_degree_than", "near_synonym"],
   "verification_states": ["verified"],
   "languages": ["en"],
   "domain_ids": ["domain_weather"],
@@ -444,6 +456,8 @@ Response:
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
     "root_node_id": "node_sweltering_hot_01",
@@ -480,6 +494,8 @@ Begin binds the stable build ID, canonical and projection schemas, complete node
 Node freeze precedes edge admission. A freeze response supplies an island-port-allocated immutable collection ID, persisted collection hash, projection hash and count, plus dense and lexical execution receipts. Requested compatibility is not execution proof: Transnet compares the server assertion for the exact dense artifact revision, dimensions, vector and input-spec names, lexical encoder revision, dictionary hash, and processed count. The production provenance behind that assertion remains an island-port deployment responsibility.
 
 Reconcile binds both immutable collection IDs, both projection and persisted hashes, the edge-to-node projection binding, point and endpoint counts, validated receipts, and the publication manifest hash. Only complete endpoint coverage and exact cross-artifact agreement produce the closed `activation_candidate` state. This operation does not mutate the active release. Status is read-only; abort follows the domain state machine and cannot leave or abort an activation candidate.
+
+The returned candidate also binds stable build and reconciliation identities plus the storage-neutral canonical-content hash. The build identity commits to that canonical hash; reconciliation and publication-manifest identities additionally commit to both typed physical collection IDs and their persisted hashes. Changing any frozen proof member changes the corresponding identity. The separate offline `release-control-v1` client may explicitly submit that complete proof; reconciliation itself never calls release control. Rollback selection names a previously verified retained manifest rather than rebuilding or mutating either collection.
 
 ```json
 {

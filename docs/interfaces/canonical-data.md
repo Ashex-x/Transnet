@@ -4,9 +4,9 @@
 
 This contract defines island-port's storage-neutral HTTP endpoints for shared canonical translations, words, phrases, senses, domains, evidence metadata, and immutable content releases. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. MySQL is the planned island-port implementation, not part of this wire contract.
 
-Status: target island-port server contract with implemented Transnet read client. The executable can optionally compose the strict outbound `canonical-data-v1` client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The implemented client covers active-release, translation-candidate, basic-card-candidate, and sense-detail reads with the common envelope and strict response-echo validation described here. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, domain/fact/scale reads, and real end-to-end acceptance remain unimplemented outside this repository.
+Status: target island-port server contract with implemented Transnet read client. The executable can optionally compose the strict outbound `canonical-data-v1` client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The implemented client covers active-release, translation-candidate, basic-card-candidate, sense-detail, and bounded domain-inventory reads with the common envelope and strict response-echo validation described here. The domain-assessment application foundation is not yet exposed as an online route. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, fact/scale reads, and real end-to-end acceptance remain unimplemented outside this repository.
 
-The checked-in M3 publication foundation models Qdrant build lifecycle, idempotency, compatibility receipts, and reconciliation hashes. Its outbound publication port and strict island-port client carry the bounded build contract, while `KnowledgePublicationService` drives authoritative status-based resume through node and edge publication and reconciliation without keeping local progress. Successful reconciliation returns only a typed activation candidate. An external authenticated publisher or control plane must submit that candidate to island-port for atomic active-trio selection. The repository does not add an island-port publication server, MySQL build/reconciliation persistence, activation pointer mutation, or rollback implementation; those authority-owned operations remain external requirements.
+The checked-in M3 publication foundation models Qdrant build lifecycle, idempotency, compatibility receipts, and reconciliation hashes. Its outbound publication port and strict island-port client carry the bounded build contract, while `KnowledgePublicationService` drives authoritative status-based resume through node and edge publication and reconciliation without keeping local progress. Successful reconciliation returns only a typed activation candidate. The offline-only `OfflinePublicationService` and strict `release-control-v1` client explicitly submit that candidate or select a retained rollback target through island-port; they are absent from online `AppState` and never mutate the active pointer themselves. The repository does not add an island-port publication server, MySQL build/reconciliation persistence, active-pointer transaction, or rollback implementation; those authority-owned operations remain external requirements.
 
 ## Contents
 
@@ -26,7 +26,8 @@ The checked-in M3 publication foundation models Qdrant build lifecycle, idempote
   - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
   - [Domain proposal handling](#domain-proposal-handling)
   - [POST /api/v1/cards/revisions/stage](#post-apiv1cardsrevisionsstage)
-  - [POST /api/v1/releases/activate](#post-apiv1releasesactivate)
+  - [POST /api/v1/releases/activation-candidates/submit](#post-apiv1releasesactivation-candidatessubmit)
+  - [POST /api/v1/releases/rollback/select](#post-apiv1releasesrollbackselect)
   - [Related documents](#related-documents)
 
 ## Endpoint reference
@@ -317,6 +318,8 @@ Response:
 
 Uniqueness is enforced by stable form, card, and sense IDs plus published canonical-form and alias rows, never by an ad hoc normalized lookup string. All eligible collisions at the best applicable rank are returned for resolution by the service.
 
+`matched_form_id` and `matched_form` are proof inputs, not display hints. Transnet requires the ID to resolve to an active form owned by the returned lexeme and requires the surface value to equal that stored form. The claimed class must also agree with the authoritative form role: `exact_canonical` requires a lemma, `exact_alias` requires a published spelling variant, alias, or phrase, and `inflection` requires an inflection. Spelling-correction and transliteration results still name the authoritative stored target form. Any mismatch fails the whole authority response instead of being downgraded to a semantic nomination.
+
 Each candidate must carry the authoritative, release-bound source record for every evidence fragment. `source.id` must equal `evidence.source_id`; source and evidence permissions must both authorize the requested use, and evidence permissions cannot exceed source permissions. For public redistribution, `source.attribution` is a nonempty, reviewed human-readable attribution (at most 256 Unicode characters), not a label synthesized from source ID or name. Missing, duplicate, conflicting, unlicensed, or cross-release source/evidence records fail closed. The adapter resolves these strict private DTOs into the existing candidate/source/evidence domain types; island-port must add this source chain before production delivery. Content hash and permission bits remain internal.
 
 `lexeme.lemma_evidence_ids` is a required, sorted, unique list of one to eight evidence IDs supporting the canonical lemma assertion itself. It is not borrowed from sense-definition evidence, does not imply `FormKind::Lemma`, and never participates in lexeme identity. Every ID must resolve through the response evidence/source chain (or the indexed `lineages` map for `senses/get`) to the same release and requested permission; dangling, duplicate, conflicting, or unused lineage fails closed.
@@ -376,10 +379,18 @@ Request:
 
 ```json
 {
-  "normalized_labels": ["meteorology", "weather"],
-  "scope_key": "earth-atmosphere-weather",
-  "content_release": "knowledge-2026-09",
-  "limit": 5
+  "context": {
+    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+    "deadline_at": "2026-09-18T12:00:02Z",
+    "schema_version": "canonical-data-v1",
+    "content_release": "knowledge-2026-09"
+  },
+  "input": {
+    "normalized_labels": ["meteorology", "weather"],
+    "scope_key": "earth-atmosphere-weather",
+    "languages": ["en", "zh-CN"],
+    "limit": 5
+  }
 }
 ```
 
@@ -387,29 +398,37 @@ Response:
 
 ```json
 {
+  "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
+  "schema_version": "canonical-data-v1",
   "outcome": "ok",
+  "content_release": "knowledge-2026-09",
   "value": {
+    "catalog_complete": true,
     "candidates": [
       {
         "domain_id": "domain_weather",
-        "canonical_label": "weather",
-        "definition": "Conditions of the atmosphere at a place and time.",
-        "inclusion_scope": ["temperature", "precipitation", "wind", "humidity"],
+        "revision": 4,
+        "labels": [{"language": "en", "text": "weather"}, {"language": "zh-CN", "text": "天气"}],
+        "aliases": [{"language": "en", "text": "meteorological weather"}],
+        "definitions": [{"language": "en", "text": "Conditions of the atmosphere at a place and time."}, {"language": "zh-CN", "text": "某一地点和时间的大气状态。"}],
+        "inclusion_scope": ["humidity", "precipitation", "temperature", "wind"],
         "exclusion_scope": ["long-term climate classification"],
         "broader_domain_ids": ["domain_earth_science"],
         "knowledge_profile": {
-          "available_fact_families": ["definition", "taxonomy", "terminology", "measurement"],
+          "available_fact_families": ["definition", "measurement", "taxonomy", "terminology"],
           "languages": ["en", "zh-CN"],
           "verified_fact_count": 184,
           "coverage_state": "partial"
-        },
-        "revision": 4
+        }
       }
     ]
-  },
-  "content_release": "knowledge-2026-09"
+  }
 }
 ```
+
+The request and response are bounded to 32 candidates, 8 labels, 16 aliases, 8 definitions, 16 inclusion items, 16 exclusion items, 8 broader domains, 16 fact families, and 8 profile languages per record. Candidates are strictly sorted and unique by `domain_id`; labels, aliases, and definitions are strictly sorted and unique by canonical language tag and then exact text. Inclusion scope, exclusion scope, broader-domain IDs, fact families, and profile languages are also sorted and unique. Every candidate belongs to the echoed immutable release, and `domain_id` plus `broader_domain_ids` use canonical `DomainId` values rather than labels.
+
+`catalog_complete` means island-port examined the complete eligible published catalog for this bounded query; it does not claim that human knowledge is complete. Transnet validates all selected IDs against exactly this returned allowlist. An unavailable, malformed, cross-release, or otherwise failed inventory produces the application outcome `uncertain`. A request-local `proposed_new` outcome is permitted only when `catalog_complete` is true, its optional broader IDs come from this allowlist, and its canonical language-plus-label pair does not exactly collide with any supplied label or alias. Neither operation writes a domain.
 
 ## POST /api/v1/knowledge-facts/get
 
@@ -554,9 +573,9 @@ Response:
 }
 ```
 
-## POST /api/v1/releases/activate
+## POST /api/v1/releases/activation-candidates/submit
 
-Activation is atomic and references a compatible immutable Qdrant node/edge release. It fails if any card root, domain, evidence record, content hash, or Qdrant manifest is missing or incompatible.
+This publisher-only island-port operation accepts a reconciled activation proof. Island-port performs the atomic selection and rejects missing or incompatible canonical content, collection manifests, active-release preconditions, or append-only audit preconditions. The strict Transnet client submits build and reconciliation identities, the storage-neutral canonical-content hash, both immutable collection proofs, the publication manifest, idempotency key, and exact next audit sequence; it validates every receipt echo.
 
 The referenced Qdrant manifest is the complete typed release trio defined by the vector contract: one canonical release and schema, one verified immutable node collection, and one verified immutable edge collection built against the exact node hash. Activation never accepts one generic vector collection identifier, an active alias, an incomplete pair, or a local Transnet ranking version. The supplied manifest hash commits to collection identities, schemas, embedding revisions, counts, hashes, and complete endpoint coverage.
 
@@ -564,11 +583,29 @@ Request:
 
 ```json
 {
+  "build_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "reconcile_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "release_id": "knowledge-2026-10",
+  "canonical_schema_version": "canonical-v1",
   "expected_active_release": "knowledge-2026-09",
-  "mysql_content_hash": "sha256:9c49d7f6...",
-  "qdrant_manifest_hash": "sha256:2e17a054...",
-  "idempotency_key": "activate-knowledge-2026-10"
+  "canonical_content_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "publication_manifest_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "node_collection_id": "knowledge_nodes__knowledge_2026_10",
+  "node_projection_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "node_persisted_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "node_point_count": 184220,
+  "edge_collection_id": "knowledge_edges__knowledge_2026_10",
+  "edge_projection_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "edge_persisted_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "edge_point_count": 612840,
+  "edge_verified_node_projection_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "expected_endpoint_count": 1225680,
+  "resolved_endpoint_count": 1225680,
+  "dense_artifact_revision": "deployment-supplied-immutable-revision",
+  "sparse_encoder_revision": "v1",
+  "idempotency_key": "activate-knowledge-2026-10",
+  "prior_audit_sequence": 183,
+  "audit_sequence": 184
 }
 ```
 
@@ -576,16 +613,45 @@ Response:
 
 ```json
 {
+  "request_id": "req_activate_01",
+  "schema_version": "release-control-v1",
+  "content_release": "knowledge-2026-10",
   "outcome": "ok",
   "value": {
     "active_release": "knowledge-2026-10",
     "previous_release": "knowledge-2026-09",
-    "activated_at": "2026-10-01T00:00:00.000000Z"
-  }
+    "selected_at": "2026-10-01T00:00:00Z",
+    "audit_sequence": 184,
+    "publication_manifest_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "error": null
 }
 ```
 
 Quarantine, withdrawal, and correction create new publication state or a new release; published rows are never silently rewritten.
+
+## POST /api/v1/releases/rollback/select
+
+This publisher-only island-port operation selects one previously verified, retained, and addressable immutable trio. The strict `release-control-v1` request names the expected active release, target canonical-content and publication-manifest proofs, an idempotency key, exact next audit sequence, and one closed reason: `verification_failure`, `canonical_defect`, `projection_defect`, or `security_quarantine`. It never rewrites the target.
+
+Request `input`:
+
+```json
+{
+  "expected_active_release": "knowledge-2026-10",
+  "target_release": "knowledge-2026-09",
+  "target_canonical_content_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "target_publication_manifest_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "reason_code": "verification_failure",
+  "idempotency_key": "rollback-knowledge-2026-09",
+  "prior_audit_sequence": 184,
+  "audit_sequence": 185
+}
+```
+
+Response uses the activation receipt shape with `active_release` set to `knowledge-2026-09`, `previous_release` set to `knowledge-2026-10`, and the exact target manifest and audit sequence echoed.
+
+Both release-control operations use the shared context envelope. `prior_audit_sequence` is the last authority receipt observed by the offline caller and `audit_sequence` must be exactly its checked successor; the client rejects a gap before transport and island-port rechecks the precondition atomically. Closed outcomes are `ok`, `invalid_payload`, `version_mismatch`, `conflict`, `missing`, `unavailable`, and `timeout`; the client validates outcome/code pairs instead of parsing messages. A different proof under the same idempotency key, stale expected-active release, nonconsecutive audit sequence, unknown field, mismatched echo, malformed timestamp, or contradictory receipt fails closed.
 
 ## Related documents
 

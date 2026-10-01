@@ -29,6 +29,8 @@ use crate::{
 pub struct KnowledgePublicationPlan {
   /// Canonical release and schema shared by every publication operation.
   pub canonical: CanonicalReleasePin,
+  /// Storage-neutral hash of all canonical rows admitted to the immutable release.
+  pub canonical_content_hash: String,
   /// Complete deterministic node projection.
   pub nodes: NodeProjectionBuild,
   /// Complete deterministic edge projection bound to `nodes`.
@@ -55,6 +57,64 @@ impl KnowledgePublicationService {
     Self { publication }
   }
 
+  /// Reads the authoritative state of one offline publication build.
+  ///
+  /// This operation is stateless and never infers progress from local files or prior calls.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed publication failure when the authority is unavailable or echoes a different
+  /// build identity.
+  pub async fn status(
+    &self,
+    context: &KnowledgePublicationContext,
+    canonical: &CanonicalReleasePin,
+    build_id: &PublicationBuildId,
+  ) -> Result<PublicationStatus, KnowledgeReleaseFailure> {
+    let status = self
+      .publication
+      .status(context, canonical, build_id)
+      .await?;
+    if status.build_id != *build_id {
+      return Err(KnowledgeReleaseFailure::IdempotencyConflict);
+    }
+    Ok(status)
+  }
+
+  /// Requests an idempotent legal abort of one non-activated offline publication build.
+  ///
+  /// Activation candidates cannot be aborted, and this operation never deletes immutable
+  /// collections or selects an active or rollback release.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed publication failure when the authority rejects the lifecycle transition,
+  /// cannot complete the request, or echoes a different build identity.
+  pub async fn abort(
+    &self,
+    context: &KnowledgePublicationContext,
+    canonical: &CanonicalReleasePin,
+    build_id: &PublicationBuildId,
+    idempotency_key: &PublicationIdempotencyKey,
+  ) -> Result<PublicationStatus, KnowledgeReleaseFailure> {
+    let fingerprint = PublicationRequestFingerprint::derive("abort", &[build_id.as_str()])
+      .map_err(KnowledgeReleaseFailure::from)?;
+    let status = self
+      .publication
+      .abort(context, canonical, build_id, idempotency_key, &fingerprint)
+      .await?;
+    if status.build_id != *build_id {
+      return Err(KnowledgeReleaseFailure::IdempotencyConflict);
+    }
+    if !matches!(
+      status.state,
+      PublicationBuildState::Aborting | PublicationBuildState::Abandoned
+    ) {
+      return Err(KnowledgeReleaseFailure::InvalidLifecycleTransition);
+    }
+    Ok(status)
+  }
+
   /// Executes or safely resumes one node-first build through reconciliation.
   ///
   /// The returned value is only an activation candidate. This service never activates or rolls
@@ -73,6 +133,7 @@ impl KnowledgePublicationService {
     let build_id = PublicationBuildId::derive(
       &plan.canonical.release_id,
       plan.nodes.embedding.payload_schema_version(),
+      &plan.canonical_content_hash,
       &plan.nodes.content_hash,
       &plan.compatibility.entry_id,
     )
@@ -186,12 +247,22 @@ impl KnowledgePublicationService {
     let manifest_hash = PublicationManifestHash::derive(
       &plan.canonical.release_id,
       &plan.canonical.canonical_schema_version,
+      &plan.canonical_content_hash,
       &node_hash,
+      &frozen_nodes.manifest.collection_id,
       &edge_hash,
+      &frozen_edges.manifest.collection_id,
     )
     .map_err(KnowledgeReleaseFailure::from)?;
-    let reconcile_id = PublicationReconcileIdentity::derive(&build_id, &node_hash, &edge_hash)
-      .map_err(KnowledgeReleaseFailure::from)?;
+    let reconcile_id = PublicationReconcileIdentity::derive(
+      &build_id,
+      &plan.canonical_content_hash,
+      &node_hash,
+      &frozen_nodes.manifest.collection_id,
+      &edge_hash,
+      &frozen_edges.manifest.collection_id,
+    )
+    .map_err(KnowledgeReleaseFailure::from)?;
     self
       .publication
       .reconcile(
@@ -200,6 +271,7 @@ impl KnowledgePublicationService {
           build_id,
           reconcile_id,
           canonical: plan.canonical.clone(),
+          canonical_content_hash: plan.canonical_content_hash.clone(),
           nodes: frozen_nodes,
           edges: frozen_edges,
           manifest_hash,
@@ -305,7 +377,8 @@ impl KnowledgePublicationService {
 }
 
 fn validate_plan(plan: &KnowledgePublicationPlan) -> Result<(), KnowledgeReleaseFailure> {
-  if plan.nodes.release_id != plan.canonical.release_id
+  if PublicationManifestHash::parse(plan.canonical_content_hash.clone()).is_err()
+    || plan.nodes.release_id != plan.canonical.release_id
     || plan.edges.release_id != plan.canonical.release_id
     || plan.nodes.embedding != plan.edges.embedding
     || plan.edges.verified_node_content_hash != plan.nodes.content_hash
@@ -336,6 +409,7 @@ fn begin_request(
       build_id.as_str(),
       plan.canonical.release_id.as_str(),
       &plan.canonical.canonical_schema_version,
+      &plan.canonical_content_hash,
       plan.nodes.embedding.payload_schema_version(),
       &plan.nodes.content_hash,
       &plan.edges.content_hash,
@@ -361,6 +435,7 @@ fn begin_request(
   Ok(BeginPublication {
     build_id,
     canonical: plan.canonical.clone(),
+    canonical_content_hash: plan.canonical_content_hash.clone(),
     projection_schema_version: plan.nodes.embedding.payload_schema_version().to_string(),
     node_projection_hash: plan.nodes.content_hash.clone(),
     edge_projection_hash: plan.edges.content_hash.clone(),
@@ -624,6 +699,8 @@ mod tests {
     edge_inspection_point_limit: Option<usize>,
     node_inspections: usize,
     edge_inspections: usize,
+    abort_build_mismatch: bool,
+    abort_state_override: Option<PublicationBuildState>,
     node_batches: Vec<(u32, String, String, usize)>,
     edge_batches: Vec<(u32, String, String, usize)>,
   }
@@ -663,6 +740,8 @@ mod tests {
         edge_inspection_point_limit: state.edge_inspection_point_limit,
         node_inspections: state.node_inspections,
         edge_inspections: state.edge_inspections,
+        abort_build_mismatch: state.abort_build_mismatch,
+        abort_state_override: state.abort_state_override,
         node_batches: state.node_batches.clone(),
         edge_batches: state.edge_batches.clone(),
       }
@@ -879,7 +958,10 @@ mod tests {
       .map_err(|_| KnowledgeReleaseFailure::IncompleteTrio)?;
       state.candidate_count += 1;
       Ok(PublicationActivationCandidate {
+        build_id: request.build_id.clone(),
+        reconcile_id: request.reconcile_id.clone(),
         trio,
+        canonical_content_hash: request.canonical_content_hash.clone(),
         manifest_hash: request.manifest_hash.clone(),
         node_persisted_hash: request.nodes.persisted_hash.clone(),
         edge_persisted_hash: request.edges.persisted_hash.clone(),
@@ -929,11 +1011,28 @@ mod tests {
       &self,
       _context: &KnowledgePublicationContext,
       _canonical: &CanonicalReleasePin,
-      _build_id: &PublicationBuildId,
+      build_id: &PublicationBuildId,
       _idempotency_key: &PublicationIdempotencyKey,
-      _fingerprint: &PublicationRequestFingerprint,
+      fingerprint: &PublicationRequestFingerprint,
     ) -> Result<PublicationStatus, KnowledgeReleaseFailure> {
-      unreachable!("abort is an explicit caller operation outside publish")
+      let mut state = self.state.lock().unwrap();
+      state.events.push(format!("abort:{}", fingerprint.as_str()));
+      let returned_build_id = if state.abort_build_mismatch {
+        PublicationBuildId::parse(
+          "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        )
+        .unwrap()
+      } else {
+        build_id.clone()
+      };
+      Ok(PublicationStatus {
+        build_id: returned_build_id,
+        state: state
+          .abort_state_override
+          .unwrap_or(PublicationBuildState::Abandoned),
+        next_node_ordinal: state.next_node,
+        next_edge_ordinal: state.next_edge,
+      })
     }
   }
 
@@ -1146,6 +1245,7 @@ mod tests {
     let edges = build_edge_projection(&nodes, embedding(), vec![relationship()]).unwrap();
     KnowledgePublicationPlan {
       canonical: CanonicalReleasePin::new(release, "canonical-v1".into()).unwrap(),
+      canonical_content_hash: format!("sha256:{}", "9".repeat(64)),
       nodes,
       edges,
       compatibility: compatibility(),
@@ -1586,5 +1686,79 @@ mod tests {
     )
     .await;
     assert_eq!(port.snapshot().candidate_count, 0);
+  }
+
+  #[tokio::test]
+  async fn explicit_status_and_abort_use_only_authoritative_state() {
+    let port = Arc::new(FakePublicationPort::new(FakeState::default()));
+    let service = KnowledgePublicationService::new(port.clone());
+    let plan = plan(2);
+    let build_id = PublicationBuildId::derive(
+      &plan.canonical.release_id,
+      plan.nodes.embedding.payload_schema_version(),
+      &plan.canonical_content_hash,
+      &plan.nodes.content_hash,
+      &plan.compatibility.entry_id,
+    )
+    .unwrap();
+    let status = service
+      .status(&context(), &plan.canonical, &build_id)
+      .await
+      .unwrap();
+    assert_eq!(status.state, PublicationBuildState::AcceptingNodes);
+
+    let aborted = service
+      .abort(
+        &context(),
+        &plan.canonical,
+        &build_id,
+        &PublicationIdempotencyKey::parse("abort-offline-r1").unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(aborted.state, PublicationBuildState::Abandoned);
+    let events = &port.snapshot().events;
+    assert_eq!(events[0], "status");
+    assert!(events[1].starts_with("abort:sha256:"));
+  }
+
+  #[tokio::test]
+  async fn abort_rejects_wrong_identity_and_illegal_returned_state() {
+    let plan = plan(2);
+    let build_id = PublicationBuildId::derive(
+      &plan.canonical.release_id,
+      plan.nodes.embedding.payload_schema_version(),
+      &plan.canonical_content_hash,
+      &plan.nodes.content_hash,
+      &plan.compatibility.entry_id,
+    )
+    .unwrap();
+    let key = PublicationIdempotencyKey::parse("abort-offline-r2").unwrap();
+
+    let wrong_identity =
+      KnowledgePublicationService::new(Arc::new(FakePublicationPort::new(FakeState {
+        abort_build_mismatch: true,
+        ..FakeState::default()
+      })));
+    assert_eq!(
+      wrong_identity
+        .abort(&context(), &plan.canonical, &build_id, &key)
+        .await
+        .unwrap_err(),
+      KnowledgeReleaseFailure::IdempotencyConflict
+    );
+
+    let wrong_state =
+      KnowledgePublicationService::new(Arc::new(FakePublicationPort::new(FakeState {
+        abort_state_override: Some(PublicationBuildState::ActivationCandidate),
+        ..FakeState::default()
+      })));
+    assert_eq!(
+      wrong_state
+        .abort(&context(), &plan.canonical, &build_id, &key)
+        .await
+        .unwrap_err(),
+      KnowledgeReleaseFailure::InvalidLifecycleTransition
+    );
   }
 }

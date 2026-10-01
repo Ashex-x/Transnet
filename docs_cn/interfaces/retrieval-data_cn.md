@@ -4,7 +4,7 @@ English: [Retrieval-data endpoint interface](../../docs/interfaces/retrieval-dat
 
 本合同定义 island-port 提供的存储无关候选检索与投影 HTTP endpoint，用于版本化规范节点与关系。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。Point 示例描述目标 Qdrant 实现，但不使其成为线上合同的一部分。
 
-状态：目标 island-port 合同；Transnet publication client 与 application orchestrator 已进入仓库，但均未组合进在线可执行文件。Transnet 已包含强类型发布三件套、关系 admission 基础以及确定性的预发布节点/边构建工件。准备步骤当前只投影权威且 active 的 `Lexeme` 与 `Sense` 记录，解析其具备 embedding 权限的词汇 evidence，冻结独立 dense/lexical 规范输入但不生成向量，并且仅在所有端点都能从同一精确节点工件解析后构建边。Construction、scale 与更广泛的目标目录在 publisher-owned 规范来源冻结前保持闭合。Island-port publication server、生产 build/status 与 reconciliation persistence、embedding 与 lexical encoder 执行、Qdrant collection mutation/verification、激活、回滚及生产验收仍是外部工作。
+状态：目标 island-port 合同；仓库内已有严格的 Transnet read 与 publication client，但二者都未组合进 online executable。Read client 通过注入的 UDS transport 实现有界 `nodes`、`scales`、`edges` 与直接 `neighbors` operation，校验 request-context 与重复 release 相等性，并对 envelope、echo、relation registry、eligibility、topology 和 result bound 违规执行闭合失败。其 fake transport test 不实现 island-port server，也不证明 production Qdrant behavior。Transnet 还包含强类型发布三件套、关系 admission 基础以及确定性的预发布节点/边构建工件。准备步骤当前只投影权威且 active 的 `Lexeme` 与 `Sense` 记录，解析其具备 embedding 权限的词汇 evidence，冻结独立 dense/lexical 规范输入但不生成向量，并且仅在所有端点都能从同一精确节点工件解析后构建边。Construction、scale 与更广泛的目标目录在 publisher-owned 规范来源冻结前保持闭合。Island-port server、生产 build/status 与 reconciliation persistence、embedding 与 lexical encoder 执行、Qdrant collection mutation/verification、激活、回滚及生产验收仍是外部工作。
 
 ## 目录
 
@@ -31,6 +31,12 @@ Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 
 所有路由统一使用 `/api/v1` 前缀。Island-port 套接字与资源路径共同标识本向量数据 API；调用方无需在路径中添加 `data`、`vec` 或存储厂商名称。
 
 每个精确请求 body 的结构为 `{"context": RequestContext, "input": EndpointInput}`。`RequestContext` 包含 `request_id`、`deadline_at`、值为 `retrieval-data-v1` 的 `schema_version`，并在适用时包含固定的 `content_release`。下方 endpoint 示例仅展示 `EndpointInput`。闭合 outcome 为 `ok`、`missing`、`invalid_payload`、`version_mismatch`、`unavailable` 和 `timeout`；发布还可返回 `conflict`。
+
+仓库内 client 要求全部四类 read 都固定一个 release，并要求每个重复的 `filters.release_id`、input 顶层 `release_id` 与 response `release_id` 等于该 context pin。Limit 范围为 1 到 50。Dense vector 恰好包含 1,024 个有限值；sparse vector 包含 1 到 4,096 个有限值，index 与 value 等长且 index 严格递增。Filter list 最多 50 项，cursor 最多 512 个 ASCII-graphic byte，request 与 response body 各限 1 MiB。Relation filter 只使用冻结 registry 的精确 wire name；alias 与 Rust enum 拼写会闭合失败。Edge candidate 必须精确回显 relationship-registry version `1`。
+
+闭合 node-family catalog 为 `lexical_sense`、`phrase`、`multilingual_term`、`concept`、`entity`、`phenomenon`、`mechanism`、`process`、`equation`、`quantity`、`material`、`instrument`、`method`、`technology`、`application`、`standard`、`organization`、`person`、`place`、`idiom`、`metaphor`、`grammar_pattern`、`collocation`、`misconception`、`domain` 与 `semantic_scale`。Unknown family 用作 filter 时会在 transport 前失败，由 island-port 返回时会闭合失败。
+
+非成功 envelope 使用精确闭合 outcome/code topology：`missing` -> `not_found`；`invalid_payload` -> `invalid_payload`；`version_mismatch` -> `schema_incompatible | content_release_unavailable`；`unavailable` -> `dependency_unavailable`；`timeout` -> `timeout`。成功响应有 value 且无 error；失败响应有 error 且无 value。Unknown code、pair 不匹配或 value/error presence 矛盾均属于 inconsistent data；绝不根据 human message 分类失败。
 
 ## 存储边界
 
@@ -301,6 +307,8 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
     "candidates": [
@@ -346,6 +354,8 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
     "candidates": [
@@ -380,7 +390,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
   "filters": {
     "release_id": "knowledge-2026-09",
     "publication_states": ["published"],
-    "relation_types": ["higher_degree", "lower_degree"],
+    "relation_types": ["higher_degree_than", "lower_degree_than"],
     "verification_states": ["verified"],
     "languages": ["en"],
     "dialects": ["en-US"],
@@ -398,6 +408,8 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
     "candidates": [
@@ -430,7 +442,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 {
   "node_id": "node_sweltering_hot_01",
   "direction": "both",
-  "relation_types": ["higher_degree", "lower_degree", "collocation"],
+  "relation_types": ["higher_degree_than", "lower_degree_than", "near_synonym"],
   "verification_states": ["verified"],
   "languages": ["en"],
   "domain_ids": ["domain_weather"],
@@ -444,6 +456,8 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
     "root_node_id": "node_sweltering_hot_01",
@@ -480,6 +494,8 @@ Begin 绑定稳定 build ID、canonical/projection schema、完整 node/edge pro
 Node freeze 先于 edge admission。Freeze response 提供由 island-port 分配的不可变 collection ID、persisted collection hash、projection hash/count，以及 dense/lexical execution receipt。Requested compatibility 不等于 execution proof：Transnet 会核对 server assertion 中的精确 dense artifact revision、dimensions、vector/input-spec name、lexical encoder revision、dictionary hash 与 processed count。该 assertion 背后的 production provenance 仍由 island-port deployment 负责。
 
 Reconcile 绑定两个不可变 collection ID、projection/persisted hash、edge-to-node projection binding、point/endpoint count、已验证 receipt 与 publication manifest hash。只有完整 endpoint coverage 和精确 cross-artifact agreement 才产生闭合 `activation_candidate` 状态；该 operation 不修改 active release。Status 只读；abort 遵守 domain state machine，不能离开或中止 activation candidate。
+
+返回的 candidate 还绑定稳定 build/reconciliation identity 与存储无关 canonical-content hash。Build identity 提交该 canonical hash；reconciliation 与 publication-manifest identity 还提交两个 typed physical collection ID 及其 persisted hash。任一冻结 proof member 改变都会改变相应 identity。独立离线 `release-control-v1` client 可显式提交该完整 proof；reconciliation 本身绝不调用 release control。Rollback selection 命名一个此前已验证且保留的 manifest，而不是重建或修改任一 collection。
 
 ```json
 {

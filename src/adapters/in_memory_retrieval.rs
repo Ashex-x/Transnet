@@ -6,10 +6,10 @@ use async_trait::async_trait;
 
 use crate::{
   domain::{
-    canonical::ActiveContentVersion,
+    canonical::{ActiveContentVersion, FormKind},
     retrieval::{
-      CandidateLoadRequest, CanonicalCandidate, LexicalSearchRequest, RepositoryMatch, VectorMatch,
-      VectorSearchRequest,
+      CandidateLoadRequest, CanonicalCandidate, LexicalMatchKind, LexicalSearchRequest,
+      RepositoryMatch, VectorMatch, VectorSearchRequest,
     },
   },
   ports::{
@@ -90,10 +90,19 @@ impl CanonicalRepository for InMemoryRetrievalAdapter {
       .filter_map(|candidate| {
         candidate
           .in_memory_match(&request.retrieval.query)
-          .map(|(kind, score)| RepositoryMatch {
-            candidate: candidate.clone(),
-            kind,
-            score,
+          .map(|(kind, score)| {
+            let matched_form = candidate.forms.iter().find(|form| {
+              form.normalized_form == request.retrieval.query
+                && (kind != LexicalMatchKind::ExactCanonical || form.kind == FormKind::Lemma)
+            });
+            RepositoryMatch {
+              candidate: candidate.clone(),
+              matched_form_id: matched_form.map(|form| form.id.clone()),
+              matched_form: matched_form
+                .map_or_else(|| candidate.lexeme.lemma.clone(), |form| form.form.clone()),
+              kind,
+              score,
+            }
           })
       })
       .collect::<Vec<_>>();
@@ -215,17 +224,30 @@ mod tests {
         definition_evidence_ids: vec![evidence_id.clone()],
         status: CanonicalStatus::Active,
       },
-      forms: vec![WordForm {
-        id: id("form-hotter"),
-        lexeme_id,
-        release_id: release_id.clone(),
-        form: "hotter".to_string(),
-        normalized_form: "hotter".to_string(),
-        kind: FormKind::Inflection,
-        morphology: Some("comparative".to_string()),
-        evidence_ids: vec![evidence_id.clone()],
-        status: CanonicalStatus::Active,
-      }],
+      forms: vec![
+        WordForm {
+          id: id("form-hot"),
+          lexeme_id: lexeme_id.clone(),
+          release_id: release_id.clone(),
+          form: "hot".to_string(),
+          normalized_form: "hot".to_string(),
+          kind: FormKind::Lemma,
+          morphology: None,
+          evidence_ids: vec![evidence_id.clone()],
+          status: CanonicalStatus::Active,
+        },
+        WordForm {
+          id: id("form-hotter"),
+          lexeme_id,
+          release_id: release_id.clone(),
+          form: "hotter".to_string(),
+          normalized_form: "hotter".to_string(),
+          kind: FormKind::Inflection,
+          morphology: Some("comparative".to_string()),
+          evidence_ids: vec![evidence_id.clone()],
+          status: CanonicalStatus::Active,
+        },
+      ],
       evidence: vec![EvidenceFragment {
         id: evidence_id,
         source_id: id("source-1"),

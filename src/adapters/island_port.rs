@@ -20,9 +20,9 @@ use thiserror::Error;
 
 use crate::domain::{
   canonical::{
-    CanonicalId, CanonicalReleasePin, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
-    EvidenceKind, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource, Sense,
-    SourcePermissions, WordForm,
+    normalize_lookup_key, CanonicalId, CanonicalReleasePin, CanonicalStatus, EvidenceConfidence,
+    EvidenceFragment, EvidenceKind, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech,
+    LexicalSource, Sense, SourcePermissions, WordForm,
   },
   canonical_content::{
     CanonicalEvidenceLineage, CanonicalEvidenceOrigin, CanonicalExample, CanonicalFactualAssertion,
@@ -37,11 +37,15 @@ use crate::domain::{
     CanonicalTranslationUnit, DomainId, MeaningComposition, SourceFingerprint,
     SOURCE_FINGERPRINT_VERSION,
   },
+  domain_assessment::{
+    CanonicalDomain, DomainCoverageState, DomainInventory, DomainKnowledgeProfile,
+    LocalizedDomainDefinition, LocalizedDomainTerm, MAX_DOMAIN_INVENTORY, MAX_DOMAIN_TERM_CHARS,
+  },
   retrieval::{CanonicalCandidate, LexicalMatchKind, RepositoryMatch, RetrievalScore},
 };
 use crate::ports::canonical_read::{
-  CanonicalCandidateQuery, CanonicalReadContext, CanonicalReadError, CanonicalReadPort,
-  CanonicalSenseQuery, CanonicalTranslationQuery,
+  CanonicalCandidateQuery, CanonicalDomainQuery, CanonicalReadContext, CanonicalReadError,
+  CanonicalReadPort, CanonicalSenseQuery, CanonicalTranslationQuery,
 };
 
 /// Canonical-data wire schema implemented by this client.
@@ -336,6 +340,11 @@ impl IslandPortCanonicalClient {
       return Err(IslandPortClientError::InvalidRequest);
     }
     let evidence_use = input.evidence_use;
+    let submitted_lookup_forms = input
+      .lookup_forms
+      .iter()
+      .map(|form| form.form.clone())
+      .collect::<BTreeSet<_>>();
     let envelope = RequestEnvelope {
       context: context_dto(context, release_id),
       input: BasicCardResolveInputDto::from(input),
@@ -352,7 +361,7 @@ impl IslandPortCanonicalClient {
     value
       .matches
       .into_iter()
-      .map(|candidate| candidate.into_domain(release_id, evidence_use))
+      .map(|candidate| candidate.into_domain(release_id, evidence_use, &submitted_lookup_forms))
       .collect()
   }
 
@@ -374,6 +383,57 @@ impl IslandPortCanonicalClient {
       return Err(IslandPortClientError::SchemaIncompatible);
     }
     value.into_domain(&pin.release_id)
+  }
+
+  /// Reads a bounded canonical-domain allowlist and explicit catalog-completeness signal.
+  pub async fn resolve_domains(
+    &self,
+    context: &IslandPortCallContext,
+    release_id: &crate::domain::canonical::ReleaseId,
+    input: DomainResolveInput,
+  ) -> Result<DomainInventory, IslandPortClientError> {
+    if input.normalized_labels.is_empty()
+      || input.normalized_labels.len() > MAX_DOMAIN_INVENTORY
+      || input.normalized_labels.iter().any(|label| {
+        label.trim() != label || label.is_empty() || label.chars().count() > MAX_DOMAIN_TERM_CHARS
+      })
+      || input
+        .normalized_labels
+        .windows(2)
+        .any(|pair| pair[0] >= pair[1])
+      || input.languages.is_empty()
+      || input.languages.len() > 8
+      || input.languages.windows(2).any(|pair| pair[0] >= pair[1])
+      || input.scope_key.as_ref().is_some_and(|scope| {
+        scope.trim() != scope || scope.is_empty() || scope.chars().count() > MAX_DOMAIN_TERM_CHARS
+      })
+      || input.limit == 0
+      || input.limit > MAX_DOMAIN_INVENTORY
+    {
+      return Err(IslandPortClientError::InvalidRequest);
+    }
+    let limit = input.limit;
+    let envelope = RequestEnvelope {
+      context: context_dto(context, release_id),
+      input: DomainResolveInputDto::from(input),
+    };
+    let response: DomainResolveResponseDto = self
+      .call("/api/v1/domains/resolve", context, &envelope)
+      .await?;
+    validate_response_context(&response.common, context, release_id)?;
+    let value = response.common.value()?;
+    if value.candidates.len() > limit || value.candidates.len() > MAX_DOMAIN_INVENTORY {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    DomainInventory::new(
+      value
+        .candidates
+        .into_iter()
+        .map(|candidate| candidate.into_domain(release_id))
+        .collect::<Result<_, _>>()?,
+      value.catalog_complete,
+    )
+    .map_err(inconsistent)
   }
 
   async fn call<T: Serialize, R: DeserializeOwned>(
@@ -450,6 +510,18 @@ pub struct SenseGetInput {
   pub dialect: Option<LanguageTag>,
   /// Evidence operation whose permissions island-port must enforce.
   pub evidence_use: crate::domain::canonical::EvidenceUse,
+}
+
+/// Bounded canonical-domain inventory selectors accepted by the outbound adapter.
+pub struct DomainResolveInput {
+  /// Normalized multilingual labels that nominated assessment.
+  pub normalized_labels: Vec<String>,
+  /// Optional request-local scope discriminator.
+  pub scope_key: Option<String>,
+  /// Languages useful for labels and coverage.
+  pub languages: Vec<LanguageTag>,
+  /// Candidate limit.
+  pub limit: usize,
 }
 
 impl From<IslandPortClientError> for CanonicalReadError {
@@ -557,6 +629,27 @@ impl CanonicalReadPort for IslandPortCanonicalClient {
           explanation_language: query.explanation_language,
           dialect: query.dialect,
           evidence_use: query.evidence_use,
+        },
+      )
+      .await
+      .map_err(Into::into)
+  }
+
+  async fn domains(
+    &self,
+    context: &CanonicalReadContext,
+    pin: &CanonicalReleasePin,
+    query: CanonicalDomainQuery,
+  ) -> Result<DomainInventory, CanonicalReadError> {
+    self
+      .resolve_domains(
+        &call_context(context)?,
+        &pin.release_id,
+        DomainResolveInput {
+          normalized_labels: query.normalized_labels,
+          scope_key: query.scope_key,
+          languages: query.languages,
+          limit: query.limit,
         },
       )
       .await
@@ -841,6 +934,148 @@ struct LocalizedTextDto {
   language: String,
 }
 
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct DomainResolveInputDto {
+  normalized_labels: Vec<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  scope_key: Option<String>,
+  languages: Vec<String>,
+  limit: usize,
+}
+
+impl From<DomainResolveInput> for DomainResolveInputDto {
+  fn from(value: DomainResolveInput) -> Self {
+    Self {
+      normalized_labels: value.normalized_labels,
+      scope_key: value.scope_key,
+      languages: value
+        .languages
+        .into_iter()
+        .map(|language| language.to_string())
+        .collect(),
+      limit: value.limit,
+    }
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct DomainResolveResponseDto {
+  common: CommonResponseDto<DomainResolveValueDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DomainResolveValueDto {
+  candidates: Vec<DomainCandidateDto>,
+  catalog_complete: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DomainCandidateDto {
+  domain_id: String,
+  revision: u64,
+  labels: Vec<LocalizedTextDto>,
+  aliases: Vec<LocalizedTextDto>,
+  definitions: Vec<LocalizedTextDto>,
+  inclusion_scope: Vec<String>,
+  exclusion_scope: Vec<String>,
+  broader_domain_ids: Vec<String>,
+  knowledge_profile: DomainKnowledgeProfileDto,
+}
+
+impl DomainCandidateDto {
+  fn into_domain(
+    self,
+    release_id: &crate::domain::canonical::ReleaseId,
+  ) -> Result<CanonicalDomain, IslandPortClientError> {
+    CanonicalDomain::new(
+      release_id.clone(),
+      DomainId::new(self.domain_id).map_err(inconsistent)?,
+      CanonicalRevision::new(self.revision).map_err(inconsistent)?,
+      localized_domain_terms(self.labels)?,
+      localized_domain_terms(self.aliases)?,
+      localized_domain_definitions(self.definitions)?,
+      self.inclusion_scope,
+      self.exclusion_scope,
+      self
+        .broader_domain_ids
+        .into_iter()
+        .map(|id| DomainId::new(id).map_err(inconsistent))
+        .collect::<Result<_, _>>()?,
+      self.knowledge_profile.into_domain()?,
+    )
+    .map_err(inconsistent)
+  }
+}
+
+fn localized_domain_terms(
+  values: Vec<LocalizedTextDto>,
+) -> Result<Vec<LocalizedDomainTerm>, IslandPortClientError> {
+  values
+    .into_iter()
+    .map(|value| {
+      LocalizedDomainTerm::new(language(&value.language)?, value.text).map_err(inconsistent)
+    })
+    .collect()
+}
+
+fn localized_domain_definitions(
+  values: Vec<LocalizedTextDto>,
+) -> Result<Vec<LocalizedDomainDefinition>, IslandPortClientError> {
+  values
+    .into_iter()
+    .map(|value| {
+      LocalizedDomainDefinition::new(language(&value.language)?, value.text).map_err(inconsistent)
+    })
+    .collect()
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DomainKnowledgeProfileDto {
+  available_fact_families: Vec<String>,
+  languages: Vec<String>,
+  verified_fact_count: u64,
+  coverage_state: DomainCoverageStateDto,
+}
+
+impl DomainKnowledgeProfileDto {
+  fn into_domain(self) -> Result<DomainKnowledgeProfile, IslandPortClientError> {
+    DomainKnowledgeProfile::new(
+      self.available_fact_families,
+      self
+        .languages
+        .into_iter()
+        .map(|value| language(&value))
+        .collect::<Result<_, _>>()?,
+      self.verified_fact_count,
+      self.coverage_state.into_domain(),
+    )
+    .map_err(inconsistent)
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum DomainCoverageStateDto {
+  Seed,
+  Partial,
+  Curated,
+}
+
+impl DomainCoverageStateDto {
+  const fn into_domain(self) -> DomainCoverageState {
+    match self {
+      Self::Seed => DomainCoverageState::Seed,
+      Self::Partial => DomainCoverageState::Partial,
+      Self::Curated => DomainCoverageState::Curated,
+    }
+  }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct MeaningScopeDto {
@@ -1063,24 +1298,28 @@ impl CandidateMatchDto {
     self,
     release_id: &crate::domain::canonical::ReleaseId,
     evidence_use: crate::domain::canonical::EvidenceUse,
+    submitted_lookup_forms: &BTreeSet<String>,
   ) -> Result<RepositoryMatch, IslandPortClientError> {
     if self.matched_form.trim().is_empty() {
       return Err(IslandPortClientError::InconsistentData);
     }
     let matched_form_id = canonical_id(self.matched_form_id)?;
     let candidate = self.candidate.into_domain(release_id, evidence_use)?;
-    if !candidate
-      .forms
-      .iter()
-      .any(|form| form.id == matched_form_id)
-    {
+    let matched_form = self.matched_form;
+    if !submitted_lookup_forms.contains(&normalize_lookup_key(&matched_form)) {
       return Err(IslandPortClientError::InconsistentData);
     }
-    Ok(RepositoryMatch {
+    let repository_match = RepositoryMatch {
       candidate,
+      matched_form_id: Some(matched_form_id),
+      matched_form,
       kind: self.match_class.into_domain(),
       score: RetrievalScore::new(self.lexical_score_basis_points).map_err(inconsistent)?,
-    })
+    };
+    if !repository_match.has_verified_source() {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    Ok(repository_match)
   }
 }
 

@@ -26,6 +26,10 @@ pub mod metrics;
 pub mod model_runtime;
 /// Opaque, application-generated public identifier interface.
 pub mod public_id;
+/// Offline-only activation submission and rollback-selection authority.
+pub mod release_control;
+/// Outbound-only storage-neutral retrieval-data operations.
+pub mod retrieval_data;
 /// Generic ranked-candidate retrieval interface.
 pub mod retriever;
 /// Request-local connected-text and lexical-draft model operations.

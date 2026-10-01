@@ -10,6 +10,8 @@ pub mod canonical_translation;
 pub mod capabilities;
 /// Immutable content-release staging, validation, publication, and rollback invariants.
 pub mod content_release;
+/// Bounded canonical-domain inventory and request-local assessment values.
+pub mod domain_assessment;
 /// Release-pinned authoritative material and canonical embedding-input contracts.
 pub mod embedding_input;
 /// Typed, evidence-backed graph topology and traversal limits.
@@ -26,10 +28,14 @@ pub mod lookup_card;
 pub mod model_runtime;
 /// Closed, redacted metric names and categorical event dimensions.
 pub mod observability;
+/// Offline release-control proofs, audit ordering, and receipt invariants.
+pub mod release_control;
 /// Request-scoped correlation, deadline, schema, and release context.
 pub mod request_context;
 /// Deterministic hybrid-retrieval values and candidate fusion.
 pub mod retrieval;
+/// Bounded storage-neutral requests and results for retrieval-data-v1.
+pub mod retrieval_data;
 /// Structured multilingual-to-English translation.
 pub mod translation;
 /// Request-local unified translation values, normalization, and response projection.

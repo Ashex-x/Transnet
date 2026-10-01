@@ -174,6 +174,8 @@ impl CanonicalReadPort for Authority {
           } else {
             candidate(pin, &format!("s{index}"))
           },
+          matched_form_id: None,
+          matched_form: "sweltering".into(),
           kind: LexicalMatchKind::ExactCanonical,
           score: RetrievalScore::exact(),
         })

@@ -57,7 +57,7 @@ Span 名是 `translation.execute`、`model.generate`、`embedding.search`、`liv
 
 ## 审计事件
 
-审计事件仅用于离线发布与控制面动作：stage 创建、校验、审核决定、隔离、激活、回滚、移除、配置接受及被拒绝的安全边界事件。它们可标识服务 actor 或 job、发布/schema 版本、转换、校验 outcome、聚合数量、manifest hash、reason code 与时间戳。
+审计事件仅用于离线发布与控制面动作：stage 创建、校验、审核决定、隔离、激活、回滚、移除、配置接受及被拒绝的安全边界事件。它们可标识服务 actor 或 job、发布/schema 版本、转换、校验 outcome、聚合数量、manifest hash、封闭 reason code、append-only audit sequence 与时间戳。严格 release-control client 要求 authority receipt 回显精确 sequence，并在 gap 或 conflict 时闭合失败。
 
 审计事件绝不包含来源 body、生成候选、证据文本、prompt、查询数据或审核者自由文本。部署支持时，publisher 原子写入审计事件与状态转换；否则激活在可见前闭合失败。
 

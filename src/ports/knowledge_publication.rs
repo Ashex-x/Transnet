@@ -73,6 +73,8 @@ pub struct BeginPublication {
   pub build_id: PublicationBuildId,
   /// Canonical release and schema pin.
   pub canonical: CanonicalReleasePin,
+  /// Storage-neutral hash of every canonical row admitted to this build.
+  pub canonical_content_hash: String,
   /// Projection payload schema shared by node and edge artifacts.
   pub projection_schema_version: String,
   /// Complete deterministic node projection hash.
@@ -189,6 +191,8 @@ pub struct ReconcilePublication {
   pub reconcile_id: PublicationReconcileIdentity,
   /// Canonical release and schema pin.
   pub canonical: CanonicalReleasePin,
+  /// Storage-neutral hash of the complete canonical release content.
+  pub canonical_content_hash: String,
   /// Frozen node artifact.
   pub nodes: FrozenNodePublication,
   /// Frozen edge artifact.
@@ -201,8 +205,14 @@ pub struct ReconcilePublication {
 
 /// Complete verified trio that is eligible for a later, separate activation operation.
 pub struct PublicationActivationCandidate {
+  /// Stable publication build that produced this candidate.
+  pub build_id: PublicationBuildId,
+  /// Stable reconciliation operation that verified the complete trio.
+  pub reconcile_id: PublicationReconcileIdentity,
   /// Validated canonical, node, and edge release trio.
   pub trio: KnowledgeReleaseTrio,
+  /// Storage-neutral hash of the complete canonical release content.
+  pub canonical_content_hash: String,
   /// Reconciled publication manifest proof.
   pub manifest_hash: PublicationManifestHash,
   /// Persisted node collection proof.
