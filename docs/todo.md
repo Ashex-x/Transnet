@@ -38,6 +38,8 @@ Repository-side admission, request/result Debug redaction, closed telemetry, and
 
 ## Milestone 1: freeze translation and intent routing
 
+- [ ] Replace the transitional Gemma 4/TranslateGemma length router with one Gemma4-27B VLM exposing internal fast and reasoning profiles plus one embedding port.
+- [ ] Keep ordinary and chunked translation on the fast profile, permit at most one closed-policy reasoning escalation per request, and prove hidden reasoning is never returned or logged.
 - [ ] Implement shared success and error envelopes, strict unknown-field rejection, language-tag validation, request metadata, and safe status mapping.
 - [ ] Implement the simple text, source-language, target-language, response-level, and optional minimal-history request plus the discriminated word, phrase, and passage `TranslationResult` response.
 - [ ] Implement a versioned request-local normalizer with Unicode normalization, language-aware case folding, whitespace and punctuation handling, meaningful-symbol preservation, and bounded derived forms.

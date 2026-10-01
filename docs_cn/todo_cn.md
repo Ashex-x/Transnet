@@ -38,6 +38,8 @@ English: [Transnet delivery plan](../docs/todo.md)
 
 ## 里程碑 1：冻结翻译与意图路由
 
+- [ ] 用一个暴露内部 fast/reasoning profile 的 Gemma4-27B VLM 加一个 embedding port，替换过渡期 Gemma 4/TranslateGemma 长度路由器。
+- [ ] 普通与分块翻译保持使用 fast profile，每个请求最多允许一次闭合策略 reasoning 升级，并证明隐藏 reasoning 绝不返回或记录。
 - [ ] 实现共享成功/错误 Envelope、严格未知字段拒绝、语言标签验证、请求元数据及安全状态映射。
 - [ ] 实现简单的文本、源语言、目标语言、响应级别与可选最小历史请求，以及判别式单词、短语和段落 `TranslationResult` 响应。
 - [ ] 实现版本化请求内 Normalizer，包括 Unicode 规范化、语言感知大小写折叠、空白与标点处理、有意义符号保留和有界派生形式。

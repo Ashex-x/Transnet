@@ -32,7 +32,7 @@ sequenceDiagram
   alt Connected passage
     O->>P: Translate with request-local context
     P->>A: Model operation
-    A->>X: Gemma provider call
+    A->>X: Gemma4-27B fast call
     X-->>A: Candidate translation
     A-->>O: Bounded model result
   else Word or established phrase
@@ -43,7 +43,7 @@ sequenceDiagram
     A-->>O: Hydrated canonical bundle
     O->>P: Optional bounded composition
     P->>A: Structured model operation
-    A->>X: Gemma provider call
+    A->>X: Gemma4-27B fast or bounded reasoning call
     X-->>A: Candidate organization
     A-->>O: Bounded model result
   end
@@ -69,7 +69,7 @@ The orchestrator owns call order, remaining-time allocation, cancellation, and d
 
 ## Connected-text branch
 
-The translation application derives the model operation. Short input uses the configured Gemma 4 role; longer input uses TranslateGemma and may use a request-local chunk plan and terminology ledger. The model port carries validated input and the remaining deadline to the provider adapter.
+The translation application derives the model operation. Sufficient canonical matches use no generation. Ordinary text, segment, and image-region work uses the configured Gemma4-27B fast profile. Longer input uses a request-local chunk plan, bounded parallel fast calls, and a disposable terminology ledger on that same model. Length never selects another generator. The orchestrator may make one reasoning-profile escalation under the closed policy in the [model-runtime reference](../model-runtime.md).
 
 The adapter creates the provider-specific HTTP request, applies resilience policy, bounds and decodes the result, and returns a closed outcome. Application logic checks coverage, order, terminology consistency, and output validity before adding the translation to the superset result.
 
@@ -98,7 +98,7 @@ Transport serializes the validated application outcome using the interface envel
 - **Translation domain:** validates language, history, response-level, and translation-result invariants.
 - **Lexical-knowledge domain:** owns canonical identity, typed relationships, evidence semantics, and graph invariants.
 - **Release domain:** owns compatible immutable release identity and valid degraded states.
-- **Model ports:** expose bounded translation and structured-generation operations without provider protocol.
+- **Model ports:** expose bounded fast/reasoning generation and embedding operations without provider protocol.
 - **Data ports:** expose use-case-specific canonical and vector reads without database-native requests.
 - **Provider adapters:** implement OpenAI-compatible requests, model roles, response decoding, and dependency failure mapping.
 - **Island-port adapters:** implement UDS data calls while preserving deadline, release, and closed outcomes.

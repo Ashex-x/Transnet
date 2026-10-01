@@ -6,7 +6,9 @@ The adapters module implements model and data ports. It owns external protocol m
 
 ## Model providers
 
-The shared OpenAI-compatible client owns HTTP construction, authentication, response-size bounds, strict structured-output decoding, safe error mapping, and resilience integration. Gemma 4 owns short-text and bounded structured-composition request policy. TranslateGemma owns longer connected-text policy. The current runtime selects between them at translation.long_text_chars.
+The target OpenAI-compatible generation adapter owns HTTP construction, authentication, response-size bounds, image encoding, strict structured-output decoding, safe error mapping, and resilience integration for one Gemma4-27B VLM. It maps the domain-neutral `fast` and `reasoning` profiles to provider settings without exposing provider-native reasoning fields. A separate embedding adapter serves offline canonical publication and ephemeral online candidate nomination.
+
+The current runtime still selects Gemma 4 or TranslateGemma at `translation.long_text_chars`. That is transitional implemented behavior, not the target provider topology. A later runtime slice removes the second generator and routes long input through application-owned chunking on the same VLM.
 
 Provider adapters never log prompts, source text, history, provider bodies, credentials, or generated content. Errors expose only closed dependency and operation categories.
 

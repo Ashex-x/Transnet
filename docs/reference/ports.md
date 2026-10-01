@@ -6,9 +6,11 @@ The ports module defines narrow operations that application services require fro
 
 ## Model operations
 
-Model ports provide bounded plain translation and structured generation. Application code selects an operation, not a provider brand. Provider URLs, credentials, HTTP envelopes, prompts, role messages, JSON Schema mechanics, retry headers, and model-specific payloads belong to adapters.
+The generation port provides bounded translation, visual reading, and structured generation through `fast` or `reasoning` profiles of the same configured VLM. Application code selects an operation and the orchestrator applies the closed escalation policy; neither selects a provider brand. The embedding port separately exposes publication-time canonical embedding and request-local candidate nomination. Provider URLs, credentials, HTTP envelopes, prompts, reasoning controls, image encoding, JSON Schema mechanics, retry headers, and model-specific payloads belong to adapters.
 
 Model output is never canonical evidence. Callers validate structure and references before use and discard request content and generated material when the request ends.
+
+The [model-runtime reference](model-runtime.md) owns call budgets, escalation, vision, and embedding lifecycle. Hidden reasoning is never a domain value or response field.
 
 ## Data operations
 

@@ -14,6 +14,8 @@ The target listener configuration uses `socket_path = "/run/transnet/transnet.so
 
 `[gemma4]` and `[translate_gemma]` each configure an OpenAI-compatible `base_url`, `model`, and `api_key`. Defaults target Gemma 4 on port 18011 and TranslateGemma on port 18007. Real credentials must be provisioned without committing them to Git; parsed credentials are redacted from Rust `Debug` diagnostics and are used only for outbound provider requests.
 
+These tables describe current transitional runtime behavior. The target configuration replaces them with one generation endpoint and one embedding endpoint. The generation settings name one Gemma4-27B model and provider-specific fast/reasoning controls; application policy, not a second endpoint, selects the profile. Separate bounded settings cover fast inference, reasoning escalation, embedding calls, and optional live retrieval. The checked-in configuration does not adopt those target keys until the matching Rust types and composition exist.
+
 Provider clients connect directly to their configured endpoints and do not inherit operating-system or environment proxy settings. This keeps loopback and private model traffic, including bearer credentials, out of unrelated proxy processes.
 
 `[provider_resilience.gemma4]` and `[provider_resilience.translate_gemma]` configure independent provider bounds. `timeout_seconds`, `max_retries`, and `retry_delay_ms` are optional overrides of `[translation]`; `max_retry_delay_ms` caps a provider-supplied `Retry-After` delay, `max_concurrent_requests` is a fail-fast bulkhead, `circuit_failure_threshold` is the number of consecutive transient logical-call failures that opens the circuit, and `circuit_open_ms` is the open interval before one half-open probe. Omitted tables use the Rust defaults of 8 concurrent attempts, a threshold of 5, a 30-second open interval, and a five-second retry-delay cap; the checked-in TranslateGemma policy tightens concurrency to 4.
@@ -21,6 +23,8 @@ Provider clients connect directly to their configured endpoints and do not inher
 Only request timeouts, connection-establishment failures, `429`, `500`, `502`, `503`, `504`, and unusable successful envelopes are retried. A valid `Retry-After` header is used instead of the configured retry delay, subject to `max_retry_delay_ms`; other client, server, and ambiguous transport failures fail without another request. An open circuit and full bulkhead fail the affected provider request promptly and map to the existing unavailable response.
 
 Provider traces contain only the static provider boundary, operation name, attempt number, outcome class, status code when available, elapsed time, and retry delay. The process exposes in-memory redacted provider counter snapshots through Rust service APIs; no raw query, context, generated answer, provider body, credential, or identity is included in provider telemetry.
+
+Target telemetry additionally records only the closed inference profile (`fast` or `reasoning`), input-kind category, and whether a reasoning escalation occurred. It never records image data, prompts, hidden reasoning, embeddings, live-search queries, fetched content, or generated output.
 
 The structured `/v1/lookups` slice uses the `[gemma4]` provider and requests strict JSON Schema output. The configured server must support the OpenAI-compatible `response_format.type = "json_schema"` request field and return JSON text in the first assistant message.
 

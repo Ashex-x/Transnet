@@ -32,7 +32,7 @@ sequenceDiagram
   alt 连续篇章
     O->>P: 使用请求级上下文翻译
     P->>A: 模型操作
-    A->>X: Gemma provider 调用
+    A->>X: Gemma4-27B fast 调用
     X-->>A: 候选译文
     A-->>O: 有界模型结果
   else 单词或固定短语
@@ -43,7 +43,7 @@ sequenceDiagram
     A-->>O: 已补全规范 bundle
     O->>P: 可选有界组织
     P->>A: 结构化模型操作
-    A->>X: Gemma provider 调用
+    A->>X: Gemma4-27B fast 或有界 reasoning 调用
     X-->>A: 候选组织结果
     A-->>O: 有界模型结果
   end
@@ -69,7 +69,7 @@ Application 编排器只固定兼容发布一次，再要求 domain 逻辑规范
 
 ## 连续文本分支
 
-翻译 application 推导模型操作。短输入使用已配置的 Gemma 4 角色；更长输入使用 TranslateGemma，并可使用请求级分块计划与术语台账。模型 port 把已校验输入及剩余 deadline 传给 provider adapter。
+翻译 application 推导模型操作。足够的规范命中不使用生成。普通文本、segment 与 image-region 工作使用已配置 Gemma4-27B fast profile。较长输入在同一模型上使用请求级分块计划、有界并行 fast 调用与可丢弃术语台账。长度绝不选择另一个生成模型。编排器可按[模型运行时参考](../model-runtime_cn.md)中的闭合策略进行一次 reasoning-profile 升级。
 
 Adapter 创建 provider 专属 HTTP 请求、应用容错策略、限制并解码结果，再返回闭合结果。Application 逻辑在把译文加入超集结果前检查覆盖、顺序、术语一致性与输出有效性。
 
@@ -98,7 +98,7 @@ Domain 与 application 逻辑组装一个超集结果。响应投影无需再次
 - **翻译 domain：** 校验语言、历史、响应级别与翻译结果不变量。
 - **词汇知识 domain：** 负责规范身份、有类型关系、证据语义与图不变量。
 - **发布 domain：** 负责兼容不可变发布身份与有效降级状态。
-- **模型 port：** 暴露有界翻译与结构化生成操作，不包含 provider 协议。
+- **模型 port：** 暴露有界 fast/reasoning 生成与 embedding 操作，不包含 provider 协议。
 - **数据 port：** 暴露面向用例的规范与向量读取，不包含数据库原生请求。
 - **Provider adapter：** 实现 OpenAI-compatible 请求、模型角色、响应解码与依赖失败映射。
 - **Island-port adapter：** 实现 UDS 数据调用，并保留 deadline、发布与闭合结果。

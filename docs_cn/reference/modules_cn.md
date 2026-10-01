@@ -14,6 +14,7 @@ English: [Module reference](../../docs/reference/modules.md)
 - [Domain](domain_cn.md)：翻译值、词汇知识、关系、发布与降级不变量。
 - [Port](ports_cn.md)：application service 所需的模型与数据操作。
 - [Adapter](adapters_cn.md)：模型 provider 与 island-port 协议实现。
+- [模型运行时](model-runtime_cn.md)：单 VLM fast/reasoning profile、embedding 操作、调用预算与视觉边界。
 - [运维](operations_cn.md)：可观测性、容错、就绪信号与离线发布。
 
 ## 依赖规则

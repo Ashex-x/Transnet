@@ -33,6 +33,8 @@ flowchart LR
 
 安装包含 Cargo、rustfmt 和 Clippy 的当前稳定版 Rust 工具链。在 `config/transnet.toml` 指定的 endpoint 启动兼容 OpenAI 的 Gemma 4 与 TranslateGemma 服务器。**Gemma 4** 是用于短文本翻译和当前结构化查询的通用 provider；**TranslateGemma** 是为较长文本选择的翻译专用 provider。供结构化查询使用的 Gemma 4 endpoint 必须支持兼容 OpenAI 的严格 JSON Schema 输出。
 
+该双 provider 设置只描述当前可执行文件。目标架构使用一个具有 fast 与有界 reasoning profile 的 Gemma4-27B 视觉语言模型以及一个 embedding 模型；参见[模型运行时参考](docs_cn/reference/model-runtime_cn.md)。
+
 ## 配置
 
 进程始终相对于 Cargo manifest 读取 `config/transnet.toml`。`[server]` 当前设置过渡性回环 listener 以及日志过滤与格式，`[http]` 设置请求体限制和过渡性 CORS 策略，`[translation]` 设置路由及旧版重试默认值，`[gemma4]` 和 `[translate_gemma]` 标识这些 provider endpoint，`[provider_resilience.*]` 设置独立的超时、重试、并发和熔断器边界。目标 UDS 设置见[配置指南](docs_cn/guides/configuration_cn.md)。不得提交真实的 provider 凭据。
