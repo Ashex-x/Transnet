@@ -25,6 +25,7 @@ English: [Transnet documentation](../docs/documentation-index.md)
 
 - [配置](guides/configuration_cn.md)：当前监听器、路由、Provider 设置及目标基础设施配置边界。
 - [开发与运维](guides/development_cn.md)：对根 README 的运维补充。
+- [部署](guides/deployment_cn.md)：GitHub Actions、GPU 服务器 systemd 设置、secret 与发布检查。
 - [内容发布](guides/content-publishing_cn.md)：拟议的 MySQL/Qdrant 摄取、校验、发布、移除和回滚工作流。
 - [质量保证](guides/quality-assurance_cn.md)：拟议的基准、失败测试、发布门禁和监控。
 

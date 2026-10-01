@@ -129,10 +129,20 @@ pub struct ServerConfig {
   pub host: String,
   /// Listener port.
   pub port: u16,
+  /// Optional absolute Unix socket path that selects the target listener instead of TCP.
+  #[serde(default)]
+  pub socket_path: Option<String>,
+  /// Octal Unix socket permissions applied after binding.
+  #[serde(default = "default_socket_mode")]
+  pub socket_mode: String,
   /// Default tracing filter when `RUST_LOG` is unset.
   pub log_level: String,
   /// `json` for JSON logs; any other value selects compact logs.
   pub log_format: String,
+}
+
+fn default_socket_mode() -> String {
+  "0660".to_string()
 }
 
 /// HTTP request-size and browser-origin settings.

@@ -4,7 +4,7 @@
 
 This contract defines island-port's storage-neutral HTTP endpoints for shared canonical translations, words, phrases, senses, domains, evidence metadata, and immutable content releases. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. MySQL is the planned island-port implementation, not part of this wire contract.
 
-Status: target island-port server contract. The executable can optionally compose the existing strict outbound canonical-read client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. That implemented client still identifies its transitional wire as `mysql-adapter-v1`; it does not implement the renamed `canonical-data-v1` target until a later migration changes code and tests. The external island-port server has not been verified against either contract, and production MySQL migrations, publisher/write operations, old-release retention, and real end-to-end acceptance remain unimplemented outside this repository.
+Status: target island-port server contract with implemented Transnet read client. The executable can optionally compose the strict outbound `canonical-data-v1` client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The implemented client covers active-release, translation-candidate, basic-card-candidate, and sense-detail reads with the common envelope and strict response-echo validation described here. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, domain/fact/scale reads, and real end-to-end acceptance remain unimplemented outside this repository.
 
 The checked-in M3 publication foundation models Qdrant build lifecycle, idempotency, compatibility receipts, and reconciliation hashes. Its outbound publication port and strict island-port client carry the bounded build contract, while `KnowledgePublicationService` drives authoritative status-based resume through node and edge publication and reconciliation without keeping local progress. Successful reconciliation returns only a typed activation candidate. An external authenticated publisher or control plane must submit that candidate to island-port for atomic active-trio selection. The repository does not add an island-port publication server, MySQL build/reconciliation persistence, activation pointer mutation, or rollback implementation; those authority-owned operations remain external requirements.
 
@@ -84,6 +84,8 @@ A fact uses `canonical_entity` with `entity_type = 'fact'`. Its immutable `canon
 `relation_type_revision` is the versioned relation registry. It defines directionality, inverse behavior, symmetric and transitive policy, causality, allowed participant roles, endpoint-type compatibility, and validation schema. A release pins the exact registry revision; neither the UI nor the model infers these properties from a label.
 
 A `canonical_relationship_revision` is a validated binary traversal projection of one exact assertion revision. It maps one stable public edge ID and positive relation version to source and target endpoints, the pinned relation-registry version, direction, restrictions, and assessment eligibility. Endpoint and relation fields remain indexed columns; explanations and bounded scope/support lists use the versioned payload. This projection supports efficient knowledge views without becoming a second source of truth. Relationship judgments and aggregates remain in the separately authorized island-port product schema defined by the [target MySQL implementation](tables/mysql.sql); Transnet cannot access the private rows.
+
+Every domain reference is a canonical `DomainId` resolved in the same release; a label or free-form field name is never identity. Relationship and scale conditions use registry-owned objects containing `condition_id`, `condition_type`, and sorted `parameter_ids`, all resolved in that release. Display prose may be hydrated from those records, but free-text conditions cannot enter canonical scope or projection identity.
 
 A semantic scale uses `canonical_entity` with `entity_type = 'semantic_scale'`. Its immutable revision payload stores the named dimension, increasing or decreasing direction, applicable domains and conditions, ordered sense-qualified node members, and evidence references. Member positions define order only. Publication rejects duplicate positions, missing members, mixed incompatible senses, absent evidence, and any attempt to encode a scale as `is_a` taxonomy. Basic cards, facts, profiles, and scales all join a release through `release_member`.
 
@@ -440,7 +442,7 @@ Response:
         "object_node_id": "node_sweltering_hot_01",
         "domain_ids": ["domain_weather"],
         "applicable_sense_ids": ["sense_sweltering_hot_01"],
-        "conditions": ["describes weather or an environment"],
+        "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
         "evidence_ids": ["evidence_dictionary_1042"],
         "provenance": ["source_dictionary_2026_01"],
         "verification_state": "verified"
@@ -482,7 +484,7 @@ Response:
         "dimension": "environmental_heat_intensity",
         "direction": "increasing",
         "domain_ids": ["domain_weather"],
-        "conditions": ["describes weather or an environment"],
+        "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
         "members": [
           {"node_id": "node_warm_temperature_01", "position": 10},
           {"node_id": "node_hot_temperature_01", "position": 20},

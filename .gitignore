@@ -10,6 +10,8 @@ logs/
 .env
 
 # Editor and temporary files
+__pycache__/
+*.py[cod]
 *.swp
 *.swo
 *~

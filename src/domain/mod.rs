@@ -6,6 +6,8 @@ pub mod canonical;
 pub mod canonical_content;
 /// Reviewed canonical translation identity, fingerprint, scope, and revision invariants.
 pub mod canonical_translation;
+/// Content-free declarations of implemented service capabilities.
+pub mod capabilities;
 /// Immutable content-release staging, validation, publication, and rollback invariants.
 pub mod content_release;
 /// Release-pinned authoritative material and canonical embedding-input contracts.
@@ -20,8 +22,12 @@ pub mod knowledge_publication;
 pub mod knowledge_release;
 /// Bounded canonical lookup-card presentation values with assertion-level provenance.
 pub mod lookup_card;
+/// Provider-neutral model runtime values and request-local call policy.
+pub mod model_runtime;
 /// Closed, redacted metric names and categorical event dimensions.
 pub mod observability;
+/// Request-scoped correlation, deadline, schema, and release context.
+pub mod request_context;
 /// Deterministic hybrid-retrieval values and candidate fusion.
 pub mod retrieval;
 /// Structured multilingual-to-English translation.

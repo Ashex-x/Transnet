@@ -1,6 +1,8 @@
 [server]
 host = "127.0.0.1"
 port = 16002
+socket_path = "/run/transnet/transnet.sock"
+socket_mode = "0660"
 log_level = "info"
 log_format = "json"
 

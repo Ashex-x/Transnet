@@ -4,7 +4,9 @@ English: [Configuration](../../docs/guides/configuration.md)
 
 进程始终相对于 Cargo Manifest 读取 `config/transnet.toml`，不受 Shell 工作目录影响。
 
-目标 listener 配置使用 `socket_path = "/run/transnet/transnet.sock"`、`socket_mode = "0660"` 和由运维管理的套接字用户组。结构化与向量数据客户端通过 `/run/island-port/island-port.sock` 使用 island-port。套接字路径是部署设置，API namespace 固定不变。当前 `[server] host` 与 `port` 仅配置过渡性回环运行时，并在 UDS 服务实现后移除。`RUST_LOG` 覆盖 `log_level`；`log_format = "json"` 选择换行分隔 JSON，其他值选择紧凑文本。
+已实现的目标 listener 配置使用 `socket_path = "/run/transnet/transnet.sock"`、`socket_mode = "0660"` 和由运维管理的套接字用户组。路径必须为绝对路径、至多 107 byte，且不得包含空白或 `..` component；mode 必须是 `0600` 至 `0770` 的四位八进制值。Supervisor 必须以预期 owner 与 group 创建真实的父目录。Transnet 拒绝非 socket entry 与活动 socket，仅在连接被拒绝证明旧 socket 已失效后移除它，绑定后应用配置 mode，并在关闭时只移除自己拥有的 socket inode。结构化与向量数据客户端通过 `/run/island-port/island-port.sock` 使用 island-port。Socket 路径是部署设置，API namespace 固定不变。
+
+存在 `socket_path` 时，Transnet 通过 Unix socket 服务 HTTP/1.1，并在关闭时给予已接受连接最多 30 秒完成。省略 `socket_path` 会显式选择由 `host` 与 `port` 配置的过渡性 loopback listener；该兼容模式仅保留到最终 runtime migration。`RUST_LOG` 覆盖 `log_level`；`log_format = "json"` 选择换行分隔 JSON，其他值选择紧凑文本。
 
 `[http]` 配置 `max_request_body_bytes` 和过渡性 CORS 字段。请求体限制在缓冲 JSON 前应用，默认 1,048,576 字节。UDS 没有浏览器 Origin，目标运行时忽略并最终移除 CORS 配置；浏览器调用产品网关而非 Transnet。
 

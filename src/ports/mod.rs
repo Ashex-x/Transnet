@@ -22,6 +22,8 @@ pub mod knowledge_publication;
 pub mod learning_model;
 /// Closed, redacted backend metric-event recording interface.
 pub mod metrics;
+/// Provider-neutral generation and ephemeral embedding operations.
+pub mod model_runtime;
 /// Opaque, application-generated public identifier interface.
 pub mod public_id;
 /// Generic ranked-candidate retrieval interface.

@@ -4,7 +4,7 @@ English: [Model runtime](../../docs/reference/model-runtime.md)
 
 本子系统负责单个已配置 Gemma4-27B 视觉语言模型与独立 embedding 模型的目标推理策略。它不通过服务接口暴露 provider 品牌、reasoning 控制、prompt 或 embedding payload。
 
-状态：目标设计。当前可执行文件仍把短输入路由到 Gemma 4、把长输入路由到 TranslateGemma。该过渡拆分会一直保持已实现状态，直到后续运行时变更替换它；目标文档不得把 TranslateGemma 描述为必需部署依赖。
+状态：模型运行时基础类型和 adapter 已实现，application 迁移仍处于过渡期。公开 Rust 边界现在提供闭合的 `fast` 与 `reasoning` profile、有界且脱敏的输入/输出/版本值、deadline 与协作式取消 hook，以及原子化的单次 reasoning guard。当前可执行文件仍把短输入路由到 Gemma 4、把长输入路由到 TranslateGemma；该拆分会保留到后续编排变更，但并非目标部署拓扑。
 
 ## 生成 profile
 
@@ -18,9 +18,11 @@ Prompt 与隐藏 reasoning 都不是响应数据。服务可以返回精简结�
 
 ## Embedding 操作
 
-Embedding port 有两类有界用途。离线发布把已审核规范节点与关系说明嵌入不可变发布投影。在线请求可以在内存中嵌入 query 或经明确许可的实时检索片段，以提名候选。在线向量随请求丢弃，绝不进入日志、trace、指标、cache、规范存储或后续发布。
+Transnet embedding port 只有一类有界用途：在线请求可以在内存中嵌入 query 或经明确许可的实时检索片段，以提名候选。在线向量随请求丢弃，绝不进入日志、trace、指标、cache、规范存储或后续发布。离线发布改为向 island-port 发送冻结的规范输入；island-port 执行 dense embedding 与 lexical encoding，并在 publication receipt 中证明精确 revision 与 dimension。Edge input 只包含结构化 endpoint、typed relation、scope 与 verified evidence metadata，绝不包含新生成的 relationship prose。
 
 向量相似度仅是排序信号。它不能建立翻译等价、同义、分类、因果、机制、文化含义、证据或真值。
+
+已实现的 embedding port 只接受有界请求级输入，并返回经过 dimension、有限数值及不可变 artifact version 校验的向量。其 OpenAI-compatible adapter 把失败映射为闭合且不含内容的错误。它尚未接入在线候选检索，并且刻意与 publication input 准备及 island-port 所属的 publication embedding 执行分离。
 
 ## Deadline 与调用预算
 
@@ -37,3 +39,5 @@ VLM 只接受来自 Transnet 请求合同、经过校验的 inline PNG、JPEG �
 ## 验证
 
 测试零调用规范答案、fast 路径选择、闭合升级触发条件、单次升级限制、长输入 chunk 覆盖与顺序、术语一致性、图片边界、结构化输出修复、deadline 记账、取消、并发、脱敏，以及文本、图片、reasoning 输出和在线向量的丢弃。
+
+当前 unit 覆盖有界值、脱敏 Debug 输出、固定有限 embedding dimension、严格 embedding envelope、闭合错误和单次 reasoning budget claim。完整调用预算选择、chunk 编排与丢弃测试仍由后续翻译和检索组合切片负责。

@@ -77,17 +77,29 @@ async fn run(config: AppConfig) -> Result<()> {
     Some(canonical) => configure_canonical(state, canonical)?,
     None => state,
   };
-  let listener = tokio::net::TcpListener::bind(address)
-    .await
-    .with_context(|| format!("failed to bind to {address}"))?;
-
-  tracing::info!(address = %address, "starting transnet");
   let router =
     app_router_with_http_config(state, &config.http).context("invalid HTTP configuration")?;
-  axum::serve(listener, router)
-    .with_graceful_shutdown(shutdown_signal())
-    .await
-    .context("transnet server failed")?;
+  if let Some(socket_path) = config.server.socket_path.as_deref() {
+    #[cfg(unix)]
+    {
+      let socket =
+        transnet::server::UnixListenerConfig::new(socket_path, &config.server.socket_mode)?;
+      let listener = transnet::server::OwnedUnixListener::bind(&socket).await?;
+      tracing::info!("starting transnet Unix listener");
+      listener.serve(router, shutdown_signal()).await?;
+    }
+    #[cfg(not(unix))]
+    anyhow::bail!("server.socket_path requires Unix domain socket support");
+  } else {
+    let listener = tokio::net::TcpListener::bind(address)
+      .await
+      .with_context(|| format!("failed to bind to {address}"))?;
+    tracing::info!(address = %address, "starting transitional transnet TCP listener");
+    axum::serve(listener, router)
+      .with_graceful_shutdown(shutdown_signal())
+      .await
+      .context("transnet server failed")?;
+  }
   Ok(())
 }
 

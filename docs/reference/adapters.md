@@ -6,9 +6,11 @@ The adapters module implements model and data ports. It owns external protocol m
 
 ## Model providers
 
-The target OpenAI-compatible generation adapter owns HTTP construction, authentication, response-size bounds, image encoding, strict structured-output decoding, safe error mapping, and resilience integration for one Gemma4-27B VLM. It maps the domain-neutral `fast` and `reasoning` profiles to provider settings without exposing provider-native reasoning fields. A separate embedding adapter serves offline canonical publication and ephemeral online candidate nomination.
+The target OpenAI-compatible generation adapter owns HTTP construction, authentication, response-size bounds, image encoding, strict structured-output decoding, safe error mapping, and resilience integration for one Gemma4-27B VLM. It maps the domain-neutral `fast` and `reasoning` profiles to provider settings without exposing provider-native reasoning fields. A separate embedding adapter serves only ephemeral online candidate nomination. Publication embedding and lexical encoding are island-port execution responsibilities and return attested receipts through the publication adapter.
 
 The current runtime still selects Gemma 4 or TranslateGemma at `translation.long_text_chars`. That is transitional implemented behavior, not the target provider topology. A later runtime slice removes the second generator and routes long input through application-owned chunking on the same VLM.
+
+The implemented compatibility generation adapter invokes the existing resilient Gemma endpoint for both neutral profiles, caps the call by the remaining request deadline, observes cooperative cancellation, and validates bounded output and version metadata. The implemented OpenAI-compatible embedding adapter validates a strict one-vector response, finite fixed dimensions, and its configured artifact version. Runtime composition does not yet use these adapters; legacy provider adapters remain intact until translation and retrieval orchestration migrate.
 
 Provider adapters never log prompts, source text, history, provider bodies, credentials, or generated content. Errors expose only closed dependency and operation categories.
 
@@ -16,7 +18,7 @@ Provider adapters never log prompts, source text, history, provider bodies, cred
 
 The island-port client maps data-port operations to versioned HTTP/1.1 JSON calls over island-port's owned Unix socket. It owns connection lifecycle, content-type and body bounds, schema-version handling, deadlines, and safe transport errors.
 
-The Stage 3 client implements outbound-only canonical reads for translation candidates, lexical candidate resolution, and sense details. Its private strict DTOs reconstruct the existing `CanonicalTranslationRevision`, `CanonicalCandidate`, and `CanonicalSenseDetails` types. Ranking, fusion, ambiguity resolution, and coverage remain request-local application work. Unix builds provide the production socket transport; tests inject a bounded fake transport without adding an inbound listener or database client.
+The canonical-data client implements outbound-only `canonical-data-v1` reads for active-release selection, translation candidates, lexical candidate resolution, and sense details. Its private strict DTOs reconstruct the existing `CanonicalTranslationRevision`, `CanonicalCandidate`, and `CanonicalSenseDetails` types. Ranking, fusion, ambiguity resolution, and coverage remain request-local application work. Unix builds provide the production socket transport; tests inject a bounded fake transport without adding an inbound listener or database client.
 
 Candidate reads now require release-bound authoritative source records, reviewed nonempty attribution, and matching source/evidence permissions; strict DTO mapping fails closed on missing or conflicting lineage. Structured `content_release_unavailable` is distinct from `schema_incompatible`, and pinned sense reads verify the returned canonical schema against the caller's pin. No error classification reads peer message text.
 

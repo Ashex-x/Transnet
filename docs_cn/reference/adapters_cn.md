@@ -6,9 +6,11 @@ Adapter 模块实现模型与数据 port。它负责外部协议机制，同时�
 
 ## 模型 provider
 
-目标 OpenAI-compatible 生成 adapter 负责单个 Gemma4-27B VLM 的 HTTP 构造、认证、响应大小限制、图片编码、严格结构化输出解码、安全错误映射与容错集成。它把 domain-neutral `fast` 与 `reasoning` profile 映射到 provider 设置，而不暴露 provider-native reasoning 字段。独立 embedding adapter 服务于离线规范发布与在线临时候选提名。
+目标 OpenAI-compatible 生成 adapter 负责单个 Gemma4-27B VLM 的 HTTP 构造、认证、响应大小限制、图片编码、严格结构化输出解码、安全错误映射与容错集成。它把 domain-neutral `fast` 与 `reasoning` profile 映射到 provider 设置，而不暴露 provider-native reasoning 字段。独立 embedding adapter 只服务在线临时候选提名。发布 embedding 与 lexical encoding 是 island-port 的执行职责，并通过 publication adapter 返回经证明的 receipt。
 
 当前运行时仍在 `translation.long_text_chars` 处选择 Gemma 4 或 TranslateGemma。这是过渡期已实现行为，不是目标 provider 拓扑。后续运行时切片将移除第二个生成模型，并通过 application 自有分块在同一 VLM 上处理长输入。
+
+已实现的兼容 generation adapter 对两个中立 profile 都调用现有 resilient Gemma endpoint，以剩余请求 deadline 限制调用，观察协作式取消，并校验有界输出和版本 metadata。已实现的 OpenAI-compatible embedding adapter 校验严格的单向量响应、有限固定 dimension 和所配置的 artifact version。Runtime composition 尚未使用这些 adapter；legacy provider adapter 会一直保留到翻译与检索编排迁移。
 
 Provider adapter 绝不记录 prompt、源文本、历史、provider body、凭据或生成内容。错误只暴露闭合依赖与操作分类。
 
@@ -16,7 +18,7 @@ Provider adapter 绝不记录 prompt、源文本、历史、provider body、凭�
 
 Island-port client 把数据 port 操作映射到 island-port 在其所属 Unix socket 上提供的版本化 HTTP/1.1 JSON 调用。它负责连接生命周期、content-type 与 body 限制、schema 版本处理、deadline 和安全传输错误。
 
-Stage 3 client 只实现出站 canonical read：翻译候选、词汇候选解析和 sense details。其私有 strict DTO 重建现有 `CanonicalTranslationRevision`、`CanonicalCandidate` 与 `CanonicalSenseDetails`；ranking、fusion、歧义解析和 coverage 仍是 request-local application 工作。Unix build 提供 production socket transport；测试注入有界 fake transport，不增加入站 listener 或数据库 client。
+Canonical-data client 只实现出站 `canonical-data-v1` read：active-release 选择、翻译候选、词汇候选解析和 sense details。其私有 strict DTO 重建现有 `CanonicalTranslationRevision`、`CanonicalCandidate` 与 `CanonicalSenseDetails`；ranking、fusion、歧义解析和 coverage 仍是 request-local application 工作。Unix build 提供 production socket transport；测试注入有界 fake transport，不增加入站 listener 或数据库 client。
 
 候选读取现在要求固定发布的权威 source 记录、经过审核的非空 attribution，以及一致的 source/evidence 权限；严格 DTO 映射对缺失或冲突 lineage 闭合失败。结构化的 `content_release_unavailable` 与 `schema_incompatible` 分离，固定发布的 sense 读取将返回的规范 schema 与调用方 pin 复核。错误分类不解析 peer message 文本。
 

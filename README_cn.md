@@ -37,7 +37,7 @@ flowchart LR
 
 ## 配置
 
-进程始终相对于 Cargo manifest 读取 `config/transnet.toml`。`[server]` 当前设置过渡性回环 listener 以及日志过滤与格式，`[http]` 设置请求体限制和过渡性 CORS 策略，`[translation]` 设置路由及旧版重试默认值，`[gemma4]` 和 `[translate_gemma]` 标识这些 provider endpoint，`[provider_resilience.*]` 设置独立的超时、重试、并发和熔断器边界。目标 UDS 设置见[配置指南](docs_cn/guides/configuration_cn.md)。不得提交真实的 provider 凭据。
+进程始终相对于 Cargo manifest 读取 `config/transnet.toml`。`[server]` 通过 `socket_path` 与 `socket_mode` 选择目标 Unix socket；省略 `socket_path` 会显式选择过渡性 loopback `host` 与 `port`。`[http]` 设置请求体限制和过渡性 CORS 策略，`[translation]` 设置路由及旧版重试默认值，`[gemma4]` 和 `[translate_gemma]` 标识这些 provider endpoint，`[provider_resilience.*]` 设置独立的超时、重试、并发和熔断器边界。详见[配置指南](docs_cn/guides/configuration_cn.md)。不得提交真实的 provider 凭据。
 
 `RUST_LOG` 覆盖 `server.log_level`。`server.log_format = "json"` 写入以换行分隔的 JSON；其他值写入紧凑文本。调试构建写入 `logs/debug/transnet.log`，发布构建写入 `logs/release/transnet.log`；每个文件在启动时替换。
 
@@ -68,7 +68,7 @@ cargo run
 cargo run --release
 ```
 
-目标 UDS 调用（将在传输迁移完成后可运行）：
+目标 UDS 调用：
 
 ```bash
 curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/api/v1/health \
@@ -82,11 +82,11 @@ curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/a
   --data '{"text":"Hello","source_language":"auto","target_language":"zh-CN","response_level":"standard"}'
 ```
 
-这些命令展示目标 UDS 接口。当前可执行文件在传输迁移实现前仍使用过渡性回环 listener 和旧版路径。MySQL 规范卡片与发布，以及 Qdrant 知识节点与边，仍属于目标能力，直至接口和指南文档推进其状态。进程会处理 Ctrl-C 和 Unix 终止信号以优雅停机。
+仓库配置使用目标 UDS listener。MySQL 规范卡片与发布，以及 Qdrant 知识节点与边，仍属于目标能力，直至接口和指南文档推进其状态。进程会处理 Ctrl-C 和 Unix 终止信号以优雅停机。
 
-使用 `curl http://127.0.0.1:35792/health` 验证当前过渡性运行时。
+如需过渡性 loopback 兼容模式，请省略 `server.socket_path`，然后使用 `curl http://127.0.0.1:16002/health` 验证。
 
-参阅[系统设计](docs_cn/transnet_cn.md)、[island-port 到 Transnet 的服务接口与 UDS 传输](docs_cn/interfaces/transnet_cn.md)、[规范数据 endpoint](docs_cn/interfaces/canonical-data_cn.md)、[检索数据 endpoint](docs_cn/interfaces/retrieval-data_cn.md)和[配置参考](docs_cn/guides/configuration_cn.md)。
+参阅[系统设计](docs_cn/transnet_cn.md)、[island-port 到 Transnet 的服务接口与 UDS 传输](docs_cn/interfaces/transnet_cn.md)、[规范数据 endpoint](docs_cn/interfaces/canonical-data_cn.md)、[检索数据 endpoint](docs_cn/interfaces/retrieval-data_cn.md)、[配置参考](docs_cn/guides/configuration_cn.md)和[部署指南](docs_cn/guides/deployment_cn.md)。
 
 ## 许可证
 

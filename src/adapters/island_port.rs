@@ -44,8 +44,8 @@ use crate::ports::canonical_read::{
   CanonicalSenseQuery, CanonicalTranslationQuery,
 };
 
-/// Internal island-port adapter schema implemented by this client.
-pub const ISLAND_PORT_SCHEMA_VERSION: &str = "mysql-adapter-v1";
+/// Canonical-data wire schema implemented by this client.
+pub const ISLAND_PORT_SCHEMA_VERSION: &str = "canonical-data-v1";
 const MAX_RESPONSE_BYTES: usize = 1_048_576;
 
 /// Per-call transport metadata propagated without becoming domain state.
@@ -160,7 +160,7 @@ impl UnixIslandPortTransport {
   /// Returns a redacted unavailable error if the HTTP client cannot be built.
   pub fn new(socket_path: impl AsRef<Path>) -> Result<Self, IslandPortClientError> {
     let client = reqwest::Client::builder()
-      .unix_socket(socket_path)
+      .unix_socket(socket_path.as_ref())
       .build()
       .map_err(|_| IslandPortClientError::Unavailable)?;
     Ok(Self { client })

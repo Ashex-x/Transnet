@@ -38,13 +38,13 @@ English: [Transnet delivery plan](../docs/todo.md)
 
 ## 里程碑 1：冻结翻译与意图路由
 
-- [ ] 用一个暴露内部 fast/reasoning profile 的 Gemma4-27B VLM 加一个 embedding port，替换过渡期 Gemma 4/TranslateGemma 长度路由器。
+- [ ] 用一个暴露内部 fast/reasoning profile 的 Gemma4-27B VLM 加一个请求级提名 embedding port，替换过渡期 Gemma 4/TranslateGemma 长度路由器；发布 embedding 仍归 island-port 所有。
 - [ ] 普通与分块翻译保持使用 fast profile，每个请求最多允许一次闭合策略 reasoning 升级，并证明隐藏 reasoning 绝不返回或记录。
 - [ ] 实现共享成功/错误 Envelope、严格未知字段拒绝、语言标签验证、请求元数据及安全状态映射。
 - [ ] 实现简单的文本、源语言、目标语言、响应级别与可选最小历史请求，以及判别式单词、短语和段落 `TranslationResult` 响应。
 - [ ] 在同一入口增加有界专业分段与图像区域输入；文件解析、OCR 策略及持久文档归属继续由 island-port 负责。
 - [ ] 增加请求内用途、受众、语域、受保护范围、术语、标注、备选数量及新鲜度指导，不创建用户画像或翻译记忆。
-- [ ] 发布可缓存的能力响应，使 island-port 无需试探请求即可发现受支持输入类型、限制、检索策略及 fast/reasoning 可用性。
+- [x] 发布 `no-store` 能力响应，使 island-port 无需试探请求即可发现当前已实现的输入类型、限制、检索策略及 generation profile 可用性。
 - [ ] 实现版本化请求内 Normalizer，包括 Unicode 规范化、语言感知大小写折叠、空白与标点处理、有意义符号保留和有界派生形式。
 - [ ] 在一个翻译入口之后，将高置信单词、术语、习语、短语动词或固定短语路由到词汇组织，并将分句、句子、篇章和歧义短片段路由到连续文本翻译。
 - [ ] 对齐 `POST /api/v1/translations`，同时保留含义、语气、术语、语域、段落结构、受保护片段和格式。
@@ -94,9 +94,10 @@ English: [Transnet delivery plan](../docs/todo.md)
 
 ## 里程碑 5：组织关系型翻译维基页面
 
-- [ ] 在词义解析后添加有界领域评估：`general`、`domain_specific`、`mixed` 或 `uncertain`，以及经校验的候选领域 ID 和简短理由。
+- [ ] 在词义解析后添加有界领域评估，返回闭合结果 `existing`、`proposed_new`、`general` 或 `uncertain`，并带经过验证的规范领域 ID 与精简理由。
 - [ ] 在评估前检索已有领域清单与 RAG 覆盖；只有清单成功且提供范围均不适用时才返回 `proposed_new`，不提供 live 创建 endpoint。
 - [ ] 发布并补全原子基本事实、领域知识 profile 和第一类语义尺度；LLM bootstrap 只能通过隔离离线候选进入。
+- [ ] 通过 application/domain result 类型与确定性 usefulness 评估添加显式请求的带标签 alternative，每个 unit 最多两个，不能只由 transport 伪造。
 - [ ] 将多语言术语与别名解析到共享概念，同时保留首选术语、译名、别名、地区、学科和使用状态。
 - [ ] 只排序和分组有用且有支持的内容：含义、术语、分类或程度、对比、配价、搭配、适用性、形态、文化延伸、机理、相邻现象、应用、测量、标准和使用惯例。
 - [ ] 使用渐进展开：先基础卡或概念摘要，再高价值直接分组、可选具名短路径，以及视觉分离的探索区。

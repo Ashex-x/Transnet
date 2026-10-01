@@ -31,6 +31,7 @@ use crate::{
     translation::TranslationOrchestrator,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
+  domain::capabilities::ServiceCapabilities,
   domain::observability::MetricEvent,
   ports::{
     active_content_reader::ActiveContentReader, learning_model::LearningModel,
@@ -40,12 +41,16 @@ use crate::{
   types::{ErrorResponse, HealthResponse, TranslateRequest},
 };
 
+mod envelope;
 mod problem;
 mod readiness;
+mod request_context;
 mod request_id;
 mod stateless;
+mod trace_context;
 mod v1;
 
+pub use envelope::{SuccessEnvelope, SuccessMeta};
 pub use readiness::{AlwaysReady, CanonicalDependencyReadiness, Readiness};
 
 use request_id::RequestId;
@@ -155,6 +160,7 @@ pub struct AppState {
   graph_cursor_protection_key: GraphCursorProtectionKey,
   metrics: Option<Arc<ClosedMetricsDispatcher>>,
   readiness: Arc<dyn Readiness>,
+  capabilities: ServiceCapabilities,
 }
 
 impl AppState {
@@ -176,6 +182,7 @@ impl AppState {
       graph_cursor_protection_key: GraphCursorProtectionKey::ephemeral(),
       metrics: None,
       readiness: Arc::new(AlwaysReady),
+      capabilities: ServiceCapabilities::current(DEFAULT_MAX_REQUEST_BODY_BYTES),
     }
   }
 
@@ -370,6 +377,10 @@ impl AppState {
     self.graph_cursor_protection_key.as_bytes()
   }
 
+  pub(crate) fn capabilities(&self) -> &ServiceCapabilities {
+    &self.capabilities
+  }
+
   fn has_graph_service(&self) -> bool {
     self.graph.is_some()
   }
@@ -397,7 +408,12 @@ pub fn app_router_with_http_config(
   Ok(build_router(state, config.max_request_body_bytes, cors))
 }
 
-fn build_router(state: AppState, max_request_body_bytes: usize, cors: Option<CorsLayer>) -> Router {
+fn build_router(
+  mut state: AppState,
+  max_request_body_bytes: usize,
+  cors: Option<CorsLayer>,
+) -> Router {
+  state.capabilities = ServiceCapabilities::current(max_request_body_bytes);
   let router = Router::new()
     .route("/health", get(health))
     .route("/livez", get(livez))
@@ -440,6 +456,8 @@ fn build_router(state: AppState, max_request_body_bytes: usize, cors: Option<Cor
         .on_failure(DefaultOnFailure::new().level(Level::WARN)),
     )
     .layer(middleware::from_fn(stateless::admit))
+    .layer(middleware::from_fn(request_context::establish))
+    .layer(middleware::from_fn(trace_context::propagate_trace_parent))
     .layer(middleware::from_fn(request_id::propagate_request_id))
 }
 
@@ -462,8 +480,13 @@ fn cors_layer(config: &HttpConfig) -> Result<Option<CorsLayer>, HttpConfigError>
     .allow_headers([
       header::CONTENT_TYPE,
       HeaderName::from_static("x-request-id"),
+      HeaderName::from_static("x-deadline-at"),
+      HeaderName::from_static("traceparent"),
     ])
-    .expose_headers([HeaderName::from_static("x-request-id")]);
+    .expose_headers([
+      HeaderName::from_static("x-request-id"),
+      HeaderName::from_static("traceparent"),
+    ]);
   Ok(Some(cors))
 }
 

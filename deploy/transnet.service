@@ -1,0 +1,21 @@
+[Unit]
+Description=Transnet private translation and relationship-knowledge service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ashex
+Group=ashex
+RuntimeDirectory=transnet
+RuntimeDirectoryMode=0770
+UMask=0007
+WorkingDirectory=/home/ashex/projects/Transnet
+Environment=RUST_LOG=info
+ExecStart=/home/ashex/projects/Transnet/target/release/transnet
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

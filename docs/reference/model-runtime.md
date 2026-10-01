@@ -4,7 +4,7 @@
 
 This subsystem owns target inference policy for the one configured Gemma4-27B vision-language model and the separate embedding model. It does not expose provider brands, reasoning controls, prompts, or embedding payloads through the service interface.
 
-Status: target design. The current executable still routes short input to Gemma 4 and long input to TranslateGemma. That transitional split remains implemented until a later runtime change replaces it; target documentation must not describe TranslateGemma as a required deployment dependency.
+Status: foundational model-runtime types and adapters are implemented, while application migration remains transitional. The public Rust boundary now provides closed `fast` and `reasoning` profiles, bounded redacted input/output/version values, deadline and cooperative-cancellation hooks, and an atomic one-reasoning-call guard. The current executable still routes short input to Gemma 4 and long input to TranslateGemma; that split remains until a later orchestration change and is not the target deployment topology.
 
 ## Generation profiles
 
@@ -18,9 +18,11 @@ Neither prompts nor hidden reasoning are response data. The service may return c
 
 ## Embedding operations
 
-The embedding port has two bounded uses. Offline publication embeds reviewed canonical nodes and relationship explanations into an immutable release projection. Online requests may embed a query or an explicitly permitted live-retrieval fragment in memory to nominate candidates. Online vectors are discarded with the request and never enter logs, traces, metrics, caches, canonical storage, or a later release.
+The Transnet embedding port has one bounded use: online requests may embed a query or an explicitly permitted live-retrieval fragment in memory to nominate candidates. Online vectors are discarded with the request and never enter logs, traces, metrics, caches, canonical storage, or a later release. Offline publication instead sends frozen canonical inputs to island-port; island-port executes dense embedding and lexical encoding and attests the exact revisions and dimensions in publication receipts. Edge inputs contain structured endpoints, typed relation, scope, and verified evidence metadata, never newly generated relationship prose.
 
 Vector similarity is a ranking signal only. It cannot establish translation equivalence, synonymy, taxonomy, causality, mechanism, cultural meaning, evidence, or truth.
+
+The implemented embedding port accepts only a bounded request-local input and returns a finite vector whose dimension and immutable artifact version are validated. Its OpenAI-compatible adapter maps failures to closed, content-free errors. It is not yet wired into online candidate retrieval, and it is deliberately separate from publication input preparation and island-port-owned publication embedding execution.
 
 ## Deadlines and call budget
 
@@ -37,3 +39,5 @@ The VLM accepts only validated inline PNG, JPEG, or WebP data and bounded image 
 ## Verification
 
 Test zero-call canonical answers, fast-path selection, the closed escalation triggers, the one-escalation limit, long-input chunk coverage and ordering, terminology consistency, image bounds, structured-output repair, deadline accounting, cancellation, concurrency, redaction, and disposal of text, images, reasoning output, and online vectors.
+
+Current unit coverage verifies bounded values, redacted debug output, fixed finite embedding dimensions, strict embedding envelopes, closed errors, and one-time reasoning-budget claims. Full call-budget selection, chunk orchestration, and disposal tests remain owned by the later translation and retrieval composition slices.

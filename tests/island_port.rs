@@ -67,7 +67,7 @@ fn context() -> IslandPortCallContext {
 async fn active_release_has_no_pin_in_request_and_maps_strict_authoritative_value() {
   let transport = Arc::new(FakeTransport::new(json!({
     "request_id": "req_stage_3",
-    "schema_version": "mysql-adapter-v1",
+    "schema_version": "canonical-data-v1",
     "outcome": "ok",
     "value": {
       "content_release": "knowledge-2026-09",
@@ -85,7 +85,7 @@ async fn active_release_has_no_pin_in_request_and_maps_strict_authoritative_valu
   let (path, body, timeout) = request.as_ref().unwrap();
   assert_eq!(*path, "/api/v1/releases/active");
   assert_eq!(body["context"]["request_id"], "req_stage_3");
-  assert_eq!(body["context"]["schema_version"], "mysql-adapter-v1");
+  assert_eq!(body["context"]["schema_version"], "canonical-data-v1");
   assert!(body["context"].get("content_release").is_none());
   assert_eq!(body["input"], json!({}));
   assert_eq!(*timeout, Duration::from_secs(2));
@@ -95,11 +95,11 @@ async fn active_release_has_no_pin_in_request_and_maps_strict_authoritative_valu
 async fn active_release_missing_or_incompatible_response_fails_closed() {
   let cases = [
     (
-      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"not_found","error":{"code":"no_active_release","message":"No active release.","retryable":false}}),
+      json!({"request_id":"req_stage_3","schema_version":"canonical-data-v1","outcome":"not_found","error":{"code":"no_active_release","message":"No active release.","retryable":false}}),
       None,
     ),
     (
-      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"version_mismatch","error":{"code":"schema_incompatible","message":"Incompatible schema.","retryable":false}}),
+      json!({"request_id":"req_stage_3","schema_version":"canonical-data-v1","outcome":"version_mismatch","error":{"code":"schema_incompatible","message":"Incompatible schema.","retryable":false}}),
       Some(IslandPortClientError::SchemaIncompatible),
     ),
     (
@@ -107,19 +107,19 @@ async fn active_release_missing_or_incompatible_response_fails_closed() {
       Some(IslandPortClientError::SchemaIncompatible),
     ),
     (
-      json!({"request_id":"other","schema_version":"mysql-adapter-v1","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1"}}),
+      json!({"request_id":"other","schema_version":"canonical-data-v1","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1"}}),
       Some(IslandPortClientError::SchemaIncompatible),
     ),
     (
-      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"ok","value":{"content_release":"release-1"}}),
+      json!({"request_id":"req_stage_3","schema_version":"canonical-data-v1","outcome":"ok","value":{"content_release":"release-1"}}),
       Some(IslandPortClientError::InconsistentData),
     ),
     (
-      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1","vector_collection_id":"fake"}}),
+      json!({"request_id":"req_stage_3","schema_version":"canonical-data-v1","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1","vector_collection_id":"fake"}}),
       Some(IslandPortClientError::InconsistentData),
     ),
     (
-      json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1"},"content_release":"release-1"}),
+      json!({"request_id":"req_stage_3","schema_version":"canonical-data-v1","outcome":"ok","value":{"content_release":"release-1","canonical_schema_version":"canonical-v1"},"content_release":"release-1"}),
       Some(IslandPortClientError::InconsistentData),
     ),
   ];
@@ -155,7 +155,7 @@ async fn expired_active_release_deadline_stops_before_transport() {
 async fn active_release_errors_do_not_expose_peer_detail_or_credentials() {
   let transport = Arc::new(FakeTransport::new(json!({
     "request_id":"req_stage_3",
-    "schema_version":"mysql-adapter-v1",
+    "schema_version":"canonical-data-v1",
     "outcome":"unavailable",
     "error":{"code":"internal_failure","message":"sensitive-source credential-secret","retryable":true}
   })));
@@ -173,7 +173,7 @@ async fn translation_response_reconstructs_revision_and_propagates_context() {
   let fingerprint = SourceFingerprint::compute("sweltering", &language("en"));
   let transport = Arc::new(FakeTransport::new(json!({
     "request_id": "req_stage_3",
-    "schema_version": "mysql-adapter-v1",
+    "schema_version": "canonical-data-v1",
     "outcome": "ok",
     "content_release": "knowledge-2026-09",
     "value": {"matches": [{
@@ -220,7 +220,7 @@ async fn translation_response_reconstructs_revision_and_propagates_context() {
   let (path, body, timeout) = request.as_ref().unwrap();
   assert_eq!(*path, "/api/v1/translations/resolve");
   assert_eq!(body["context"]["request_id"], "req_stage_3");
-  assert_eq!(body["context"]["schema_version"], "mysql-adapter-v1");
+  assert_eq!(body["context"]["schema_version"], "canonical-data-v1");
   assert_eq!(body["context"]["content_release"], "knowledge-2026-09");
   assert_eq!(
     body["input"]["normalizer_version"],
@@ -277,7 +277,7 @@ async fn candidate_response_maps_authoritative_data_without_accepting_rank() {
 fn candidate_response() -> Value {
   json!({
     "request_id": "req_stage_3",
-    "schema_version": "mysql-adapter-v1",
+    "schema_version": "canonical-data-v1",
     "outcome": "ok",
     "content_release": "knowledge-2026-09",
     "value": {
@@ -390,7 +390,7 @@ async fn release_unavailable_and_schema_incompatible_are_distinct_closed_outcome
     ),
   ] {
     let response = json!({
-      "request_id":"req_stage_3", "schema_version":"mysql-adapter-v1",
+      "request_id":"req_stage_3", "schema_version":"canonical-data-v1",
       "content_release":"release-r1", "outcome":outcome,
       "error":{"code":code,"message":"secret response body and socket path","retryable":false}
     });
@@ -414,7 +414,7 @@ async fn release_unavailable_and_schema_incompatible_are_distinct_closed_outcome
     assert_eq!(error, expected);
     assert!(!format!("{error:?} {error}").contains("secret"));
   }
-  let response = json!({"request_id":"req_stage_3","schema_version":"mysql-adapter-v1","content_release":"release-r1","outcome":"content_release_unavailable","error":{"code":"schema_incompatible","message":"secret","retryable":false}});
+  let response = json!({"request_id":"req_stage_3","schema_version":"canonical-data-v1","content_release":"release-r1","outcome":"content_release_unavailable","error":{"code":"schema_incompatible","message":"secret","retryable":false}});
   let error = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))
     .get_sense(
       &context(),
@@ -438,7 +438,7 @@ async fn release_unavailable_and_schema_incompatible_are_distinct_closed_outcome
 #[tokio::test]
 async fn pinned_sense_rejects_canonical_schema_mismatch() {
   let response = json!({
-    "request_id":"req_stage_3", "schema_version":"mysql-adapter-v1", "outcome":"ok",
+    "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
     "content_release":"release-r1",
     "value": {"canonical_schema_version":"canonical-v2", "target":{
       "lexeme":{"id":"lexeme_x","language":"en","lemma":"x","lemma_evidence_ids":["evidence_x"],"normalized_lemma":"x","part_of_speech":"noun","status":"active"},
@@ -478,7 +478,7 @@ async fn pinned_sense_rejects_canonical_schema_mismatch() {
 async fn sense_response_constructs_target_independently() {
   let transport = Arc::new(FakeTransport::new(json!({
     "request_id": "req_stage_3",
-    "schema_version": "mysql-adapter-v1",
+    "schema_version": "canonical-data-v1",
     "outcome": "ok",
     "content_release": "knowledge-2026-09",
     "value": {
@@ -528,7 +528,7 @@ async fn sense_response_constructs_target_independently() {
 #[tokio::test]
 async fn dangling_lineage_reference_and_unknown_fields_fail_closed() {
   let transport = Arc::new(FakeTransport::new(json!({
-    "request_id": "req_stage_3", "schema_version": "mysql-adapter-v1", "outcome": "ok",
+    "request_id": "req_stage_3", "schema_version": "canonical-data-v1", "outcome": "ok",
     "content_release": "knowledge-2026-09",
     "value": {
       "canonical_schema_version": "canonical-v1",

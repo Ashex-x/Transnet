@@ -4,7 +4,7 @@
 
 This contract defines the target island-port-to-Transnet interface and the shared internal HTTP/1.1-over-UDS rules. Island-port owns internet transport, authentication, user state, file ingestion, document reconstruction, and final presentation. Transnet receives no end-user identity and persists no live request content.
 
-Status: revised target v1 contract. The checked-in executable still uses loopback HTTP and implements only the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. Structured segments, image regions, capabilities, live retrieval, target inbound UDS, guided knowledge views, and knowledge paths are not implemented until their handlers, composition, tests, and documentation land together.
+Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 through the target inbound UDS and implements target capability discovery and health, liveness, and dependency-readiness probes plus the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. Explicit configuration may retain the loopback listener during migration. Structured segments, image regions, live retrieval, guided knowledge views, and knowledge paths are not implemented until their handlers, composition, tests, and documentation land together.
 
 ## Contents
 
@@ -32,7 +32,7 @@ Status: revised target v1 contract. The checked-in executable still uses loopbac
 
 Transnet listens on `/run/transnet/transnet.sock`; Transnet data adapters call `/run/island-port/island-port.sock`. Deployments may relocate sockets through configuration, but endpoint paths and payloads do not change. Socket owners create the parent directory, prove a stale socket is inactive before removing it, bind with mode `0660`, and rely on filesystem workload identity rather than forwarded user headers.
 
-Every operation uses HTTP/1.1, an origin-form `/api/v1/...` path, `Host: localhost`, UTF-8 JSON, and `POST`. Empty input is `{}`. Clients send `Content-Type: application/json`, `Accept: application/json`, a bounded `Content-Length`, and optionally `X-Request-Id`. Query strings, chunked request bodies, multipart bodies, upgrades, and response streaming are rejected. Servers reject unknown JSON fields and return `X-Request-Id` plus `Cache-Control: no-store`.
+Every operation uses HTTP/1.1, an origin-form `/api/v1/...` path, `Host: localhost`, UTF-8 JSON, and `POST`. Empty input is `{}`. Clients send `Content-Type: application/json`, `Accept: application/json`, a bounded `Content-Length`, and optionally `X-Request-Id` and `X-Deadline-At`. Query strings, chunked request bodies, multipart bodies, upgrades, and response streaming are rejected. Servers reject unknown JSON fields and return `X-Request-Id` plus `Cache-Control: no-store`.
 
 The default body limit is 1 MiB. A translation request containing inline images may use the route-specific 12 MiB encoded-body limit. At most four decoded images are accepted, each no larger than 2 MiB or 4096 by 4096 pixels, with at most sixteen regions across the request. Supported image media types are `image/png`, `image/jpeg`, and `image/webp`.
 
@@ -49,6 +49,8 @@ Canonical content enters storage only through the authenticated offline publicat
 ## Deadlines and call budget
 
 One caller deadline covers the complete operation. Canonical reads, embeddings, generation, and permitted live retrieval receive sub-deadlines capped by the remaining time and cannot extend the request.
+
+The current HTTP boundary implements the request-context foundation on transitional and target paths. `X-Deadline-At`, when present, must contain a future UTC RFC 3339 timestamp at microsecond precision no more than 120 seconds from admission. An omitted header receives a 30-second deadline. Invalid or overlong deadlines return `400 invalid_deadline`; already exhausted deadlines return `504 deadline_exceeded`. Middleware stores one immutable `RequestContext` with the safe request ID, absolute deadline, `transnet-service-v1` schema, remaining-budget calculation, and an optional release pin for later application composition. Existing handlers are not yet cancelled automatically when their budget expires; downstream adoption remains incremental.
 
 A sufficient canonical match uses zero generation calls. Ordinary translation, visual reading, classification, and grounded composition use the Gemma4-27B `fast` profile. Long input uses bounded semantic chunks, bounded parallel fast calls, one request-local terminology ledger, and deterministic reassembly on the same model.
 
@@ -152,7 +154,7 @@ Text is limited to 131,072 Unicode scalars. Segmented input accepts at most 256 
 
 ## Professional guidance
 
-`guidance` is optional and request-scoped. Omitted values use `general`, `general`, `preserve`, zero alternatives, the response-level default annotations, and `offline` freshness.
+`guidance` is optional and request-scoped. Omitted values use `general`, `general`, `preserve`, zero alternatives, the response-level default annotations, and `offline` freshness. `max_alternatives` is a Milestone 5 result-composition capability; Milestone 1 accepts and validates no nonzero value and does not fabricate alternatives before that application result exists.
 
 ```json
 {
@@ -236,7 +238,9 @@ Each displayed item is the root or includes an explicit path to the root, a conc
 
 ## POST /api/v1/capabilities
 
-Returns configured BCP 47 language pairs, input kinds, image types, purposes, annotation families, knowledge lenses, body and semantic limits, live-retrieval availability, and schema versions. It exposes no credentials, provider URLs, socket paths, concurrency state, or private feature flags.
+Returns currently implemented BCP 47 language selectors, input kinds, image types, purposes, annotation families, knowledge lenses, body and semantic limits, live-retrieval availability, generation profiles, and schema versions. Empty closed sets explicitly mean that the current runtime does not implement that capability. It exposes no credentials, provider URLs, socket paths, concurrency state, or private feature flags.
+
+Capabilities follows the interface-wide response policy: every response carries `Cache-Control: no-store`. Callers may refresh it when they need current deployment information, but the contract promises no HTTP caching or validator semantics.
 
 Request: `{}`
 
@@ -245,11 +249,15 @@ Request: `{}`
   "data": {
     "source_languages": ["auto", "en", "zh-CN"],
     "target_languages": ["en", "zh-CN"],
-    "input_types": ["text", "segments", "image_regions"],
-    "image_media_types": ["image/png", "image/jpeg", "image/webp"],
-    "knowledge_lenses": ["meaning", "contrast", "usage", "form", "origin", "domain", "mechanism", "application"],
+    "input_types": ["text"],
+    "image_media_types": [],
+    "purposes": [],
+    "annotation_families": [],
+    "knowledge_lenses": [],
+    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
     "live_retrieval": {"available": false, "default": "offline"},
-    "schema_versions": ["translation-result-v1", "knowledge-view-v1"]
+    "generation_profiles": ["fast"],
+    "schema_versions": ["translation-result-v1"]
   },
   "meta": {"request_id": "req_example"}
 }

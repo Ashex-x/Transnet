@@ -204,9 +204,9 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
     "fact_revision": 1,
     "source_node_id": "node_sweltering_hot_01",
     "target_node_id": "node_scorching_heat_01",
-    "relation_type": "higher_degree",
+    "relation_type": "higher_degree_than",
     "applicable_sense_ids": ["sense_sweltering_hot_01"],
-    "conditions": ["temperature describes weather or an environment"],
+    "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
     "restrictions": {
       "dimension": "temperature_intensity",
       "register": "general"
@@ -226,11 +226,11 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 关系族覆盖词汇命名与翻译等价、分类与整体—部分、同义/反义/对比/明确命名的强度、配价/语法/搭配/固定表达、形态、语域/方言/地区/时期/场景/领域适用性、文化延伸，以及领域机理、因果、依赖、实现、应用、测量、标准化和术语。探索关系保持独立。版本化关系类型注册表定义方向、逆关系、对称性、传递性和因果性；UI 与 LLM 不从措辞猜测。Payload 索引覆盖两端、关系类型与版本、评估资格、发布与验证状态、发布版本、适用词义、语言、方言、地区、时期、领域和证据 ID。Qdrant 不存储任何判断或聚合值。
 
-当前 Transnet registry 只冻结此处已有规范方向的映射：内部 `Hypernym` 以宽义指向窄义并发布为 `has_subtype`；内部 `Hyponym` 以窄义指向宽义并发布为 `is_a`；`LowerDegree` 与 `HigherDegree` 分别发布为 `lower_degree_than` 与 `higher_degree_than`。同义、反义、翻译等价、形态、构式、词源及弱关联保留已有内部方向与逆关系规则，但其 Qdrant wire 名、传递性与因果性仍是未解决的 contract gap。发布必须闭合失败，不能从 Rust variant 或英文标签推导名称。
+已实现的 v1 wire registry 冻结以下名称与逆关系：`synonym`、`near_synonym`、`translation_equivalent`、`antonym`、`confusable_with`、`associated_with` 与 `derivationally_related_to` 为对称且自逆；`has_subtype` / `is_a`、`has_part` / `part_of`、`inflection_of` / `has_inflection`、`etymologically_derived_from` / `etymological_source_of`、`member_of_construction` / `has_construction_member`、`scale_contains` / `member_of_scale` 及 `lower_degree_than` / `higher_degree_than` 为有向逆关系对。只有 `is_a` 与 `has_subtype` 声明 taxonomy 传递性，其他所列关系均声明传递性不适用。这些 v1 关系均不是因果关系；只有另行注册的显式 causation 关系可以声明因果性，所有非因果关系都声明因果性不适用。名称、逆关系、端点族或属性未出现在固定 registry 中时，发布闭合失败，不能从 Rust variant 或标签推导语义。
 
-投影前，已实现的 Transnet admission boundary 要求声明的 wire relation 与 inverse 精确匹配 registry，验证允许的端点 kind，并为 identity 确定性规范化对称端点，但不生成第二条 inverse edge。一个稳定 edge identity 包含不可变发布、publisher 分配的 relationship ID 与 revision、规范端点、内部关系类型和已接纳 scope；runtime rank、插入顺序、request ID、时间戳及 Qdrant 生成 ID 均不参与。重复 typed assertion 另行按发布、规范化端点、关系类型和 scope 拒绝，即使 publisher 提供了不同 relationship ID。Evidence revision 是否进入 edge identity 仍未冻结，因此不会猜测。
+投影前，已实现的 Transnet admission boundary 要求声明的 wire relation 与 inverse 精确匹配 registry，验证允许的端点 kind，并为 identity 确定性规范化对称端点，但不生成第二条 inverse edge。一个稳定 edge identity 包含不可变发布、publisher 分配的 relationship ID 与 relationship revision、规范端点、内部关系类型和已接纳 scope；runtime rank、插入顺序、request ID、时间戳、Qdrant 生成 ID 及 evidence revision 均不参与。Evidence revision 改由不可变 relationship revision、精确 release membership、经验证的 evidence content hash 与 projection/content hash 绑定。重复 typed assertion 另行按发布、规范化端点、关系类型和 scope 拒绝，即使 publisher 提供了不同 relationship ID。
 
-Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精确 ID 集必须匹配，每个 fragment 必须属于关系发布，source 与 fragment permission 都必须允许 storage 和 embedding，fragment 必须 active，generated evidence 必须已完成审核提升。Evidence confidence 使用现有闭合 `High`、`Medium`、`Low` domain 值，因此缺失或越界的数值无法进入该 domain boundary。当前 `GraphScope` 可安全携带强类型 dialect 与有界非空 register。自由文本 condition 与字符串 domain scope 在 canonical condition 和 domain-ID 语义冻结前一律拒绝进入 M3 投影。
+Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精确 ID 集必须匹配，每个 fragment 必须属于关系发布，source 与 fragment permission 都必须允许 storage 和 embedding，fragment 必须 active，generated evidence 必须已完成审核提升。Evidence confidence 使用现有闭合 `High`、`Medium`、`Low` domain 值，因此缺失或越界的数值无法进入该 domain boundary。Domain scope 使用同一发布中已排序、唯一的规范 `DomainId`；label 与自由文本绝不是 domain identity。每个 condition 都是 registry 自有的结构化对象，含 `condition_id`、`condition_type` 与已排序的 `parameter_ids`；三者均为在同一发布中解析的规范标识符，prose 只属于补全后的展示数据。因此过渡期 `GraphScope.domain` 与 `GraphScope.note` 字符串仍不得进入发布。
 
 `is_a` 从较窄词义指向较宽类别，`has_subtype` 是其逆关系。`lower_degree_than` 与 `higher_degree_than` 只在命名且兼容的维度内比较成员。程度边不暗示分类、同义或可互换。
 
@@ -254,7 +254,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
     "dimension": "environmental_heat_intensity",
     "direction": "increasing",
     "domain_ids": ["domain_weather"],
-    "conditions": ["describes weather or an environment"],
+    "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
     "members": [
       {"node_id": "node_warm_temperature_01", "position": 10},
       {"node_id": "node_hot_temperature_01", "position": 20},
@@ -406,7 +406,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
         "score": 0.91,
         "source_node_id": "node_sweltering_hot_01",
         "target_node_id": "node_scorching_heat_01",
-        "relation_type": "higher_degree",
+        "relation_type": "higher_degree_than",
         "relation_registry_version": 1,
         "fact_id": "fact_sweltering_degree_scorching_01",
         "fact_revision": 2,
@@ -453,7 +453,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
           "edge_id": "edge_sweltering_scorching_01",
           "source_node_id": "node_sweltering_hot_01",
           "target_node_id": "node_scorching_heat_01",
-          "relation_type": "higher_degree",
+          "relation_type": "higher_degree_than",
           "verification_state": "verified"
         },
         "node": {

@@ -4,7 +4,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本合同定义目标 island-port 到 Transnet 接口及内部共享 HTTP/1.1-over-UDS 规则。Island-port 负责互联网传输、认证、用户状态、文件接入、文档重建和最终展示。Transnet 不接收终端用户身份，也不持久化实时请求内容。
 
-状态：修订后的目标 v1 合同。仓库中的可执行文件仍使用回环 HTTP，且只实现已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。结构化 segment、image region、capability、实时检索、目标入站 UDS、引导式知识视图和知识路径，必须等 handler、组合、测试与文档共同落地后才算已实现。
+状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。迁移期间可以通过显式配置保留 loopback listener。结构化 segment、image region、实时检索、引导式知识视图和知识路径，必须等 handler、组合、测试与文档共同落地后才算已实现。
 
 ## 目录
 
@@ -32,7 +32,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 Transnet 监听 `/run/transnet/transnet.sock`；Transnet 数据 adapter 调用 `/run/island-port/island-port.sock`。部署可以通过配置迁移 socket，但 endpoint 路径和 payload 不变。Socket owner 创建父目录，只在证明旧 socket 不活动后移除它，以 `0660` 模式绑定，并依赖文件系统 workload identity，而不是转发的用户 header。
 
-每个操作使用 HTTP/1.1、origin-form `/api/v1/...` 路径、`Host: localhost`、UTF-8 JSON 与 `POST`。空输入为 `{}`。Client 发送 `Content-Type: application/json`、`Accept: application/json`、有界 `Content-Length` 和可选 `X-Request-Id`。拒绝 query string、chunked request body、multipart body、upgrade 与响应 streaming。Server 拒绝未知 JSON 字段，并返回 `X-Request-Id` 与 `Cache-Control: no-store`。
+每个操作使用 HTTP/1.1、origin-form `/api/v1/...` 路径、`Host: localhost`、UTF-8 JSON 与 `POST`。空输入为 `{}`。Client 发送 `Content-Type: application/json`、`Accept: application/json`、有界 `Content-Length` 和可选 `X-Request-Id`、`X-Deadline-At`。拒绝 query string、chunked request body、multipart body、upgrade 与响应 streaming。Server 拒绝未知 JSON 字段，并返回 `X-Request-Id` 与 `Cache-Control: no-store`。
 
 默认 body 上限为 1 MiB。含 inline 图片的翻译请求可使用该路由专属 12 MiB 编码 body 上限。最多接受四张解码图片，每张不超过 2 MiB 或 4096 × 4096 像素；整个请求最多十六个 region。支持 `image/png`、`image/jpeg` 与 `image/webp`。
 
@@ -49,6 +49,8 @@ Transnet 不接受用户、学习者、账户、owner、session、cookie、beare
 ## Deadline 与调用预算
 
 一个调用方 deadline 覆盖完整操作。规范读取、embedding、生成与经许可实时检索获得受剩余时间限制的子 deadline，且不能延长请求。
+
+当前 HTTP boundary 已在过渡期与目标 path 上实现请求上下文基础。若存在 `X-Deadline-At`，它必须是准入时刻之后不超过 120 秒、微秒精度的 UTC RFC 3339 时间戳；省略该 header 时使用 30 秒 deadline。无效或过长 deadline 返回 `400 invalid_deadline`，已耗尽 deadline 返回 `504 deadline_exceeded`。Middleware 存储一个不可变 `RequestContext`，其中包含安全 request ID、绝对 deadline、`transnet-service-v1` schema、剩余预算计算以及供后续 application composition 使用的可选发布 pin。现有 handler 尚不会在预算耗尽时自动取消；下游采用将逐步完成。
 
 足够的规范命中使用零次生成调用。普通翻译、视觉读取、分类与 grounded composition 使用 Gemma4-27B `fast` profile。长输入在同一模型上使用有界语义 chunk、有界并行 fast 调用、一个请求级术语台账与确定性重组。
 
@@ -152,7 +154,7 @@ Transnet 不接受用户、学习者、账户、owner、session、cookie、beare
 
 ## 专业 guidance
 
-`guidance` 可选且仅属于当前请求。省略时分别使用 `general`、`general`、`preserve`、零个 alternative、response-level 默认 annotation 与 `offline` freshness。
+`guidance` 可选且仅属于当前请求。省略时分别使用 `general`、`general`、`preserve`、零个 alternative、response-level 默认 annotation 与 `offline` freshness。`max_alternatives` 是 Milestone 5 的结果组合能力；Milestone 1 在对应 application result 存在前不接受非零值，也不伪造 alternative。
 
 ```json
 {
@@ -236,7 +238,9 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 
 ## POST /api/v1/capabilities
 
-返回已配置 BCP 47 语言对、输入类型、图片类型、purpose、annotation family、知识 lens、body 与语义限制、实时检索可用性和 schema 版本。它不暴露凭据、provider URL、socket 路径、并发状态或私有 feature flag。
+返回当前已实现的 BCP 47 语言 selector、输入类型、图片类型、purpose、annotation family、知识 lens、body 与语义限制、实时检索可用性、generation profile 和 schema 版本。空的闭合集明确表示当前 runtime 尚未实现该能力。它不暴露凭据、provider URL、socket 路径、并发状态或私有 feature flag。
+
+Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cache-Control: no-store`。调用方可以在需要当前部署信息时重新获取，但合同不承诺 HTTP cache 或 validator 语义。
 
 请求：`{}`
 
@@ -245,11 +249,15 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
   "data": {
     "source_languages": ["auto", "en", "zh-CN"],
     "target_languages": ["en", "zh-CN"],
-    "input_types": ["text", "segments", "image_regions"],
-    "image_media_types": ["image/png", "image/jpeg", "image/webp"],
-    "knowledge_lenses": ["meaning", "contrast", "usage", "form", "origin", "domain", "mechanism", "application"],
+    "input_types": ["text"],
+    "image_media_types": [],
+    "purposes": [],
+    "annotation_families": [],
+    "knowledge_lenses": [],
+    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
     "live_retrieval": {"available": false, "default": "offline"},
-    "schema_versions": ["translation-result-v1", "knowledge-view-v1"]
+    "generation_profiles": ["fast"],
+    "schema_versions": ["translation-result-v1"]
   },
   "meta": {"request_id": "req_example"}
 }

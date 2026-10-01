@@ -20,6 +20,8 @@ use crate::{
   types::{is_language_code, TranslateRequest, TranslateResponse},
 };
 
+use crate::domain::model_runtime::GenerationProfile;
+
 /// Failure returned by translation validation or model communication.
 #[derive(Debug, Error)]
 pub enum TranslationError {
@@ -96,6 +98,44 @@ pub struct TranslationProviderMetrics {
 }
 
 impl TranslationService {
+  /// Runs one provider-neutral operation against the transitional Gemma 4 endpoint.
+  ///
+  /// This compatibility hook does not select TranslateGemma and is intended for the target
+  /// generation adapter while legacy translation orchestration remains in place.
+  pub(crate) async fn generate_with_profile(
+    &self,
+    profile: GenerationProfile,
+    input: &str,
+  ) -> Result<(String, String), TranslationError> {
+    let instruction = match profile {
+      GenerationProfile::Fast => "Complete the requested operation accurately and concisely.",
+      GenerationProfile::Reasoning => {
+        "Resolve the requested operation carefully. Return only the requested conclusion."
+      }
+    };
+    let body = ChatCompletionRequest {
+      model: self.gemma4.config.model.clone(),
+      messages: vec![
+        ChatMessage {
+          role: "system",
+          content: MessageContent::Text(instruction.to_string()),
+        },
+        ChatMessage {
+          role: "user",
+          content: MessageContent::Text(input.to_string()),
+        },
+      ],
+      temperature: 0.0,
+    };
+    let output = self
+      .gemma4
+      .resilience
+      .execute("generate", || self.gemma4.send(&body))
+      .await
+      .map_err(|_| TranslationError::Provider)?;
+    Ok((output, self.gemma4.config.model.clone()))
+  }
+
   /// Creates a reusable translation service.
   ///
   /// # Errors

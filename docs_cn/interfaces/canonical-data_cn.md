@@ -4,7 +4,7 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
 
 本合同定义 island-port 提供的存储无关 HTTP endpoint，涵盖共享规范翻译、单词、短语、词义、领域、证据元数据和不可变内容发布。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。MySQL 是计划中的 island-port 实现，不属于本线上合同。
 
-状态：目标 island-port 服务端合同。可执行文件可选地组合现有严格出站 canonical-read client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。该已实现 client 仍把过渡线上标识为 `mysql-adapter-v1`；在后续 migration 修改代码与测试前，它尚未实现改名后的 `canonical-data-v1` 目标。外部 island-port server 尚未按任一合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留及真实端到端验收仍需在本仓库之外完成。
+状态：目标 island-port 服务端合同，Transnet 读取 client 已实现。可执行文件可选地组合严格出站 `canonical-data-v1` client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。已实现 client 按本文通用 envelope 与严格 response echo 校验覆盖 active-release、translation candidate、basic-card candidate 和 sense-detail 读取。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留、domain/fact/scale 读取及真实端到端验收仍需在本仓库之外完成。
 
 仓库内 M3 publication foundation 建模 Qdrant build lifecycle、idempotency、compatibility receipt 与 reconciliation hash。其出站 publication port 与严格 island-port client 承载有界 build contract；`KnowledgePublicationService` 基于权威 status 恢复，驱动 node/edge publication 直至 reconciliation，且不保存本地 progress。Reconciliation 成功后只返回强类型 activation candidate；外部已认证 publisher 或 control plane 必须将该 candidate 提交给 island-port，才能原子切换 active trio。仓库没有新增 island-port publication server、MySQL build/reconciliation persistence、activation pointer mutation 或 rollback implementation；这些 authority-owned operation 仍是外部要求。
 
@@ -84,6 +84,8 @@ erDiagram
 `relation_type_revision` 是版本化关系 registry。它定义方向、inverse 行为、对称与传递策略、因果性、允许的 participant role、endpoint 类型兼容性与校验 schema。发布固定精确 registry 修订；UI 与模型都不得从 label 推断这些属性。
 
 `canonical_relationship_revision` 是一个精确 assertion 修订的已校验二元 traversal 投影。它把稳定公开 edge ID 和正关系版本映射到 source/target endpoint、固定 relation-registry 版本、方向、限制与评估资格。Endpoint 和关系字段保留为索引列；解释及有界范围/支持列表使用带版本 payload。该投影支持高效知识视图，但不成为第二权威来源。关系判断与聚合保留在[目标 MySQL 实现](../../docs/interfaces/tables/mysql.sql)定义的独立授权 island-port 产品 schema 中；Transnet 无法访问私有行。
+
+每个 domain 引用都是在同一发布中解析的规范 `DomainId`；label 或自由文本领域名绝不是 identity。关系与 scale condition 使用 registry 自有对象，包含 `condition_id`、`condition_type` 和已排序的 `parameter_ids`，并全部在该发布中解析。展示 prose 可以从这些记录补全，但自由文本 condition 不得进入规范 scope 或 projection identity。
 
 语义尺度使用 `entity_type = 'semantic_scale'` 的 `canonical_entity`。其不可变修订 payload 存储命名维度、递增或递减方向、适用领域与条件、有序词义限定节点成员及证据引用。成员位置只定义顺序。发布拒绝重复位置、缺失成员、混合不兼容词义、缺失证据，以及把尺度编码成 `is_a` 分类的行为。基础卡、事实、profile 与尺度均通过 `release_member` 加入发布。
 
@@ -432,7 +434,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
         "object_node_id": "node_sweltering_hot_01",
         "domain_ids": ["domain_weather"],
         "applicable_sense_ids": ["sense_sweltering_hot_01"],
-        "conditions": ["describes weather or an environment"],
+        "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
         "evidence_ids": ["evidence_dictionary_1042"],
         "provenance": ["source_dictionary_2026_01"],
         "verification_state": "verified"
@@ -474,7 +476,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
         "dimension": "environmental_heat_intensity",
         "direction": "increasing",
         "domain_ids": ["domain_weather"],
-        "conditions": ["describes weather or an environment"],
+        "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
         "members": [
           {"node_id": "node_warm_temperature_01", "position": 10},
           {"node_id": "node_hot_temperature_01", "position": 20},

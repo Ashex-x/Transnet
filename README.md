@@ -37,7 +37,7 @@ This two-provider setup describes the current executable only. The target archit
 
 ## Configure
 
-The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` currently sets the transitional loopback listener and log filter/format, `[http]` sets the body limit and transitional CORS policy, `[translation]` sets routing and legacy retry defaults, `[gemma4]` and `[translate_gemma]` identify those provider endpoints, and `[provider_resilience.*]` sets independent timeout, retry, concurrency, and circuit-breaker bounds. The target UDS settings are defined in the [configuration guide](docs/guides/configuration.md). Do not commit real provider credentials.
+The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` selects the target Unix socket with `socket_path` and `socket_mode`; omitting `socket_path` explicitly selects the transitional loopback `host` and `port`. `[http]` sets the body limit and transitional CORS policy, `[translation]` sets routing and legacy retry defaults, `[gemma4]` and `[translate_gemma]` identify those provider endpoints, and `[provider_resilience.*]` sets independent timeout, retry, concurrency, and circuit-breaker bounds. See the [configuration guide](docs/guides/configuration.md). Do not commit real provider credentials.
 
 `RUST_LOG` overrides `server.log_level`. `server.log_format = "json"` writes newline-delimited JSON; any other value writes compact text. Debug builds log to `logs/debug/transnet.log`, release builds log to `logs/release/transnet.log`; each file is replaced on startup.
 
@@ -68,7 +68,7 @@ For a release build:
 cargo run --release
 ```
 
-Target UDS calls (these become runnable when the transport migration lands):
+Target UDS calls:
 
 ```bash
 curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/api/v1/health \
@@ -82,11 +82,11 @@ curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/a
   --data '{"text":"Hello","source_language":"auto","target_language":"zh-CN","response_level":"standard"}'
 ```
 
-These commands show the target UDS interface. The current executable still uses the transitional loopback listener and legacy paths until the transport migration is implemented. MySQL canonical cards and releases plus Qdrant knowledge nodes and edges remain target capabilities until their status is advanced in the interface and guide documents. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
+The checked-in configuration uses the target UDS listener. MySQL canonical cards and releases plus Qdrant knowledge nodes and edges remain target capabilities until their status is advanced in the interface and guide documents. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
 
-Verify the current transitional runtime with `curl http://127.0.0.1:35792/health`.
+For transitional loopback compatibility, omit `server.socket_path`, then verify with `curl http://127.0.0.1:16002/health`.
 
-See the [design](docs/transnet.md), [island-port-to-Transnet service interface and UDS transport](docs/interfaces/transnet.md), [canonical-data endpoints](docs/interfaces/canonical-data.md), [retrieval-data endpoints](docs/interfaces/retrieval-data.md), and [configuration reference](docs/guides/configuration.md).
+See the [design](docs/transnet.md), [island-port-to-Transnet service interface and UDS transport](docs/interfaces/transnet.md), [canonical-data endpoints](docs/interfaces/canonical-data.md), [retrieval-data endpoints](docs/interfaces/retrieval-data.md), [configuration reference](docs/guides/configuration.md), and [deployment guide](docs/guides/deployment.md).
 
 ## License
 

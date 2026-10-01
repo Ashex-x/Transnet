@@ -14,6 +14,8 @@ English: [Transport and API boundary](../../docs/reference/transport.md)
 
 Middleware 顺序是确定的：识别路由、建立安全请求上下文、应用限制与 deadline、调用 handler、映射失败、记录不含内容的遥测。取消和 permit 必须在所有退出路径释放。
 
+已实现的准入 middleware 现在会校验或生成一个安全 request ID，并从可选 `X-Deadline-At` 派生一个绝对请求 deadline；默认值为 30 秒，并拒绝超过 120 秒的调用方预算。它在 handler 运行前把公开的请求安全上下文放入 request extension。该上下文只公开关联信息、schema、deadline 预算和可选不可变发布 ID，不包含 request body、身份、凭据或任意 header。自动 timeout 取消及向每个 application port 传播仍是目标工作。
+
 ## Handler 规则
 
 探针、翻译、词义和图 handler 必须保持轻薄：解码并校验线上结构，调用一次 application 操作，再编码已记录结果。它们不选择模型、不推断领域、不构造数据库查询、不遍历图，也不持久化请求数据。

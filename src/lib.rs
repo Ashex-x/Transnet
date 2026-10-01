@@ -20,19 +20,41 @@ pub mod ports;
 pub mod provider;
 /// Bounded, redacted resilience controls for outbound providers.
 pub mod resilience;
+/// Owned Unix-domain listener lifecycle and HTTP serving.
+#[cfg(unix)]
+pub mod server;
 /// Public HTTP request and response types.
 pub mod types;
 
 pub use adapters::learning_model::OpenAiLearningModel;
+pub use adapters::model_runtime::{OpenAiEmbeddingAdapter, OpenAiGenerationAdapter};
 pub use api::{
   app_router, app_router_with_http_config, AlwaysReady, AppState, GraphCursorProtectionKey,
-  GraphCursorProtectionKeyError, Readiness, MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES,
+  GraphCursorProtectionKeyError, Readiness, SuccessEnvelope, SuccessMeta,
+  MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES,
 };
 pub use application::canonical_lookup::{CanonicalLookupError, CanonicalLookupService};
-pub use application::observability::{ClosedMetricsDispatcher, MAX_IN_FLIGHT_METRIC_RECORDS};
+pub use application::observability::{
+  ClosedMetricsDispatcher, TelemetryDropSnapshot, MAX_IN_FLIGHT_METRIC_RECORDS,
+};
 pub use config::{
   AppConfig, HttpConfig, HttpConfigError, ProviderApiKey, ProviderConfig, ProviderResilienceConfig,
   ProviderResilienceConfigs, TranslationConfig,
+};
+pub use domain::capabilities::{
+  AnnotationFamilyCapability, CapabilityLimits, GenerationProfileCapability,
+  ImageMediaTypeCapability, InputTypeCapability, KnowledgeLensCapability, LiveRetrievalCapability,
+  LiveRetrievalDefault, PurposeCapability, SchemaVersionCapability, ServiceCapabilities,
+  SourceLanguageCapability, TargetLanguageCapability,
+};
+pub use domain::model_runtime::{
+  CancellationSignal, EmbeddingInput, EphemeralEmbedding, GenerationInput, GenerationOutput,
+  GenerationProfile, ModelValueError, ModelVersion, ReasoningBudget,
+};
+pub use domain::request_context::{RequestContext, RequestContextError, RequestId};
+pub use ports::model_runtime::{
+  EmbeddingPort, EmbeddingRequest, GenerationPort, GenerationRequest, GenerationResponse,
+  ModelOperationContext, ModelOperationError,
 };
 pub use provider::{TranslationError, TranslationProviderMetrics, TranslationService};
 pub use resilience::{ProviderMetricsSnapshot, ProviderPolicy, ProviderPolicyError};
