@@ -442,6 +442,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
         "relation_registry_version": 1,
         "assertion_id": "assertion_sweltering_degree_scorching_01",
         "assertion_revision": 2,
+        "relationship_revision": 3,
         "relation_type_id": "relation_degree",
         "traversal_id": "traversal_higher_degree",
         "verification_state": "verified"
@@ -452,7 +453,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 }
 ```
 
-每项结果均为候选指针。在事实性使用前，Transnet 必须针对同一发布通过 `POST /api/v1/assertions/get` 补全精确 assertion，并校验所选 registry traversal。相似度始终只用于提名。
+每项结果均为候选指针。在事实性使用前，Transnet 必须针对同一发布通过 `POST /api/v1/assertions/get` 补全精确 relationship 与 assertion revision，并校验所选 registry traversal。相似度始终只用于提名。
 
 ## POST /api/v1/neighbors/search
 
@@ -469,6 +470,17 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
   "languages": ["en"],
   "domain_ids": ["domain_weather"],
   "release_id": "knowledge-2026-09",
+  "execution": {
+    "content_release": "knowledge-2026-09",
+    "canonical_schema_version": "canonical-v1",
+    "node_collection_id": "knowledge_nodes__knowledge_2026_09",
+    "node_collection_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "edge_collection_id": "knowledge_edges__knowledge_2026_09",
+    "edge_collection_content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "relationship_registry_version": 1,
+    "edge_dense_input_version": "edge-dense-input-v1",
+    "edge_lexical_input_version": "edge-lexical-input-v1"
+  },
   "limit": 20,
   "cursor": null
 }
@@ -482,6 +494,17 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
   "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
+    "execution": {
+      "content_release": "knowledge-2026-09",
+      "canonical_schema_version": "canonical-v1",
+      "node_collection_id": "knowledge_nodes__knowledge_2026_09",
+      "node_collection_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "edge_collection_id": "knowledge_edges__knowledge_2026_09",
+      "edge_collection_content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "relationship_registry_version": 1,
+      "edge_dense_input_version": "edge-dense-input-v1",
+      "edge_lexical_input_version": "edge-lexical-input-v1"
+    },
     "root_node_id": "node_sweltering_hot_01",
     "neighbors": [
       {
@@ -493,6 +516,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
           "relation_registry_version": 1,
           "assertion_id": "assertion_sweltering_degree_scorching_01",
           "assertion_revision": 2,
+          "relationship_revision": 3,
           "relation_type_id": "relation_degree",
           "traversal_id": "traversal_higher_degree",
           "verification_state": "verified"
@@ -510,7 +534,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 }
 ```
 
-扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。每个 neighbor edge 都携带精确 assertion identity/revision、relation type identity、traversal identity 与 registry 版本 `1`；Transnet 必须先补全并校验该精确 assertion projection，才能把 edge 作为 verified path step。Assertion 缺失、修订被替换、未知 traversal/relation、endpoint 不一致或 registry mismatch 都会使 candidate 无效。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
+扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。请求和响应绑定完整的内容发布/schema pin、不可变 node/edge collection ID 与 SHA-256 content hash、registry revision，以及 edge dense/lexical input version；任何成员缺失或改变都会闭合失败。每个 neighbor edge 都携带精确 relationship 与 assertion revision、relation type identity、traversal identity、endpoint 与 registry 版本 `1`，形成 Transnet 在把 edge 作为 verified path step 前必须补全的精确 assertion projection reference。Assertion 缺失、修订被替换、未知 traversal/relation、endpoint 不一致或 registry mismatch 都会使 candidate 无效。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
 
 ## Internal publication operations
 
