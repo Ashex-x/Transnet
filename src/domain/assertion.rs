@@ -185,6 +185,28 @@ pub struct AssertionCondition {
   pub parameter_ids: Vec<CanonicalId>,
 }
 
+/// Release-pinned canonical domain resolved by publication tooling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedDomainReference {
+  /// Exact canonical domain identity.
+  pub domain_id: DomainId,
+  /// Immutable release owning the domain revision.
+  pub release_id: ReleaseId,
+}
+
+/// Release-pinned condition registry record resolved by publication tooling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedConditionReference {
+  /// Exact condition identity.
+  pub condition_id: CanonicalId,
+  /// Registered closed condition type.
+  pub condition_type: CanonicalId,
+  /// Exact sorted parameter identities admitted by this condition revision.
+  pub parameter_ids: Vec<CanonicalId>,
+  /// Immutable release owning the condition and parameter revisions.
+  pub release_id: ReleaseId,
+}
+
 /// Whether a participant role accepts an entity or a typed literal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParticipantValueRule {
@@ -235,8 +257,10 @@ pub struct AssertionRegistryEntry {
   pub registry_revision: u32,
   /// Closed participant-role schema.
   pub participant_roles: Vec<ParticipantRoleRule>,
-  /// Closed supported condition types; empty means conditions are forbidden.
-  pub condition_types: BTreeSet<CanonicalId>,
+  /// Release-resolved domains eligible for structured scope.
+  pub resolved_domains: Vec<ResolvedDomainReference>,
+  /// Release-resolved condition and parameter records eligible for structured scope.
+  pub resolved_conditions: Vec<ResolvedConditionReference>,
   /// Explicit binary traversals; absence means the assertion is never projected as an edge.
   pub binary_traversals: Vec<BinaryTraversalRule>,
   /// Whether independently citable evidence is required.
@@ -328,6 +352,9 @@ pub enum AssertionValidationError {
   /// The binary relationship does not identify this exact assertion revision and release.
   #[error("binary relationship does not match its authoritative assertion")]
   ProjectionMismatch,
+  /// Structured assertion scope has no lossless representation in the selected edge projection.
+  #[error("assertion structured scope is not represented by the binary projection")]
+  ProjectionScopeMismatch,
   /// Existing graph publication admission rejected the binary projection.
   #[error("binary relationship failed graph publication admission")]
   Graph(#[source] super::graph::GraphValidationError),
@@ -379,6 +406,27 @@ impl AssertionRegistryEntry {
         {
           return Err(AssertionValidationError::InvalidTraversalEndpoints);
         }
+      }
+    }
+    if self
+      .resolved_domains
+      .windows(2)
+      .any(|pair| pair[0].domain_id >= pair[1].domain_id)
+      || self
+        .resolved_conditions
+        .windows(2)
+        .any(|pair| pair[0].condition_id >= pair[1].condition_id)
+    {
+      return Err(AssertionValidationError::UnknownRegistryEntry);
+    }
+    for condition in &self.resolved_conditions {
+      if condition.parameter_ids.len() > MAX_CONDITION_PARAMETERS
+        || condition
+          .parameter_ids
+          .windows(2)
+          .any(|pair| pair[0] >= pair[1])
+      {
+        return Err(AssertionValidationError::UnsupportedCondition);
       }
     }
     Ok(())
@@ -446,8 +494,12 @@ impl CanonicalAssertion {
       || self.release_id != relationship.source_release_id
       || self.release_id != relationship.target_release_id
       || self.evidence_ids != relationship.relation.evidence.evidence_ids
+      || self.evidence_lineage != relationship.evidence_lineage
     {
       return Err(AssertionValidationError::ProjectionMismatch);
+    }
+    if !self.domain_ids.is_empty() || !self.conditions.is_empty() {
+      return Err(AssertionValidationError::ProjectionScopeMismatch);
     }
     relationship.validate()?;
     Ok(())
@@ -508,15 +560,39 @@ impl CanonicalAssertion {
     {
       return Err(AssertionValidationError::UnsupportedCondition);
     }
+    for domain_id in &self.domain_ids {
+      let Some(resolved) = registry
+        .resolved_domains
+        .iter()
+        .find(|resolved| &resolved.domain_id == domain_id)
+      else {
+        return Err(AssertionValidationError::InvalidDomainScope);
+      };
+      if resolved.release_id != self.release_id {
+        return Err(AssertionValidationError::InvalidDomainScope);
+      }
+    }
     let mut condition_ids = BTreeSet::new();
     for condition in &self.conditions {
       if !condition_ids.insert(&condition.condition_id)
-        || !registry.condition_types.contains(&condition.condition_type)
         || condition.parameter_ids.len() > MAX_CONDITION_PARAMETERS
         || condition
           .parameter_ids
           .windows(2)
           .any(|pair| pair[0] >= pair[1])
+      {
+        return Err(AssertionValidationError::UnsupportedCondition);
+      }
+      let Some(resolved) = registry
+        .resolved_conditions
+        .iter()
+        .find(|resolved| resolved.condition_id == condition.condition_id)
+      else {
+        return Err(AssertionValidationError::UnsupportedCondition);
+      };
+      if resolved.release_id != self.release_id
+        || resolved.condition_type != condition.condition_type
+        || resolved.parameter_ids != condition.parameter_ids
       {
         return Err(AssertionValidationError::UnsupportedCondition);
       }
@@ -689,6 +765,10 @@ mod tests {
   }
 
   fn lineage(release: &str) -> CanonicalEvidenceLineage {
+    lineage_with_hash(release, "sha256:evidence-1")
+  }
+
+  fn lineage_with_hash(release: &str, content_hash: &str) -> CanonicalEvidenceLineage {
     let source_id = id("source-1");
     CanonicalEvidenceLineage::new(
       LexicalSource {
@@ -708,7 +788,7 @@ mod tests {
         kind: EvidenceKind::Definition,
         confidence: EvidenceConfidence::High,
         text: "Reviewed support.".to_string(),
-        content_hash: "sha256:evidence-1".to_string(),
+        content_hash: content_hash.to_string(),
         permissions: permissions(),
         status: CanonicalStatus::Active,
       },
@@ -725,7 +805,16 @@ mod tests {
         role("role-narrower", CanonicalNodeFamily::LexicalSense),
         role("role-broader", CanonicalNodeFamily::LexicalSense),
       ],
-      condition_types: BTreeSet::from([id("usage-context")]),
+      resolved_domains: vec![ResolvedDomainReference {
+        domain_id: DomainId::new("domain_weather").unwrap(),
+        release_id: id("release-1"),
+      }],
+      resolved_conditions: vec![ResolvedConditionReference {
+        condition_id: id("condition-weather"),
+        condition_type: id("usage-context"),
+        parameter_ids: vec![id("context-weather")],
+        release_id: id("release-1"),
+      }],
       binary_traversals: vec![BinaryTraversalRule {
         traversal_id: id("traversal-has-subtype"),
         source_role_id: id("role-broader"),
@@ -850,7 +939,8 @@ mod tests {
           value_rule: ParticipantValueRule::Decimal,
         },
       ],
-      condition_types: BTreeSet::new(),
+      resolved_domains: Vec::new(),
+      resolved_conditions: Vec::new(),
       binary_traversals: Vec::new(),
       requires_evidence: false,
     };
@@ -882,11 +972,15 @@ mod tests {
 
   #[test]
   fn admits_only_the_explicit_lossless_binary_traversal() {
-    let assertion = assertion();
+    let mut assertion = assertion();
+    assertion.domain_ids.clear();
+    assertion.conditions.clear();
     let relationship = published();
+    let assertion_id = assertion.assertion_id.clone();
+    let assertion_revision = assertion.assertion_revision;
     let projection = BinaryAssertionProjection {
-      assertion_id: &assertion.assertion_id,
-      assertion_revision: assertion.assertion_revision,
+      assertion_id: &assertion_id,
+      assertion_revision,
       traversal_id: &id("traversal-has-subtype"),
       relationship: &relationship,
     };
@@ -930,7 +1024,9 @@ mod tests {
       Err(AssertionValidationError::IneligibleEvidence)
     );
 
-    let assertion = assertion();
+    let mut assertion = assertion();
+    assertion.domain_ids.clear();
+    assertion.conditions.clear();
     let mut relationship = published();
     relationship.relation.target = GraphNodeKey::new(GraphNodeKind::Sense, id("sense-c"));
     let projection = BinaryAssertionProjection {
@@ -941,6 +1037,52 @@ mod tests {
     };
     assert_eq!(
       assertion.validate_binary_projection(&registry(), projection),
+      Err(AssertionValidationError::ProjectionMismatch)
+    );
+  }
+
+  #[test]
+  fn binary_projection_requires_independent_identity_scope_and_full_lineage_match() {
+    let scoped = assertion();
+    let relationship = published();
+    let assertion_id = scoped.assertion_id.clone();
+    let projection = BinaryAssertionProjection {
+      assertion_id: &assertion_id,
+      assertion_revision: scoped.assertion_revision,
+      traversal_id: &id("traversal-has-subtype"),
+      relationship: &relationship,
+    };
+    assert_eq!(
+      scoped.validate_binary_projection(&registry(), projection),
+      Err(AssertionValidationError::ProjectionScopeMismatch)
+    );
+
+    let mut unscoped = scoped;
+    unscoped.domain_ids.clear();
+    unscoped.conditions.clear();
+    let wrong_id = id("fact-other");
+    let projection = BinaryAssertionProjection {
+      assertion_id: &wrong_id,
+      assertion_revision: unscoped.assertion_revision,
+      traversal_id: &id("traversal-has-subtype"),
+      relationship: &relationship,
+    };
+    assert_eq!(
+      unscoped.validate_binary_projection(&registry(), projection),
+      Err(AssertionValidationError::ProjectionMismatch)
+    );
+
+    let mut changed_lineage = relationship;
+    changed_lineage.evidence_lineage[0] = lineage_with_hash("release-1", "sha256:changed");
+    let assertion_id = unscoped.assertion_id.clone();
+    let projection = BinaryAssertionProjection {
+      assertion_id: &assertion_id,
+      assertion_revision: unscoped.assertion_revision,
+      traversal_id: &id("traversal-has-subtype"),
+      relationship: &changed_lineage,
+    };
+    assert_eq!(
+      unscoped.validate_binary_projection(&registry(), projection),
       Err(AssertionValidationError::ProjectionMismatch)
     );
   }
@@ -968,5 +1110,12 @@ mod tests {
     assert!(!is_canonical_decimal("01.0"));
     assert!(!is_canonical_decimal("1.20"));
     assert!(is_canonical_decimal("-12.5"));
+
+    let mut wrong_release_registry = registry();
+    wrong_release_registry.resolved_domains[0].release_id = id("release-2");
+    assert_eq!(
+      assertion().validate(&wrong_release_registry),
+      Err(AssertionValidationError::InvalidDomainScope)
+    );
   }
 }

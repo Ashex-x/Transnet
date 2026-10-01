@@ -663,7 +663,7 @@ fn node_point(point: &NodeProjection) -> Value {
 }
 
 fn edge_point(point: &EdgeProjection) -> Value {
-  json!({
+  let mut value = json!({
     "point_id": point.point_id.as_str(),
     "relationship_id": point.identity.relationship_id.as_str(),
     "relationship_revision": point.identity.relationship_revision.get(),
@@ -692,7 +692,24 @@ fn edge_point(point: &EdgeProjection) -> Value {
     "lexical_input": BASE64.encode(point.lexical_input.canonical_bytes()),
     "lexical_input_hash": point.lexical_input.input_hash(),
     "projection_content_hash": point.content_hash
-  })
+  });
+  if let (Some(assertion), Some(object)) = (point.assertion.as_ref(), value.as_object_mut()) {
+    object.insert("fact_id".into(), json!(assertion.assertion_id.as_str()));
+    object.insert("fact_revision".into(), json!(assertion.assertion_revision));
+    object.insert(
+      "relation_type_id".into(),
+      json!(assertion.relation_type_id.as_str()),
+    );
+    object.insert(
+      "relation_registry_version".into(),
+      json!(assertion.relation_registry_revision),
+    );
+    object.insert(
+      "traversal_id".into(),
+      json!(assertion.traversal_id.as_str()),
+    );
+  }
+  value
 }
 
 #[derive(Serialize)]

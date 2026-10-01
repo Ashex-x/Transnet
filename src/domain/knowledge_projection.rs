@@ -337,6 +337,21 @@ pub struct EdgeVerificationMetadata {
   pub verification_state: RelationshipVerificationState,
 }
 
+/// Exact canonical assertion revision and registry traversal retained by a binary projection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssertionProjectionReference {
+  /// Publisher-owned canonical assertion identity.
+  pub assertion_id: CanonicalId,
+  /// Positive immutable assertion revision.
+  pub assertion_revision: u32,
+  /// Exact relation type identity from the pinned registry.
+  pub relation_type_id: CanonicalId,
+  /// Positive immutable relation-registry revision.
+  pub relation_registry_revision: u32,
+  /// Explicit binary traversal declaration used for this projection.
+  pub traversal_id: CanonicalId,
+}
+
 /// One deterministic edge point ready for a later embedding and Qdrant write step.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EdgeProjection {
@@ -354,6 +369,8 @@ pub struct EdgeProjection {
   pub wire_relation: String,
   /// Admitted bounded scope.
   pub scope: GraphScope,
+  /// Originating assertion proof for assertion-backed edges; absent only on the legacy path.
+  pub assertion: Option<AssertionProjectionReference>,
   /// Ordered evidence and provenance references.
   pub evidence: Vec<ProjectionEvidenceReference>,
   /// Immutable review metadata.
@@ -392,6 +409,10 @@ pub struct EdgeProjectionBuild {
 pub struct AssertionEdgeProjectionInput {
   /// Authoritative canonical assertion revision.
   pub assertion: CanonicalAssertion,
+  /// Assertion identity independently retained by the publisher's binary projection record.
+  pub projected_assertion_id: CanonicalId,
+  /// Assertion revision independently retained by the publisher's binary projection record.
+  pub projected_assertion_revision: u32,
   /// Exact relation-registry entry pinned by the assertion.
   pub registry: AssertionRegistryEntry,
   /// Explicit binary traversal declaration selected from that entry.
@@ -584,20 +605,49 @@ pub fn build_assertion_edge_projection(
   embedding: ProjectionEmbeddingSpec,
   inputs: Vec<AssertionEdgeProjectionInput>,
 ) -> Result<EdgeProjectionBuild, ProjectionValidationError> {
+  let mut assertion_by_edge = BTreeMap::new();
   let mut relationships = Vec::with_capacity(inputs.len());
   for input in inputs {
     input.assertion.validate_binary_projection(
       &input.registry,
       BinaryAssertionProjection {
-        assertion_id: &input.assertion.assertion_id,
-        assertion_revision: input.assertion.assertion_revision,
+        assertion_id: &input.projected_assertion_id,
+        assertion_revision: input.projected_assertion_revision,
         traversal_id: &input.traversal_id,
         relationship: &input.relationship,
       },
     )?;
+    let identity = input.relationship.identity();
+    let reference = AssertionProjectionReference {
+      assertion_id: input.projected_assertion_id,
+      assertion_revision: input.projected_assertion_revision,
+      relation_type_id: input.assertion.relation_type_id.clone(),
+      relation_registry_revision: input.assertion.relation_registry_revision,
+      traversal_id: input.traversal_id,
+    };
+    if assertion_by_edge.insert(identity, reference).is_some() {
+      return Err(ProjectionValidationError::RelationshipAdmission(
+        GraphValidationError::DuplicateTypedRelationship,
+      ));
+    }
     relationships.push(input.relationship);
   }
-  build_edge_projection(nodes, embedding, relationships)
+  let mut build = build_edge_projection(nodes, embedding.clone(), relationships)?;
+  for point in &mut build.points {
+    point.assertion = assertion_by_edge.remove(&point.identity);
+    if point.assertion.is_none() {
+      return Err(ProjectionValidationError::NodeBuildMismatch);
+    }
+    point.content_hash = hash_edge_point(&embedding, point);
+  }
+  build.content_hash = hash_edge_build(
+    nodes,
+    &embedding,
+    &build.points,
+    build.expected_endpoint_count,
+    build.resolved_endpoint_count,
+  );
+  Ok(build)
 }
 
 fn project_node(
@@ -743,6 +793,7 @@ fn project_edge(
     target_point_id: target_point.point_id.clone(),
     wire_relation,
     scope,
+    assertion: None,
     evidence,
     verification,
     dense_input,
@@ -903,6 +954,17 @@ fn hash_edge_point(embedding: &ProjectionEmbeddingSpec, projection: &EdgeProject
   out.string(projection.target_point_id.as_str());
   out.string(&projection.wire_relation);
   scope_bytes(&mut out, &projection.scope);
+  match &projection.assertion {
+    Some(assertion) => {
+      out.u32(1);
+      out.string(assertion.assertion_id.as_str());
+      out.u32(assertion.assertion_revision);
+      out.string(assertion.relation_type_id.as_str());
+      out.u32(assertion.relation_registry_revision);
+      out.string(assertion.traversal_id.as_str());
+    }
+    None => out.u32(0),
+  }
   out.usize(projection.evidence.len());
   for item in &projection.evidence {
     out.string(item.evidence_id.as_str());
@@ -1331,11 +1393,14 @@ mod tests {
         evidence_lineage: relationship.evidence_lineage.clone(),
         verification_state: RelationshipVerificationState::Verified,
       },
+      projected_assertion_id: id(&format!("fact-{edge}")),
+      projected_assertion_revision: 1,
       registry: AssertionRegistryEntry {
         relation_type_id: id("relation-taxonomy"),
         registry_revision: 1,
         participant_roles: vec![role(source_role.clone()), role(target_role.clone())],
-        condition_types: BTreeSet::new(),
+        resolved_domains: Vec::new(),
+        resolved_conditions: Vec::new(),
         binary_traversals: vec![BinaryTraversalRule {
           traversal_id: traversal_id.clone(),
           source_role_id: source_role,
@@ -1478,6 +1543,22 @@ mod tests {
     )
     .unwrap();
     assert_eq!(build.points.len(), 1);
+    let assertion = build.points[0].assertion.as_ref().unwrap();
+    assert_eq!(assertion.assertion_id, id("fact-edge-1"));
+    assert_eq!(assertion.assertion_revision, 1);
+
+    let mut identity_mismatch = admitted.clone();
+    identity_mismatch.projected_assertion_id = id("fact-other");
+    assert!(matches!(
+      build_assertion_edge_projection(
+        &nodes,
+        embedding("knowledge-graph-v1"),
+        vec![identity_mismatch]
+      ),
+      Err(ProjectionValidationError::AssertionAdmission(
+        AssertionValidationError::ProjectionMismatch
+      ))
+    ));
 
     let mut unknown = admitted;
     unknown.traversal_id = id("traversal-unknown");
