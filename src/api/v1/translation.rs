@@ -11,8 +11,8 @@ use serde::Serialize;
 use crate::{
   application::translation::TranslationOrchestrationError,
   domain::translation_turn::{
-    ProjectedTranslationResult, ResponseLevel, TranslationTurn, TranslationTurnRequest,
-    TranslationTurnResult, TurnValidationError,
+    ProjectedTranslationResult, ResponseLevel, TranslationInputKind, TranslationTurn,
+    TranslationTurnRequest, TranslationTurnResult, TurnValidationError,
   },
 };
 
@@ -52,6 +52,16 @@ pub(crate) async fn translate(
       )
     }
   };
+  match turn.input_kind() {
+    TranslationInputKind::Segments => return unsupported_capability("segments", &request_id),
+    TranslationInputKind::ImageRegions => {
+      return unsupported_capability("image_regions", &request_id)
+    }
+    TranslationInputKind::Text => {}
+  }
+  if turn.requires_guidance_execution() {
+    return unsupported_capability("guidance", &request_id);
+  }
   let Some(orchestrator) = state.translation_orchestrator() else {
     return translation_model_unavailable(&request_id);
   };
@@ -63,6 +73,9 @@ pub(crate) async fn translate(
     }
     Err(TranslationOrchestrationError::ChunkPlanLimit) => {
       invalid_translation_field("text", &request_id)
+    }
+    Err(TranslationOrchestrationError::UnsupportedInput) => {
+      unsupported_capability("input", &request_id)
     }
     Err(TranslationOrchestrationError::ModelUnavailable) => {
       translation_model_unavailable(&request_id)

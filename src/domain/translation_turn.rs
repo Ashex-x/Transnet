@@ -99,6 +99,28 @@ pub enum TranslationInput {
   },
 }
 
+/// Closed discriminator for a validated translation input without exposing its content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TranslationInputKind {
+  /// One lexical or connected text value.
+  Text,
+  /// Ordered document or localization segments.
+  Segments,
+  /// Sanitized inline images with bounded regions.
+  ImageRegions,
+}
+
+impl TranslationInput {
+  /// Returns the content-free discriminator for this input shape.
+  pub const fn kind(&self) -> TranslationInputKind {
+    match self {
+      Self::Text { .. } => TranslationInputKind::Text,
+      Self::Segments { .. } => TranslationInputKind::Segments,
+      Self::ImageRegions { .. } => TranslationInputKind::ImageRegions,
+    }
+  }
+}
+
 /// One ordered structured translation segment.
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -421,15 +443,34 @@ pub enum TurnValidationError {
 }
 
 /// Validated linguistic input; callers cannot mutate it after validation.
-#[derive(Clone, Serialize)]
+#[derive(Clone)]
 pub struct TranslationTurn {
-  text: String,
+  input: TranslationInput,
   source_language: SourceLanguage,
   target_language: TurnLanguage,
   history: Vec<TranslationHistory>,
   guidance: TranslationGuidance,
-  #[serde(skip)]
   response_level: ResponseLevel,
+}
+
+impl Serialize for TranslationTurn {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    use serde::ser::{Error as _, SerializeStruct as _};
+
+    let text = self
+      .text()
+      .ok_or_else(|| S::Error::custom("structured translation input has no model serialization"))?;
+    let mut state = serializer.serialize_struct("TranslationTurn", 5)?;
+    state.serialize_field("text", text)?;
+    state.serialize_field("source_language", &self.source_language)?;
+    state.serialize_field("target_language", &self.target_language)?;
+    state.serialize_field("history", &self.history)?;
+    state.serialize_field("guidance", &self.guidance)?;
+    state.end()
+  }
 }
 
 impl TranslationTurn {
@@ -438,6 +479,9 @@ impl TranslationTurn {
   /// # Errors
   /// Returns a closed field error or a request-size error before any provider is called.
   pub fn new(request: TranslationTurnRequest) -> Result<Self, TurnValidationError> {
+    let encoded_bytes = serde_json::to_vec(&request)
+      .map_err(|_| TurnValidationError::Field("input"))?
+      .len();
     let input = match (request.text, request.input) {
       (Some(text), None) => TranslationInput::Text { text },
       (None, Some(input)) => input,
@@ -446,17 +490,8 @@ impl TranslationTurn {
     let guidance = request.guidance.unwrap_or_default();
     validate_guidance(&guidance)?;
     validate_input(&input, &guidance)?;
-    let text = match input {
-      TranslationInput::Text { text } => text,
-      TranslationInput::Segments { .. } => {
-        return Err(TurnValidationError::Unsupported("segments"))
-      }
-      TranslationInput::ImageRegions { .. } => {
-        return Err(TurnValidationError::Unsupported("image_regions"))
-      }
-    };
-    if guidance_requires_execution(&guidance) {
-      return Err(TurnValidationError::Unsupported("guidance"));
+    if encoded_bytes > MAX_TURN_BYTES {
+      return Err(TurnValidationError::TooLarge);
     }
     let source_language = SourceLanguage::parse(&request.source_language)
       .ok_or(TurnValidationError::Field("source_language"))?;
@@ -464,21 +499,6 @@ impl TranslationTurn {
       .ok_or(TurnValidationError::Field("target_language"))?;
     let response_level = ResponseLevel::parse(&request.response_level)
       .ok_or(TurnValidationError::Field("response_level"))?;
-    // Check raw lengths before serialization to avoid allocating another oversized payload.
-    let raw_bytes = request
-      .history
-      .iter()
-      .try_fold(text.len(), |bytes, turn| {
-        bytes
-          .checked_add(turn.source_text.len())?
-          .checked_add(turn.translated_text.len())?
-          .checked_add(turn.source_language.len())?
-          .checked_add(turn.target_language.len())
-      })
-      .ok_or(TurnValidationError::TooLarge)?;
-    if raw_bytes > MAX_TURN_BYTES {
-      return Err(TurnValidationError::TooLarge);
-    }
     for turn in &request.history {
       if turn.source_text.trim().is_empty()
         || turn.translated_text.trim().is_empty()
@@ -489,7 +509,7 @@ impl TranslationTurn {
       }
     }
     Ok(Self {
-      text,
+      input,
       source_language,
       target_language,
       history: request.history,
@@ -498,9 +518,20 @@ impl TranslationTurn {
     })
   }
 
-  /// Returns the original text without changing paragraph or formatting boundaries.
-  pub fn text(&self) -> &str {
-    &self.text
+  /// Returns the complete validated request-local input.
+  pub const fn input(&self) -> &TranslationInput {
+    &self.input
+  }
+  /// Returns the input discriminator without exposing request content.
+  pub const fn input_kind(&self) -> TranslationInputKind {
+    self.input.kind()
+  }
+  /// Returns the original text for a text input without changing formatting boundaries.
+  pub fn text(&self) -> Option<&str> {
+    match &self.input {
+      TranslationInput::Text { text } => Some(text),
+      TranslationInput::Segments { .. } | TranslationInput::ImageRegions { .. } => None,
+    }
   }
   /// Returns the source-language selector.
   pub const fn source_language(&self) -> SourceLanguage {
@@ -518,19 +549,27 @@ impl TranslationTurn {
   pub const fn guidance(&self) -> &TranslationGuidance {
     &self.guidance
   }
+  /// Reports whether accepted guidance needs orchestration that is not composed yet.
+  pub fn requires_guidance_execution(&self) -> bool {
+    guidance_requires_execution(&self.guidance)
+  }
   /// Returns the projection level, never passed to a generation prompt.
   pub fn response_level(&self) -> ResponseLevel {
     self.response_level
   }
   /// Derives one request-local lookup form while preserving significant symbols such as + and #.
-  pub fn lookup_form(&self) -> String {
-    TranslationNormalizer::new()
-      .normalize(&self.text, self.source_language)
-      .primary
+  pub fn lookup_form(&self) -> Option<String> {
+    self.text().map(|text| {
+      TranslationNormalizer::new()
+        .normalize(text, self.source_language)
+        .primary
+    })
   }
   /// Returns whether input is too long or structured to be one lexical unit.
   pub fn requires_passage(&self) -> bool {
-    self.text.chars().count() > MAX_LEXICAL_CHARS || self.text.contains(['\n', '\r'])
+    self
+      .text()
+      .is_none_or(|text| text.chars().count() > MAX_LEXICAL_CHARS || text.contains(['\n', '\r']))
   }
 }
 
@@ -1427,7 +1466,7 @@ mod tests {
   }
 
   #[test]
-  fn target_text_guidance_is_validated_before_unavailable_execution() {
+  fn target_text_guidance_is_retained_after_validation() {
     let request: TranslationTurnRequest = serde_json::from_value(json!({
       "input": {"type": "text", "text": "torque"},
       "source_language": "en", "target_language": "zh-CN", "response_level": "standard",
@@ -1438,10 +1477,14 @@ mod tests {
       }
     }))
     .unwrap();
-    assert_eq!(
-      TranslationTurn::new(request).unwrap_err(),
-      TurnValidationError::Unsupported("guidance")
-    );
+    let turn = TranslationTurn::new(request).unwrap();
+    assert_eq!(turn.input_kind(), TranslationInputKind::Text);
+    assert_eq!(turn.text(), Some("torque"));
+    assert_eq!(turn.guidance().terminology[0].source, "torque");
+    assert!(turn.requires_guidance_execution());
+    let model_value = serde_json::to_value(&turn).unwrap();
+    assert_eq!(model_value["text"], "torque");
+    assert!(model_value.get("input").is_none());
     assert!(serde_json::from_value::<TranslationTurnRequest>(json!({
       "input": {"type": "text", "text": "secret", "extra": true},
       "source_language": "en", "target_language": "zh-CN", "response_level": "brief"
@@ -1462,18 +1505,20 @@ mod tests {
       }))
       .unwrap()
     };
-    assert_eq!(
-      TranslationTurn::new(parse(json!([{"start": 7, "end": 13}]), json!([]))).unwrap_err(),
-      TurnValidationError::Unsupported("segments")
-    );
-    assert_eq!(
-      TranslationTurn::new(parse(
-        json!([{"start": 7, "end": 13}, {"start": 0, "end": 6}]),
-        json!([])
-      ))
-      .unwrap_err(),
-      TurnValidationError::Unsupported("segments")
-    );
+    let first = TranslationTurn::new(parse(json!([{"start": 7, "end": 13}]), json!([]))).unwrap();
+    assert_eq!(first.input_kind(), TranslationInputKind::Segments);
+    assert_eq!(first.text(), None);
+    let ordered = TranslationTurn::new(parse(
+      json!([{"start": 7, "end": 13}, {"start": 0, "end": 6}]),
+      json!([]),
+    ))
+    .unwrap();
+    let TranslationInput::Segments { segments } = ordered.input() else {
+      panic!("validated segment input changed shape")
+    };
+    assert_eq!(segments[0].segment_id, "s1");
+    assert_eq!(segments[0].protected_ranges[0].start, 7);
+    assert_eq!(segments[0].protected_ranges[1].start, 0);
     assert_eq!(
       TranslationTurn::new(parse(
         json!([{"start": 7, "end": 13}, {"start": 8, "end": 10}]),
@@ -1512,10 +1557,19 @@ mod tests {
         "regions":[{"region_id":"r1","x":0.1,"y":0.2,"width":0.5,"height":0.2}]}], "reading_order":["p1:r1"]},
       "source_language":"auto", "target_language":"en", "response_level":"standard"
     })).unwrap();
-    assert_eq!(
-      TranslationTurn::new(request).unwrap_err(),
-      TurnValidationError::Unsupported("image_regions")
-    );
+    let turn = TranslationTurn::new(request).unwrap();
+    assert_eq!(turn.input_kind(), TranslationInputKind::ImageRegions);
+    let TranslationInput::ImageRegions {
+      images,
+      reading_order,
+    } = turn.input()
+    else {
+      panic!("validated image input changed shape")
+    };
+    assert_eq!(images[0].image_id, "p1");
+    assert_eq!(images[0].data, encoded);
+    assert_eq!(images[0].regions[0].region_id, "r1");
+    assert_eq!(reading_order, &["p1:r1"]);
   }
 
   #[test]
@@ -1662,5 +1716,27 @@ mod tests {
     let error = TranslationTurn::new(invalid).unwrap_err().to_string();
     assert!(!error.contains(secret_text));
     assert!(!error.contains(history_secret));
+
+    let structured: TranslationTurnRequest = serde_json::from_value(json!({
+      "input":{"type":"segments","segments":[{"segment_id":"private-id-733",
+        "text":"private-segment-734","role":"paragraph","format":"plain",
+        "protected_ranges":[]}]},
+      "source_language":"en","target_language":"zh-CN","response_level":"brief"
+    }))
+    .unwrap();
+    let rendered = format!("{:?}", TranslationTurn::new(structured).unwrap());
+    assert!(!rendered.contains("private-id-733"));
+    assert!(!rendered.contains("private-segment-734"));
+
+    let structured: TranslationTurnRequest = serde_json::from_value(json!({
+      "input":{"type":"segments","segments":[{"segment_id":"private-id-735",
+        "text":"private-segment-736","role":"paragraph","format":"plain"}]},
+      "source_language":"en","target_language":"zh-CN","response_level":"brief"
+    }))
+    .unwrap();
+    let error = serde_json::to_string(&TranslationTurn::new(structured).unwrap()).unwrap_err();
+    let rendered = error.to_string();
+    assert!(!rendered.contains("private-id-735"));
+    assert!(!rendered.contains("private-segment-736"));
   }
 }

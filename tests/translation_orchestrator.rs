@@ -252,6 +252,32 @@ async fn request_history_is_observed_only_on_its_own_call() {
 }
 
 #[tokio::test]
+async fn structured_input_fails_before_either_model_port() {
+  let request = serde_json::from_value(serde_json::json!({
+    "input":{"type":"segments","segments":[{"segment_id":"private-segment-612",
+      "text":"Launch {name}","role":"title","format":"plain",
+      "protected_ranges":[{"start":7,"end":13}]}]},
+    "source_language":"en","target_language":"zh-CN","response_level":"standard",
+    "history":[{"source_text":"private-history-613","translated_text":"私密译文",
+      "source_language":"en","target_language":"zh-CN"}]
+  }))
+  .unwrap();
+  let turn = TranslationTurn::new(request).unwrap();
+  let (service, calls) = orchestrator(Ok("unused".to_string()), Ok(lexical_draft()));
+
+  let error = service.translate(&turn).await.unwrap_err();
+
+  assert_eq!(error, TranslationOrchestrationError::UnsupportedInput);
+  assert_eq!(
+    format!("{error:?} {error}"),
+    "UnsupportedInput translation input workflow unavailable"
+  );
+  let calls = calls.lock().unwrap();
+  assert!(calls.connected.is_empty());
+  assert!(calls.lexical.is_empty());
+}
+
+#[tokio::test]
 async fn model_failures_are_stable_and_redacted() {
   let secret = "private-input-8127";
   let credential = "credential-9931";

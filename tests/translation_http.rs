@@ -306,19 +306,50 @@ async fn unsupported_inline_image_media_type_returns_415() {
 
 #[tokio::test]
 async fn structured_inputs_validate_then_fail_with_safe_capability_problem() {
+  let segment_secret = "private-segment-442";
+  let history_secret = "private-history-443";
   let response = app(Ok(connected_output()), Ok(lexical_output()))
     .oneshot(request(json!({
-      "input": {"type": "segments", "segments": [{"segment_id":"s1", "text":"Launch {name}",
-        "role":"title", "format":"plain", "protected_ranges":[{"start":7,"end":13}]}]},
-      "source_language":"en", "target_language":"zh-CN", "response_level":"standard"
+      "input": {"type": "segments", "segments": [{"segment_id":segment_secret,
+        "text":"Launch {name}", "role":"title", "format":"plain",
+        "protected_ranges":[{"start":7,"end":13}]}]},
+      "source_language":"en", "target_language":"zh-CN", "response_level":"standard",
+      "history":[{"source_text":history_secret,"translated_text":"私密译文",
+        "source_language":"en","target_language":"zh-CN"}],
+      "guidance":{"purpose":"localization","freshness":"offline"}
     })))
     .await
     .unwrap();
   assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
-  assert_eq!(
-    body(response).await["code"],
-    "translation_capability_unavailable"
-  );
+  let problem = body(response).await;
+  assert_eq!(problem["code"], "translation_capability_unavailable");
+  assert!(!problem.to_string().contains(segment_secret));
+  assert!(!problem.to_string().contains(history_secret));
+  assert!(!problem.to_string().contains("Launch"));
+}
+
+#[tokio::test]
+async fn validated_image_bytes_and_order_never_enter_the_capability_problem() {
+  let image_id = "private-image-991";
+  let region_id = "private-region-992";
+  let encoded = "iVBORw0KGgoAAAAAAAAAAAAAAAEAAAAB";
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input":{"type":"image_regions","images":[{"image_id":image_id,
+        "media_type":"image/png","data":encoded,"regions":[{"region_id":region_id,
+        "x":0.0,"y":0.0,"width":1.0,"height":1.0}]}],
+        "reading_order":[format!("{image_id}:{region_id}")]},
+      "source_language":"auto","target_language":"en","response_level":"brief"
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  let problem = body(response).await;
+  assert_eq!(problem["code"], "translation_capability_unavailable");
+  let rendered = problem.to_string();
+  assert!(!rendered.contains(image_id));
+  assert!(!rendered.contains(region_id));
+  assert!(!rendered.contains(encoded));
 }
 
 #[tokio::test]

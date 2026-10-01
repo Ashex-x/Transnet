@@ -150,7 +150,7 @@ Transnet 不接受用户、学习者、账户、owner、session、cookie、beare
 
 文本最多 131,072 个 Unicode scalar。Segment 输入最多 256 项，每项 8,192 scalar，总计 131,072 scalar。每个 segment 最多 128 个 protected range。这些限制仍受编码 body 上限约束。
 
-迁移期间，当前 runtime 同时接受 tagged text shape 与 legacy 顶层 `text` 字段；调用方必须且只能发送其中一种。不含依赖执行的 guidance 的 tagged text 正常处理。Segment 与 image-region 请求会在返回不含内容的 `501 translation_capability_unavailable` problem 前完成有界的结构、media header、尺寸、region 与顺序校验，且这些输入不会调用 model。完整图片解码属于后续 image-region 执行 slice。
+迁移期间，当前 runtime 同时接受 tagged text shape 与 legacy 顶层 `text` 字段；调用方必须且只能发送其中一种。校验后，请求 domain 仅在本次请求内保留完整 tagged input、guidance 与 history，使后续 orchestration 无需重新解析 wire body 即可保留调用方 ID、顺序、protected range 与 inline image data。不含依赖执行的 guidance 的 tagged text 正常处理。Segment 与 image-region 请求会在返回不含内容的 `501 translation_capability_unavailable` problem 前完成有界的结构、media header、尺寸、region 与顺序校验，且这些输入不会调用 model。完整图片解码属于后续 image-region 执行 slice。
 
 `history` 可选并按时间排序。每项只包含先前源文本、译文与语言 tag，不含 turn ID、时间、用户 ID、反馈、模型 metadata 或保存状态。公共 body 上限约束 history，不另设项目数上限。
 

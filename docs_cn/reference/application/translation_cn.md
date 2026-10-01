@@ -4,6 +4,8 @@ English: [Translation application](../../../docs/reference/application/translati
 
 本模块负责连续文本、结构化分段与有界图像区域翻译，并产生共享结果中的主要译文部分。
 
+状态：请求 domain 已校验并保留三种 tagged shape 及其请求级 guidance 与 history。当前 application 仅执行文本；HTTP 边界会在任何 model 调用前以不含内容的 `501 translation_capability_unavailable` 响应拒绝已校验的 segment 与 image-region turn。
+
 ## 职责
 
 翻译在生成自然目标语文本时保留含义、意图、语气、语域、术语、保护片段、段落结构与相关格式。Provider 选择是模型 port 背后的策略，不是公开请求选项。

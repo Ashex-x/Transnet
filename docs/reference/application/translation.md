@@ -4,6 +4,8 @@
 
 This module owns connected-text, structured-segment, and bounded image-region translation and produces the primary translation portion of the shared result.
 
+Status: the request domain validates and retains all three tagged shapes with their request-local guidance and history. The current application executes text only; the HTTP boundary rejects validated segment and image-region turns with a content-free `501 translation_capability_unavailable` response before any model call.
+
 ## Responsibilities
 
 Translation preserves meaning, intent, tone, register, terminology, protected spans, paragraph structure, and relevant formatting while producing natural target-language text. Provider selection is policy behind the model port, not a public request option.

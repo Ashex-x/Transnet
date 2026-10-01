@@ -35,6 +35,9 @@ pub const MAX_TRANSLATED_CHUNK_CHARS: usize = 32_768;
 /// Closed orchestration failure without provider identity or private request content.
 #[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
 pub enum TranslationOrchestrationError {
+  /// The validated input shape has no composed application workflow yet.
+  #[error("translation input workflow unavailable")]
+  UnsupportedInput,
   /// Automatic source-language detection did not resolve to an initially supported language.
   #[error("unsupported translation source language")]
   UnsupportedSourceLanguage,
@@ -90,9 +93,10 @@ impl TranslationOrchestrator {
     &self,
     turn: &TranslationTurn,
   ) -> Result<ProjectedTranslationResult, TranslationOrchestrationError> {
-    let normalized = self
-      .normalizer
-      .normalize(turn.text(), turn.source_language());
+    let text = turn
+      .text()
+      .ok_or(TranslationOrchestrationError::UnsupportedInput)?;
+    let normalized = self.normalizer.normalize(text, turn.source_language());
     let classification = self.classifier.classify(turn, &normalized);
     let source_language = classification
       .detected_source_language
@@ -135,15 +139,18 @@ impl TranslationOrchestrator {
     turn: &TranslationTurn,
     source_language: crate::domain::translation_turn::TurnLanguage,
   ) -> Result<(String, Vec<ModelOperationVersions>), TranslationOrchestrationError> {
-    if turn.text().chars().count() <= MAX_CONNECTED_CHUNK_CHARS {
+    let text = turn
+      .text()
+      .ok_or(TranslationOrchestrationError::UnsupportedInput)?;
+    if text.chars().count() <= MAX_CONNECTED_CHUNK_CHARS {
       let output = self
-        .translate_segment(turn, turn.text(), source_language, &[], None)
+        .translate_segment(turn, text, source_language, &[], None)
         .await?;
       return Ok((output.translation, vec![output.versions]));
     }
 
-    let chunks = plan_chunks(turn.text())?;
-    let terminology = build_terminology_ledger(turn.text());
+    let chunks = plan_chunks(text)?;
+    let terminology = build_terminology_ledger(text);
     let mut assembled = String::new();
     let mut versions = Vec::new();
     let mut preceding_translation: Option<String> = None;
@@ -151,14 +158,14 @@ impl TranslationOrchestrator {
       let output = self
         .translate_segment(
           turn,
-          &turn.text()[chunk.text],
+          &text[chunk.text],
           source_language,
           &terminology,
           preceding_translation.as_deref(),
         )
         .await?;
       assembled.push_str(&output.translation);
-      assembled.push_str(&turn.text()[chunk.separator]);
+      assembled.push_str(&text[chunk.separator]);
       preceding_translation = Some(output.translation);
       versions.push(output.versions);
     }
