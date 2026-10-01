@@ -30,5 +30,5 @@ All answers are pinned to a canonical content release where relevant. MySQL supp
 
 - [System design](../transnet.md)
 - [Transnet service interface](../interfaces/transnet.md)
-- [MySQL interface](../interfaces/mysql.md)
-- [Qdrant interface](../interfaces/qdrant.md)
+- [Canonical-data interface](../interfaces/canonical-data.md)
+- [Retrieval-data interface](../interfaces/retrieval-data.md)

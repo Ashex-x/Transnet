@@ -1,8 +1,8 @@
-# Target vector collections
+# Target Qdrant implementation
 
-中文：[目标向量集合](../../../docs_cn/interfaces/tables/vec_cn.md)
+中文：[目标 Qdrant 实现](../../../docs_cn/interfaces/tables/qdrant_cn.md)
 
-This catalog defines the target Qdrant collections behind the [vector data endpoint](../qdrant.md). Qdrant is a rebuildable release-pinned projection; MySQL canonical revisions and signed release artifacts remain authoritative.
+This catalog defines the target Qdrant implementation behind the storage-neutral [retrieval-data endpoint](../retrieval-data.md). Qdrant is a rebuildable release-pinned projection; canonical-data revisions and signed release artifacts remain authoritative.
 
 Status: target schema; the current Transnet executable does not create or activate these collections.
 
@@ -47,7 +47,7 @@ Corrections build new physical collections. Rollback selects a retained immutabl
 
 ## Related documents
 
-- [Vector endpoint contract](../qdrant.md)
-- [MySQL schema](sql.sql)
+- [Retrieval-data endpoint contract](../retrieval-data.md)
+- [MySQL implementation](mysql.sql)
 - [Relationship assessment contract](../transnet.md#relationship-assessment-metadata)
 - [Content publishing](../../guides/content-publishing.md)

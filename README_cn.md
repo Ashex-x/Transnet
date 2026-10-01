@@ -86,7 +86,7 @@ curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/a
 
 使用 `curl http://127.0.0.1:35792/health` 验证当前过渡性运行时。
 
-参阅[系统设计](docs_cn/transnet_cn.md)、[island-port 到 Transnet 的服务接口与 UDS 传输](docs_cn/interfaces/transnet_cn.md)、[Transnet 到 island-port 的 SQL endpoint](docs_cn/interfaces/mysql_cn.md)、[Transnet 到 island-port 的向量 endpoint](docs_cn/interfaces/qdrant_cn.md)和[配置参考](docs_cn/guides/configuration_cn.md)。
+参阅[系统设计](docs_cn/transnet_cn.md)、[island-port 到 Transnet 的服务接口与 UDS 传输](docs_cn/interfaces/transnet_cn.md)、[规范数据 endpoint](docs_cn/interfaces/canonical-data_cn.md)、[检索数据 endpoint](docs_cn/interfaces/retrieval-data_cn.md)和[配置参考](docs_cn/guides/configuration_cn.md)。
 
 ## 许可证
 

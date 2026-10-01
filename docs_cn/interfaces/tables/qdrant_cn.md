@@ -1,8 +1,8 @@
-# 目标向量 collection
+# 目标 Qdrant 实现
 
-English: [Target vector collections](../../../docs/interfaces/tables/vec.md)
+English: [Target Qdrant implementation](../../../docs/interfaces/tables/qdrant.md)
 
-本目录定义[向量数据 endpoint](../qdrant_cn.md)背后的目标 Qdrant collection。Qdrant 是可重建且绑定发布版本的投影；MySQL 规范修订和签名发布 artifact 仍是权威来源。
+本目录定义存储无关[检索数据 endpoint](../retrieval-data_cn.md)背后的目标 Qdrant 实现。Qdrant 是可重建且绑定发布版本的投影；规范数据修订和签名发布 artifact 仍是权威来源。
 
 状态：目标 schema；当前 Transnet 可执行文件不会创建或激活这些 collection。
 
@@ -47,7 +47,7 @@ Island-port 首先解析活动内容发布和不可变节点/边 alias。Qdrant 
 
 ## 相关文档
 
-- [向量 endpoint 合同](../qdrant_cn.md)
-- [MySQL schema](../../../docs/interfaces/tables/sql.sql)
+- [检索数据 endpoint 合同](../retrieval-data_cn.md)
+- [MySQL 实现](../../../docs/interfaces/tables/mysql.sql)
 - [关系评估合同](../transnet_cn.md#关系评估元数据)
 - [内容发布](../../guides/content-publishing_cn.md)

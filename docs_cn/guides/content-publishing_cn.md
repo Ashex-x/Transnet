@@ -58,9 +58,9 @@ flowchart LR
 
 ## 构建不可变 Qdrant 集合
 
-为发布创建一个不可变节点集合和一个不可变边集合，同时使用具名稠密/稀疏向量和 [Qdrant 合同](../interfaces/qdrant_cn.md)的 Payload 索引。在 Manifest 中记录维度、规范化、嵌入模型、哈希、Schema、数量和端点覆盖率。Edge dense/lexical input 绑定两端冻结 input hash 与完整的已接纳结构化关系；island-port 解析端点输入并应用精确批准的 compatibility-registry entry。重建探索邻居不会修改已验证内容。
+为发布创建一个不可变节点集合和一个不可变边集合，同时使用具名稠密/稀疏向量和[检索数据合同](../interfaces/retrieval-data_cn.md)的 Payload 索引。在 Manifest 中记录维度、规范化、嵌入模型、哈希、Schema、数量和端点覆盖率。Edge dense/lexical input 绑定两端冻结 input hash 与完整的已接纳结构化关系；island-port 解析端点输入并应用精确批准的 compatibility-registry entry。重建探索邻居不会修改已验证内容。
 
-Execution baseline 为 `semantic` vector 使用 1,024 维的 `Qwen/Qwen3-Embedding-0.6B`，但在部署提供精确不可变 artifact revision 且 island-port 能证明其实际加载的 revision 之前，publication 仍然闭合失败。Lexical publication 使用非神经的 `transnet-lexical-bm25-v1` encoder 与 `lexical` sparse vector。它保留 NFC spelling、大小写以及附着的技术符号 `+`/`#`，从按 UTF-8 排序的 term 构造无碰撞 release-local index，仅在完整 collection 冻结后计算 document-side BM25 term-frequency saturation，并将依赖 collection 的 IDF 交给 Qdrant `idf` modifier。IDF 绝不改变 canonical input hash。精确 tokenizer、dictionary、数值和执行边界由 [Qdrant 合同](../interfaces/qdrant_cn.md#lexical-encoder-合同)规定。
+Execution baseline 为 `semantic` vector 使用 1,024 维的 `Qwen/Qwen3-Embedding-0.6B`，但在部署提供精确不可变 artifact revision 且 island-port 能证明其实际加载的 revision 之前，publication 仍然闭合失败。Lexical publication 使用非神经的 `transnet-lexical-bm25-v1` encoder 与 `lexical` sparse vector。它保留 NFC spelling、大小写以及附着的技术符号 `+`/`#`，从按 UTF-8 排序的 term 构造无碰撞 release-local index，仅在完整 collection 冻结后计算 document-side BM25 term-frequency saturation，并将依赖 collection 的 IDF 交给 Qdrant `idf` modifier。IDF 绝不改变 canonical input hash。精确 tokenizer、dictionary、数值和执行边界由[检索数据合同](../interfaces/retrieval-data_cn.md#lexical-encoder-合同)规定。
 
 仓库内 publication foundation 会校验 node-first lifecycle、稳定 build/batch identity、冲突 retry、execution receipt、dictionary proof 以及 input/projection/persisted/manifest hash hierarchy。其出站 publication port 与严格 island-port client 通过共享 UDS transport 承载 begin、有界 node/edge batch、freeze receipt、reconciliation、status 与 abort。`KnowledgePublicationService` 从不可变 projection 工件驱动该合同，始终以 island-port 权威 status 恢复，不保留本地 publication progress，并且只在 reconciliation 成功后返回 typed activation candidate。Failed 或 abandoned build 不能成为 candidate，reconciliation 也不会激活 release。Production 仍受阻于已部署的不可变 Qwen revision 与 attestation、真实 dense/lexical execution、island-port build/status 与 reconciliation persistence、Qdrant node/edge collection 创建和 mutation、production collection verification 与 persisted hash、真实 MySQL/Qdrant reconciliation，以及 release-trio E2E 验收。
 
@@ -85,6 +85,6 @@ Transnet 在线请求路径只有读取权限。Transnet publication orchestrati
 ## 相关文档
 
 - [系统设计](../transnet_cn.md)
-- [MySQL](../interfaces/mysql_cn.md)
-- [Qdrant](../interfaces/qdrant_cn.md)
+- [规范数据接口](../interfaces/canonical-data_cn.md)
+- [检索数据接口](../interfaces/retrieval-data_cn.md)
 - [质量保证](quality-assurance_cn.md)

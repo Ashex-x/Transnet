@@ -15,6 +15,7 @@ English: [Module reference](../../docs/reference/modules.md)
 - [Port](ports_cn.md)：application service 所需的模型与数据操作。
 - [Adapter](adapters_cn.md)：模型 provider 与 island-port 协议实现。
 - [模型运行时](model-runtime_cn.md)：单 VLM fast/reasoning profile、embedding 操作、调用预算与视觉边界。
+- [持久化](persistence_cn.md)：application port、UDS adapter、数据库 repository、物理 schema 与发布一致性。
 - [运维](operations_cn.md)：可观测性、容错、就绪信号与离线发布。
 
 ## 依赖规则

@@ -226,8 +226,8 @@ Prompt、Schema、模型、Normalizer、检索配置、证据策略和知识发�
 ## 相关文档
 
 - [Transnet 服务接口](interfaces/transnet_cn.md)
-- [MySQL 接口](interfaces/mysql_cn.md)
-- [Qdrant 接口](interfaces/qdrant_cn.md)
+- [规范数据接口](interfaces/canonical-data_cn.md)
+- [检索数据接口](interfaces/retrieval-data_cn.md)
 - [服务行为](product/service-behavior_cn.md)
 - [内容发布](guides/content-publishing_cn.md)
 - [质量保证](guides/quality-assurance_cn.md)

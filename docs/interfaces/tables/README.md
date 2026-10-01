@@ -4,8 +4,8 @@
 
 This directory turns the target SQL and vector endpoint contracts into implementation-oriented schema and collection catalogs. The endpoint contracts remain authoritative for wire behavior; these artifacts own target persistence shape, keys, mutability, and separation between canonical knowledge and island-port product data.
 
-- [MySQL schema](sql.sql): executable MySQL 8 DDL for the optimized hybrid model: eleven canonical tables and five private island-port assessment tables.
-- [Vector collections](vec.md): immutable Qdrant node and edge collections and their payload indexes.
+- [MySQL implementation](mysql.sql): executable MySQL 8 DDL for the optimized hybrid model: eleven canonical tables and five private island-port assessment tables.
+- [Qdrant implementation](qdrant.md): immutable Qdrant node and edge collections and their payload indexes.
 
 No table or collection stores live translation text, lookup context, request-scoped history, provider output, credentials, or vectors derived from private traffic.
 

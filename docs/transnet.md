@@ -234,8 +234,8 @@ The design succeeds when a user can translate connected text or deeply understan
 ## Related documents
 
 - [Transnet service interface](interfaces/transnet.md)
-- [MySQL interface](interfaces/mysql.md)
-- [Qdrant interface](interfaces/qdrant.md)
+- [Canonical-data interface](interfaces/canonical-data.md)
+- [Retrieval-data interface](interfaces/retrieval-data.md)
 - [Service behavior](product/service-behavior.md)
 - [Content publishing](guides/content-publishing.md)
 - [Quality assurance](guides/quality-assurance.md)

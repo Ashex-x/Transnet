@@ -30,5 +30,5 @@ Transnet 在领域评估前检索已有领域名称、范围与 RAG 覆盖。LLM
 
 - [系统设计](../transnet_cn.md)
 - [Transnet 服务接口](../interfaces/transnet_cn.md)
-- [MySQL 接口](../interfaces/mysql_cn.md)
-- [Qdrant 接口](../interfaces/qdrant_cn.md)
+- [规范数据接口](../interfaces/canonical-data_cn.md)
+- [检索数据接口](../interfaces/retrieval-data_cn.md)

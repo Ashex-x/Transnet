@@ -64,7 +64,7 @@ Validation rejects orphan endpoints, cross-release references, invalid direction
 
 ## Build immutable Qdrant collections
 
-Create one immutable node collection and one immutable edge collection for the release. Both use named dense and sparse vectors and payload indexes required by the [Qdrant contract](../interfaces/qdrant.md). Record dimensions, normalization, embedding models, hashes, schema, counts, and endpoint coverage in the release manifest.
+Create one immutable node collection and one immutable edge collection for the release. Both use named dense and sparse vectors and payload indexes required by the [retrieval-data contract](../interfaces/retrieval-data.md). Record dimensions, normalization, embedding models, hashes, schema, counts, and endpoint coverage in the release manifest.
 
 The publisher completes and verifies the deterministic node projection first. It then freezes the node manifest and builds edges against that exact node hash. Reconciliation compares the canonical roots, canonical schema, typed physical collection IDs, payload schemas, embedding revisions and dimensions, node and edge hashes and counts, and complete endpoint coverage. A partial member, active alias, cross-release reference, unresolved relationship wire mapping, or unverified collection blocks activation.
 
@@ -97,6 +97,6 @@ A normal correction creates a new immutable release and preserves evidence linea
 ## Related documents
 
 - [System design](../transnet.md)
-- [MySQL interface](../interfaces/mysql.md)
-- [Qdrant interface](../interfaces/qdrant.md)
+- [Canonical-data interface](../interfaces/canonical-data.md)
+- [Retrieval-data interface](../interfaces/retrieval-data.md)
 - [Quality assurance](quality-assurance.md)

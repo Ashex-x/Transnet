@@ -26,11 +26,11 @@ The executable optionally constructs this outbound transport and canonical-only 
 
 The publication adapter is a separate outbound-only client over the same injectable transport. Private strict DTOs map `KnowledgePublicationPort` operations to `knowledge-publication-v1` begin, node/edge batch, freeze, reconcile, status, and abort calls. Its pure node/edge batch inspection and final send use one DTO/JSON/base64 serializer; inspection reserves the maximum legal request-ID/deadline representation without transport I/O, while send repeats the 1 MiB defensive check. It also enforces request/deadline/release echoing, the 256-point bound, 256 KiB control/response bounds, closed outcome/code combinations, exact execution receipts, and cross-artifact hashes. Fake transport tests exercise the contract without adding Qdrant/MySQL drivers, an island-port server, embedding execution, activation, or runtime handler wiring.
 
-The corresponding island-port server is maintained outside this repository and must implement the current delta in `interfaces/mysql.md`. Until that peer is upgraded, incompatible or incomplete responses fail closed and real island-port/MySQL end-to-end operation is not considered verified.
+The corresponding island-port server is maintained outside this repository and must implement the current delta in `interfaces/canonical-data.md`. Until that peer is upgraded, incompatible or incomplete responses fail closed and real island-port/MySQL end-to-end operation is not considered verified.
 
 Structured and vector mapping preserves release identifiers and closed outcomes. Island-port owns MySQL and Qdrant drivers, queries, pooling, transactions, collection selection, and credentials. Transnet does not expose SQL or Qdrant-native requests. Filesystem permissions authenticate processes; JSON never forwards end-user identity or credentials.
 
-Online adapters are read-only. A separately authorized publisher composition uses mutation-capable operations. Exact payloads remain in the [SQL](../interfaces/mysql.md) and [vector](../interfaces/qdrant.md) interfaces.
+Online adapters are read-only. A separately authorized publisher composition uses mutation-capable operations. Exact payloads remain in the [canonical-data](../interfaces/canonical-data.md) and [retrieval-data](../interfaces/retrieval-data.md) interfaces.
 
 ## Verification
 

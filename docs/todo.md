@@ -126,7 +126,7 @@ Exit criteria: a user can translate connected text or deeply understand one sele
 
 - [System design](transnet.md)
 - [Service behavior](product/service-behavior.md)
-- [Island-port SQL endpoints](interfaces/mysql.md)
-- [Island-port vector endpoints](interfaces/qdrant.md)
+- [Canonical-data endpoints](interfaces/canonical-data.md)
+- [Retrieval-data endpoints](interfaces/retrieval-data.md)
 - [Content publishing](guides/content-publishing.md)
 - [Quality assurance](guides/quality-assurance.md)

@@ -332,7 +332,7 @@ Domain assessment uses the closed `resolution` values `existing`, `proposed_new`
 
 A live translation result is ephemeral and has no save flag. Transnet first may resolve an exact reviewed canonical translation from the pinned MySQL release; otherwise it calls a provider and discards the request, response, and intermediate terminology ledger after the bounded request. It never stores a provider result as a side effect of traffic or decides importance from user behavior.
 
-There are two meanings of important and they have different owners. A translation saved, starred, or labeled important by an end user is private product data and island-port stores the association outside Transnet. A translation important to the shared language product is a canonical-content candidate: authorized publication tooling stages it with provenance and rights metadata, reviewers approve it, and a later immutable content release makes it readable by Transnet. The [SQL data endpoint contract](mysql.md) owns that storage and publication design.
+There are two meanings of important and they have different owners. A translation saved, starred, or labeled important by an end user is private product data and island-port stores the association outside Transnet. A translation important to the shared language product is a canonical-content candidate: authorized publication tooling stages it with provenance and rights metadata, reviewers approve it, and a later immutable content release makes it readable by Transnet. The [canonical-data endpoint contract](canonical-data.md) owns that storage and publication design.
 
 ## Relationship assessment metadata
 
@@ -720,5 +720,5 @@ Response `200`:
 ## Related documents
 
 - [System design](../transnet.md)
-- [MySQL interface](mysql.md)
-- [Qdrant interface](qdrant.md)
+- [Canonical-data interface](canonical-data.md)
+- [Retrieval-data interface](retrieval-data.md)

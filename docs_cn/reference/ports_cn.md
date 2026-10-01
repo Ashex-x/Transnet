@@ -18,7 +18,7 @@ Port 模块定义 application service 从模型和数据依赖所需的窄操作
 
 每次读取携带请求 deadline 和精确发布标识符。闭合结果区分缺失、不兼容、不可用、无效与权限过滤数据，且不泄露被隐藏内容。
 
-在线组合不接收 mutation method。独立发布 port 可暂存、校验、投影、激活、隔离、移除与回滚已审核规范内容，并绝不传给请求 handler。精确操作由 [SQL](../interfaces/mysql_cn.md) 与[向量](../interfaces/qdrant_cn.md)合同负责。
+在线组合不接收 mutation method。独立发布 port 可暂存、校验、投影、激活、隔离、移除与回滚已审核规范内容，并绝不传给请求 handler。精确操作由[规范数据](../interfaces/canonical-data_cn.md)与[检索数据](../interfaces/retrieval-data_cn.md)合同负责。
 
 ## 验证
 

@@ -332,7 +332,7 @@ Standard 段落响应：
 
 实时翻译结果是临时数据，不提供保存字段。Transnet 可以先从固定的 MySQL 发布中解析完全匹配的已审核规范翻译；否则调用 provider，并在有界请求结束后丢弃请求、响应和中间术语台账。它绝不把 provider 结果作为流量副作用存储，也不根据用户行为判断重要性。
 
-“重要”有两种含义，归属不同。终端用户保存、加星或标记重要的翻译属于私有产品数据，其关联由 island-port 在 Transnet 之外存储。对共享语言产品重要的翻译属于规范内容候选：经授权的发布工具携带来源与权利元数据暂存，审核者批准后，由后续不可变内容发布使其可供 Transnet 读取。[SQL 数据 endpoint 合同](mysql_cn.md)负责该存储和发布设计。
+“重要”有两种含义，归属不同。终端用户保存、加星或标记重要的翻译属于私有产品数据，其关联由 island-port 在 Transnet 之外存储。对共享语言产品重要的翻译属于规范内容候选：经授权的发布工具携带来源与权利元数据暂存，审核者批准后，由后续不可变内容发布使其可供 Transnet 读取。[规范数据 endpoint 合同](canonical-data_cn.md)负责该存储和发布设计。
 
 ## 关系评估元数据
 
@@ -719,5 +719,5 @@ Matches 最多 12；每 match 的 forms 最多 24、已审核 translations 最�
 ## 相关文档
 
 - [系统设计](../transnet_cn.md)
-- [MySQL 接口](mysql_cn.md)
-- [Qdrant 接口](qdrant_cn.md)
+- [规范数据接口](canonical-data_cn.md)
+- [检索数据接口](retrieval-data_cn.md)

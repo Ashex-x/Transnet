@@ -32,6 +32,6 @@ Provider Trace 只包含静态 Provider 边界、操作名、尝试次数、结�
 
 启用后，进程构造严格的出站 island-port client 与请求局部的 `CanonicalReadService`，供 `POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用；现有翻译与 lookup 响应保持不变。`GET /readyz` 保持现有响应合同，只执行有界的 `/api/v1/releases/active` 只读调用：没有 active release、transport 故障、schema 不兼容、畸形响应或超时都表示未就绪。island-port 服务端缺失或尚未升级时，进程可以继续存活，但 `/readyz` 返回 `503`；不得把这种情况当作 canonical miss 或可用能力。socket 不是 MySQL 直连，也不会捏造 vector/ranking 版本。Adapter wire schema 和响应大小边界保持 Stage 3 的固定严格合同，不开放调用方配置伪版本。
 
-Transnet-side canonical 公开交付已由上述两个路由实现，包括发布/schema 失败映射和 attribution/证据投影。island-port canonical server、生产 MySQL migration、publisher/write 操作、真实发布、激活、回滚与隔离、不可变旧发布服务验证，以及 island-port/MySQL 端到端验收仍属外部目标能力。嵌入、向量检索及其评估属于后续 milestone；见 [SQL endpoint](../interfaces/mysql_cn.md)、[向量 endpoint](../interfaces/qdrant_cn.md)和 [Transnet](../transnet_cn.md)合同。不得把凭据或请求内容写入仓库配置。
+Transnet-side canonical 公开交付已由上述两个路由实现，包括发布/schema 失败映射和 attribution/证据投影。island-port canonical server、生产 MySQL migration、publisher/write 操作、真实发布、激活、回滚与隔离、不可变旧发布服务验证，以及 island-port/MySQL 端到端验收仍属外部目标能力。Embedding、候选检索及其评估属于后续 milestone；见[规范数据 endpoint](../interfaces/canonical-data_cn.md)、[检索数据 endpoint](../interfaces/retrieval-data_cn.md)和 [Transnet](../transnet_cn.md)合同。不得把凭据或请求内容写入仓库配置。
 
 相关：[设计](../transnet_cn.md)、[Transnet 服务接口](../interfaces/transnet_cn.md)和[开发](development_cn.md)。

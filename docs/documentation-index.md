@@ -12,8 +12,8 @@
 
 - [Interface catalog](interfaces/README.md): table of contents, boundaries, and recommended reading order for this directory.
 - [Transnet service interface](interfaces/transnet.md): island-port-to-Transnet contract and shared internal UDS transport rules.
-- [Island-port SQL endpoints](interfaces/mysql.md): canonical-card and curated-translation storage plus UDS JSON operations under `api/v1`; callers never access MySQL or submit SQL directly.
-- [Island-port vector endpoints](interfaces/qdrant.md): UDS JSON operations under `api/v1`; callers never access Qdrant directly.
+- [Canonical-data endpoints](interfaces/canonical-data.md): storage-neutral canonical-card, translation, fact, release, and publication operations over UDS JSON.
+- [Retrieval-data endpoints](interfaces/retrieval-data.md): storage-neutral candidate node, relationship, scale, and projection operations over UDS JSON.
 
 ## Reference
 

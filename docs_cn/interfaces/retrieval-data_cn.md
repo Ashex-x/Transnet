@@ -1,14 +1,14 @@
-# 向量数据 endpoint 接口
+# 检索数据 endpoint 接口
 
-English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
+English: [Retrieval-data endpoint interface](../../docs/interfaces/retrieval-data.md)
 
-本合同定义 island-port 提供的向量与图 HTTP endpoint，用于版本化规范节点与边。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。Point 示例描述 island-port 的内部投影。
+本合同定义 island-port 提供的存储无关候选检索与投影 HTTP endpoint，用于版本化规范节点与关系。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。Point 示例描述目标 Qdrant 实现，但不使其成为线上合同的一部分。
 
 状态：目标 island-port 合同；Transnet publication client 与 application orchestrator 已进入仓库，但均未组合进在线可执行文件。Transnet 已包含强类型发布三件套、关系 admission 基础以及确定性的预发布节点/边构建工件。准备步骤当前只投影权威且 active 的 `Lexeme` 与 `Sense` 记录，解析其具备 embedding 权限的词汇 evidence，冻结独立 dense/lexical 规范输入但不生成向量，并且仅在所有端点都能从同一精确节点工件解析后构建边。Construction、scale 与更广泛的目标目录在 publisher-owned 规范来源冻结前保持闭合。Island-port publication server、生产 build/status 与 reconciliation persistence、embedding 与 lexical encoder 执行、Qdrant collection mutation/verification、激活、回滚及生产验收仍是外部工作。
 
 ## 目录
 
-- [向量数据 endpoint 接口](#向量数据-endpoint-接口)
+- [检索数据 endpoint 接口](#检索数据-endpoint-接口)
   - [目录](#目录)
   - [endpoint 参考](#endpoint-参考)
   - [存储边界](#存储边界)
@@ -26,27 +26,11 @@ English: [Vector data endpoint interface](../../docs/interfaces/qdrant.md)
 
 ## endpoint 参考
 
-- [向量数据 endpoint 接口](#向量数据-endpoint-接口)
-  - [目录](#目录)
-  - [endpoint 参考](#endpoint-参考)
-  - [存储边界](#存储边界)
-  - [发布与集合合同](#发布与集合合同)
-  - [知识节点 point](#知识节点-point)
-  - [知识边 point](#知识边-point)
-  - [语义尺度 point](#语义尺度-point)
-  - [POST /api/v1/nodes/search](#post-apiv1nodessearch)
-  - [POST /api/v1/scales/search](#post-apiv1scalessearch)
-  - [POST /api/v1/edges/search](#post-apiv1edgessearch)
-  - [POST /api/v1/neighbors/search](#post-apiv1neighborssearch)
-  - [Internal publication operations](#internal-publication-operations)
-  - [Deprecated POST /api/v1/releases/publish](#deprecated-post-apiv1releasespublish)
-  - [相关文档](#相关文档)
-
 Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 UDS JSON 传输](transnet_cn.md)。调用方绝不直接连接 Qdrant 或提交原生 Qdrant 请求；collection 选择、查询构造、凭据和连接池均由 island-port 负责。只有 Transnet 运行时和经过认证的发布工具可以访问套接字。运行时调用方具有搜索权限；发布要求 publisher 服务账户。
 
 所有路由统一使用 `/api/v1` 前缀。Island-port 套接字与资源路径共同标识本向量数据 API；调用方无需在路径中添加 `data`、`vec` 或存储厂商名称。
 
-每个精确请求 body 的结构为 `{"context": RequestContext, "input": EndpointInput}`。`RequestContext` 包含 `request_id`、`deadline_at`、值为 `vector-data-v1` 的 `schema_version`，并在适用时包含固定的 `content_release`。下方 endpoint 示例仅展示 `EndpointInput`。闭合 outcome 为 `ok`、`missing`、`invalid_payload`、`version_mismatch`、`unavailable` 和 `timeout`；发布还可返回 `conflict`。
+每个精确请求 body 的结构为 `{"context": RequestContext, "input": EndpointInput}`。`RequestContext` 包含 `request_id`、`deadline_at`、值为 `retrieval-data-v1` 的 `schema_version`，并在适用时包含固定的 `content_release`。下方 endpoint 示例仅展示 `EndpointInput`。闭合 outcome 为 `ok`、`missing`、`invalid_payload`、`version_mismatch`、`unavailable` 和 `timeout`；发布还可返回 `conflict`。
 
 ## 存储边界
 
@@ -624,8 +608,8 @@ Status-shaped success response 回显 build ID、一个闭合 lifecycle state，
 ## 相关文档
 
 - [共享 UDS JSON 传输与 Transnet 接口](transnet_cn.md)
-- [目标向量 collection 目录](tables/vec_cn.md)
+- [目标 Qdrant 实现](tables/qdrant_cn.md)
 - [Transnet 设计与外部接口](../transnet_cn.md)
-- [MySQL 接口](mysql_cn.md)
+- [规范数据接口](canonical-data_cn.md)
 - [内容发布](../guides/content-publishing_cn.md)
 - [质量保证](../guides/quality-assurance_cn.md)
