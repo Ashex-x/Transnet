@@ -1,8 +1,9 @@
 //! Bounded request-local live retrieval values with content-free diagnostics.
 
-use std::fmt;
+use std::{fmt, time::Duration};
 
 use thiserror::Error;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 use url::Url;
 
 /// Maximum results admitted from the sole search round.
@@ -17,6 +18,10 @@ pub const MAX_LIVE_PAGE_BYTES: usize = 512 * 1024;
 pub const MAX_LIVE_AGGREGATE_BYTES: usize = 1024 * 1024;
 /// Maximum Unicode scalars retained from one page.
 pub const MAX_LIVE_FRAGMENT_SCALARS: usize = 8_192;
+/// Default wall-clock budget shared by search and fetches.
+pub const DEFAULT_LIVE_SUBDEADLINE: Duration = Duration::from_secs(5);
+/// Largest configurable wall-clock budget for one live retrieval round.
+pub const MAX_LIVE_SUBDEADLINE: Duration = Duration::from_secs(15);
 
 /// Closed live-retrieval failure without query, URL, or page content.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
@@ -110,9 +115,12 @@ impl fmt::Debug for LiveSearchResult {
 /// One safely fetched request-local textual fragment.
 #[derive(Clone, PartialEq, Eq)]
 pub struct LiveFetchedPage {
+  /// Search nomination whose display metadata identifies this page.
   pub result: LiveSearchResult,
   fragment: String,
+  /// RFC 3339 instant at which retrieval completed.
   pub retrieved_at: String,
+  /// Decompressed response byte count before text extraction.
   pub byte_count: usize,
 }
 
@@ -124,10 +132,14 @@ impl LiveFetchedPage {
     retrieved_at: String,
     byte_count: usize,
   ) -> Result<Self, LiveRetrievalError> {
+    let retrieved_instant =
+      OffsetDateTime::parse(&retrieved_at, &Rfc3339).map_err(|_| LiveRetrievalError::Invalid)?;
     if fragment.trim().is_empty()
       || fragment.chars().count() > MAX_LIVE_FRAGMENT_SCALARS
       || byte_count == 0
       || byte_count > MAX_LIVE_PAGE_BYTES
+      || retrieved_instant.offset() != UtcOffset::UTC
+      || !retrieved_instant.nanosecond().is_multiple_of(1_000)
     {
       return Err(LiveRetrievalError::Invalid);
     }
@@ -153,15 +165,20 @@ impl fmt::Debug for LiveFetchedPage {
 /// Response-local live citation and the claims it supports.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LiveCitation {
+  /// Response-local source identifier in deterministic retrieval order.
   pub source_id: String,
+  /// Source identifiers supporting the response claim.
   pub source_ids: Vec<String>,
+  /// Closed non-canonical evidence state, always `live_external`.
   pub evidence_state: &'static str,
 }
 
 /// Completed request-local retrieval material.
 #[derive(Clone)]
 pub struct LiveRetrievalMaterial {
+  /// Safely fetched pages retained only for the request lifetime.
   pub pages: Vec<LiveFetchedPage>,
+  /// Response-local citations corresponding one-for-one with retained pages.
   pub citations: Vec<LiveCitation>,
 }
 
