@@ -41,6 +41,35 @@ struct FakeGeneration {
   delay: Duration,
 }
 
+struct VersionedChunkGeneration;
+
+#[async_trait]
+impl GenerationPort for VersionedChunkGeneration {
+  async fn generate(
+    &self,
+    context: ModelOperationContext<'_>,
+    request: GenerationRequest,
+  ) -> Result<GenerationResponse, ModelOperationError> {
+    context.ensure_active()?;
+    let (output, model) = match request.profile {
+      GenerationProfile::Reasoning => (connected("修复一"), "repair-model"),
+      GenerationProfile::Fast => {
+        let prompt: serde_json::Value = serde_json::from_str(request.input.as_str()).unwrap();
+        match prompt["chunk_index"].as_u64().unwrap() {
+          0 => ("invalid-first".to_string(), "fast-model-0"),
+          1 => (connected("二"), "fast-model-1"),
+          other => panic!("unexpected chunk index {other}"),
+        }
+      }
+    };
+    Ok(GenerationResponse {
+      output: GenerationOutput::new(output).unwrap(),
+      model_version: ModelVersion::new(model).unwrap(),
+      prompt_version: request.prompt_version,
+    })
+  }
+}
+
 impl FakeGeneration {
   fn new(outcomes: impl IntoIterator<Item = Result<String, ModelOperationError>>) -> Self {
     Self {
@@ -330,6 +359,35 @@ async fn two_invalid_chunks_never_consume_two_reasoning_calls() {
       .filter(|call| call.profile == GenerationProfile::Reasoning)
       .count(),
     1
+  );
+}
+
+#[tokio::test]
+async fn all_parallel_fast_versions_precede_later_reasoning_repair() {
+  let source = format!(
+    "{}. {}.",
+    "a".repeat(MAX_CONNECTED_CHUNK_CHARS - 2),
+    "b".repeat(MAX_CONNECTED_CHUNK_CHARS - 2)
+  );
+  let orchestrator = TranslationOrchestrator::new(Arc::new(VersionedChunkGeneration));
+
+  let result = orchestrator
+    .translate(
+      &context(30),
+      Arc::new(CancellationSignal::default()),
+      &turn(&source),
+    )
+    .await
+    .unwrap();
+
+  assert_eq!(result.translation.translations[0].text, "修复一 二");
+  assert_eq!(
+    result.metadata.model_versions,
+    ["fast-model-0", "fast-model-1", "repair-model"]
+  );
+  assert_eq!(
+    result.metadata.inference_profiles,
+    [GenerationProfile::Fast, GenerationProfile::Reasoning]
   );
 }
 

@@ -267,9 +267,11 @@ impl TranslationOrchestrator {
       .await?;
     let budget = ReasoningBudget::default();
     let mut assembled = String::new();
-    let mut versions = Vec::new();
+    let mut versions = responses
+      .iter()
+      .map(|response| operation_version(response, GenerationProfile::Fast))
+      .collect::<Vec<_>>();
     for (index, (chunk, fast)) in chunks.into_iter().zip(responses).enumerate() {
-      versions.push(operation_version(&fast, GenerationProfile::Fast));
       let translation = match parse_connected(&fast) {
         Ok(value) => value,
         Err(_) if !budget.is_spent() => {
