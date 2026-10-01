@@ -30,6 +30,8 @@ Assertion tests validate relation-registry versioning, arity, participant roles,
 
 Publication tests validate deterministic IDs, immutable collections, manifest reconciliation, quarantine, activation, and rollback. Bootstrap tests prove generated candidates remain quarantined until evidence or an approved editorial-source policy, rights checks, deterministic validation, and review succeed; model output alone can never become verified. Privacy tests prove that current text, translation history, caller identity, generated provider bodies, and user-related state do not enter MySQL, Qdrant, caches, logs, traces, metrics, backups, queues, or vectors.
 
+Migration tests build a fresh schema and upgrade from every supported starting version, compare their logical shape, exercise interrupted DDL recovery and checksum drift, run old and new binaries across the declared compatibility window, verify resumable bounded backfills, and prove that contract migrations cannot run before retained releases and rollback binaries stop depending on the old shape.
+
 Treat request text, retrieved documents, evidence, and model output as untrusted data. Injection suites attempt to replace instructions, exfiltrate credentials, bypass release filters, fabricate evidence, or add hidden persistence.
 
 ## Telemetry verification
@@ -49,3 +51,4 @@ A release passes only when translation, routing, canonical-card, sense and conce
 - [Content publishing](content-publishing.md)
 - [Transnet service interface](../interfaces/transnet.md)
 - [Observability contract](../reference/observability.md)
+- [MySQL migration policy](../interfaces/tables/migrations.md)

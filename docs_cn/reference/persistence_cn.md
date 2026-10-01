@@ -14,6 +14,8 @@ Island-port 拥有 repository 实现。其规范数据 repository 可以使用 M
 
 物理 MySQL DDL 与 Qdrant payload/index 定义是实现 artifact。它们实现逻辑发布、身份、证据、assertion 与候选合同，但本身不是服务接口。只有发布工具组合可接收具备 mutation 能力的 repository；在线 Transnet 组合只接收只读 port。
 
+MySQL 演进遵循不可变编号 migration 与扩展/迁移/切换/收缩兼容窗口。安装快照绝不作为升级脚本重复执行。规范与产品 schema 保持独立迁移 ledger，内容激活也与物理 schema 部署分离。精确运维规则见 [MySQL 迁移策略](../interfaces/tables/migrations_cn.md)。
+
 ## 一致性
 
 一个请求只选择一次兼容且不可变的规范与检索发布视图。每个下游读取都携带该 pin。候选检索可以提名标识符，但规范数据 hydration 仍是权威。Repository 故障、不兼容 schema、固定发布缺失或局部投影都是闭合条件，绝不能变成空的事实结果。
@@ -22,4 +24,4 @@ Publisher 先暂存规范修订，再由这些修订构建投影，核对数量�
 
 ## 验证
 
-测试 application port 不含厂商类型、Transnet adapter 不含原生数据库请求、在线组合不具备 mutation 能力、发布 pin 经每次映射仍保持、repository 错误映射到闭合结果，以及物理实现在激活前完成精确核对。
+测试 application port 不含厂商类型、Transnet adapter 不含原生数据库请求、在线组合不具备 mutation 能力、发布 pin 经每次映射仍保持、repository 错误映射到闭合结果、物理实现在激活前完成精确核对，且全新安装与升级路径收敛到等价 schema。

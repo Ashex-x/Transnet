@@ -30,6 +30,8 @@ English: [Quality assurance](../../docs/guides/quality-assurance.md)
 
 发布测试校验确定性 ID、不可变集合、manifest 对账、隔离、激活和回滚。Bootstrap 测试证明生成候选在证据或批准编辑来源策略、权利检查、确定性校验及审核成功前保持隔离；模型输出本身绝不能成为已验证内容。隐私测试证明当前文本、翻译历史、调用方身份、生成 provider body 和用户相关状态不进入 MySQL、Qdrant、缓存、日志、trace、指标、备份、队列或向量。
 
+Migration 测试构建全新 schema，并从每个受支持起始版本升级，比较其逻辑结构，覆盖中断 DDL 恢复与 checksum drift，让新旧 binary 在声明兼容窗口内运行，验证可恢复有界 backfill，并证明在保留发布与 rollback binary 不再依赖旧结构前不能执行收缩 migration。
+
 把请求文本、检索文档、证据和模型输出当作不受信数据。注入套件尝试替换指令、泄漏凭据、绕过发布过滤、伪造证据或增加隐藏持久化。
 
 ## 遥测验证
@@ -49,3 +51,4 @@ English: [Quality assurance](../../docs/guides/quality-assurance.md)
 - [内容发布](content-publishing_cn.md)
 - [Transnet 服务接口](../interfaces/transnet_cn.md)
 - [可观测性合同](../reference/observability_cn.md)
+- [MySQL 迁移策略](../interfaces/tables/migrations_cn.md)

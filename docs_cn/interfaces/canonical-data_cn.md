@@ -51,7 +51,7 @@ Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 
 
 使用 `utf8mb4`、UTC 微秒时间、不透明稳定公开 ID、在两端均为单一具体类型时使用显式外键，以及不可变已发布修订。凭据和加密密钥置于 MySQL 之外。
 
-目标 schema 有意采用关系型与 JSON 混合模型。稳定身份、生命周期、发布成员关系、关系 endpoint、评估资格和高频查询键使用有类型且带索引的列；随内容族变化的有界字段使用闭合且带版本的 JSON payload schema。这样既避免为每种卡片子项或领域属性建立一张表，也不会让核心 join 和过滤退化成 JSON 扫描。发布进入活动状态前，必须校验 payload schema、被引用实体类型、证据引用，以及多态 `release_member` 的目标。
+目标 schema 有意采用关系型与 JSON 混合模型。稳定身份、生命周期、发布成员关系、关系 endpoint、评估资格和高频查询键使用有类型且带索引的列；随内容族变化的有界字段使用闭合且带版本的 JSON payload schema。这样既避免为每种卡片子项或领域属性建立一张表，也不会让核心 join 和过滤退化成 JSON 扫描。`entity_type_revision` 使新增内容族由数据驱动，无需 `ALTER TABLE`；发布进入活动状态前，必须校验固定的类型定义、payload schema、引用及多态 `release_member` 目标。
 
 ## 精选翻译存储
 
@@ -63,8 +63,11 @@ erDiagram
   CANONICAL_ENTITY o|--o{ CANONICAL_ENTITY : owns
   CONTENT_RELEASE ||--o{ RELEASE_MEMBER : contains
   CANONICAL_ENTITY_REVISION ||--o{ RELEASE_MEMBER : pins
-  CANONICAL_SOURCE ||--o{ EVIDENCE_REVISION : supports
+  CANONICAL_SOURCE ||--o{ CANONICAL_SOURCE_REVISION : has
+  CANONICAL_SOURCE_REVISION ||--o{ EVIDENCE_REVISION : supports
 ```
+
+来源引文、权利与生命周期数据使用不可变 `canonical_source_revision` 行。Evidence 固定一个精确 source revision，发布同时固定精确 source 与 evidence 修订。因此，更新署名或撤回权利会创建新的 source revision 与发布，不能静默改变旧保留发布看到的来源。
 
 规范公共 ID 遵循 `canonical-id-v1`：实体族前缀标识实体种类，其余不透明值由 publisher 分配，绝不能由规范化文本或内容 hash 派生。在一个发布中，已发布翻译修订由源语言、`translation-source-v1` fingerprint、目标语言及其显式词义或范围键唯一选择。稳定 translation ID 在修正时保持不变；每次修正创建新的正数不可变修订及后续发布成员关系，而不是修改已发布内容。存储源文以便 Transnet 在检索后进行精确比较；仅 fingerprint 匹配绝不充分。词汇范围保留 sense、词性、短语级或组合式含义，以及有界规范领域，从而避免同形词与领域特定含义发生碰撞。Passage 条目有配置长度上限，且必须是可复用参考内容，不能是私人通信或任意提交文本。
 
@@ -76,7 +79,7 @@ erDiagram
 
 规范数据还拥有领域知识 profile、原子 assertion 和语义尺度。领域修订存储多语言名称与别名、定义、包含/排除范围、上层领域 ID，以及包含可用事实族、语言、已验证事实数和覆盖状态（`seed`、`partial` 或 `curated`）的知识 profile。覆盖描述活动发布，绝不声称完整。
 
-事实使用 `entity_type = 'fact'` 的 `canonical_entity`。其不可变 `canonical_entity_revision` 存储有类型谓词、陈述、qualifier、适用范围、证据引用、来源及验证数据。`canonical_assertion_participant` 把有序 schema-defined role 分配给规范实体或有类型字面值，从而支持二元与 n-ary assertion，而不把可查询 participant 隐藏在单个 JSON blob 中。Assertion 仍可独立审核并按发布寻址。
+事实使用 `entity_type = 'fact'` 的 `canonical_entity`。其不可变 `canonical_entity_revision` 存储关系类型与 registry 版本、陈述、qualifier、适用范围、证据引用、来源及验证数据。`canonical_assertion_participant` 是有序 schema-defined 实体或有类型字面值角色的权威来源，从而支持二元与 n-ary assertion，且不在单个 JSON blob 中重复 subject/object 值。Assertion 仍可独立审核并按发布寻址。
 
 `relation_type_revision` 是版本化关系 registry。它定义方向、inverse 行为、对称与传递策略、因果性、允许的 participant role、endpoint 类型兼容性与校验 schema。发布固定精确 registry 修订；UI 与模型都不得从 label 推断这些属性。
 

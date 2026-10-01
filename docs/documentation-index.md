@@ -14,6 +14,7 @@
 - [Transnet service interface](interfaces/transnet.md): island-port-to-Transnet contract and shared internal UDS transport rules.
 - [Canonical-data endpoints](interfaces/canonical-data.md): storage-neutral canonical-card, translation, fact, release, and publication operations over UDS JSON.
 - [Retrieval-data endpoints](interfaces/retrieval-data.md): storage-neutral candidate node, relationship, scale, and projection operations over UDS JSON.
+- [MySQL migration policy](interfaces/tables/migrations.md): physical-schema compatibility, online rollout, backfill, rollback, and migration-ledger rules.
 
 ## Reference
 

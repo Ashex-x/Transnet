@@ -51,7 +51,7 @@ Allowed Transnet service data includes:
 
 Use `utf8mb4`, UTC timestamps with microsecond precision, opaque stable public IDs, explicit foreign keys where both sides have one concrete type, and immutable published revisions. Credentials and encryption keys remain outside MySQL.
 
-The target schema deliberately uses a hybrid relational model. Stable identity, lifecycle, release membership, relationship endpoints, assessment eligibility, and frequent lookup keys are typed and indexed columns. Bounded fields that vary by content family use closed, versioned JSON payload schemas. This avoids a table per card child or domain attribute without turning core joins and filters into JSON scans. Publication validates payload schemas, referenced entity types, evidence references, and the polymorphic `release_member` target before a release can become active.
+The target schema deliberately uses a hybrid relational model. Stable identity, lifecycle, release membership, relationship endpoints, assessment eligibility, and frequent lookup keys are typed and indexed columns. Bounded fields that vary by content family use closed, versioned JSON payload schemas. This avoids a table per card child or domain attribute without turning core joins and filters into JSON scans. `entity_type_revision` makes new content families data-driven rather than requiring an `ALTER TABLE`; publication validates the pinned type definition, payload schema, references, and polymorphic `release_member` target before a release can become active.
 
 ## Curated translation storage
 
@@ -63,8 +63,11 @@ erDiagram
   CANONICAL_ENTITY o|--o{ CANONICAL_ENTITY : owns
   CONTENT_RELEASE ||--o{ RELEASE_MEMBER : contains
   CANONICAL_ENTITY_REVISION ||--o{ RELEASE_MEMBER : pins
-  CANONICAL_SOURCE ||--o{ EVIDENCE_REVISION : supports
+  CANONICAL_SOURCE ||--o{ CANONICAL_SOURCE_REVISION : has
+  CANONICAL_SOURCE_REVISION ||--o{ EVIDENCE_REVISION : supports
 ```
+
+Source citation, rights, and lifecycle data are immutable `canonical_source_revision` rows. Evidence pins one exact source revision, and a release pins both exact source and evidence revisions. Updating attribution or withdrawing rights therefore creates a new source revision and release; it cannot silently change the provenance seen by an older retained release.
 
 Canonical public IDs follow `canonical-id-v1`: a family prefix identifies the entity kind and the remaining opaque value is publisher-assigned, never derived from normalized text or a content hash. A published translation revision is uniquely selected within a release by source language, `translation-source-v1` fingerprint, target language, and its explicit sense or scope key. The stable translation ID survives corrections, while each correction creates a new positive immutable revision and later release membership rather than modifying published content. The stored source text is retained so Transnet can compare an exact candidate after retrieval; a fingerprint match alone is never sufficient. Lexical scope preserves sense, part of speech, phrase-level versus compositional meaning, and bounded canonical domains so homographs and field-specific meanings do not collide. Passage entries have a configured length bound and must be reusable reference content rather than personal correspondence or arbitrary submitted text.
 
@@ -76,7 +79,7 @@ User saves are a separate concern. When an end user stars or saves a translation
 
 Canonical data also owns domain knowledge profiles, atomic assertions, and semantic scales. A domain revision stores multilingual labels and aliases, definition, inclusion and exclusion scope, broader domain IDs, and a knowledge profile containing available fact families, languages, verified fact count, and coverage state (`seed`, `partial`, or `curated`). Coverage describes the active release and never asserts completeness.
 
-A fact uses `canonical_entity` with `entity_type = 'fact'`. Its immutable `canonical_entity_revision` stores the typed predicate, statement, qualifiers, applicability, evidence references, provenance, and verification data. `canonical_assertion_participant` assigns ordered schema-defined roles to canonical entities or typed literals, allowing binary and n-ary assertions without hiding queryable participants inside one JSON blob. Assertions remain independently reviewable and release-addressable.
+A fact uses `canonical_entity` with `entity_type = 'fact'`. Its immutable `canonical_entity_revision` stores the relation type and registry version, statement, qualifiers, applicability, evidence references, provenance, and verification data. `canonical_assertion_participant` is authoritative for its ordered schema-defined entity or typed-literal roles, allowing binary and n-ary assertions without duplicating subject/object values inside one JSON blob. Assertions remain independently reviewable and release-addressable.
 
 `relation_type_revision` is the versioned relation registry. It defines directionality, inverse behavior, symmetric and transitive policy, causality, allowed participant roles, endpoint-type compatibility, and validation schema. A release pins the exact registry revision; neither the UI nor the model infers these properties from a label.
 

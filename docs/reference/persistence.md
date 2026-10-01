@@ -14,6 +14,8 @@ Island-port owns repository implementations. Its canonical-data repository may u
 
 Physical MySQL DDL and Qdrant payload/index definitions are implementation artifacts. They implement the logical release, identity, evidence, assertion, and candidate contracts but are not themselves service interfaces. Publication tooling is the only composition allowed to receive mutation-capable repositories; the online Transnet composition receives read-only ports.
 
+MySQL evolution follows immutable numbered migrations and an expand/migrate/switch/contract compatibility window. The installation snapshot is never rerun as an upgrade. Canonical and product schemas keep independent migration ledgers, and content activation remains separate from physical schema deployment. Exact operational rules belong to the [MySQL migration policy](../interfaces/tables/migrations.md).
+
 ## Consistency
 
 One request selects a compatible immutable canonical and retrieval release view once. Every downstream read carries that pin. Candidate retrieval may nominate identifiers, but canonical-data hydration remains authoritative. A repository outage, incompatible schema, missing pinned release, or partial projection is a closed condition and never becomes an empty factual result.
@@ -22,4 +24,4 @@ The publisher stages canonical revisions first, builds projections from those re
 
 ## Verification
 
-Test that application ports contain no vendor types, Transnet adapters contain no native database requests, online composition has no mutation capability, release pins survive every mapping, repository errors map to closed outcomes, and physical implementations reconcile exactly before activation.
+Test that application ports contain no vendor types, Transnet adapters contain no native database requests, online composition has no mutation capability, release pins survive every mapping, repository errors map to closed outcomes, physical implementations reconcile exactly before activation, and fresh-install plus upgrade paths converge on an equivalent schema.

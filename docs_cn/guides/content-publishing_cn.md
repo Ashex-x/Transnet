@@ -38,7 +38,9 @@ flowchart LR
 
 仅为已审核、可复用的共享内容创建规范翻译修订。记录其单词、短语或段落单元，带语言标签的精确源文与译文，适用词义、方言、语域和领域范围，来源与证据，发布权利声明，选择理由，审核决定，normalizer 版本及内容 hash。绝不从请求日志产生候选，也绝不摄取私有用户保存内容。基础卡引用与精确翻译解析相同的已发布翻译身份。
 
-目标 MySQL schema 通过共享稳定的 `canonical_entity` 身份和不可变 `canonical_entity_revision` 行表示 lexeme、词义、基础卡、翻译、领域、事实和语义尺度。高频过滤键保留为列；每个内容族使用闭合且带版本的 JSON payload schema 保存其有界字段。Publisher 拒绝声明实体类型、引用或 schema 版本不一致的 payload，然后通过 `release_member` 固定已批准的实体与关系修订。不得仅因增加一个有界内容字段就新建表。
+目标 MySQL schema 通过共享稳定的 `canonical_entity` 身份和不可变 `canonical_entity_revision` 行表示 lexeme、词义、基础卡、翻译、领域、事实和语义尺度。高频过滤键保留为列；每个内容族使用闭合且带版本的 JSON payload schema 保存其有界字段。`entity_type_revision` 定义每个内容族的 parent、引用、索引字段与 payload 规则，因此新增内容族通常是 registry 发布而非 DDL。Publisher 拒绝声明类型、引用或 schema 版本不一致的 payload，然后通过 `release_member` 固定已批准的 source、evidence、registry、entity 与 relationship 修订。不得仅因增加一个有界内容字段就新建表。
+
+来源引文、权利与生命周期变化创建不可变 `canonical_source_revision` 行。Evidence 引用精确 source revision。因此旧发布保留审核时的来源署名和权限；撤回或修正通过隔离与新发布交付，绝不原地改写 metadata。
 
 在构建向量投影前创建领域知识 profile 与原子断言。二元事实包含主体、有类型谓词、客体或字面值、陈述、范围、条件、证据、来源、验证状态和不可变修订。天然需要更多角色的关系——例如在特定条件下使用某方法测量某物理量——使用有序且具名角色的断言参与者，而不是有损的成对事实。每个 profile 列出可用事实族及诚实的 `seed`、`partial` 或 `curated` 覆盖；缺失事实族保持显式缺失。
 
@@ -79,6 +81,8 @@ MySQL 卡片与规范翻译发布以及配对 Qdrant 节点/边版本作为一�
 Transnet 在线请求路径只有读取权限。Transnet publication orchestration 在 `PublicationActivationCandidate` 处停止。外部认证 publisher/control-plane 将该 candidate 提交给 island-port；island-port 拥有 MySQL/Qdrant 凭据、collection mutation、对账持久化与原子活动指针。激活只能选择完全对账的不可变三件套。
 
 回滚通过同一个 island-port authority 重新激活此前已验证且保留的不可变三件套。它不改写旧 canonical release，也不重建旧 immutable Qdrant collection。目标必须仍处于 verified、retained 且可寻址状态；build GC 绝不能删除 active 或 retained rollback target。Production retention 与 rollback 行为仍需外部验证。
+
+数据库 rollout 遵循 [MySQL 迁移策略](../interfaces/tables/migrations_cn.md)。Schema 扩展、有界 backfill、reader/writer 切换与破坏性收缩属于独立部署；激活内容发布不能替代 schema 兼容检查。
 
 ## 修正、隔离与删除
 

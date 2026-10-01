@@ -14,6 +14,7 @@ English: [Transnet documentation](../docs/documentation-index.md)
 - [Transnet 服务接口](interfaces/transnet_cn.md)：island-port 到 Transnet 的合同及共享内部 UDS 传输规则。
 - [规范数据 endpoint](interfaces/canonical-data_cn.md)：通过 UDS JSON 提供与存储技术无关的规范卡片、翻译、事实、发布与内容发布操作。
 - [检索数据 endpoint](interfaces/retrieval-data_cn.md)：通过 UDS JSON 提供与存储技术无关的候选节点、关系、尺度与投影操作。
+- [MySQL 迁移策略](interfaces/tables/migrations_cn.md)：物理 schema 兼容、在线 rollout、backfill、回滚与迁移 ledger 规则。
 
 ## 参考
 
