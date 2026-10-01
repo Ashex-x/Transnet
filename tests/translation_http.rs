@@ -118,6 +118,16 @@ async fn translation_success_uses_the_frozen_envelope_and_plural_versions() {
     body["data"]["translation"]["translations"][0]["text"],
     "热的"
   );
+  assert_eq!(
+    body["data"]["translation"]["translations"][0]["translation_id"],
+    "translation_0"
+  );
+  assert_eq!(body["data"]["translation"]["translations"][0]["order"], 0);
+  assert_eq!(
+    body["data"]["translation"]["review"],
+    json!({"state":"clean","issues":[]})
+  );
+  assert!(body["data"].get("external_sources").is_none());
   assert_eq!(body["meta"]["request_id"], "frontend-contract-17");
   assert_eq!(body["meta"]["response_level"], "standard");
   assert_eq!(body["meta"]["schema_version"], "translation-result-v1");
@@ -171,6 +181,7 @@ async fn passage_and_request_local_history_use_the_same_wire_contract() {
   assert!(body["data"]["translation"]["translations"][0]
     .get("details")
     .is_none());
+  assert_eq!(body["data"]["translation"]["review"]["state"], "clean");
   assert_eq!(body["meta"]["response_level"], "full");
   assert_eq!(
     body["meta"]["model_versions"],

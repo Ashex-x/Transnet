@@ -180,17 +180,18 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 
 ## 翻译输出
 
-文本输出保留现有按含义区分的有序翻译列表。Segment 与 image-region 输出保留请求顺序与 ID。每个 unit 有一个主译文及不超过请求数量且实质有用的 alternative。
+结果由 `unit` 判别：`word`、`phrase`、`passage`、`segment` 或 `image_region`。Word、phrase 与 passage 保留现有有序 `translations`；每个 choice 都有从位置确定的 `translation_id` 与零起始 `order`，并在各投影间保持稳定。Segment 与 image-region 结果保留调用方 ID 及显式的零起始 `order`；每个内层 unit 携带检测语言、主译文、typed annotation 与不变的 review outcome。结构化结果还携带实际执行的有序请求级 `terminology_decisions`。每个 unit 以后可以携带不超过请求数量且实质有用的带标签 alternative；在确定性 evaluator 完成组合前，该 Milestone 5 能力仍不可用。
 
 ```json
 {
   "translation": {
-    "input_type": "segments",
-    "detected_source_languages": ["en"],
+    "unit": "segment",
     "segments": [
       {
         "segment_id": "seg_title",
-        "translations": [{"text": "发布 {product_name}", "language": "zh-CN"}],
+        "order": 0,
+        "detected_source_language": "en",
+        "translations": [{"translation_id": "translation_0", "order": 0, "text": "发布 {product_name}", "language": "zh-CN"}],
         "annotations": [
           {"type": "terminology", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
         ],
@@ -202,9 +203,11 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 }
 ```
 
-图片输出使用含 `image_id`、`region_id`、检测语言、翻译、annotation 与 review 的 `regions`。它不返回图片或无限制 OCR transcript。Review state 为 `clean` 或 `review_recommended`；闭合 issue code 包括 `low_confidence`、`source_ambiguous`、`terminology_conflict`、`format_risk`、`protected_content_mismatch`、`visual_order_uncertain` 与 `live_source_incomplete`。
+图片输出使用 `unit: "image_region"`，其 `regions` 含 `image_id`、`region_id`、零起始阅读 `order`、检测语言、翻译、annotation 与 review。它不返回图片或无限制 OCR transcript。Review state 为 `clean` 或 `review_recommended`；闭合 issue code 包括 `low_confidence`、`source_ambiguous`、`terminology_conflict`、`format_risk`、`protected_content_mismatch`、`visual_order_uncertain` 与 `live_source_incomplete`。
 
 `brief`、`standard` 与 `full` 是一个已验证超集的确定性投影。较低级别移除支持详情，但绝不改变所选含义、译文、protected content、证据状态或 review outcome。空分区省略。
+
+Typed annotation 使用闭合 family `ambiguity`、`terminology`、`register`、`culture`、`format` 与 `review`；闭合 code 为 `ambiguity_detected`、`term_selected`、`protected_content_preserved`、`register_applied`、`cultural_context`、`format_preserved` 与 `review_required`。每项 annotation 均包含有界 display message 及可选的响应级 citation reference。`data.external_sources` 如存在，只包含被这些 citation 引用的 source；source 与 fragment ID 只在本次响应内有效，绝不是规范证据。当前 offline 文本路径不返回 external source。结果校验会在序列化前拒绝未知 citation target、重复 source ID、identity/order 缺口、重复 review issue、与 issue 矛盾的 clean review state，以及空主译文。
 
 ## 实时检索
 

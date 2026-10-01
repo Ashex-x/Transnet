@@ -55,6 +55,13 @@ pub use domain::model_runtime::{
   GenerationProfile, ModelValueError, ModelVersion, ReasoningBudget,
 };
 pub use domain::request_context::{RequestContext, RequestContextError, RequestId};
+pub use domain::translation_turn::{
+  CitationReference, ExternalSourceReference, ImageRegionTranslationResult,
+  ProjectedTranslationResult, SegmentTranslationResult, TerminologyDecision, TranslationAnnotation,
+  TranslationAnnotationCode, TranslationResultKind, TranslationResultValidationError,
+  TranslationReview, TranslationReviewIssue, TranslationReviewState, TranslationTurnResult,
+  TranslationVersionMetadata, TurnDetails, TurnTranslation,
+};
 pub use ports::model_runtime::{
   EmbeddingPort, EmbeddingRequest, GenerationPort, GenerationRequest, GenerationResponse,
   ModelOperationContext, ModelOperationError,

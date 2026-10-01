@@ -458,6 +458,7 @@ fn project_outcome(
       retrieval_version: None,
       content_release: None,
     },
+    external_sources: Vec::new(),
   }
 }
 

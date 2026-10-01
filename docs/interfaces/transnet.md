@@ -180,17 +180,18 @@ Until guidance-aware orchestration is composed, valid execution-dependent guidan
 
 ## Translation output
 
-Text output preserves the existing meaning-specific ordered translation list. Segment and image-region outputs preserve request order and IDs. Every unit has one primary translation and up to the requested number of materially useful alternatives.
+The result is discriminated by `unit`: `word`, `phrase`, `passage`, `segment`, or `image_region`. Word, phrase, and passage keep the existing ordered `translations`; every choice has a position-derived `translation_id` and zero-based `order` that remain stable across projections. Segment and image-region results preserve caller IDs and an explicit zero-based `order`; each nested unit carries its detected language, primary translations, typed annotations, and invariant review outcome. Structured results also carry the ordered request-scoped `terminology_decisions` that were actually enforced. Every unit may later carry up to the requested number of materially useful labeled alternatives; that Milestone 5 capability remains unavailable until its deterministic evaluator is composed.
 
 ```json
 {
   "translation": {
-    "input_type": "segments",
-    "detected_source_languages": ["en"],
+    "unit": "segment",
     "segments": [
       {
         "segment_id": "seg_title",
-        "translations": [{"text": "发布 {product_name}", "language": "zh-CN"}],
+        "order": 0,
+        "detected_source_language": "en",
+        "translations": [{"translation_id": "translation_0", "order": 0, "text": "发布 {product_name}", "language": "zh-CN"}],
         "annotations": [
           {"type": "terminology", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
         ],
@@ -202,9 +203,11 @@ Text output preserves the existing meaning-specific ordered translation list. Se
 }
 ```
 
-Image output uses `regions` with `image_id`, `region_id`, detected language, translations, annotations, and review. It does not return the image or an unrestricted OCR transcript. Review state is `clean` or `review_recommended`; issue codes are closed and include `low_confidence`, `source_ambiguous`, `terminology_conflict`, `format_risk`, `protected_content_mismatch`, `visual_order_uncertain`, and `live_source_incomplete`.
+Image output uses `unit: "image_region"` and `regions` with `image_id`, `region_id`, zero-based reading `order`, detected language, translations, annotations, and review. It does not return the image or an unrestricted OCR transcript. Review state is `clean` or `review_recommended`; issue codes are closed and include `low_confidence`, `source_ambiguous`, `terminology_conflict`, `format_risk`, `protected_content_mismatch`, `visual_order_uncertain`, and `live_source_incomplete`.
 
 `brief`, `standard`, and `full` are deterministic projections of one validated superset. A lower level removes supporting detail but never changes the selected meaning, translation, protected content, evidence state, or review outcome. Empty sections are omitted.
+
+Typed annotations use the closed families `ambiguity`, `terminology`, `register`, `culture`, `format`, and `review`; closed codes are `ambiguity_detected`, `term_selected`, `protected_content_preserved`, `register_applied`, `cultural_context`, `format_preserved`, and `review_required`. Each annotation has a bounded display message and optional response-local citation references. `data.external_sources`, when present, contains only sources referenced by those citations; source and fragment IDs are response-local and never canonical evidence. The current offline text path returns no external sources. Result validation rejects unknown citation targets, duplicate source IDs, identity/order gaps, duplicate review issues, contradictory clean review state, and empty primary translations before serialization.
 
 ## Live retrieval
 

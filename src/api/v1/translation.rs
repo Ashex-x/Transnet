@@ -120,15 +120,30 @@ pub(crate) async fn translate(
 }
 
 fn success(result: ProjectedTranslationResult, request_id: &RequestId) -> Response {
+  if result.validate().is_err() {
+    return problem::response(
+      StatusCode::BAD_GATEWAY,
+      "invalid_model_output",
+      "Invalid model output",
+      "The translation result did not satisfy the bounded output contract.",
+      request_id,
+      true,
+      Vec::new(),
+    );
+  }
   let ProjectedTranslationResult {
     translation,
     metadata,
+    external_sources,
   } = result;
   problem::no_store(
     (
       StatusCode::OK,
       Json(TranslationResponse {
-        data: TranslationData { translation },
+        data: TranslationData {
+          translation,
+          external_sources,
+        },
         meta: TranslationMeta {
           request_id: request_id.as_str().to_string(),
           response_level: metadata.response_level,
@@ -237,6 +252,8 @@ struct TranslationResponse {
 #[derive(Serialize)]
 struct TranslationData {
   translation: TranslationTurnResult,
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  external_sources: Vec<crate::domain::translation_turn::ExternalSourceReference>,
 }
 
 #[derive(Serialize)]

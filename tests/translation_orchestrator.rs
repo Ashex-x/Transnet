@@ -18,8 +18,8 @@ use transnet::{
   },
   domain::translation_turn::{
     GuidanceAudience, GuidancePurpose, GuidanceRegister, TerminologyConstraint, TerminologyPolicy,
-    TranslationGuidance, TranslationHistory, TranslationTurn, TranslationTurnRequest,
-    TranslationUnit,
+    TranslationGuidance, TranslationHistory, TranslationResultKind, TranslationTurn,
+    TranslationTurnRequest,
   },
   CancellationSignal, GenerationInput, GenerationOutput, GenerationPort, GenerationProfile,
   GenerationRequest, GenerationResponse, ModelOperationContext, ModelOperationError, ModelVersion,
@@ -214,8 +214,8 @@ async fn routing_uses_one_fast_profile_and_no_provider_selector() {
     .translate(&request, cancellation, &turn("The service is ready."))
     .await
     .unwrap();
-  assert_eq!(word.translation.unit, TranslationUnit::Word);
-  assert_eq!(sentence.translation.unit, TranslationUnit::Passage);
+  assert_eq!(word.translation.kind(), TranslationResultKind::Word);
+  assert_eq!(sentence.translation.kind(), TranslationResultKind::Passage);
   assert!(fake
     .calls()
     .iter()
@@ -270,7 +270,7 @@ async fn long_chunks_run_in_bounded_parallel_and_reassemble_in_source_order() {
     )
     .await
     .unwrap();
-  assert_eq!(result.translation.translations[0].text, "一 二 三 四");
+  assert_eq!(result.translation.translations()[0].text, "一 二 三 四");
   assert!(fake.peak.load(Ordering::Acquire) > 1);
   assert!(fake.peak.load(Ordering::Acquire) <= MAX_PARALLEL_GENERATIONS);
 }
@@ -380,7 +380,7 @@ async fn all_parallel_fast_versions_precede_later_reasoning_repair() {
     .await
     .unwrap();
 
-  assert_eq!(result.translation.translations[0].text, "修复一 二");
+  assert_eq!(result.translation.translations()[0].text, "修复一 二");
   assert_eq!(
     result.metadata.model_versions,
     ["fast-model-0", "fast-model-1", "repair-model"]

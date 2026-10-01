@@ -1134,15 +1134,253 @@ fn bounded(value: &str, chars: usize) -> bool {
   !value.trim().is_empty() && value.chars().count() <= chars
 }
 
-/// Shared inner translation result used by the unified HTTP response.
+/// Closed annotation emitted only from validated application output.
 #[derive(Clone, Serialize)]
-pub struct TranslationTurnResult {
-  /// Word, established phrase, or connected passage.
-  pub unit: TranslationUnit,
-  /// Supported language resolved for the current text.
+pub struct TranslationAnnotation {
+  /// Typed annotation family.
+  #[serde(rename = "type")]
+  pub family: AnnotationFamily,
+  /// Closed application-owned reason code.
+  pub code: TranslationAnnotationCode,
+  /// Concise bounded explanation safe to show with this result.
+  pub message: String,
+  /// Minimum response breadth at which this supporting annotation is useful.
+  #[serde(skip)]
+  pub minimum_level: ResponseLevel,
+  /// Response-local citations supporting the annotation.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub citations: Vec<CitationReference>,
+}
+
+/// Closed application-owned reason code for a typed result annotation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranslationAnnotationCode {
+  /// The source admits more than one material reading.
+  AmbiguityDetected,
+  /// A request-scoped terminology choice was applied.
+  TermSelected,
+  /// Protected source content was copied unchanged.
+  ProtectedContentPreserved,
+  /// Requested register guidance was applied.
+  RegisterApplied,
+  /// A bounded cultural explanation accompanies the translation.
+  CulturalContext,
+  /// Source formatting constraints were preserved.
+  FormatPreserved,
+  /// A closed review issue requires caller attention.
+  ReviewRequired,
+}
+
+/// Human-review state derived from validated issues rather than model confidence prose.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranslationReviewState {
+  /// No material issue requires explicit review.
+  Clean,
+  /// One or more closed issues should be reviewed by the caller.
+  ReviewRecommended,
+}
+
+/// Closed review issue codes understood by the target result contract.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranslationReviewIssue {
+  /// Model or source confidence is too low for silent acceptance.
+  LowConfidence,
+  /// Source meaning remains materially ambiguous.
+  SourceAmbiguous,
+  /// Requested terminology could not be satisfied safely.
+  TerminologyConflict,
+  /// Formatting may not round-trip safely.
+  FormatRisk,
+  /// Protected source material was not preserved exactly.
+  ProtectedContentMismatch,
+  /// Visual reading order could not be established confidently.
+  VisualOrderUncertain,
+  /// Required live supporting material was incomplete.
+  LiveSourceIncomplete,
+}
+
+/// Deterministic review outcome retained by every response projection.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct TranslationReview {
+  /// Aggregate review state.
+  pub state: TranslationReviewState,
+  /// Ordered, deduplicated closed issues.
+  pub issues: Vec<TranslationReviewIssue>,
+}
+
+impl TranslationReview {
+  /// Creates the issue-free review outcome used by validated ordinary text.
+  pub fn clean() -> Self {
+    Self {
+      state: TranslationReviewState::Clean,
+      issues: Vec::new(),
+    }
+  }
+}
+
+/// One applied request-scoped terminology decision.
+#[derive(Clone, Serialize)]
+pub struct TerminologyDecision {
+  /// Request-local source term.
+  pub source: String,
+  /// Selected target term, absent for a successfully forbidden term.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub target: Option<String>,
+  /// Policy enforced for this decision.
+  pub policy: TerminologyPolicy,
+}
+
+/// Response-local external source descriptor; it never denotes canonical evidence.
+#[derive(Clone, Serialize)]
+pub struct ExternalSourceReference {
+  /// Stable only within this response.
+  pub source_id: String,
+  /// Bounded display title.
+  pub title: String,
+  /// Public source URL admitted by the live-retrieval boundary.
+  pub url: String,
+}
+
+/// Reference from an annotation or generated claim to a response-local source.
+#[derive(Clone, Serialize)]
+pub struct CitationReference {
+  /// Response-local source identity.
+  pub source_id: String,
+  /// Optional bounded fragment identity owned by the retrieval result.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub fragment_id: Option<String>,
+}
+
+/// One ordered document-segment translation.
+#[derive(Clone, Serialize)]
+pub struct SegmentTranslationResult {
+  /// Caller-owned request-local identity returned unchanged.
+  pub segment_id: String,
+  /// Zero-based request order retained across every projection.
+  pub order: usize,
+  /// Detected supported source language.
   pub detected_source_language: TurnLanguage,
-  /// Ordered meanings preserved identically across all response levels.
+  /// Primary translation choices for this segment.
   pub translations: Vec<TurnTranslation>,
+  /// Typed supporting annotations.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub annotations: Vec<TranslationAnnotation>,
+  /// Invariant review outcome.
+  pub review: TranslationReview,
+}
+
+/// One ordered visual-region translation without returning image bytes or OCR transcripts.
+#[derive(Clone, Serialize)]
+pub struct ImageRegionTranslationResult {
+  /// Caller-owned image identity returned unchanged.
+  pub image_id: String,
+  /// Caller-owned region identity returned unchanged.
+  pub region_id: String,
+  /// Zero-based reading order retained across every projection.
+  pub order: usize,
+  /// Detected supported source language.
+  pub detected_source_language: TurnLanguage,
+  /// Primary translation choices for this region.
+  pub translations: Vec<TurnTranslation>,
+  /// Typed supporting annotations.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub annotations: Vec<TranslationAnnotation>,
+  /// Invariant review outcome.
+  pub review: TranslationReview,
+}
+
+/// Validated result superset shared by all translation input families.
+#[derive(Clone, Serialize)]
+#[serde(tag = "unit", rename_all = "snake_case")]
+pub enum TranslationTurnResult {
+  /// One lexical word with ordered meaning-specific translations.
+  Word {
+    /// Detected supported source language.
+    detected_source_language: TurnLanguage,
+    /// Ordered meaning-specific translations.
+    translations: Vec<TurnTranslation>,
+    /// Typed supporting annotations.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    annotations: Vec<TranslationAnnotation>,
+    /// Invariant review outcome.
+    review: TranslationReview,
+  },
+  /// One established phrase with ordered meaning-specific translations.
+  Phrase {
+    /// Detected supported source language.
+    detected_source_language: TurnLanguage,
+    /// Ordered meaning-specific translations.
+    translations: Vec<TurnTranslation>,
+    /// Typed supporting annotations.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    annotations: Vec<TranslationAnnotation>,
+    /// Invariant review outcome.
+    review: TranslationReview,
+  },
+  /// One connected passage.
+  Passage {
+    /// Detected supported source language.
+    detected_source_language: TurnLanguage,
+    /// Primary passage translation.
+    translations: Vec<TurnTranslation>,
+    /// Typed supporting annotations.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    annotations: Vec<TranslationAnnotation>,
+    /// Invariant review outcome.
+    review: TranslationReview,
+  },
+  /// Ordered structured document or localization segments.
+  Segment {
+    /// Ordered results retaining caller IDs and order.
+    segments: Vec<SegmentTranslationResult>,
+    /// Applied request-scoped terminology decisions.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    terminology_decisions: Vec<TerminologyDecision>,
+  },
+  /// Ordered bounded image regions.
+  ImageRegion {
+    /// Ordered results retaining caller image and region IDs.
+    regions: Vec<ImageRegionTranslationResult>,
+    /// Applied request-scoped terminology decisions.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    terminology_decisions: Vec<TerminologyDecision>,
+  },
+}
+
+/// Closed discriminator for every target translation result family.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranslationResultKind {
+  /// One lexical word.
+  Word,
+  /// One established phrase.
+  Phrase,
+  /// One connected passage.
+  Passage,
+  /// Ordered structured text segments.
+  Segment,
+  /// Ordered regions extracted from images.
+  ImageRegion,
+}
+
+/// Closed structural failures for a translation result superset.
+#[derive(Clone, Copy, Debug, Error, Eq, PartialEq)]
+pub enum TranslationResultValidationError {
+  /// A result family has no primary unit or translation.
+  #[error("translation result is empty")]
+  Empty,
+  /// Caller-owned identities are blank, duplicated, or out of request order.
+  #[error("translation result identity or order is invalid")]
+  InvalidIdentityOrder,
+  /// Review state and its closed issue list contradict one another.
+  #[error("translation result review state is inconsistent")]
+  InvalidReview,
+  /// A bounded result value exceeds the target result contract.
+  #[error("translation result value is invalid")]
+  InvalidValue,
 }
 
 /// Version metadata for one projected translation application outcome.
@@ -1179,11 +1417,51 @@ pub struct ProjectedTranslationResult {
   pub translation: TranslationTurnResult,
   /// Versions of only the components that participated in this request.
   pub metadata: TranslationVersionMetadata,
+  /// Response-local sources referenced by annotations or generated claims.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub external_sources: Vec<ExternalSourceReference>,
+}
+
+impl ProjectedTranslationResult {
+  /// Validates the superset and every response-local citation before HTTP serialization.
+  pub fn validate(&self) -> Result<(), TranslationResultValidationError> {
+    self.translation.validate()?;
+    let mut source_ids = std::collections::BTreeSet::new();
+    if self.external_sources.len() > 5
+      || self.external_sources.iter().any(|source| {
+        source.source_id.trim().is_empty()
+          || !source_ids.insert(source.source_id.as_str())
+          || !bounded(&source.title, 512)
+          || !bounded(&source.url, 2_048)
+      })
+    {
+      return Err(TranslationResultValidationError::InvalidValue);
+    }
+    if self
+      .translation
+      .annotations()
+      .flat_map(|annotation| &annotation.citations)
+      .any(|citation| {
+        !source_ids.contains(citation.source_id.as_str())
+          || citation
+            .fragment_id
+            .as_deref()
+            .is_some_and(|value| !bounded(value, 256))
+      })
+    {
+      return Err(TranslationResultValidationError::InvalidValue);
+    }
+    Ok(())
+  }
 }
 
 /// One translation with optional meaning-specific generated detail.
 #[derive(Clone, Serialize)]
 pub struct TurnTranslation {
+  /// Stable position-derived identity within this result unit.
+  pub translation_id: String,
+  /// Zero-based rank retained across every response projection.
+  pub order: usize,
   /// Translated text, including preserved formatting for passages.
   pub text: String,
   /// Target language selected by the caller.
@@ -1224,6 +1502,68 @@ pub struct TurnDetails {
 }
 
 impl TranslationTurnResult {
+  /// Validates identities, order, primary translations, annotations, terminology, and review state.
+  pub fn validate(&self) -> Result<(), TranslationResultValidationError> {
+    match self {
+      Self::Word {
+        translations,
+        annotations,
+        review,
+        ..
+      }
+      | Self::Phrase {
+        translations,
+        annotations,
+        review,
+        ..
+      }
+      | Self::Passage {
+        translations,
+        annotations,
+        review,
+        ..
+      } => validate_result_unit(translations, annotations, review),
+      Self::Segment {
+        segments,
+        terminology_decisions,
+      } => {
+        if segments.is_empty() || segments.len() > MAX_SEGMENTS {
+          return Err(TranslationResultValidationError::Empty);
+        }
+        let mut ids = std::collections::BTreeSet::new();
+        for (order, segment) in segments.iter().enumerate() {
+          if segment.order != order
+            || segment.segment_id.trim().is_empty()
+            || !ids.insert(segment.segment_id.as_str())
+          {
+            return Err(TranslationResultValidationError::InvalidIdentityOrder);
+          }
+          validate_result_unit(&segment.translations, &segment.annotations, &segment.review)?;
+        }
+        validate_terminology_decisions(terminology_decisions)
+      }
+      Self::ImageRegion {
+        regions,
+        terminology_decisions,
+      } => {
+        if regions.is_empty() || regions.len() > MAX_IMAGE_REGIONS {
+          return Err(TranslationResultValidationError::Empty);
+        }
+        let mut ids = std::collections::BTreeSet::new();
+        for (order, region) in regions.iter().enumerate() {
+          if region.order != order
+            || region.image_id.trim().is_empty()
+            || region.region_id.trim().is_empty()
+            || !ids.insert((region.image_id.as_str(), region.region_id.as_str()))
+          {
+            return Err(TranslationResultValidationError::InvalidIdentityOrder);
+          }
+          validate_result_unit(&region.translations, &region.annotations, &region.review)?;
+        }
+        validate_terminology_decisions(terminology_decisions)
+      }
+    }
+  }
   /// Assembles the full lexical superset; callers must validate the model draft first.
   pub fn lexical(
     draft: LexicalTurnDraft,
@@ -1231,60 +1571,230 @@ impl TranslationTurnResult {
     source: TurnLanguage,
     target: TurnLanguage,
   ) -> Self {
-    Self {
-      unit,
-      detected_source_language: source,
-      translations: draft
-        .translations
-        .into_iter()
-        .map(|m| TurnTranslation {
-          text: m.text,
-          language: target,
-          meaning: Some(m.meaning),
-          details: Some(TurnDetails {
-            unit,
-            part_of_speech: (unit == TranslationUnit::Word).then_some(m.part_of_speech),
-            phrase_type: (unit == TranslationUnit::Phrase).then_some(m.phrase_type),
-            aliases: m.aliases,
-            examples: m.examples,
-            usage_notes: m.usage_notes,
-            generated: true,
-            evidence_state: "exploratory",
-          }),
-        })
-        .collect(),
+    let translations = draft
+      .translations
+      .into_iter()
+      .enumerate()
+      .map(|(order, m)| TurnTranslation {
+        translation_id: format!("translation_{order}"),
+        order,
+        text: m.text,
+        language: target,
+        meaning: Some(m.meaning),
+        details: Some(TurnDetails {
+          unit,
+          part_of_speech: (unit == TranslationUnit::Word).then_some(m.part_of_speech),
+          phrase_type: (unit == TranslationUnit::Phrase).then_some(m.phrase_type),
+          aliases: m.aliases,
+          examples: m.examples,
+          usage_notes: m.usage_notes,
+          generated: true,
+          evidence_state: "exploratory",
+        }),
+      })
+      .collect();
+    let annotations = Vec::new();
+    let review = TranslationReview::clean();
+    match unit {
+      TranslationUnit::Word => Self::Word {
+        detected_source_language: source,
+        translations,
+        annotations,
+        review,
+      },
+      TranslationUnit::Phrase => Self::Phrase {
+        detected_source_language: source,
+        translations,
+        annotations,
+        review,
+      },
+      TranslationUnit::Passage => Self::Passage {
+        detected_source_language: source,
+        translations,
+        annotations,
+        review,
+      },
     }
   }
   /// Produces a plain connected-text result without inventing optional tips or alternatives.
   pub fn passage(text: String, source: TurnLanguage, target: TurnLanguage) -> Self {
-    Self {
-      unit: TranslationUnit::Passage,
+    Self::Passage {
       detected_source_language: source,
       translations: vec![TurnTranslation {
+        translation_id: "translation_0".into(),
+        order: 0,
         text,
         language: target,
         meaning: None,
         details: None,
       }],
+      annotations: Vec::new(),
+      review: TranslationReview::clean(),
     }
+  }
+
+  /// Returns the closed discriminant without exposing variant-specific storage.
+  pub const fn kind(&self) -> TranslationResultKind {
+    match self {
+      Self::Word { .. } => TranslationResultKind::Word,
+      Self::Phrase { .. } => TranslationResultKind::Phrase,
+      Self::Passage { .. } => TranslationResultKind::Passage,
+      Self::Segment { .. } => TranslationResultKind::Segment,
+      Self::ImageRegion { .. } => TranslationResultKind::ImageRegion,
+    }
+  }
+
+  /// Returns ordinary text translations, or an empty slice for structured result families.
+  pub fn translations(&self) -> &[TurnTranslation] {
+    match self {
+      Self::Word { translations, .. }
+      | Self::Phrase { translations, .. }
+      | Self::Passage { translations, .. } => translations,
+      Self::Segment { .. } | Self::ImageRegion { .. } => &[],
+    }
+  }
+
+  fn annotations(&self) -> impl Iterator<Item = &TranslationAnnotation> {
+    let mut values = Vec::new();
+    match self {
+      Self::Word { annotations, .. }
+      | Self::Phrase { annotations, .. }
+      | Self::Passage { annotations, .. } => values.extend(annotations),
+      Self::Segment { segments, .. } => {
+        values.extend(segments.iter().flat_map(|segment| &segment.annotations));
+      }
+      Self::ImageRegion { regions, .. } => {
+        values.extend(regions.iter().flat_map(|region| &region.annotations));
+      }
+    }
+    values.into_iter()
   }
   /// Projects an existing superset without changing translation text, meaning count, or rank.
   pub fn project(mut self, level: ResponseLevel) -> Self {
-    for translation in &mut self.translations {
-      match level {
-        ResponseLevel::Brief => translation.details = None,
-        ResponseLevel::Standard => {
-          if let Some(details) = &mut translation.details {
-            details.aliases.clear();
-            details.examples.truncate(1);
-            details.usage_notes.truncate(2);
-          }
-        }
-        ResponseLevel::Full => {}
+    let (translations, annotations) = match &mut self {
+      Self::Word {
+        translations,
+        annotations,
+        ..
       }
-    }
+      | Self::Phrase {
+        translations,
+        annotations,
+        ..
+      }
+      | Self::Passage {
+        translations,
+        annotations,
+        ..
+      } => (translations.as_mut_slice(), annotations),
+      Self::Segment { segments, .. } => {
+        for segment in segments {
+          project_translations(&mut segment.translations, level);
+          segment
+            .annotations
+            .retain(|value| visible_at(value.minimum_level, level));
+        }
+        return self;
+      }
+      Self::ImageRegion { regions, .. } => {
+        for region in regions {
+          project_translations(&mut region.translations, level);
+          region
+            .annotations
+            .retain(|value| visible_at(value.minimum_level, level));
+        }
+        return self;
+      }
+    };
+    project_translations(translations, level);
+    annotations.retain(|value| visible_at(value.minimum_level, level));
     self
   }
+}
+
+fn validate_result_unit(
+  translations: &[TurnTranslation],
+  annotations: &[TranslationAnnotation],
+  review: &TranslationReview,
+) -> Result<(), TranslationResultValidationError> {
+  let mut translation_ids = std::collections::BTreeSet::new();
+  if translations.is_empty()
+    || translations.iter().enumerate().any(|(order, value)| {
+      value.order != order
+        || value.translation_id.trim().is_empty()
+        || !translation_ids.insert(value.translation_id.as_str())
+        || !bounded(&value.text, 32_768)
+    })
+  {
+    return Err(TranslationResultValidationError::Empty);
+  }
+  if annotations.len() > 64
+    || annotations
+      .iter()
+      .any(|value| !bounded(&value.message, 512) || value.citations.len() > 16)
+  {
+    return Err(TranslationResultValidationError::InvalidValue);
+  }
+  let review_is_valid = match review.state {
+    TranslationReviewState::Clean => review.issues.is_empty(),
+    TranslationReviewState::ReviewRecommended => !review.issues.is_empty(),
+  };
+  if !review_is_valid {
+    return Err(TranslationResultValidationError::InvalidReview);
+  }
+  let mut issues = std::collections::BTreeSet::new();
+  if !review.issues.iter().all(|issue| issues.insert(*issue)) {
+    return Err(TranslationResultValidationError::InvalidReview);
+  }
+  Ok(())
+}
+
+fn validate_terminology_decisions(
+  decisions: &[TerminologyDecision],
+) -> Result<(), TranslationResultValidationError> {
+  if decisions.len() > MAX_TERMINOLOGY {
+    return Err(TranslationResultValidationError::InvalidValue);
+  }
+  let mut sources = std::collections::BTreeSet::new();
+  if decisions.iter().any(|value| {
+    !bounded(&value.source, MAX_TERM_SCALARS)
+      || value
+        .target
+        .as_deref()
+        .is_some_and(|target| !bounded(target, MAX_TERM_SCALARS))
+      || !sources.insert(value.source.as_str())
+  }) {
+    return Err(TranslationResultValidationError::InvalidValue);
+  }
+  Ok(())
+}
+
+fn project_translations(translations: &mut [TurnTranslation], level: ResponseLevel) {
+  for translation in translations {
+    match level {
+      ResponseLevel::Brief => translation.details = None,
+      ResponseLevel::Standard => {
+        if let Some(details) = &mut translation.details {
+          details.aliases.clear();
+          details.examples.truncate(1);
+          details.usage_notes.truncate(2);
+        }
+      }
+      ResponseLevel::Full => {}
+    }
+  }
+}
+
+const fn visible_at(minimum: ResponseLevel, requested: ResponseLevel) -> bool {
+  matches!(
+    (minimum, requested),
+    (ResponseLevel::Brief, _)
+      | (
+        ResponseLevel::Standard,
+        ResponseLevel::Standard | ResponseLevel::Full
+      )
+      | (ResponseLevel::Full, ResponseLevel::Full)
+  )
 }
 
 macro_rules! redacted_debug {
@@ -1304,6 +1814,12 @@ redacted_debug!(
   TranslationTurnResult,
   TurnTranslation,
   TurnDetails,
+  TranslationAnnotation,
+  TerminologyDecision,
+  ExternalSourceReference,
+  CitationReference,
+  SegmentTranslationResult,
+  ImageRegionTranslationResult,
   ProjectedTranslationResult
 );
 
@@ -1719,6 +2235,162 @@ mod tests {
         .unwrap()
         .len(),
       2
+    );
+  }
+
+  fn plain_translation(text: &str) -> TurnTranslation {
+    TurnTranslation {
+      translation_id: "translation_0".into(),
+      order: 0,
+      text: text.into(),
+      language: TurnLanguage::Chinese,
+      meaning: None,
+      details: None,
+    }
+  }
+
+  fn annotation(minimum_level: ResponseLevel) -> TranslationAnnotation {
+    TranslationAnnotation {
+      family: AnnotationFamily::Terminology,
+      code: TranslationAnnotationCode::TermSelected,
+      message: "The requested term was selected.".into(),
+      minimum_level,
+      citations: Vec::new(),
+    }
+  }
+
+  #[test]
+  fn structured_projection_preserves_identity_order_translation_constraints_and_review() {
+    let review = TranslationReview {
+      state: TranslationReviewState::ReviewRecommended,
+      issues: vec![TranslationReviewIssue::FormatRisk],
+    };
+    let superset = TranslationTurnResult::Segment {
+      segments: vec![
+        SegmentTranslationResult {
+          segment_id: "title".into(),
+          order: 0,
+          detected_source_language: TurnLanguage::English,
+          translations: vec![plain_translation("标题 {name}")],
+          annotations: vec![
+            annotation(ResponseLevel::Brief),
+            annotation(ResponseLevel::Full),
+          ],
+          review: review.clone(),
+        },
+        SegmentTranslationResult {
+          segment_id: "body".into(),
+          order: 1,
+          detected_source_language: TurnLanguage::English,
+          translations: vec![plain_translation("正文")],
+          annotations: Vec::new(),
+          review: TranslationReview::clean(),
+        },
+      ],
+      terminology_decisions: vec![TerminologyDecision {
+        source: "launch".into(),
+        target: Some("发布".into()),
+        policy: TerminologyPolicy::Required,
+      }],
+    };
+    assert_eq!(superset.validate(), Ok(()));
+    let brief = serde_json::to_value(superset.clone().project(ResponseLevel::Brief)).unwrap();
+    let full = serde_json::to_value(superset.project(ResponseLevel::Full)).unwrap();
+    for value in [&brief, &full] {
+      assert_eq!(value["unit"], "segment");
+      assert_eq!(value["segments"][0]["segment_id"], "title");
+      assert_eq!(value["segments"][0]["order"], 0);
+      assert_eq!(
+        value["segments"][0]["translations"][0]["text"],
+        "标题 {name}"
+      );
+      assert_eq!(
+        value["segments"][0]["review"]["state"],
+        "review_recommended"
+      );
+      assert_eq!(value["terminology_decisions"][0]["target"], "发布");
+    }
+    assert_eq!(
+      brief["segments"][0]["annotations"]
+        .as_array()
+        .unwrap()
+        .len(),
+      1
+    );
+    assert_eq!(
+      full["segments"][0]["annotations"].as_array().unwrap().len(),
+      2
+    );
+  }
+
+  #[test]
+  fn image_results_validate_order_review_and_response_local_citations() {
+    let translation = TranslationTurnResult::ImageRegion {
+      regions: vec![ImageRegionTranslationResult {
+        image_id: "page-1".into(),
+        region_id: "region-1".into(),
+        order: 0,
+        detected_source_language: TurnLanguage::English,
+        translations: vec![plain_translation("警告")],
+        annotations: vec![TranslationAnnotation {
+          family: AnnotationFamily::Culture,
+          code: TranslationAnnotationCode::CulturalContext,
+          message: "Context comes from the cited source.".into(),
+          minimum_level: ResponseLevel::Standard,
+          citations: vec![CitationReference {
+            source_id: "live_1".into(),
+            fragment_id: Some("fragment_1".into()),
+          }],
+        }],
+        review: TranslationReview::clean(),
+      }],
+      terminology_decisions: Vec::new(),
+    };
+    let projected = ProjectedTranslationResult {
+      translation,
+      metadata: TranslationVersionMetadata {
+        schema_version: TRANSLATION_RESULT_SCHEMA_VERSION,
+        normalizer_version: NORMALIZER_VERSION,
+        projection_version: PROJECTION_VERSION,
+        response_level: ResponseLevel::Full,
+        model_versions: Vec::new(),
+        prompt_versions: Vec::new(),
+        inference_profiles: Vec::new(),
+        reasoning_escalated: false,
+        retrieval_version: None,
+        content_release: None,
+      },
+      external_sources: vec![ExternalSourceReference {
+        source_id: "live_1".into(),
+        title: "Public notice".into(),
+        url: "https://example.invalid/notice".into(),
+      }],
+    };
+    assert_eq!(projected.validate(), Ok(()));
+    let mut invalid = projected;
+    invalid.external_sources.clear();
+    assert_eq!(
+      invalid.validate(),
+      Err(TranslationResultValidationError::InvalidValue)
+    );
+  }
+
+  #[test]
+  fn structured_results_reject_order_gaps_before_projection() {
+    let invalid = TranslationTurnResult::Segment {
+      segments: vec![SegmentTranslationResult {
+        segment_id: "segment-1".into(),
+        order: 1,
+        detected_source_language: TurnLanguage::English,
+        translations: vec![plain_translation("译文")],
+        annotations: Vec::new(),
+        review: TranslationReview::clean(),
+      }],
+      terminology_decisions: Vec::new(),
+    };
+    assert_eq!(
+      invalid.validate(),
+      Err(TranslationResultValidationError::InvalidIdentityOrder)
     );
   }
 
