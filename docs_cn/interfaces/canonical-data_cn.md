@@ -4,7 +4,7 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
 
 本合同定义 island-port 提供的存储无关 HTTP endpoint，涵盖共享规范翻译、单词、短语、词义、领域、证据元数据和不可变内容发布。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。MySQL 是计划中的 island-port 实现，不属于本线上合同。
 
-状态：目标 island-port 服务端合同。可执行文件可选地组合现有严格出站 canonical-read client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。该已实现 client 仍把过渡线上标识为 `mysql-adapter-v1`；在后续 migration 修改代码与测试前，它尚未实现改名后的 `canonical-data-v1` 目标。外部 island-port server 尚未按任一合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留及真实端到端验收仍需在本仓库之外完成。
+状态：目标 island-port 服务端合同，Transnet 读取 client 已实现。可执行文件可选地组合严格出站 `canonical-data-v1` client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。已实现 client 按本文通用 envelope 与严格 response echo 校验覆盖 active-release、translation candidate、basic-card candidate 和 sense-detail 读取。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留、domain/fact/scale 读取及真实端到端验收仍需在本仓库之外完成。
 
 仓库内 M3 publication foundation 建模 Qdrant build lifecycle、idempotency、compatibility receipt 与 reconciliation hash。其出站 publication port 与严格 island-port client 承载有界 build contract；`KnowledgePublicationService` 基于权威 status 恢复，驱动 node/edge publication 直至 reconciliation，且不保存本地 progress。Reconciliation 成功后只返回强类型 activation candidate；外部已认证 publisher 或 control plane 必须将该 candidate 提交给 island-port，才能原子切换 active trio。仓库没有新增 island-port publication server、MySQL build/reconciliation persistence、activation pointer mutation 或 rollback implementation；这些 authority-owned operation 仍是外部要求。
 

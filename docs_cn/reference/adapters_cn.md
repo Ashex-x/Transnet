@@ -16,7 +16,7 @@ Provider adapter 绝不记录 prompt、源文本、历史、provider body、凭�
 
 Island-port client 把数据 port 操作映射到 island-port 在其所属 Unix socket 上提供的版本化 HTTP/1.1 JSON 调用。它负责连接生命周期、content-type 与 body 限制、schema 版本处理、deadline 和安全传输错误。
 
-Stage 3 client 只实现出站 canonical read：翻译候选、词汇候选解析和 sense details。其私有 strict DTO 重建现有 `CanonicalTranslationRevision`、`CanonicalCandidate` 与 `CanonicalSenseDetails`；ranking、fusion、歧义解析和 coverage 仍是 request-local application 工作。Unix build 提供 production socket transport；测试注入有界 fake transport，不增加入站 listener 或数据库 client。
+Canonical-data client 只实现出站 `canonical-data-v1` read：active-release 选择、翻译候选、词汇候选解析和 sense details。其私有 strict DTO 重建现有 `CanonicalTranslationRevision`、`CanonicalCandidate` 与 `CanonicalSenseDetails`；ranking、fusion、歧义解析和 coverage 仍是 request-local application 工作。Unix build 提供 production socket transport；测试注入有界 fake transport，不增加入站 listener 或数据库 client。
 
 候选读取现在要求固定发布的权威 source 记录、经过审核的非空 attribution，以及一致的 source/evidence 权限；严格 DTO 映射对缺失或冲突 lineage 闭合失败。结构化的 `content_release_unavailable` 与 `schema_incompatible` 分离，固定发布的 sense 读取将返回的规范 schema 与调用方 pin 复核。错误分类不解析 peer message 文本。
 

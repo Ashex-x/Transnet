@@ -204,7 +204,7 @@ fn canonical_configuration_is_optional_but_strict_when_enabled() {
 #[tokio::test]
 async fn strict_outbound_client_can_back_opt_in_service_and_readiness() {
   for (schema_version, expected) in [
-    ("mysql-adapter-v1", StatusCode::OK),
+    ("canonical-data-v1", StatusCode::OK),
     ("obsolete-schema", StatusCode::SERVICE_UNAVAILABLE),
   ] {
     let transport = Arc::new(ActiveReleaseTransport { schema_version });
