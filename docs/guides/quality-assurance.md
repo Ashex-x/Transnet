@@ -44,6 +44,8 @@ Inject MySQL, Qdrant node, Qdrant edge, and model failures; invalid structured o
 
 A release passes only when translation, routing, canonical-card, sense and concept resolution, domain assessment, retrieval, relationship semantics, page composition, evidence, degraded-mode, non-persistence, activation, rollback, schema-compatibility, and injection suites pass. Production monitoring records only aggregate operational outcomes and contains no request content or raw provider bodies.
 
+The checked-in `tests/fixtures/target_challenges_v1.json` foundation is synthetic, CC0-licensed, schema-versioned, and covers every required challenge category. Its contract test rejects unknown fields, missing categories, duplicate or unsafe IDs, unsupported language pairs, unbounded content, and malformed expected codes. Scenario-specific executable evaluators are added alongside the corresponding target runtime slices; fixture presence alone is never treated as behavioral acceptance.
+
 ## Related documents
 
 - [System design](../transnet.md)
