@@ -101,12 +101,13 @@ impl KnowledgePublicationService {
       .publication
       .abort(context, canonical, build_id, idempotency_key, &fingerprint)
       .await?;
-    if status.build_id != *build_id
-      || !matches!(
-        status.state,
-        PublicationBuildState::Aborting | PublicationBuildState::Abandoned
-      )
-    {
+    if status.build_id != *build_id {
+      return Err(KnowledgeReleaseFailure::IdempotencyConflict);
+    }
+    if !matches!(
+      status.state,
+      PublicationBuildState::Aborting | PublicationBuildState::Abandoned
+    ) {
       return Err(KnowledgeReleaseFailure::InvalidLifecycleTransition);
     }
     Ok(status)
@@ -681,6 +682,8 @@ mod tests {
     edge_inspection_point_limit: Option<usize>,
     node_inspections: usize,
     edge_inspections: usize,
+    abort_build_mismatch: bool,
+    abort_state_override: Option<PublicationBuildState>,
     node_batches: Vec<(u32, String, String, usize)>,
     edge_batches: Vec<(u32, String, String, usize)>,
   }
@@ -720,6 +723,8 @@ mod tests {
         edge_inspection_point_limit: state.edge_inspection_point_limit,
         node_inspections: state.node_inspections,
         edge_inspections: state.edge_inspections,
+        abort_build_mismatch: state.abort_build_mismatch,
+        abort_state_override: state.abort_state_override,
         node_batches: state.node_batches.clone(),
         edge_batches: state.edge_batches.clone(),
       }
@@ -992,9 +997,19 @@ mod tests {
     ) -> Result<PublicationStatus, KnowledgeReleaseFailure> {
       let mut state = self.state.lock().unwrap();
       state.events.push(format!("abort:{}", fingerprint.as_str()));
+      let returned_build_id = if state.abort_build_mismatch {
+        PublicationBuildId::parse(
+          "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        )
+        .unwrap()
+      } else {
+        build_id.clone()
+      };
       Ok(PublicationStatus {
-        build_id: build_id.clone(),
-        state: PublicationBuildState::Abandoned,
+        build_id: returned_build_id,
+        state: state
+          .abort_state_override
+          .unwrap_or(PublicationBuildState::Abandoned),
         next_node_ordinal: state.next_node,
         next_edge_ordinal: state.next_edge,
       })
@@ -1683,5 +1698,44 @@ mod tests {
     let events = &port.snapshot().events;
     assert_eq!(events[0], "status");
     assert!(events[1].starts_with("abort:sha256:"));
+  }
+
+  #[tokio::test]
+  async fn abort_rejects_wrong_identity_and_illegal_returned_state() {
+    let plan = plan(2);
+    let build_id = PublicationBuildId::derive(
+      &plan.canonical.release_id,
+      plan.nodes.embedding.payload_schema_version(),
+      &plan.nodes.content_hash,
+      &plan.compatibility.entry_id,
+    )
+    .unwrap();
+    let key = PublicationIdempotencyKey::parse("abort-offline-r2").unwrap();
+
+    let wrong_identity =
+      KnowledgePublicationService::new(Arc::new(FakePublicationPort::new(FakeState {
+        abort_build_mismatch: true,
+        ..FakeState::default()
+      })));
+    assert_eq!(
+      wrong_identity
+        .abort(&context(), &plan.canonical, &build_id, &key)
+        .await
+        .unwrap_err(),
+      KnowledgeReleaseFailure::IdempotencyConflict
+    );
+
+    let wrong_state =
+      KnowledgePublicationService::new(Arc::new(FakePublicationPort::new(FakeState {
+        abort_state_override: Some(PublicationBuildState::ActivationCandidate),
+        ..FakeState::default()
+      })));
+    assert_eq!(
+      wrong_state
+        .abort(&context(), &plan.canonical, &build_id, &key)
+        .await
+        .unwrap_err(),
+      KnowledgeReleaseFailure::InvalidLifecycleTransition
+    );
   }
 }
