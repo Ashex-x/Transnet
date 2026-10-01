@@ -226,8 +226,28 @@ async fn routing_uses_one_fast_profile_and_no_provider_selector() {
 }
 
 #[tokio::test]
-async fn execution_dependent_guidance_is_rejected_before_generation() {
+async fn text_guidance_is_executed_and_checked() {
   let fake = Arc::new(FakeGeneration::new([Ok(lexical("扭矩"))]));
+  let orchestrator = TranslationOrchestrator::new(fake.clone());
+  let result = orchestrator
+      .translate(
+        &context(30),
+        Arc::new(CancellationSignal::default()),
+        &guided_turn("torque"),
+      )
+      .await
+      .unwrap();
+  assert_eq!(result.translation.kind(), TranslationResultKind::Word);
+  assert_eq!(fake.calls().len(), 1);
+  assert!(fake.calls()[0].input.contains("technical"));
+}
+
+#[tokio::test]
+async fn terminology_violation_uses_only_one_repair_then_fails() {
+  let fake = Arc::new(FakeGeneration::new([
+    Ok(lexical("错误")),
+    Ok(lexical("仍然错误")),
+  ]));
   let orchestrator = TranslationOrchestrator::new(fake.clone());
   assert_eq!(
     orchestrator
@@ -238,9 +258,10 @@ async fn execution_dependent_guidance_is_rejected_before_generation() {
       )
       .await
       .unwrap_err(),
-    TranslationOrchestrationError::UnsupportedInput
+    TranslationOrchestrationError::GuidanceViolation
   );
-  assert!(fake.calls().is_empty());
+  assert_eq!(fake.calls().len(), 2);
+  assert_eq!(fake.calls()[1].profile, GenerationProfile::Reasoning);
 }
 
 #[tokio::test]

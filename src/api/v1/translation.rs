@@ -61,9 +61,6 @@ pub(crate) async fn translate(
     }
     TranslationInputKind::Text => {}
   }
-  if turn.requires_guidance_execution() {
-    return unsupported_capability("guidance", &request_id);
-  }
   let Some(orchestrator) = state.translation_orchestrator() else {
     return translation_model_unavailable(&request_id);
   };
@@ -94,6 +91,24 @@ pub(crate) async fn translate(
       "invalid_model_output",
       "Invalid model output",
       "The translation model could not satisfy the bounded output contract.",
+      &request_id,
+      true,
+      Vec::new(),
+    ),
+    Err(TranslationOrchestrationError::GuidanceViolation) => problem::response(
+      StatusCode::BAD_GATEWAY,
+      "guidance_postcondition_failed",
+      "Guidance postcondition failed",
+      "The model could not satisfy the deterministic translation guidance.",
+      &request_id,
+      false,
+      Vec::new(),
+    ),
+    Err(TranslationOrchestrationError::LiveRetrievalUnavailable) => problem::response(
+      StatusCode::SERVICE_UNAVAILABLE,
+      "live_retrieval_unavailable",
+      "Live retrieval unavailable",
+      "Required live retrieval is not configured for this service.",
       &request_id,
       true,
       Vec::new(),

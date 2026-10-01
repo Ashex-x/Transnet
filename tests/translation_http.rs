@@ -253,7 +253,7 @@ async fn malformed_unknown_and_semantically_invalid_requests_use_safe_problems()
 }
 
 #[tokio::test]
-async fn target_text_guidance_returns_explicit_unavailable_problem() {
+async fn target_text_guidance_executes_for_text() {
   let response = app(Ok(connected_output()), Ok(lexical_output()))
     .oneshot(request(json!({
       "input": {"type": "text", "text": "hot"},
@@ -263,11 +263,7 @@ async fn target_text_guidance_returns_explicit_unavailable_problem() {
     })))
     .await
     .unwrap();
-  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
-  assert_eq!(
-    body(response).await["code"],
-    "translation_capability_unavailable"
-  );
+  assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -280,11 +276,8 @@ async fn live_freshness_remains_explicitly_unavailable() {
     })))
     .await
     .unwrap();
-  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
-  assert_eq!(
-    body(response).await["code"],
-    "translation_capability_unavailable"
-  );
+  assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+  assert_eq!(body(response).await["code"], "live_retrieval_unavailable");
 }
 
 #[tokio::test]

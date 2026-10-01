@@ -4,7 +4,7 @@ English: [Translation application](../../../docs/reference/application/translati
 
 本模块负责连续文本、结构化分段与有界图像区域翻译，并产生共享结果中的主要译文部分。
 
-状态：请求 domain 已校验并保留三种 tagged shape 及其请求级 guidance 与 history。已校验 result superset 现在覆盖 word、phrase、passage、有序 segment 与有序 image-region outcome，并包含 typed annotation、terminology decision、review state、响应级 citation reference 及确定性 breadth projection。当前 application 仍仅执行文本；HTTP 边界会在任何 model 调用前以不含内容的 `501 translation_capability_unavailable` 响应拒绝已校验的 segment 与 image-region turn。
+状态：请求 domain 已校验并保留三种 tagged shape 及其请求级 guidance 与 history。已校验 result superset 覆盖 word、phrase、passage、有序 segment 与有序 image-region outcome，并包含 typed annotation、terminology decision、review state、响应级 citation reference 及确定性 breadth projection。Application 现会为 text 执行 purpose、audience、register、terminology、请求的 annotation family 与 freshness guidance；它确定性检查 required/forbidden terminology 与段落结构，并最多允许一次 reasoning-profile repair。Preferred terminology 是 prompt preference，而不是硬 postcondition。Segment 与 image-region turn 仍在任何 model call 前被拒绝。
 
 ## 职责
 
@@ -14,7 +14,7 @@ Application 接受一种带判别标签的输入形式。文本是低延迟默�
 
 长输入可使用有界请求级分块计划与术语台账。分块尊重语义和段落边界、保持顺序，并在组合时不丢内容。台账只为当前请求跟踪名称、缩写与重复术语；它不是翻译记忆或持久任务。
 
-Gemma4-27B 默认通过 fast profile 处理文本与视觉。闭合升级策略最多允许一次 reasoning profile 调用；隐藏 reasoning 既不返回也不观测。只有新鲜度显式为 `allowed` 或 `required` 时，application 才可执行一次有界实时检索，并必须为每项依赖实时内容的声明附引文。检索材料是不可信的请求内上下文，绝不成为规范内容。
+Gemma4-27B 默认通过 fast profile 处理文本。闭合升级策略对 invalid、ambiguous 或违反 guidance 的输出最多允许一次 reasoning profile 调用；隐藏 reasoning 既不返回也不观测。`offline` 永不执行检索。由于尚未配置 production search authority，`allowed` 当前会退化为普通翻译且不会声称实时支持，`required` 则在生成前显式失败。配置 search authority 后，现有有界 live-retrieval service 仍是唯一允许的检索路径，并且每个依赖实时材料的声明都必须携带 response-local citation。
 
 段落提示与明确标注的备选仍计划在后续 milestone 实现。在 application 结果模型、确定性 usefulness evaluator 与编排真正生成这些能力之前，HTTP handler 不会伪造它们。当前 offline 路径的空 external-source collection 会被省略。
 
