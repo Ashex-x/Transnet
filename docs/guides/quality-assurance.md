@@ -44,7 +44,7 @@ Inject MySQL, Qdrant node, Qdrant edge, and model failures; invalid structured o
 
 A release passes only when translation, routing, canonical-card, sense and concept resolution, domain assessment, retrieval, relationship semantics, page composition, evidence, degraded-mode, non-persistence, activation, rollback, schema-compatibility, and injection suites pass. Production monitoring records only aggregate operational outcomes and contains no request content or raw provider bodies.
 
-The checked-in `tests/fixtures/target_challenges_v1.json` foundation is synthetic, CC0-licensed, schema-versioned, and covers every required challenge category. Its contract test rejects unknown fields, missing categories, duplicate or unsafe IDs, unsupported language pairs, unbounded content, and malformed expected codes. Scenario-specific executable evaluators are added alongside the corresponding target runtime slices; fixture presence alone is never treated as behavioral acceptance.
+The checked-in `tests/fixtures/target_challenges_v1.json` foundation is manually reviewed synthetic material, licensed under the repository's Apache-2.0 license, schema-versioned, and covers every required challenge category. Its contract test fixes the license and synthetic provenance markers and rejects unknown fields, missing categories, excessive fixture or case counts, duplicate or unsafe IDs, unsupported language pairs, unbounded content, and malformed or duplicate expected codes. Scenario-specific executable evaluators are added alongside the corresponding target runtime slices; fixture presence alone is never treated as behavioral acceptance.
 
 ## Related documents
 

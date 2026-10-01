@@ -30,17 +30,23 @@ struct ChallengeCase {
 fn target_challenge_fixture_is_versioned_licensed_and_complete_by_category() {
   let fixture: ChallengeSet = serde_json::from_str(FIXTURE).unwrap();
   assert_eq!(fixture.schema_version, "transnet-challenges-v1");
-  assert_eq!(fixture.license, "CC0-1.0");
-  assert!(!fixture.provenance.trim().is_empty());
+  assert_eq!(fixture.license, "Apache-2.0");
+  assert_eq!(fixture.provenance, "synthetic");
+  assert!(FIXTURE.len() <= 65_536);
+  assert!(!fixture.cases.is_empty() && fixture.cases.len() <= 64);
 
   let required = BTreeSet::from([
     "routing",
     "translation_fidelity",
     "terminology",
+    "register",
     "formatting",
     "sense_resolution",
+    "concept_resolution",
     "domain_resolution",
+    "domain_assessment",
     "relationship_semantics",
+    "relationship_selection",
     "path_validity",
     "omission",
     "fabrication",
@@ -61,20 +67,41 @@ fn target_challenges_have_unique_safe_ids_and_bounded_synthetic_content() {
   let mut ids = BTreeSet::new();
   for case in fixture.cases {
     assert!(ids.insert(case.id.clone()));
-    assert!(case.id.bytes().all(|byte| {
-      byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')
-    }));
+    assert!(safe_case_id(&case.id));
     assert!(matches!(case.source_language.as_str(), "en" | "zh-CN"));
     assert!(matches!(case.target_language.as_str(), "en" | "zh-CN"));
     assert_ne!(case.source_language, case.target_language);
     assert!(!case.input.trim().is_empty() && case.input.len() <= 512);
-    assert!(!case.expected_codes.is_empty());
-    assert!(case.expected_codes.iter().all(|code| {
-      !code.is_empty()
-        && code.len() <= 64
-        && code
-          .bytes()
-          .all(|byte| byte.is_ascii_lowercase() || byte == b'_')
-    }));
+    assert!(!case.expected_codes.is_empty() && case.expected_codes.len() <= 8);
+    let unique_codes = case.expected_codes.iter().collect::<BTreeSet<_>>();
+    assert_eq!(unique_codes.len(), case.expected_codes.len());
+    assert!(case
+      .expected_codes
+      .iter()
+      .all(|code| safe_expected_code(code)));
   }
+}
+
+fn safe_case_id(value: &str) -> bool {
+  (3..=64).contains(&value.len())
+    && value
+      .bytes()
+      .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    && value.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
+    && value.as_bytes().last().is_some_and(u8::is_ascii_digit)
+    && !value.contains("--")
+}
+
+fn safe_expected_code(value: &str) -> bool {
+  (1..=64).contains(&value.len())
+    && value.split('_').all(|segment| {
+      !segment.is_empty()
+        && segment
+          .as_bytes()
+          .first()
+          .is_some_and(u8::is_ascii_lowercase)
+        && segment
+          .bytes()
+          .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+    })
 }

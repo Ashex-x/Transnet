@@ -44,7 +44,7 @@ Migration 测试构建全新 schema，并从每个受支持起始版本升级，
 
 只有翻译、路由、规范卡、词义与概念解析、领域评估、检索、关系语义、页面组织、证据、降级、非持久化、激活、回滚、Schema 兼容性和注入套件全部通过时才可发布。生产监控只记录聚合运行结果，不含请求内容或原始 Provider Body。
 
-仓库内的 `tests/fixtures/target_challenges_v1.json` 基础 fixture 为合成数据，采用 CC0 license，并带有 schema 版本，覆盖所有必需 challenge 类别。其 contract test 会拒绝未知字段、缺失类别、重复或不安全 ID、不支持的语言对、无界内容及格式错误的 expected code。每个目标 runtime slice 仍需同时加入对应的可执行场景 evaluator；只有 fixture 存在绝不代表行为验收完成。
+仓库内的 `tests/fixtures/target_challenges_v1.json` 基础 fixture 是经人工审核的合成材料，采用仓库的 Apache-2.0 license，并带有 schema 版本，覆盖所有必需 challenge 类别。其 contract test 固定 license 与 synthetic provenance marker，并拒绝未知字段、缺失类别、过多 fixture/case、重复或不安全 ID、不支持的语言对、无界内容，以及格式错误或重复的 expected code。每个目标 runtime slice 仍需同时加入对应的可执行场景 evaluator；只有 fixture 存在绝不代表行为验收完成。
 
 ## 相关文档
 
