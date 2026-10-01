@@ -259,7 +259,12 @@ impl LiveFetchPort for PublicHttpFetcher {
         .map_err(|_| LiveRetrievalError::Unavailable)?
         .format(&Rfc3339)
         .map_err(|_| LiveRetrievalError::Unavailable)?;
-      return LiveFetchedPage::new(result, fragment, retrieved_at, byte_count);
+      return LiveFetchedPage::new(
+        result.with_fetched_url(target)?,
+        fragment,
+        retrieved_at,
+        byte_count,
+      );
     }
     Err(LiveRetrievalError::Invalid)
   }
@@ -585,6 +590,7 @@ mod tests {
       .await
       .unwrap();
     assert_eq!(page.fragment(), "safe text");
+    assert_eq!(page.result.url().as_str(), "https://other.example/final");
     let requests = exchange.requests.lock().unwrap();
     assert_eq!(requests.len(), 2);
     assert_eq!(requests[0].addresses, vec![public_one]);

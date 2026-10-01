@@ -85,6 +85,7 @@ impl LiveSearchResult {
     if !matches!(url.scheme(), "http" | "https")
       || !url.username().is_empty()
       || url.password().is_some()
+      || url.as_str().len() > 2_048
       || title.trim().is_empty()
       || title.chars().count() > 256
       || publisher
@@ -103,6 +104,23 @@ impl LiveSearchResult {
   /// Returns the nominated URL for the safe fetch boundary.
   pub fn url(&self) -> &Url {
     &self.url
+  }
+  /// Borrows the bounded display title for response-local attribution.
+  pub fn title(&self) -> &str {
+    &self.title
+  }
+
+  /// Rebinds attribution to the final safely fetched URL after redirects.
+  pub fn with_fetched_url(mut self, url: Url) -> Result<Self, LiveRetrievalError> {
+    if !matches!(url.scheme(), "http" | "https")
+      || !url.username().is_empty()
+      || url.password().is_some()
+      || url.as_str().len() > 2_048
+    {
+      return Err(LiveRetrievalError::Invalid);
+    }
+    self.url = url;
+    Ok(self)
   }
 }
 

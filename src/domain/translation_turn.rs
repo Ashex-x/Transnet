@@ -629,20 +629,26 @@ fn validate_input(
           }
           previous_end = end;
         }
-        for term in guidance
-          .terminology
-          .iter()
-          .filter(|term| term.policy == TerminologyPolicy::Required)
-        {
-          if term.source != term.target
-            && term_occurrences(&segment.text, &term.source).any(|(start, end)| {
+        for term in &guidance.terminology {
+          let source_present = term_occurrences(&segment.text, &term.source)
+            .next()
+            .is_some();
+          let protected_contains = |value: &str| {
+            term_occurrences(&segment.text, value).any(|(start, end)| {
               protected_ranges
                 .iter()
                 .any(|&(protected_start, protected_end)| {
                   start < protected_end && end > protected_start
                 })
             })
-          {
+          };
+          let required_conflict = term.policy == TerminologyPolicy::Required
+            && term.source != term.target
+            && protected_contains(&term.source);
+          let forbidden_conflict = term.policy == TerminologyPolicy::Forbidden
+            && source_present
+            && protected_contains(&term.target);
+          if required_conflict || forbidden_conflict {
             return Err(TurnValidationError::ConstraintConflict(
               "guidance.terminology",
             ));
@@ -687,6 +693,9 @@ fn guidance_requires_execution(guidance: &TranslationGuidance) -> bool {
 }
 
 fn validate_guidance(guidance: &TranslationGuidance) -> Result<(), TurnValidationError> {
+  if !guidance.annotations.is_empty() {
+    return Err(TurnValidationError::Unsupported("guidance.annotations"));
+  }
   if guidance.max_alternatives > 2 {
     return Err(TurnValidationError::Field("guidance.max_alternatives"));
   }
@@ -1184,6 +1193,8 @@ pub enum TranslationAnnotationCode {
   FormatPreserved,
   /// A closed review issue requires caller attention.
   ReviewRequired,
+  /// A generated claim used one or more request-local live sources.
+  LiveSourceUsed,
 }
 
 /// Human-review state derived from validated issues rather than model confidence prose.
@@ -1256,6 +1267,16 @@ pub struct ExternalSourceReference {
   pub title: String,
   /// Public source URL admitted by the live-retrieval boundary.
   pub url: String,
+  /// Closed non-canonical provenance label for request-local live material.
+  pub evidence_state: ExternalEvidenceState,
+}
+
+/// Closed provenance state for response-local external material.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalEvidenceState {
+  /// Request-local public material that is neither canonical nor verified evidence.
+  LiveExternal,
 }
 
 /// Reference from an annotation or generated claim to a response-local source.
@@ -1263,6 +1284,8 @@ pub struct ExternalSourceReference {
 pub struct CitationReference {
   /// Response-local source identity.
   pub source_id: String,
+  /// Deterministic generated claim identity supported by this source.
+  pub claim_id: String,
   /// Optional bounded fragment identity owned by the retrieval result.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub fragment_id: Option<String>,
@@ -1460,11 +1483,16 @@ impl ProjectedTranslationResult {
         cited_source_ids.insert(citation.source_id.as_str());
         !source_ids.contains(citation.source_id.as_str())
           || !bounded_id(&citation.source_id)
+          || !bounded_id(&citation.claim_id)
           || citation
             .fragment_id
             .as_deref()
             .is_some_and(|value| !bounded_id(value))
-          || !citations.insert((citation.source_id.as_str(), citation.fragment_id.as_deref()))
+          || !citations.insert((
+            citation.source_id.as_str(),
+            citation.claim_id.as_str(),
+            citation.fragment_id.as_deref(),
+          ))
       })
     }) || cited_source_ids != source_ids
     {
@@ -1691,6 +1719,89 @@ pub struct TurnDetails {
 }
 
 impl TranslationTurnResult {
+  /// Attaches validated request-local live citations to every generated result unit.
+  pub(crate) fn attach_live_citations(&mut self, citations: Vec<CitationReference>) {
+    let annotations = citations
+      .chunks(16)
+      .map(|citations| TranslationAnnotation {
+        family: AnnotationFamily::Review,
+        code: TranslationAnnotationCode::LiveSourceUsed,
+        message: "Translation used request-local live sources.".into(),
+        minimum_level: ResponseLevel::Brief,
+        citations: citations.to_vec(),
+      })
+      .collect::<Vec<_>>();
+    match self {
+      Self::Word {
+        annotations: result_annotations,
+        ..
+      }
+      | Self::Phrase {
+        annotations: result_annotations,
+        ..
+      }
+      | Self::Passage {
+        annotations: result_annotations,
+        ..
+      } => result_annotations.extend(annotations),
+      Self::Segment { segments, .. } => {
+        for segment in segments {
+          segment.annotations.extend(annotations.clone());
+        }
+      }
+      Self::ImageRegion { regions, .. } => {
+        for region in regions {
+          region.annotations.extend(annotations.clone());
+        }
+      }
+    }
+  }
+  /// Marks an explicitly permitted live-retrieval attempt that safely degraded without sources.
+  pub(crate) fn mark_live_retrieval_degraded(&mut self) {
+    let annotation = TranslationAnnotation {
+      family: AnnotationFamily::Review,
+      code: TranslationAnnotationCode::ReviewRequired,
+      message: "Live retrieval was unavailable; review freshness-sensitive claims.".into(),
+      minimum_level: ResponseLevel::Brief,
+      citations: Vec::new(),
+    };
+    let review = TranslationReview {
+      state: TranslationReviewState::ReviewRecommended,
+      issues: vec![TranslationReviewIssue::LiveSourceIncomplete],
+    };
+    match self {
+      Self::Word {
+        annotations,
+        review: result_review,
+        ..
+      }
+      | Self::Phrase {
+        annotations,
+        review: result_review,
+        ..
+      }
+      | Self::Passage {
+        annotations,
+        review: result_review,
+        ..
+      } => {
+        annotations.push(annotation);
+        *result_review = review;
+      }
+      Self::Segment { segments, .. } => {
+        for segment in segments {
+          segment.annotations.push(annotation.clone());
+          segment.review = review.clone();
+        }
+      }
+      Self::ImageRegion { regions, .. } => {
+        for region in regions {
+          region.annotations.push(annotation.clone());
+          region.review = review.clone();
+        }
+      }
+    }
+  }
   /// Validates identities, order, primary translations, annotations, terminology, and review state.
   pub fn validate(&self) -> Result<(), TranslationResultValidationError> {
     match self {
@@ -2029,6 +2140,7 @@ const fn annotation_family(code: TranslationAnnotationCode) -> AnnotationFamily 
     TranslationAnnotationCode::RegisterApplied => AnnotationFamily::Register,
     TranslationAnnotationCode::CulturalContext => AnnotationFamily::Culture,
     TranslationAnnotationCode::ReviewRequired => AnnotationFamily::Review,
+    TranslationAnnotationCode::LiveSourceUsed => AnnotationFamily::Review,
   }
 }
 
@@ -2301,7 +2413,7 @@ mod tests {
       "guidance": {
         "purpose": "technical", "audience": "specialist", "register": "preserve",
         "terminology": [{"source": "torque", "target": "扭矩", "policy": "required"}],
-        "max_alternatives": 0, "annotations": ["terminology"], "freshness": "offline"
+        "max_alternatives": 0, "annotations": [], "freshness": "offline"
       }
     }))
     .unwrap();
@@ -2367,6 +2479,14 @@ mod tests {
       TranslationTurn::new(parse(
         json!([{"start": 7, "end": 13}]),
         json!([{"source":"h {name}","target":"产品", "policy":"required"}])
+      ))
+      .unwrap_err(),
+      TurnValidationError::ConstraintConflict("guidance.terminology")
+    );
+    assert_eq!(
+      TranslationTurn::new(parse(
+        json!([{"start": 7, "end": 13}]),
+        json!([{"source":"Launch","target":"{name}", "policy":"forbidden"}])
       ))
       .unwrap_err(),
       TurnValidationError::ConstraintConflict("guidance.terminology")
@@ -2633,6 +2753,7 @@ mod tests {
           minimum_level: ResponseLevel::Standard,
           citations: vec![CitationReference {
             source_id: "live_1".into(),
+            claim_id: "translation_0".into(),
             fragment_id: Some("fragment_1".into()),
           }],
         }],
@@ -2658,6 +2779,7 @@ mod tests {
         source_id: "live_1".into(),
         title: "Public notice".into(),
         url: "https://example.invalid/notice".into(),
+        evidence_state: ExternalEvidenceState::LiveExternal,
       }],
     };
     assert_eq!(projected.validate(), Ok(()));
@@ -2763,6 +2885,7 @@ mod tests {
           minimum_level: ResponseLevel::Full,
           citations: vec![CitationReference {
             source_id: "live_1".into(),
+            claim_id: "translation_0".into(),
             fragment_id: None,
           }],
         }],
@@ -2777,6 +2900,7 @@ mod tests {
         source_id: "live_1".into(),
         title: "Public notice".into(),
         url: "https://example.invalid/notice".into(),
+        evidence_state: ExternalEvidenceState::LiveExternal,
       }],
     }
     .project(ResponseLevel::Brief);

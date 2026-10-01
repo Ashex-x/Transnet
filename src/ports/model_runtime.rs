@@ -5,8 +5,8 @@ use thiserror::Error;
 
 use crate::domain::{
   model_runtime::{
-    CancellationSignal, EmbeddingInput, EphemeralEmbedding, GenerationInput, GenerationOutput,
-    GenerationProfile, ModelVersion,
+    CancellationSignal, EmbeddingInput, EphemeralEmbedding, GenerationImage, GenerationInput,
+    GenerationOutput, GenerationProfile, ModelVersion,
   },
   request_context::RequestContext,
 };
@@ -42,6 +42,8 @@ pub struct GenerationRequest {
   pub prompt_version: ModelVersion,
   /// Validated request-local operation input.
   pub input: GenerationInput,
+  /// Bounded decoded images available only during this operation.
+  pub images: Vec<GenerationImage>,
 }
 
 /// One validated generation response.

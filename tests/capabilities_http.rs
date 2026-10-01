@@ -1,5 +1,8 @@
 //! HTTP contract tests for current, content-free service capability discovery.
 
+use std::sync::Arc;
+
+use async_trait::async_trait;
 use axum::{
   body::{to_bytes, Body},
   http::{header, Request, StatusCode},
@@ -7,9 +10,24 @@ use axum::{
 use serde_json::Value;
 use tower::ServiceExt;
 use transnet::{
-  app_router_with_http_config, AppState, HttpConfig, KnowledgeCapabilityBundle, ProviderConfig,
-  ServiceCapabilities, TranslationConfig, TranslationService,
+  app_router_with_http_config, application::translation::TranslationOrchestrator, AppState,
+  GenerationPort, GenerationRequest, GenerationResponse, HttpConfig, KnowledgeCapabilityBundle,
+  ModelOperationContext, ModelOperationError, ProviderConfig, ServiceCapabilities,
+  TranslationConfig, TranslationService,
 };
+
+struct UnusedGeneration;
+
+#[async_trait]
+impl GenerationPort for UnusedGeneration {
+  async fn generate(
+    &self,
+    _context: ModelOperationContext<'_>,
+    _request: GenerationRequest,
+  ) -> Result<GenerationResponse, ModelOperationError> {
+    Err(ModelOperationError::Unavailable)
+  }
+}
 
 fn app(max_request_body_bytes: usize) -> axum::Router {
   app_with_state(max_request_body_bytes, |state| state)
@@ -104,7 +122,7 @@ async fn reports_only_implemented_content_free_capabilities() {
   );
   assert_eq!(
     json["data"]["live_retrieval"],
-    serde_json::json!({"available": false, "default": "offline"})
+    serde_json::json!({"available": false, "default": "offline", "input_types": []})
   );
   assert_eq!(
     json["data"]["generation_profiles"],
@@ -124,6 +142,87 @@ async fn reports_only_implemented_content_free_capabilities() {
   ] {
     assert!(!raw.contains(forbidden), "response leaked `{forbidden}`");
   }
+}
+
+#[tokio::test]
+async fn structured_capabilities_activate_only_with_the_translation_orchestrator() {
+  let response = app_with_state(8_192, |state| {
+    state.with_translation_orchestrator(Arc::new(TranslationOrchestrator::new(Arc::new(
+      UnusedGeneration,
+    ))))
+  })
+  .oneshot(post("{}"))
+  .await
+  .unwrap();
+  let (_, json) = body(response).await;
+  assert_eq!(
+    json["data"]["input_types"],
+    serde_json::json!(["text", "segments", "image_regions"])
+  );
+  assert_eq!(
+    json["data"]["image_media_types"],
+    serde_json::json!(["image/png", "image/jpeg", "image/webp"])
+  );
+  assert_eq!(
+    json["data"]["annotation_families"],
+    serde_json::json!(["format"])
+  );
+  assert_eq!(json["data"]["purposes"], serde_json::json!([]));
+}
+
+#[tokio::test]
+async fn caller_capabilities_cannot_drop_composed_translation_features() {
+  let response = app_with_state(8_192, |state| {
+    state
+      .with_translation_orchestrator(Arc::new(TranslationOrchestrator::new(Arc::new(
+        UnusedGeneration,
+      ))))
+      .with_capabilities(ServiceCapabilities::current(7))
+  })
+  .oneshot(post("{}"))
+  .await
+  .unwrap();
+  let (_, json) = body(response).await;
+  assert_eq!(
+    json["data"]["input_types"],
+    serde_json::json!(["text", "segments", "image_regions"])
+  );
+  assert_eq!(
+    json["data"]["image_media_types"],
+    serde_json::json!(["image/png", "image/jpeg", "image/webp"])
+  );
+  assert_eq!(json["data"]["limits"]["max_request_body_bytes"], 8_192);
+}
+
+#[tokio::test]
+async fn structured_capabilities_follow_composition_across_builder_order() {
+  let response = app_with_state(8_192, |state| {
+    state
+      .with_translation_orchestrator(Arc::new(TranslationOrchestrator::new(Arc::new(
+        UnusedGeneration,
+      ))))
+      .with_capabilities(ServiceCapabilities::current(8_192))
+  })
+  .oneshot(post("{}"))
+  .await
+  .unwrap();
+  let (_, json) = body(response).await;
+  assert_eq!(
+    json["data"]["input_types"],
+    serde_json::json!(["text", "segments", "image_regions"])
+  );
+
+  let advertised_without_runtime =
+    ServiceCapabilities::current(8_192).with_translation_orchestrator(true);
+  let response = app_with_state(8_192, |state| {
+    state.with_capabilities(advertised_without_runtime)
+  })
+  .oneshot(post("{}"))
+  .await
+  .unwrap();
+  let (_, json) = body(response).await;
+  assert_eq!(json["data"]["input_types"], serde_json::json!(["text"]));
+  assert_eq!(json["data"]["image_media_types"], serde_json::json!([]));
 }
 
 #[tokio::test]

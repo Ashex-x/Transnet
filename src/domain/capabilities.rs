@@ -63,6 +63,7 @@ impl ServiceCapabilities {
       live_retrieval: LiveRetrievalCapability {
         available: false,
         default: LiveRetrievalDefault::Offline,
+        input_types: Vec::new(),
       },
       generation_profiles: vec![
         GenerationProfileCapability::Fast,
@@ -70,6 +71,36 @@ impl ServiceCapabilities {
       ],
       schema_versions: vec![SchemaVersionCapability::TranslationResultV1],
     }
+  }
+
+  /// Atomically derives every capability owned by the unified translation orchestrator.
+  pub fn with_translation_orchestrator(mut self, available: bool) -> Self {
+    self.input_types.retain(|value| {
+      !matches!(
+        value,
+        InputTypeCapability::Segments | InputTypeCapability::ImageRegions
+      )
+    });
+    self.image_media_types.clear();
+    self.purposes.clear();
+    self
+      .annotation_families
+      .retain(|value| *value != AnnotationFamilyCapability::Format);
+    if available {
+      self.input_types.extend([
+        InputTypeCapability::Segments,
+        InputTypeCapability::ImageRegions,
+      ]);
+      self.image_media_types = vec![
+        ImageMediaTypeCapability::Png,
+        ImageMediaTypeCapability::Jpeg,
+        ImageMediaTypeCapability::WebP,
+      ];
+      self
+        .annotation_families
+        .push(AnnotationFamilyCapability::Format);
+    }
+    self
   }
 
   /// Activates only the lenses backed by one fully composed canonical/retrieval/view bundle.
@@ -88,6 +119,24 @@ impl ServiceCapabilities {
     self
   }
 
+  /// Advertises live retrieval only for a completely composed translation retrieval operation.
+  pub fn with_live_retrieval(mut self, available: bool) -> Self {
+    self
+      .annotation_families
+      .retain(|value| *value != AnnotationFamilyCapability::Review);
+    self.live_retrieval.available = available;
+    self.live_retrieval.input_types = if available {
+      vec![InputTypeCapability::Text]
+    } else {
+      Vec::new()
+    };
+    if available {
+      self
+        .annotation_families
+        .push(AnnotationFamilyCapability::Review);
+    }
+    self
+  }
   /// Rebinds the configured HTTP body limit without changing activated capabilities.
   pub fn with_max_request_body_bytes(mut self, max_request_body_bytes: usize) -> Self {
     self.limits.max_request_body_bytes = max_request_body_bytes;
@@ -136,19 +185,51 @@ pub enum TargetLanguageCapability {
 pub enum InputTypeCapability {
   /// One connected or lexical text input.
   Text,
+  /// Ordered structured document or localization segments.
+  Segments,
+  /// Bounded inline images with explicit normalized regions.
+  ImageRegions,
 }
 
-/// Image media types; the enum is intentionally uninhabited until vision input is implemented.
+/// Image media types accepted by the composed VLM path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub enum ImageMediaTypeCapability {}
+pub enum ImageMediaTypeCapability {
+  /// PNG.
+  #[serde(rename = "image/png")]
+  Png,
+  /// JPEG.
+  #[serde(rename = "image/jpeg")]
+  Jpeg,
+  /// WebP.
+  #[serde(rename = "image/webp")]
+  WebP,
+}
 
-/// Request purposes; the enum is intentionally uninhabited until guidance is implemented.
+/// Request purposes executed by the unified translation orchestrator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub enum PurposeCapability {}
+#[serde(rename_all = "snake_case")]
+pub enum PurposeCapability {
+  /// General-purpose translation.
+  General,
+  /// Publication-ready wording.
+  Publication,
+  /// Technical material.
+  Technical,
+  /// Product localization.
+  Localization,
+  /// Subtitle translation.
+  Subtitles,
+}
 
-/// Result annotation families; intentionally uninhabited until typed annotations are implemented.
+/// Result annotation families emitted by currently executable translation paths.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub enum AnnotationFamilyCapability {}
+#[serde(rename_all = "snake_case")]
+pub enum AnnotationFamilyCapability {
+  /// Protected-content and source-format preservation outcomes.
+  Format,
+  /// Review and source-attribution outcomes emitted by live retrieval.
+  Review,
+}
 
 /// Guided-view lenses with an executable relation policy in the current implementation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -192,6 +273,50 @@ mod tests {
       ]
     );
   }
+
+  #[test]
+  fn translation_capabilities_activate_atomically() {
+    let disabled = ServiceCapabilities::current(1_024);
+    assert_eq!(disabled.input_types, vec![InputTypeCapability::Text]);
+    assert!(disabled.image_media_types.is_empty());
+    let enabled = disabled.with_translation_orchestrator(true);
+    assert_eq!(
+      enabled.input_types,
+      vec![
+        InputTypeCapability::Text,
+        InputTypeCapability::Segments,
+        InputTypeCapability::ImageRegions
+      ]
+    );
+    assert_eq!(
+      enabled.image_media_types,
+      vec![
+        ImageMediaTypeCapability::Png,
+        ImageMediaTypeCapability::Jpeg,
+        ImageMediaTypeCapability::WebP,
+      ]
+    );
+    assert!(enabled.purposes.is_empty());
+    assert_eq!(
+      enabled.with_translation_orchestrator(false).input_types,
+      vec![InputTypeCapability::Text]
+    );
+  }
+
+  #[test]
+  fn live_retrieval_activates_only_through_explicit_composition() {
+    let disabled = ServiceCapabilities::current(1_024);
+    assert!(!disabled.live_retrieval.available);
+    let enabled = disabled.with_live_retrieval(true);
+    assert!(enabled.live_retrieval.available);
+    assert_eq!(
+      enabled.live_retrieval.input_types,
+      vec![InputTypeCapability::Text]
+    );
+    assert!(enabled
+      .annotation_families
+      .contains(&AnnotationFamilyCapability::Review));
+  }
 }
 
 /// Numeric bounds enforced by the current translation and HTTP paths.
@@ -212,12 +337,14 @@ pub struct CapabilityLimits {
 }
 
 /// Live-retrieval declaration.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct LiveRetrievalCapability {
   /// Whether the runtime can perform live retrieval.
   pub available: bool,
   /// Default policy applied when callers omit retrieval guidance.
   pub default: LiveRetrievalDefault,
+  /// Input families with a complete claim-bound live attribution workflow.
+  pub input_types: Vec<InputTypeCapability>,
 }
 
 /// Closed default live-retrieval policy.

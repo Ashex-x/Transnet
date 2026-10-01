@@ -4,7 +4,7 @@ English: [Translation application](../../../docs/reference/application/translati
 
 本模块负责连续文本、结构化分段与有界图像区域翻译，并产生共享结果中的主要译文部分。
 
-状态：请求 domain 已校验并保留三种 tagged shape 及其请求级 guidance 与 history。已校验 result superset 现在覆盖 word、phrase、passage、有序 segment 与有序 image-region outcome，并包含 typed annotation、terminology decision、review state、响应级 citation reference 及确定性 breadth projection。当前 application 仍仅执行文本；HTTP 边界会在任何 model 调用前以不含内容的 `501 translation_capability_unavailable` 响应拒绝已校验的 segment 与 image-region turn。
+状态：请求 domain 已校验并保留三种 tagged shape 及其请求级 guidance 与 history。已校验 result superset 覆盖 word、phrase、passage、有序 segment 与有序 image-region outcome，并包含 typed annotation、terminology decision、review state、响应级 citation reference 及确定性 breadth projection。Application 执行带 guidance 的 text、结构化 segment 与有界 image-region turn；它确定性检查 required/forbidden terminology 与段落结构，并最多允许一次 reasoning-profile repair。Preferred terminology 是 prompt preference，而不是硬 postcondition。Image execution 会拒绝自身无法执行的 execution-dependent guidance，在 blocking pool 上执行有界 decode/crop/encode 并在各 unit 之间检查 deadline 与 cancellation，只为每个声明 region 提交一个有界 crop，执行一次有界 fast-profile 调用，并把 attachment index、精确 reading-order ID 与检测语言严格映射到 image-region result。
 
 ## 职责
 
@@ -14,7 +14,11 @@ Application 接受一种带判别标签的输入形式。文本是低延迟默�
 
 长输入可使用有界请求级分块计划与术语台账。分块尊重语义和段落边界、保持顺序，并在组合时不丢内容。台账只为当前请求跟踪名称、缩写与重复术语；它不是翻译记忆或持久任务。
 
-Gemma4-27B 默认通过 fast profile 处理文本与视觉。闭合升级策略最多允许一次 reasoning profile 调用；隐藏 reasoning 既不返回也不观测。只有新鲜度显式为 `allowed` 或 `required` 时，application 才可执行一次有界实时检索，并必须为每项依赖实时内容的声明附引文。检索材料是不可信的请求内上下文，绝不成为规范内容。
+结构化 segment 使用有界并行 fast call，同时在组装结果中保持确定性请求顺序。每个 prompt 绑定 segment role、format、source/target language、protected scalar range、请求 guidance 与 prompt contract；调用方 ID 不会发送给 model。Required 与 forbidden terminology 使用适合文字体系的匹配进行检查，包括嵌在未分词 CJK 文本中的术语；结果记录完整且有序的 terminology decision 列表。整个请求共享一次 reasoning-repair budget。确定性 postcondition 会拒绝缺失、重排或重复的 protected value，以及改变的段落换行、Markdown 结构 delimiter 或 HTML tag。成功结果在返回前针对请求完成校验，并使用调用方 segment ID、零起始 segment order、`translation_0` 及可选闭合 format annotation；完成后不保留任何 segment 内容。
+
+Gemma4-27B 默认通过 fast profile 处理文本。闭合升级策略对 invalid、ambiguous、违反 guidance 或 citation 无效的输出最多允许一次 reasoning profile 调用；隐藏 reasoning 既不返回也不观测。`offline` 不发起 search 或 fetch。`allowed` 仅在确定性判断 text 输入对时效敏感且 canonical material 不足时消耗唯一一轮；若被许可的轮次不可用或 live sub-deadline 到期，响应保留翻译并以 `review_recommended` 与 `live_source_incomplete` 明确标记，而不会静默声称时效性。`required` 始终尝试检索；live sub-deadline 失败或没有安全可用 source 时在生成前映射为明确的实时检索不可用。Segment 与 image-region 输入当前会在网络、解码或生成前拒绝非 `offline` freshness，因为它们尚未实现 claim-bound live attribution。
+
+实时材料只作为结构化 `live_material` 数组进入 generation；固定 application instruction 将其中 fragment 标记为不可信数据。每个模型 citation 都是严格的 `{source_id, claim_id}` pair：lexical claim 绑定 `translation_N`，connected-text claim 绑定实际消费 source 的精确 `chunk_N`。每个实时辅助 claim 都必须具有已准入 source；重复、伪造、缺失或跨 claim citation 都不满足有界输出契约。Application 仅暴露已引用的 title 与最终抓取 URL descriptor，把每个 source 标为 `live_external`，在返回前校验最终 request-bound result，把 `translation-live-v1` 记录为 retrieval version，并随请求丢弃 query、抓取 fragment 与 vector。只有 search、安全 fetch 和本 translation orchestrator 作为一个 runtime unit 完整组合时，capability discovery 才报告 live retrieval；默认 executable 仍没有 production search authority，因此继续报告不可用。
 
 段落提示与明确标注的备选仍计划在后续 milestone 实现。在 application 结果模型、确定性 usefulness evaluator 与编排真正生成这些能力之前，HTTP handler 不会伪造它们。当前 offline 路径的空 external-source collection 会被省略。
 
