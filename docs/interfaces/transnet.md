@@ -314,6 +314,8 @@ Accepts the translation input, language tags, response level, optional guidance,
 
 Successful metadata includes result, normalizer, projection, model, and prompt versions that actually participated; optional `content_release`, `retrieval_version`, `embedding_version`, and `live_retrieval` appear only when used. `inference_profiles` is ordered and de-duplicated. `reasoning_escalated` reports the safe policy outcome without exposing reasoning content.
 
+Only resolved word and established-phrase results may embed the relationship-page object. Passage, segment, and image-region results never do. The page begins with an authoritative BasicCard or concept-summary reference, then applies deterministic progressive disclosure to supported direct groups, complete semantic scales, optional verified short paths, labeled generated examples and inferred explanations, and a visibly separate exploratory section. Explicitly requested labeled alternatives are capped at two per lexical unit and name the changed dimension, practical consequence, and usefulness reason; they are not aliases or normalized lookup forms. Request-local relationship-gap proposals are excluded from the online response and reserved for a separate offline review workflow. No additional public relationship-page route exists.
+
 Closed route errors additionally include `invalid_translation_request`, `constraint_conflict`, `unsupported_input_type`, `unsupported_language_pair`, `invalid_image`, `invalid_model_output`, `translation_model_unavailable`, and `live_retrieval_unavailable`.
 
 ## POST /api/v1/basic-cards/lookup

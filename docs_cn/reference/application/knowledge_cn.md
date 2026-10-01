@@ -42,6 +42,8 @@ path-search service 会先从 canonical data 补全并类型检查两个选定 r
 
 `brief`、`standard` 与 `full` 是同一个已校验超集的投影。响应级别只改变广度，不改变事实选择或真实性状态。
 
+relationship-page domain 基础在不增加 transport orchestration 的情况下拥有这个更大的 lexical superset。它把 BasicCard 或 concept-summary reference、domain assessment 与 profile、精确 hydrated fact、完整 semantic scale、确定性 relationship group 与 path、带标签的 request-local generated 或 inferred 材料、exploratory nomination、显式请求的 alternative，以及仅供 offline 使用的 gap proposal 绑定到同一个 root 与完整 release pin。其在线 projection 有意不包含 gap-proposal 字段。后续 application composer 只把该 projection 嵌入 word 或 established-phrase translation 结果；不存在独立 page route。
+
 ## 验证
 
 测试候选优先级、歧义、闭合领域结果、清单不可用、发布一致性、补全、关系注册表兼容性、n 元参与者校验、lens 预算、路径证据、循环安全展示、证据过滤、图边界、虚构引用、空分区与投影单调性。

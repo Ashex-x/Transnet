@@ -42,6 +42,8 @@ Every nominated edge is batch-hydrated as the exact assertion revision and decla
 
 `brief`, `standard`, and `full` are projections of the same validated superset. Response level changes breadth, not fact choice or truth status.
 
+The relationship-page domain foundation owns that larger lexical superset without adding transport orchestration. It binds a BasicCard or concept-summary reference, domain assessment and profiles, exact hydrated facts, complete semantic scales, deterministic relationship groups and paths, labeled request-local generated or inferred material, exploratory nominations, explicitly requested alternatives, and offline-only gap proposals to one root and full release pin. Its online projection deliberately has no gap-proposal field. The eventual application composer embeds the projection only in word or established-phrase translation results; there is no separate page route.
+
 ## Verification
 
 Test candidate precedence, ambiguity, closed domain outcomes, unavailable inventory, release consistency, hydration, relation-registry compatibility, n-ary participant validation, lens budgets, path evidence, cycle-safe presentation, evidence filtering, graph bounds, hallucinated references, empty sections, and projection monotonicity.

@@ -36,6 +36,8 @@ pub mod lookup_card;
 pub mod model_runtime;
 /// Closed, redacted metric names and categorical event dimensions.
 pub mod observability;
+/// Relationship-centered lexical-page supersets and deterministic disclosure policy.
+pub mod relationship_page;
 /// Offline release-control proofs, audit ordering, and receipt invariants.
 pub mod release_control;
 /// Request-scoped correlation, deadline, schema, and release context.

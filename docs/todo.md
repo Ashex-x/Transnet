@@ -94,6 +94,8 @@ Exit criteria: retrieval is bounded, release-pinned, filter-safe, and useful for
 
 ## Milestone 5: compose relationship-centered translation-wiki pages
 
+Ownership is frozen: the composed page is an optional field of lexical word or established-phrase `/api/v1/translations` results, never a new public route. The BasicCard, knowledge-view, and knowledge-path endpoints remain diagnostic reads.
+
 - [ ] Add a bounded domain assessment after sense resolution with the closed outcomes `existing`, `proposed_new`, `general`, or `uncertain`, validated canonical domain IDs, and a concise reason.
 - [ ] Retrieve the existing-domain inventory and RAG coverage before assessment; return `proposed_new` only when the available catalog succeeds and no supplied scope fits, with no live creation endpoint.
 - [ ] Publish and hydrate atomic basic facts, domain knowledge profiles, and first-class semantic scales; allow LLM bootstrap only through quarantined offline candidates.

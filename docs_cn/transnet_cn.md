@@ -179,7 +179,7 @@ LLM 选择有用内容，并解释关系为何重要。规范 assertion 标记�
 
 ## LLM 如何构建关系页面
 
-LLM 是页面组织者，而不是每个事实的权威来源。目标流程为：
+LLM 是页面组织者，而不是每个事实的权威来源。relationship page 只嵌入 `POST /api/v1/translations` 的 lexical word 或 established-phrase 结果，不新增独立公开 route。Passage 结果不包含该页面；BasicCard、knowledge-view 与 knowledge-path route 继续作为诊断性 release-pinned read，而不是第二套 page API。目标流程为：
 
 ```mermaid
 flowchart LR

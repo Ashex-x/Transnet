@@ -306,6 +306,8 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 
 成功 metadata 包含实际参与的 result、normalizer、projection、model 与 prompt 版本；可选 `content_release`、`retrieval_version`、`embedding_version` 与 `live_retrieval` 只在使用时出现。`inference_profiles` 有序且去重。`reasoning_escalated` 报告安全策略结果而不暴露 reasoning 内容。
 
+只有已解析的 word 与 established-phrase 结果可以嵌入 relationship-page object。Passage、segment 与 image-region 结果绝不包含它。页面先给出权威 BasicCard 或 concept-summary reference，再对受支持 direct group、完整 semantic scale、可选 verified short path、带标签的 generated example 与 inferred explanation，以及视觉上独立的 exploratory section 应用确定性 progressive disclosure。显式请求的 labeled alternative 每个 lexical unit 最多两个，并说明改变的维度、实际后果与 usefulness reason；它们不是 alias 或 normalized lookup form。request-local relationship-gap proposal 不进入在线 response，只保留给独立 offline review workflow。系统不新增公开 relationship-page route。
+
 闭合路由错误还包括 `invalid_translation_request`、`constraint_conflict`、`unsupported_input_type`、`unsupported_language_pair`、`invalid_image`、`invalid_model_output`、`translation_model_unavailable` 与 `live_retrieval_unavailable`。
 
 ## POST /api/v1/basic-cards/lookup

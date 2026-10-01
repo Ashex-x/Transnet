@@ -181,6 +181,8 @@ Only translations deliberately selected as reusable shared knowledge may be stor
 
 The LLM is the page composer, not the source of truth for every fact. The target pipeline is:
 
+The relationship page is embedded only in lexical word or established-phrase results from `POST /api/v1/translations`. It is not a separate public route. Passage results do not contain this page, while the BasicCard, knowledge-view, and knowledge-path routes remain diagnostic release-pinned reads rather than a second page API.
+
 ```mermaid
 flowchart LR
   input["Lookup + context"] --> route["Intent and language routing"]

@@ -445,6 +445,21 @@ pub enum DomainAssessment {
   Uncertain,
 }
 
+impl DomainAssessment {
+  /// Returns the selected canonical domain identities for an existing-domain outcome.
+  pub fn existing_domain_ids(&self) -> Option<&[DomainId]> {
+    match self {
+      Self::Existing { domain_ids, .. } => Some(domain_ids),
+      _ => None,
+    }
+  }
+
+  /// Returns whether this is a request-local proposal that only full projection may expose.
+  pub const fn is_proposed_new(&self) -> bool {
+    matches!(self, Self::ProposedNew(_))
+  }
+}
+
 fn bounded_text(value: String, max_chars: usize) -> Result<String, DomainAssessmentError> {
   if value.trim() != value || value.is_empty() || value.chars().count() > max_chars {
     return Err(DomainAssessmentError::InvalidValue);
