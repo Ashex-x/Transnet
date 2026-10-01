@@ -1,5 +1,7 @@
 //! Business types and invariants independent of HTTP and providers.
 
+/// Canonical n-ary assertions and explicit binary traversal admission.
+pub mod assertion;
 /// Canonical lexical entities, source permissions, and evidence.
 pub mod canonical;
 /// Bounded canonical lexical details with reviewed factual-evidence lineage.
