@@ -16,6 +16,8 @@ The offline `KnowledgePublicationService` is a separate application boundary ove
 
 Normalization creates bounded language-aware lookup forms but never serves as canonical identity. Resolution uses the closed order exact canonical -> exact published alias -> bounded inflection -> bounded spelling correction -> bounded transliteration -> semantic nomination. A score or vector signal cannot promote a lower class above an eligible higher class. Only candidates in the best available class survive; one sense resolves, multiple distinct senses require clarification or preserved ambiguity, and no candidate is an explicit not-found result. Materially plausible homographs, parts of speech, phrase-level meanings, and field-specific senses remain separate.
 
+Every non-semantic authority match is verified against the release-pinned candidate before ranking. Its stable form ID, exact stored surface form, active lifecycle, lexeme ownership, and form role must support the claimed match class. Contradictory provenance fails the canonical-only read; it cannot silently become not-found or receive a weaker class. Intentional canonical-only operation is reported with its canonical release pin and is distinct from hybrid retrieval's explicit vector-degraded outcome.
+
 Domain assessment uses a bounded published inventory and returns `existing`, `proposed_new`, `general`, or `uncertain`. Inventory failure produces `uncertain`; it cannot prove that a domain is new. Proposals are request-local and appear only where the full response permits them.
 
 ## Retrieval and composition

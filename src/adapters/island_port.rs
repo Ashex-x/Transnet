@@ -1069,18 +1069,18 @@ impl CandidateMatchDto {
     }
     let matched_form_id = canonical_id(self.matched_form_id)?;
     let candidate = self.candidate.into_domain(release_id, evidence_use)?;
-    if !candidate
-      .forms
-      .iter()
-      .any(|form| form.id == matched_form_id)
-    {
-      return Err(IslandPortClientError::InconsistentData);
-    }
-    Ok(RepositoryMatch {
+    let matched_form = self.matched_form;
+    let repository_match = RepositoryMatch {
       candidate,
+      matched_form_id: Some(matched_form_id),
+      matched_form,
       kind: self.match_class.into_domain(),
       score: RetrievalScore::new(self.lexical_score_basis_points).map_err(inconsistent)?,
-    })
+    };
+    if !repository_match.has_verified_source() {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    Ok(repository_match)
   }
 }
 

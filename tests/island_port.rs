@@ -268,10 +268,43 @@ async fn candidate_response_maps_authoritative_data_without_accepting_rank() {
   assert_eq!(matches.len(), 1);
   assert_eq!(matches[0].kind, LexicalMatchKind::ExactCanonical);
   assert_eq!(matches[0].score.basis_points(), 10_000);
+  assert_eq!(matches[0].matched_form, "sweltering");
+  assert_eq!(
+    matches[0].matched_form_id.as_ref().unwrap().as_str(),
+    "form_sweltering"
+  );
   assert_eq!(
     matches[0].candidate.sources[0].attribution.as_deref(),
     Some("Reviewed dictionary attribution")
   );
+}
+
+#[tokio::test]
+async fn candidate_match_source_must_equal_the_authoritative_stored_form() {
+  let mut cases = Vec::new();
+  let mut changed_surface = candidate_response();
+  *changed_surface
+    .pointer_mut("/value/matches/0/matched_form")
+    .unwrap() = json!("swelteringly");
+  cases.push(changed_surface);
+  let mut changed_id = candidate_response();
+  *changed_id
+    .pointer_mut("/value/matches/0/matched_form_id")
+    .unwrap() = json!("form_other");
+  cases.push(changed_id);
+  let mut false_alias = candidate_response();
+  *false_alias
+    .pointer_mut("/value/matches/0/match_class")
+    .unwrap() = json!("exact_alias");
+  cases.push(false_alias);
+
+  for response in cases {
+    let error = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))
+      .resolve_basic_card_candidates(&context(), &id("knowledge-2026-09"), candidate_input())
+      .await
+      .unwrap_err();
+    assert_eq!(error, IslandPortClientError::InconsistentData);
+  }
 }
 
 fn candidate_response() -> Value {

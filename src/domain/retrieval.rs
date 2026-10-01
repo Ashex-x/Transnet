@@ -352,10 +352,61 @@ impl CanonicalCandidate {
 pub struct RepositoryMatch {
   /// Fully hydrated canonical candidate.
   pub candidate: CanonicalCandidate,
+  /// Stable authoritative form that selected this candidate, when the match is form-backed.
+  pub matched_form_id: Option<super::canonical::FormId>,
+  /// Authoritative stored surface form that selected this candidate.
+  pub matched_form: String,
   /// Retrieval signal produced by the repository.
   pub kind: LexicalMatchKind,
   /// Normalized rank or match confidence for this signal.
   pub score: RetrievalScore,
+}
+
+impl RepositoryMatch {
+  /// Returns whether the match provenance belongs to the candidate and supports its class.
+  ///
+  /// Semantic nominations may omit a form identity, but still carry a nonempty authority-owned
+  /// nomination label. Every stronger class must name the exact active stored form or canonical
+  /// lemma that established the match; a score alone is never sufficient.
+  pub fn has_verified_source(&self) -> bool {
+    if self.matched_form.trim().is_empty() {
+      return false;
+    }
+    if self.kind == LexicalMatchKind::Semantic {
+      return self.matched_form_id.as_ref().is_none_or(|matched_id| {
+        self.candidate.forms.iter().any(|form| {
+          form.id == *matched_id
+            && form.status == CanonicalStatus::Active
+            && form.form == self.matched_form
+        })
+      });
+    }
+
+    if self.kind == LexicalMatchKind::ExactCanonical
+      && self.matched_form_id.is_none()
+      && self.candidate.lexeme.lemma == self.matched_form
+    {
+      return true;
+    }
+
+    self.matched_form_id.as_ref().is_some_and(|matched_id| {
+      self.candidate.forms.iter().any(|form| {
+        form.id == *matched_id
+          && form.status == CanonicalStatus::Active
+          && form.form == self.matched_form
+          && match self.kind {
+            LexicalMatchKind::ExactCanonical => form.kind == FormKind::Lemma,
+            LexicalMatchKind::ExactAlias => matches!(
+              form.kind,
+              FormKind::SpellingVariant | FormKind::Alias | FormKind::Phrase
+            ),
+            LexicalMatchKind::Inflection => form.kind == FormKind::Inflection,
+            LexicalMatchKind::SpellingCorrection | LexicalMatchKind::Transliteration => true,
+            LexicalMatchKind::Semantic => unreachable!("semantic matches returned above"),
+          }
+      })
+    })
+  }
 }
 
 /// Hydrated canonical data associated with one filtered vector result.
@@ -478,9 +529,10 @@ pub fn fuse_candidates(
   let mut candidates = BTreeMap::<SenseId, CandidateAccumulator>::new();
 
   for lexical in lexical_matches {
-    if !lexical
-      .candidate
-      .is_eligible_for(&content.release_id, evidence_use)
+    if !lexical.has_verified_source()
+      || !lexical
+        .candidate
+        .is_eligible_for(&content.release_id, evidence_use)
     {
       continue;
     }
@@ -526,7 +578,8 @@ pub fn rank_lexical_candidates(
 ) -> Vec<RankedCandidate> {
   let mut candidates = BTreeMap::<SenseId, CandidateAccumulator>::new();
   for lexical in lexical_matches {
-    if lexical.candidate.is_eligible_for(release_id, evidence_use) {
+    if lexical.has_verified_source() && lexical.candidate.is_eligible_for(release_id, evidence_use)
+    {
       merge_candidate(
         &mut candidates,
         lexical.candidate,
@@ -781,6 +834,26 @@ mod tests {
     }
   }
 
+  fn repository_match(
+    candidate: CanonicalCandidate,
+    kind: LexicalMatchKind,
+    score: RetrievalScore,
+  ) -> RepositoryMatch {
+    let matched_form = match kind {
+      LexicalMatchKind::ExactCanonical => None,
+      LexicalMatchKind::Semantic => None,
+      _ => candidate.forms.first(),
+    };
+    RepositoryMatch {
+      matched_form_id: matched_form.map(|form| form.id.clone()),
+      matched_form: matched_form
+        .map_or_else(|| candidate.lexeme.lemma.clone(), |form| form.form.clone()),
+      candidate,
+      kind,
+      score,
+    }
+  }
+
   #[test]
   fn fusion_deduplicates_by_sense_and_retains_signals() {
     let hot = candidate("sense-hot", "hot");
@@ -789,21 +862,21 @@ mod tests {
       &content(),
       EvidenceUse::ApiRedistribution,
       [
-        RepositoryMatch {
-          candidate: hot.clone(),
-          kind: LexicalMatchKind::Inflection,
-          score: RetrievalScore::new(7_500).unwrap(),
-        },
-        RepositoryMatch {
-          candidate: hot.clone(),
-          kind: LexicalMatchKind::Semantic,
-          score: RetrievalScore::new(2_000).unwrap(),
-        },
-        RepositoryMatch {
-          candidate: warm,
-          kind: LexicalMatchKind::Semantic,
-          score: RetrievalScore::new(9_000).unwrap(),
-        },
+        repository_match(
+          hot.clone(),
+          LexicalMatchKind::Inflection,
+          RetrievalScore::new(7_500).unwrap(),
+        ),
+        repository_match(
+          hot.clone(),
+          LexicalMatchKind::Semantic,
+          RetrievalScore::new(2_000).unwrap(),
+        ),
+        repository_match(
+          warm,
+          LexicalMatchKind::Semantic,
+          RetrievalScore::new(9_000).unwrap(),
+        ),
       ],
       [vector_match(hot, 9_200)],
     );
@@ -822,10 +895,12 @@ mod tests {
   fn fusion_is_stable_when_adapter_order_changes() {
     let first = candidate("sense-a", "a");
     let second = candidate("sense-b", "b");
-    let match_for = |candidate: CanonicalCandidate| RepositoryMatch {
-      candidate,
-      kind: LexicalMatchKind::Semantic,
-      score: RetrievalScore::new(5_000).unwrap(),
+    let match_for = |candidate: CanonicalCandidate| {
+      repository_match(
+        candidate,
+        LexicalMatchKind::Semantic,
+        RetrievalScore::new(5_000).unwrap(),
+      )
     };
     let forward = fuse_candidates(
       &content(),
@@ -846,22 +921,23 @@ mod tests {
 
   #[test]
   fn exact_matches_exclude_lower_precedence_candidates_regardless_of_score() {
-    let exact = candidate("sense-exact", "exact");
+    let mut exact = candidate("sense-exact", "exact");
+    exact.forms[0].kind = FormKind::Alias;
     let semantic = candidate("sense-semantic", "semantic");
     let ranked = fuse_candidates(
       &content(),
       EvidenceUse::ApiRedistribution,
       [
-        RepositoryMatch {
-          candidate: semantic,
-          kind: LexicalMatchKind::Semantic,
-          score: RetrievalScore::exact(),
-        },
-        RepositoryMatch {
-          candidate: exact,
-          kind: LexicalMatchKind::ExactAlias,
-          score: RetrievalScore::new(8_000).unwrap(),
-        },
+        repository_match(
+          semantic,
+          LexicalMatchKind::Semantic,
+          RetrievalScore::exact(),
+        ),
+        repository_match(
+          exact,
+          LexicalMatchKind::ExactAlias,
+          RetrievalScore::new(8_000).unwrap(),
+        ),
       ],
       [],
     );
@@ -882,16 +958,16 @@ mod tests {
       &content(),
       EvidenceUse::ApiRedistribution,
       [
-        RepositoryMatch {
-          candidate: verb,
-          kind: LexicalMatchKind::ExactCanonical,
-          score: RetrievalScore::exact(),
-        },
-        RepositoryMatch {
-          candidate: noun,
-          kind: LexicalMatchKind::ExactCanonical,
-          score: RetrievalScore::exact(),
-        },
+        repository_match(
+          verb,
+          LexicalMatchKind::ExactCanonical,
+          RetrievalScore::exact(),
+        ),
+        repository_match(
+          noun,
+          LexicalMatchKind::ExactCanonical,
+          RetrievalScore::exact(),
+        ),
       ],
       [],
     );
@@ -908,11 +984,11 @@ mod tests {
     let ranked = fuse_candidates(
       &content(),
       EvidenceUse::ApiRedistribution,
-      [RepositoryMatch {
-        candidate: blocked,
-        kind: LexicalMatchKind::ExactCanonical,
-        score: RetrievalScore::exact(),
-      }],
+      [repository_match(
+        blocked,
+        LexicalMatchKind::ExactCanonical,
+        RetrievalScore::exact(),
+      )],
       [],
     );
 

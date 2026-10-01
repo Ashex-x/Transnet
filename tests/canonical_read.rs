@@ -184,6 +184,8 @@ impl CanonicalReadPort for SwitchingAuthority {
     Ok(if self.has_candidate {
       vec![RepositoryMatch {
         candidate: candidate(pin),
+        matched_form_id: None,
+        matched_form: "hello".into(),
         kind: LexicalMatchKind::ExactCanonical,
         score: RetrievalScore::exact(),
       }]

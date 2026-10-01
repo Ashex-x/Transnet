@@ -136,7 +136,8 @@ impl CanonicalReadService {
       return Err(CanonicalReadError::InconsistentData);
     }
     if lexical_matches.iter().any(|matched| {
-      matched.candidate.lexeme.release_id != pin.release_id
+      !matched.has_verified_source()
+        || matched.candidate.lexeme.release_id != pin.release_id
         || matched.candidate.sense.release_id != pin.release_id
         || matched
           .candidate

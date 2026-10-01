@@ -90,10 +90,19 @@ impl CanonicalRepository for InMemoryRetrievalAdapter {
       .filter_map(|candidate| {
         candidate
           .in_memory_match(&request.retrieval.query)
-          .map(|(kind, score)| RepositoryMatch {
-            candidate: candidate.clone(),
-            kind,
-            score,
+          .map(|(kind, score)| {
+            let matched_form = candidate
+              .forms
+              .iter()
+              .find(|form| form.normalized_form == request.retrieval.query);
+            RepositoryMatch {
+              candidate: candidate.clone(),
+              matched_form_id: matched_form.map(|form| form.id.clone()),
+              matched_form: matched_form
+                .map_or_else(|| candidate.lexeme.lemma.clone(), |form| form.form.clone()),
+              kind,
+              score,
+            }
           })
       })
       .collect::<Vec<_>>();

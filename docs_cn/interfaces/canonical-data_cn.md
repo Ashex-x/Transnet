@@ -309,6 +309,8 @@ island-port server 不在当前仓库，仍需实现该 operation、原子选择
 
 唯一性由稳定的词形、卡片和词义 ID 及已发布规范形式/别名行维护，不依赖临时规范化检索字符串。最佳适用层级的所有合格冲突均须返回，由服务解析。
 
+`matched_form_id` 与 `matched_form` 是证明输入，不是展示提示。Transnet 要求该 ID 解析到返回 lexeme 所属的 active form，并要求 surface value 与存储 form 完全一致。声明的类别还必须符合权威 form role：`exact_canonical` 要求 lemma，`exact_alias` 要求已发布 spelling variant、alias 或 phrase，`inflection` 要求 inflection。拼写修正与转写结果仍须指明权威存储目标 form。任何不匹配都使整个权威响应闭合失败，而不会降级成 semantic nomination。
+
 每个候选必须为每条 evidence 提供权威且固定发布的 source 记录。`source.id` 必须等于 `evidence.source_id`；source 和 evidence 的权限均须允许请求用途，且 evidence 权限不得超过 source 权限。公开再分发所需的 `source.attribution` 必须是非空、经过权利审核的人类可读署名（最多 256 个 Unicode 字符），不能由 source ID 或名称拼接。缺失、重复、冲突、无许可或跨发布的 source/evidence 记录均闭合失败。适配器将严格私有 DTO 映射至已有 candidate/source/evidence domain 类型；真实交付前 island-port 必须补齐此数据链。content hash 和权限位仍仅供内部使用。
 
 `lexeme.lemma_evidence_ids` 是必填、排序且唯一的 1 至 8 个 evidence ID，专门支持 canonical lemma assertion。它不能借用 sense definition evidence，不暗示存在 `FormKind::Lemma`，也永不参与 lexeme identity。每个 ID 必须通过响应 evidence/source chain（或 `senses/get` 的 indexed `lineages` map）解析到同一发布及请求 permission；dangling、重复、冲突或未使用 lineage 均闭合失败。
