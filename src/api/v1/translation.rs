@@ -55,10 +55,9 @@ pub(crate) async fn translate(
     }
   };
   match turn.input_kind() {
-    TranslationInputKind::ImageRegions => {
-      return unsupported_capability("image_regions", &request_id)
-    }
-    TranslationInputKind::Text | TranslationInputKind::Segments => {}
+    TranslationInputKind::Text
+    | TranslationInputKind::Segments
+    | TranslationInputKind::ImageRegions => {}
   }
   let Some(orchestrator) = state.translation_orchestrator() else {
     return translation_model_unavailable(&request_id);

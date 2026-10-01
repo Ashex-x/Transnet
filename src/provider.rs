@@ -136,6 +136,55 @@ impl TranslationService {
     Ok((output, self.gemma4.config.model.clone()))
   }
 
+  /// Runs one provider-neutral multimodal operation against the Gemma 4 endpoint.
+  pub(crate) async fn generate_with_profile_images(
+    &self,
+    profile: GenerationProfile,
+    input: &str,
+    images: &[(String, String)],
+  ) -> Result<(String, String), TranslationError> {
+    let instruction = match profile {
+      GenerationProfile::Fast => "Complete the requested operation accurately and concisely.",
+      GenerationProfile::Reasoning => {
+        "Resolve the requested operation carefully. Return only the requested conclusion."
+      }
+    };
+    let mut content = Vec::with_capacity(images.len() + 1);
+    content.push(VlmContent::Text {
+      text: input.to_string(),
+    });
+    content.extend(
+      images
+        .iter()
+        .map(|(media_type, data)| VlmContent::ImageUrl {
+          image_url: ImageUrl {
+            url: format!("data:{media_type};base64,{data}"),
+          },
+        }),
+    );
+    let body = ChatCompletionRequest {
+      model: self.gemma4.config.model.clone(),
+      messages: vec![
+        ChatMessage {
+          role: "system",
+          content: MessageContent::Text(instruction.to_string()),
+        },
+        ChatMessage {
+          role: "user",
+          content: MessageContent::Vlm(content),
+        },
+      ],
+      temperature: 0.0,
+    };
+    let output = self
+      .gemma4
+      .resilience
+      .execute("generate", || self.gemma4.send(&body))
+      .await
+      .map_err(|_| TranslationError::Provider)?;
+    Ok((output, self.gemma4.config.model.clone()))
+  }
+
   /// Creates a reusable translation service.
   ///
   /// # Errors
@@ -424,6 +473,19 @@ struct ChatMessage {
 enum MessageContent {
   Text(String),
   Structured(Vec<TranslateGemmaContent>),
+  Vlm(Vec<VlmContent>),
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum VlmContent {
+  Text { text: String },
+  ImageUrl { image_url: ImageUrl },
+}
+
+#[derive(Serialize)]
+struct ImageUrl {
+  url: String,
 }
 
 #[derive(Serialize)]
@@ -490,6 +552,27 @@ mod tests {
         "target_lang_code": "zh-CN",
         "text": "long text"
       })
+    );
+  }
+
+  #[test]
+  fn vlm_content_uses_standard_text_and_image_url_parts() {
+    let value = serde_json::to_value(MessageContent::Vlm(vec![
+      VlmContent::Text {
+        text: "bounded prompt".into(),
+      },
+      VlmContent::ImageUrl {
+        image_url: ImageUrl {
+          url: "data:image/png;base64,cHJpdmF0ZQ==".into(),
+        },
+      },
+    ]))
+    .unwrap();
+    assert_eq!(value[0], json!({"type":"text","text":"bounded prompt"}));
+    assert_eq!(value[1]["type"], "image_url");
+    assert_eq!(
+      value[1]["image_url"]["url"],
+      "data:image/png;base64,cHJpdmF0ZQ=="
     );
   }
 }

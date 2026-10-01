@@ -51,8 +51,9 @@ pub use domain::capabilities::{
   SchemaVersionCapability, ServiceCapabilities, SourceLanguageCapability, TargetLanguageCapability,
 };
 pub use domain::model_runtime::{
-  CancellationSignal, EmbeddingInput, EphemeralEmbedding, GenerationInput, GenerationOutput,
-  GenerationProfile, ModelValueError, ModelVersion, ReasoningBudget,
+  CancellationSignal, EmbeddingInput, EphemeralEmbedding, GenerationImage,
+  GenerationImageMediaType, GenerationInput, GenerationOutput, GenerationProfile, ModelValueError,
+  ModelVersion, ReasoningBudget,
 };
 pub use domain::request_context::{RequestContext, RequestContextError, RequestId};
 pub use domain::translation_turn::{

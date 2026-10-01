@@ -205,6 +205,7 @@ impl AppState {
   ) -> Self {
     self.translation_orchestrator = Some(orchestrator);
     self.capabilities = self.capabilities.with_segment_translation(true);
+    self.capabilities = self.capabilities.with_image_region_translation();
     self
   }
 

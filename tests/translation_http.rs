@@ -31,7 +31,18 @@ impl GenerationPort for FakeGeneration {
     request: GenerationRequest,
   ) -> Result<GenerationResponse, ModelOperationError> {
     context.ensure_active()?;
-    let outcome = if request.input.as_str().contains("lexical_translation") {
+    let outcome = if request.input.as_str().contains("image_region_translation") {
+      self.connected.clone()?;
+      assert_eq!(request.images.len(), 1);
+      let prompt: Value = serde_json::from_str(request.input.as_str()).unwrap();
+      let key = prompt["reading_order"][0].as_str().unwrap();
+      let (image_id, region_id) = key.split_once(':').unwrap();
+      Ok(
+        json!({"regions":[{"image_id":image_id,"region_id":region_id,
+        "detected_source_language":"en","translation":"Warning"}]})
+        .to_string(),
+      )
+    } else if request.input.as_str().contains("lexical_translation") {
       self.lexical.clone()
     } else {
       self.connected.clone()
@@ -93,6 +104,30 @@ fn request(body: Value) -> Request<Body> {
 
 async fn body(response: axum::response::Response) -> Value {
   serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn composed_vlm_truthfully_activates_image_capabilities() {
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(
+      Request::post("/api/v1/capabilities")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-request-id", "image-capabilities")
+        .body(Body::from("{}"))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::OK);
+  let value = body(response).await;
+  assert_eq!(
+    value["data"]["input_types"],
+    json!(["text", "image_regions"])
+  );
+  assert_eq!(
+    value["data"]["image_media_types"],
+    json!(["image/png", "image/jpeg", "image/webp"])
+  );
 }
 
 #[tokio::test]
@@ -365,7 +400,7 @@ async fn segment_postcondition_failure_returns_redacted_bad_gateway() {
 }
 
 #[tokio::test]
-async fn validated_image_bytes_and_order_never_enter_the_capability_problem() {
+async fn validated_image_regions_return_ordered_translation_without_image_bytes() {
   let image_id = "private-image-991";
   let region_id = "private-region-992";
   let encoded = "iVBORw0KGgoAAAAAAAAAAAAAAAEAAAAB";
@@ -379,12 +414,42 @@ async fn validated_image_bytes_and_order_never_enter_the_capability_problem() {
     })))
     .await
     .unwrap();
-  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
-  let problem = body(response).await;
-  assert_eq!(problem["code"], "translation_capability_unavailable");
-  let rendered = problem.to_string();
-  assert!(!rendered.contains(image_id));
-  assert!(!rendered.contains(region_id));
+  assert_eq!(response.status(), StatusCode::OK);
+  let result = body(response).await;
+  assert_eq!(result["data"]["translation"]["unit"], "image_region");
+  assert_eq!(
+    result["data"]["translation"]["regions"][0]["image_id"],
+    image_id
+  );
+  assert_eq!(
+    result["data"]["translation"]["regions"][0]["region_id"],
+    region_id
+  );
+  assert_eq!(result["data"]["translation"]["regions"][0]["order"], 0);
+  assert_eq!(
+    result["data"]["translation"]["regions"][0]["translations"][0]["text"],
+    "Warning"
+  );
+  assert!(!result.to_string().contains(encoded));
+}
+
+#[tokio::test]
+async fn image_dependency_failure_never_echoes_image_or_region_content() {
+  let encoded = "iVBORw0KGgoAAAAAAAAAAAAAAAEAAAAB";
+  let response = app(Err(ModelOperationError::Unavailable), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input":{"type":"image_regions","images":[{"image_id":"private-image-771",
+        "media_type":"image/png","data":encoded,"regions":[{"region_id":"private-region-772",
+        "x":0.0,"y":0.0,"width":1.0,"height":1.0}]}],
+        "reading_order":["private-image-771:private-region-772"]},
+      "source_language":"auto","target_language":"en","response_level":"brief"
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+  let rendered = body(response).await.to_string();
+  assert!(!rendered.contains("private-image-771"));
+  assert!(!rendered.contains("private-region-772"));
   assert!(!rendered.contains(encoded));
 }
 

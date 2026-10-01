@@ -31,6 +31,7 @@ struct RecordedCall {
   profile: GenerationProfile,
   input: String,
   deadline: OffsetDateTime,
+  image_count: usize,
 }
 
 struct FakeGeneration {
@@ -142,6 +143,7 @@ impl GenerationPort for FakeGeneration {
       profile: request.profile,
       input: request.input.as_str().to_string(),
       deadline: context.request.deadline_at(),
+      image_count: request.images.len(),
     });
     let current = self.in_flight.fetch_add(1, Ordering::AcqRel) + 1;
     self.peak.fetch_max(current, Ordering::AcqRel);
@@ -194,6 +196,18 @@ fn turn(text: &str) -> TranslationTurn {
     guidance: None,
   })
   .unwrap()
+}
+
+fn image_turn() -> TranslationTurn {
+  let request: TranslationTurnRequest = serde_json::from_value(serde_json::json!({
+    "input":{"type":"image_regions","images":[{"image_id":"page",
+      "media_type":"image/png","data":"iVBORw0KGgoAAAAAAAAAAAAAAAEAAAAB",
+      "regions":[{"region_id":"title","x":0.0,"y":0.0,"width":1.0,"height":1.0}]}],
+      "reading_order":["page:title"]},
+    "source_language":"auto","target_language":"zh-CN","response_level":"standard"
+  }))
+  .unwrap();
+  TranslationTurn::new(request).unwrap()
 }
 
 fn guided_turn(text: &str) -> TranslationTurn {
@@ -629,4 +643,78 @@ fn history_shape_remains_request_local() {
   })
   .unwrap();
   assert_eq!(request.history().len(), 1);
+}
+
+#[tokio::test]
+async fn image_regions_use_one_bounded_vlm_call_and_preserve_reading_order() {
+  let fake = Arc::new(FakeGeneration::new([Ok(
+    serde_json::json!({
+      "regions":[{"image_id":"page","region_id":"title",
+        "detected_source_language":"en","translation":"标题"}]
+    })
+    .to_string(),
+  )]));
+  let orchestrator = TranslationOrchestrator::new(fake.clone());
+  let result = orchestrator
+    .translate(
+      &context(5),
+      Arc::new(CancellationSignal::default()),
+      &image_turn(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(
+    result.translation.kind(),
+    TranslationResultKind::ImageRegion
+  );
+  let value = serde_json::to_value(result.translation).unwrap();
+  assert_eq!(value["regions"][0]["image_id"], "page");
+  assert_eq!(value["regions"][0]["region_id"], "title");
+  assert_eq!(value["regions"][0]["order"], 0);
+  assert_eq!(value["regions"][0]["translations"][0]["text"], "标题");
+  let calls = fake.calls();
+  assert_eq!(calls.len(), 1);
+  assert_eq!(calls[0].image_count, 1);
+  assert!(!calls[0].input.contains("iVBOR"));
+}
+
+#[tokio::test]
+async fn image_output_identity_drift_and_cancellation_fail_content_free() {
+  let fake = Arc::new(FakeGeneration::new([Ok(
+    serde_json::json!({
+      "regions":[{"image_id":"page","region_id":"wrong",
+        "detected_source_language":"en","translation":"private-output"}]
+    })
+    .to_string(),
+  )]));
+  let error = TranslationOrchestrator::new(fake)
+    .translate(
+      &context(5),
+      Arc::new(CancellationSignal::default()),
+      &image_turn(),
+    )
+    .await
+    .unwrap_err();
+  assert_eq!(error, TranslationOrchestrationError::InvalidModelOutput);
+  assert!(!format!("{error:?} {error}").contains("private-output"));
+
+  let fake = Arc::new(FakeGeneration::delayed(
+    [Ok("unused".into())],
+    Duration::from_secs(1),
+  ));
+  let cancellation = Arc::new(CancellationSignal::default());
+  let cancel = cancellation.clone();
+  let orchestrator = TranslationOrchestrator::new(fake);
+  let request_context = context(5);
+  let turn = image_turn();
+  let operation = orchestrator.translate(&request_context, cancellation, &turn);
+  tokio::pin!(operation);
+  tokio::select! {
+    result = &mut operation => panic!("image operation completed early: {result:?}"),
+    _ = tokio::time::sleep(Duration::from_millis(20)) => cancel.cancel(),
+  }
+  assert_eq!(
+    operation.await.unwrap_err(),
+    TranslationOrchestrationError::Cancelled
+  );
 }

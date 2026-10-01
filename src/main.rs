@@ -244,6 +244,7 @@ fn configure_knowledge(
     knowledge.canonical.timeout,
   ));
   let capabilities = ServiceCapabilities::current(max_request_body_bytes)
+    .with_image_region_translation()
     .with_knowledge_bundle(KnowledgeCapabilityBundle::FullyConfigured);
   Ok((
     state

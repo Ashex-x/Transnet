@@ -16,6 +16,66 @@ pub const MAX_GENERATION_OUTPUT_BYTES: usize = 262_144;
 pub const MAX_EMBEDDING_INPUT_BYTES: usize = 16_384;
 /// Maximum bytes accepted for a model or artifact version identifier.
 pub const MAX_MODEL_VERSION_BYTES: usize = 128;
+/// Maximum decoded bytes carried by one request-local generation image.
+pub const MAX_GENERATION_IMAGE_BYTES: usize = 2 * 1_048_576;
+
+/// Closed media types accepted by the neutral VLM boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GenerationImageMediaType {
+  /// PNG image bytes.
+  Png,
+  /// JPEG image bytes.
+  Jpeg,
+  /// WebP image bytes.
+  WebP,
+}
+
+impl GenerationImageMediaType {
+  /// Returns the exact media type used in the provider data URL.
+  pub const fn as_str(self) -> &'static str {
+    match self {
+      Self::Png => "image/png",
+      Self::Jpeg => "image/jpeg",
+      Self::WebP => "image/webp",
+    }
+  }
+}
+
+/// One decoded request-local image that is dropped after its generation operation.
+#[derive(Clone, PartialEq, Eq)]
+pub struct GenerationImage {
+  media_type: GenerationImageMediaType,
+  bytes: Vec<u8>,
+}
+
+impl GenerationImage {
+  /// Validates nonempty bounded decoded image bytes.
+  pub fn new(
+    media_type: GenerationImageMediaType,
+    bytes: Vec<u8>,
+  ) -> Result<Self, ModelValueError> {
+    if bytes.is_empty() || bytes.len() > MAX_GENERATION_IMAGE_BYTES {
+      return Err(ModelValueError::InvalidGenerationImage);
+    }
+    Ok(Self { media_type, bytes })
+  }
+
+  /// Returns the declared closed media type.
+  pub const fn media_type(&self) -> GenerationImageMediaType {
+    self.media_type
+  }
+
+  /// Borrows decoded bytes only for the immediate adapter call.
+  pub fn bytes(&self) -> &[u8] {
+    &self.bytes
+  }
+}
+
+impl fmt::Debug for GenerationImage {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter.write_str("GenerationImage(REDACTED)")
+  }
+}
 
 /// Closed invocation profile for the configured generation model.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -234,6 +294,9 @@ pub enum ModelValueError {
   /// Generation input is blank or exceeds its byte bound.
   #[error("invalid generation input")]
   InvalidGenerationInput,
+  /// Decoded generation image bytes are empty or exceed their request-local bound.
+  #[error("invalid generation image")]
+  InvalidGenerationImage,
   /// Generation output is blank or exceeds its byte bound.
   #[error("invalid generation output")]
   InvalidGenerationOutput,
@@ -292,6 +355,18 @@ mod tests {
     assert_eq!(
       ModelVersion::new("unsafe\nversion"),
       Err(ModelValueError::InvalidModelVersion)
+    );
+  }
+
+  #[test]
+  fn generation_images_are_bounded_and_debug_redacted() {
+    let secret = b"private-image-bytes".to_vec();
+    let image = GenerationImage::new(GenerationImageMediaType::Png, secret).unwrap();
+    assert_eq!(image.media_type().as_str(), "image/png");
+    assert_eq!(format!("{image:?}"), "GenerationImage(REDACTED)");
+    assert_eq!(
+      GenerationImage::new(GenerationImageMediaType::Jpeg, Vec::new()),
+      Err(ModelValueError::InvalidGenerationImage)
     );
   }
 

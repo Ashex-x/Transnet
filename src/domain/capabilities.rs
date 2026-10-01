@@ -72,6 +72,22 @@ impl ServiceCapabilities {
     }
   }
 
+  /// Activates image-region input only when the neutral VLM operation is composed.
+  pub fn with_image_region_translation(mut self) -> Self {
+    if !self
+      .input_types
+      .contains(&InputTypeCapability::ImageRegions)
+    {
+      self.input_types.push(InputTypeCapability::ImageRegions);
+    }
+    self.image_media_types = vec![
+      ImageMediaTypeCapability::Png,
+      ImageMediaTypeCapability::Jpeg,
+      ImageMediaTypeCapability::WebP,
+    ];
+    self
+  }
+
   /// Activates only the lenses backed by one fully composed canonical/retrieval/view bundle.
   pub fn with_knowledge_bundle(mut self, bundle: KnowledgeCapabilityBundle) -> Self {
     self.knowledge_lenses.clear();
@@ -155,11 +171,23 @@ pub enum InputTypeCapability {
   Text,
   /// Ordered structured document or localization segments.
   Segments,
+  /// Bounded inline images with explicit normalized regions.
+  ImageRegions,
 }
 
-/// Image media types; the enum is intentionally uninhabited until vision input is implemented.
+/// Image media types accepted by the composed VLM path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub enum ImageMediaTypeCapability {}
+pub enum ImageMediaTypeCapability {
+  /// PNG.
+  #[serde(rename = "image/png")]
+  Png,
+  /// JPEG.
+  #[serde(rename = "image/jpeg")]
+  Jpeg,
+  /// WebP.
+  #[serde(rename = "image/webp")]
+  WebP,
+}
 
 /// Request purposes; the enum is intentionally uninhabited until guidance is implemented.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -212,6 +240,26 @@ mod tests {
         KnowledgeLensCapability::Form,
         KnowledgeLensCapability::Origin,
         KnowledgeLensCapability::Domain,
+      ]
+    );
+  }
+
+  #[test]
+  fn image_regions_activate_only_through_explicit_composition() {
+    let disabled = ServiceCapabilities::current(1_024);
+    assert_eq!(disabled.input_types, vec![InputTypeCapability::Text]);
+    assert!(disabled.image_media_types.is_empty());
+    let enabled = disabled.with_image_region_translation();
+    assert_eq!(
+      enabled.input_types,
+      vec![InputTypeCapability::Text, InputTypeCapability::ImageRegions]
+    );
+    assert_eq!(
+      enabled.image_media_types,
+      vec![
+        ImageMediaTypeCapability::Png,
+        ImageMediaTypeCapability::Jpeg,
+        ImageMediaTypeCapability::WebP,
       ]
     );
   }

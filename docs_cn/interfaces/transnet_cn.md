@@ -4,7 +4,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本合同定义目标 island-port 到 Transnet 接口及内部共享 HTTP/1.1-over-UDS 规则。Island-port 负责互联网传输、认证、用户状态、文件接入、文档重建和最终展示。Transnet 不接收终端用户身份，也不持久化实时请求内容。
 
-状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。翻译边界严格校验 tagged text、结构化 segment、image region、history 与专业 guidance。Text 与结构化 segment 会进入当前 orchestrator；有效 image 请求在 image result composition 落地前仍返回 `501 translation_capability_unavailable`。迁移期间可以通过显式配置保留 loopback listener。严格 knowledge-path handler 及其 application service 已在隔离 route-composition seam 后实现，但默认 runtime 尚未注入该 service 或公开 route。实时检索现在具备下文描述的请求级 policy orchestrator 与强化的生产 page-fetch adapter，但尚无生产 search adapter 或 runtime composition；因此 capability 继续将其报告为不可用。引导式知识视图仍未实现为 runtime capability。
+状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。翻译边界严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；带 guidance 的 text、结构化 segment 与有界 image region 都会进入当前中立 Gemma VLM orchestrator。迁移期间可以通过显式配置保留 loopback listener。严格 knowledge-path handler 及其 application service 已在隔离 route-composition seam 后实现，但默认 runtime 尚未注入该 service 或公开 route。实时检索现在具备下文描述的请求级 policy orchestrator 与强化的生产 page-fetch adapter，但尚无生产 search adapter 或 runtime composition；因此 capability 继续将其报告为不可用。引导式知识视图仍未实现为 runtime capability。
 
 ## 目录
 
@@ -150,7 +150,7 @@ HTTP boundary 已在过渡期与目标 path 上实现请求上下文基础。若
 
 文本最多 131,072 个 Unicode scalar。Segment 输入最多 256 项，每项 8,192 scalar，总计 131,072 scalar。每个 segment 最多 128 个 protected range。这些限制仍受编码 body 上限约束。
 
-迁移期间，当前 runtime 同时接受 tagged text shape 与 legacy 顶层 `text` 字段；调用方必须且只能发送其中一种。校验后，请求 domain 仅在本次请求内保留完整 tagged input、guidance 与 history。不含依赖执行的 guidance 的 tagged text 与 segment 会正常处理。Segment orchestration 通过中立 generation port 为每个 segment 发送严格的 structure-aware prompt，执行有界并行 fast-profile 调用，并且整个请求最多进行一次 reasoning repair。它确定性恢复调用方顺序与 ID；只有每个 protected scalar range 仍逐字且有序、换行数不变、Markdown delimiter 或 HTML tag 精确匹配时才接受输出。Image-region 请求会在返回不含内容的 `501 translation_capability_unavailable` problem 前完成有界 media header、尺寸、region 与顺序校验。完整 image execution 仍属于后续 slice。
+迁移期间，当前 runtime 同时接受 tagged text shape 与 legacy 顶层 `text` 字段；调用方必须且只能发送其中一种。校验后，请求 domain 仅在本次请求内保留完整 tagged input、guidance 与 history。Segment orchestration 通过中立 generation port 为每个 segment 发送严格的 structure-aware prompt，执行有界并行 fast-profile 调用，并且整个请求最多进行一次 reasoning repair。它确定性恢复调用方顺序与 ID；只有每个 protected scalar range 仍逐字且有序、换行数不变、Markdown delimiter 或 HTML tag 精确匹配时才接受输出。Image-region 请求完成有界结构、media header、decoded byte、尺寸、rectangle 与精确 reading-order 校验，然后以 decoded image 与严格 metadata prompt 执行一次受 deadline/cancellation 约束的 VLM 调用。输出必须按 reading order 精确匹配每个调用方 image/region ID，并使用请求的 target language；无效或乱序输出 fail closed。图片 byte、prompt material、OCR-like text 与输出随请求丢弃。
 
 `history` 可选并按时间排序。每项只包含先前源文本、译文与语言 tag，不含 turn ID、时间、用户 ID、反馈、模型 metadata 或保存状态。不另设项目数上限，但 history 与 guidance 的 JSON 编码合计最多 8,192 byte，从而保证每个已接受的文本请求都符合 65,536-byte generation-input 合同。超限 aggregate 会在任何 model call 前返回 `422 invalid_translation_request`，并只带不含内容的 `generation_context` field。
 

@@ -1,6 +1,7 @@
 //! OpenAI-compatible adapters for neutral generation and ephemeral embedding ports.
 
 use async_trait::async_trait;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
@@ -36,9 +37,29 @@ impl GenerationPort for OpenAiGenerationAdapter {
   ) -> Result<GenerationResponse, ModelOperationError> {
     context.ensure_active()?;
     let remaining = context.request.remaining_budget();
-    let operation = self
-      .service
-      .generate_with_profile(request.profile, request.input.as_str());
+    let encoded_images = request
+      .images
+      .iter()
+      .map(|image| {
+        (
+          image.media_type().as_str().to_string(),
+          BASE64.encode(image.bytes()),
+        )
+      })
+      .collect::<Vec<_>>();
+    let operation = async {
+      if encoded_images.is_empty() {
+        self
+          .service
+          .generate_with_profile(request.profile, request.input.as_str())
+          .await
+      } else {
+        self
+          .service
+          .generate_with_profile_images(request.profile, request.input.as_str(), &encoded_images)
+          .await
+      }
+    };
     let (output, model) = tokio::select! {
       _ = context.cancellation.cancelled() => return Err(ModelOperationError::Cancelled),
       result = tokio::time::timeout(remaining, operation) => result
