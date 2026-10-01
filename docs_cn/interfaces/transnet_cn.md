@@ -250,7 +250,7 @@ HTTP 序列化之前会执行 request-bound validation：structured result 的 I
 
 安装 translation orchestrator 会原子地公布 `segments`、`image_regions`、三种已接受图片媒体类型与 `format` annotation family；缺少该依赖的 state 不公布其中任何一项。扁平的 v1 capability shape 无法表达按 input 区分的 guidance 支持，因此在所有已公布 input 都执行相同 purpose 集之前，`purposes` 保持为空。替换调用方提供的 capability 声明不能部分移除或虚构这个原子集合。
 
-实时检索 capability 还会声明具备完整 claim-bound attribution 的精确 `input_types`。当前已组合实现只报告 `text`；不可用 deployment 会同时报告空列表与 `available: false`。
+实时检索 capability 还会声明具备完整 claim-bound attribution 的精确 `input_types`。当前已组合实现只报告 `text`，并增加用于 `live_external` attribution 的 `review` annotation family；不可用 deployment 会同时报告空 input 列表、没有 live review family 与 `available: false`。
 
 知识 lens 的激活是原子的。`AppState` 只接受一个经过验证且不可拆分的 knowledge route dependency bundle，其中 view 与 path service 必须共享同一个完整不可变 projection expectation；安装它时也会同时安装与该快照匹配的 active-release readiness。未提供 bundle 时两个 route 都不存在。只有安装该 bundle 时，runtime 才公布 `meaning`、`contrast`、`usage`、`form`、`origin` 和 `domain`，即使调用方提供了陈旧 capability 声明也不例外。`mechanism` 与 `application` 仍不公布，因为其显式技术关系策略尚不可执行。默认 executable 尚未构造该 bundle。
 

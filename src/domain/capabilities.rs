@@ -121,12 +121,20 @@ impl ServiceCapabilities {
 
   /// Advertises live retrieval only for a completely composed translation retrieval operation.
   pub fn with_live_retrieval(mut self, available: bool) -> Self {
+    self
+      .annotation_families
+      .retain(|value| *value != AnnotationFamilyCapability::Review);
     self.live_retrieval.available = available;
     self.live_retrieval.input_types = if available {
       vec![InputTypeCapability::Text]
     } else {
       Vec::new()
     };
+    if available {
+      self
+        .annotation_families
+        .push(AnnotationFamilyCapability::Review);
+    }
     self
   }
   /// Rebinds the configured HTTP body limit without changing activated capabilities.
@@ -219,6 +227,8 @@ pub enum PurposeCapability {
 pub enum AnnotationFamilyCapability {
   /// Protected-content and source-format preservation outcomes.
   Format,
+  /// Review and source-attribution outcomes emitted by live retrieval.
+  Review,
 }
 
 /// Guided-view lenses with an executable relation policy in the current implementation.
@@ -286,7 +296,7 @@ mod tests {
         ImageMediaTypeCapability::WebP,
       ]
     );
-    assert_eq!(enabled.purposes.len(), 5);
+    assert!(enabled.purposes.is_empty());
     assert_eq!(
       enabled.with_translation_orchestrator(false).input_types,
       vec![InputTypeCapability::Text]
@@ -297,9 +307,15 @@ mod tests {
   fn live_retrieval_activates_only_through_explicit_composition() {
     let disabled = ServiceCapabilities::current(1_024);
     assert!(!disabled.live_retrieval.available);
-    let enabled = disabled.with_live_retrieval(true).live_retrieval;
-    assert!(enabled.available);
-    assert_eq!(enabled.input_types, vec![InputTypeCapability::Text]);
+    let enabled = disabled.with_live_retrieval(true);
+    assert!(enabled.live_retrieval.available);
+    assert_eq!(
+      enabled.live_retrieval.input_types,
+      vec![InputTypeCapability::Text]
+    );
+    assert!(enabled
+      .annotation_families
+      .contains(&AnnotationFamilyCapability::Review));
   }
 }
 
