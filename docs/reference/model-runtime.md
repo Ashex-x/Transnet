@@ -4,7 +4,7 @@
 
 This subsystem owns target inference policy for the one configured Gemma4-27B vision-language model and the separate embedding model. It does not expose provider brands, reasoning controls, prompts, or embedding payloads through the service interface.
 
-Status: foundational model-runtime types and adapters are implemented, while application migration remains transitional. The public Rust boundary now provides closed `fast` and `reasoning` profiles, bounded redacted input/output/version values, deadline and cooperative-cancellation hooks, and an atomic one-reasoning-call guard. The current executable still routes short input to Gemma 4 and long input to TranslateGemma; that split remains until a later orchestration change and is not the target deployment topology.
+Status: foundational model-runtime types, adapters, and text-translation orchestration are implemented. The public Rust boundary provides closed `fast` and `reasoning` profiles, bounded redacted input/output/version values, deadline and cooperative-cancellation hooks, and an atomic one-reasoning-call guard. The target translation route uses only the provider-neutral generation port; the legacy direct translation route retains the transitional two-provider split until final route removal.
 
 ## Generation profiles
 
@@ -40,4 +40,4 @@ The VLM accepts only validated inline PNG, JPEG, or WebP data and bounded image 
 
 Test zero-call canonical answers, fast-path selection, the closed escalation triggers, the one-escalation limit, long-input chunk coverage and ordering, terminology consistency, image bounds, structured-output repair, deadline accounting, cancellation, concurrency, redaction, and disposal of text, images, reasoning output, and online vectors.
 
-Current unit coverage verifies bounded values, redacted debug output, fixed finite embedding dimensions, strict embedding envelopes, closed errors, and one-time reasoning-budget claims. Full call-budget selection, chunk orchestration, and disposal tests remain owned by the later translation and retrieval composition slices.
+Current coverage verifies bounded values, redacted debug output, fixed finite embedding dimensions, strict embedding envelopes, closed errors, one-time reasoning-budget claims, deterministic lexical-versus-connected routing, bounded parallel chunk calls, ordered reassembly, terminology-ledger disposal, deadline and cancellation propagation, and the single deterministic invalid-or-ambiguous output repair. Structured segment, image-region, retrieval, and canonical zero-call composition remain later slices.

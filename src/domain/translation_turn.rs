@@ -1151,7 +1151,11 @@ pub struct TranslationVersionMetadata {
   /// Ordered, de-duplicated model identifiers that actually served the request.
   pub model_versions: Vec<String>,
   /// Ordered, de-duplicated prompt contract versions that actually served the request.
-  pub prompt_versions: Vec<&'static str>,
+  pub prompt_versions: Vec<String>,
+  /// Ordered profiles that actually served this request.
+  pub inference_profiles: Vec<crate::domain::model_runtime::GenerationProfile>,
+  /// Whether the request consumed its sole reasoning repair.
+  pub reasoning_escalated: bool,
   /// Retrieval version, absent until retrieval participates in the request.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub retrieval_version: Option<String>,

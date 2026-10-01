@@ -38,6 +38,8 @@ impl ModelOperationContext<'_> {
 pub struct GenerationRequest {
   /// Closed invocation policy selected by application orchestration.
   pub profile: GenerationProfile,
+  /// Version of the application-owned operation prompt contract.
+  pub prompt_version: ModelVersion,
   /// Validated request-local operation input.
   pub input: GenerationInput,
 }

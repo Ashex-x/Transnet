@@ -11,80 +11,49 @@ use axum::{
 use serde_json::{json, Value};
 use tower::ServiceExt;
 use transnet::{
-  app_router, app_router_with_http_config,
-  application::translation::TranslationOrchestrator,
-  domain::translation_turn::{
-    LexicalMeaningDraft, LexicalTurnDraft, TranslationTurn, TranslationUnit, TurnLanguage,
-  },
-  ports::translation_model::{
-    ConnectedTextModel, ConnectedTextOutput, ConnectedTextRequest, LexicalDraftModel,
-    LexicalDraftOutput, ModelOperationVersions, TranslationModelError,
-  },
-  AppState, HttpConfig, ProviderConfig, TranslationConfig, TranslationService,
+  app_router, app_router_with_http_config, application::translation::TranslationOrchestrator,
+  AppState, GenerationOutput, GenerationPort, GenerationRequest, GenerationResponse, HttpConfig,
+  ModelOperationContext, ModelOperationError, ModelVersion, ProviderConfig, TranslationConfig,
+  TranslationService,
 };
 
 #[derive(Clone)]
-struct FakeConnected {
-  outcome: Result<ConnectedTextOutput, TranslationModelError>,
+struct FakeGeneration {
+  connected: Result<String, ModelOperationError>,
+  lexical: Result<String, ModelOperationError>,
 }
 
 #[async_trait]
-impl ConnectedTextModel for FakeConnected {
-  async fn translate_connected_text(
+impl GenerationPort for FakeGeneration {
+  async fn generate(
     &self,
-    _request: ConnectedTextRequest<'_>,
-    _source_language: TurnLanguage,
-  ) -> Result<ConnectedTextOutput, TranslationModelError> {
-    self.outcome.clone()
+    context: ModelOperationContext<'_>,
+    request: GenerationRequest,
+  ) -> Result<GenerationResponse, ModelOperationError> {
+    context.ensure_active()?;
+    let outcome = if request.input.as_str().contains("lexical_translation") {
+      self.lexical.clone()
+    } else {
+      self.connected.clone()
+    }?;
+    Ok(GenerationResponse {
+      output: GenerationOutput::new(outcome).unwrap(),
+      model_version: ModelVersion::new("generation-model-v1").unwrap(),
+      prompt_version: request.prompt_version,
+    })
   }
 }
 
-#[derive(Clone)]
-struct FakeLexical {
-  outcome: Result<LexicalDraftOutput, TranslationModelError>,
+fn connected_output() -> String {
+  json!({"status":"complete", "translation":"那个计划仍然悬而未决。"}).to_string()
 }
 
-#[async_trait]
-impl LexicalDraftModel for FakeLexical {
-  async fn generate_lexical_draft(
-    &self,
-    _turn: &TranslationTurn,
-    _unit: TranslationUnit,
-    _source_language: TurnLanguage,
-  ) -> Result<LexicalDraftOutput, TranslationModelError> {
-    self.outcome.clone()
-  }
-}
-
-fn versions(model: &str, prompt: &'static str) -> ModelOperationVersions {
-  ModelOperationVersions {
-    model_version: model.to_string(),
-    prompt_version: prompt,
-  }
-}
-
-fn connected_output() -> ConnectedTextOutput {
-  ConnectedTextOutput {
-    translation: "那个计划仍然悬而未决。".to_string(),
-    versions: versions("connected-model-v2", "connected-text-prompt-v1"),
-  }
-}
-
-fn lexical_output() -> LexicalDraftOutput {
-  LexicalDraftOutput {
-    draft: LexicalTurnDraft {
-      translations: vec![LexicalMeaningDraft {
-        text: "热的".to_string(),
-        meaning: "having a high temperature".to_string(),
-        part_of_speech: "adjective".to_string(),
-        phrase_type: String::new(),
-        aliases: vec!["高温的".to_string()],
-        examples: Vec::new(),
-        usage_notes: vec!["Used for temperature.".to_string()],
-      }],
-    },
-    versions: versions("lexical-model-v3", "lexical-draft-prompt-v1"),
-  }
+fn lexical_output() -> String {
+  json!({"status":"complete", "translations":[{"text":"热的",
+    "meaning":"having a high temperature", "part_of_speech":"adjective",
+    "phrase_type":"", "aliases":["高温的"], "examples":[],
+    "usage_notes":["Used for temperature."]}]})
+  .to_string()
 }
 
 fn legacy_service() -> TranslationService {
@@ -107,13 +76,10 @@ fn legacy_service() -> TranslationService {
 }
 
 fn app(
-  connected: Result<ConnectedTextOutput, TranslationModelError>,
-  lexical: Result<LexicalDraftOutput, TranslationModelError>,
+  connected: Result<String, ModelOperationError>,
+  lexical: Result<String, ModelOperationError>,
 ) -> Router {
-  let orchestrator = TranslationOrchestrator::new(
-    Arc::new(FakeConnected { outcome: connected }),
-    Arc::new(FakeLexical { outcome: lexical }),
-  );
+  let orchestrator = TranslationOrchestrator::new(Arc::new(FakeGeneration { connected, lexical }));
   app_router(AppState::new(legacy_service()).with_translation_orchestrator(Arc::new(orchestrator)))
 }
 
@@ -163,11 +129,16 @@ async fn translation_success_uses_the_frozen_envelope_and_plural_versions() {
     body["meta"]["projection_version"],
     "translation-projection-v1"
   );
-  assert_eq!(body["meta"]["model_versions"], json!(["lexical-model-v3"]));
+  assert_eq!(
+    body["meta"]["model_versions"],
+    json!(["generation-model-v1"])
+  );
   assert_eq!(
     body["meta"]["prompt_versions"],
-    json!(["lexical-draft-prompt-v1"])
+    json!(["translation-lexical-v1"])
   );
+  assert_eq!(body["meta"]["inference_profiles"], json!(["fast"]));
+  assert_eq!(body["meta"]["reasoning_escalated"], false);
   assert!(body["meta"].get("retrieval_version").is_none());
   assert!(body["meta"].get("content_release").is_none());
 }
@@ -203,7 +174,7 @@ async fn passage_and_request_local_history_use_the_same_wire_contract() {
   assert_eq!(body["meta"]["response_level"], "full");
   assert_eq!(
     body["meta"]["model_versions"],
-    json!(["connected-model-v2"])
+    json!(["generation-model-v1"])
   );
   assert!(!body.to_string().contains("We discussed the proposal"));
 }
@@ -271,13 +242,27 @@ async fn malformed_unknown_and_semantically_invalid_requests_use_safe_problems()
 }
 
 #[tokio::test]
-async fn target_text_guidance_is_never_silently_ignored() {
+async fn target_text_guidance_is_applied_by_orchestration() {
   let response = app(Ok(connected_output()), Ok(lexical_output()))
     .oneshot(request(json!({
       "input": {"type": "text", "text": "hot"},
       "source_language": "en", "target_language": "zh-CN", "response_level": "brief",
       "guidance": {"purpose": "technical", "audience": "specialist", "register": "preserve",
-        "terminology": [], "max_alternatives": 0, "annotations": ["terminology"], "freshness": "offline"}
+        "terminology": [], "max_alternatives": 0, "annotations": [], "freshness": "offline"}
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::OK);
+  assert_eq!(body(response).await["data"]["translation"]["unit"], "word");
+}
+
+#[tokio::test]
+async fn live_freshness_remains_explicitly_unavailable() {
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input":{"type":"text","text":"current term"},
+      "source_language":"en","target_language":"zh-CN","response_level":"brief",
+      "guidance":{"freshness":"required"}
     })))
     .await
     .unwrap();
@@ -404,18 +389,15 @@ async fn target_route_rejects_other_methods_and_unknown_paths_with_shared_proble
 
 #[tokio::test]
 async fn model_failures_map_to_stable_redacted_problem_statuses() {
-  let unavailable = app(
-    Err(TranslationModelError::Unavailable),
-    Ok(lexical_output()),
-  )
-  .oneshot(request(json!({
-    "text": "This contains private-source-991.",
-    "source_language": "en",
-    "target_language": "zh-CN",
-    "response_level": "brief"
-  })))
-  .await
-  .unwrap();
+  let unavailable = app(Err(ModelOperationError::Unavailable), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "text": "This contains private-source-991.",
+      "source_language": "en",
+      "target_language": "zh-CN",
+      "response_level": "brief"
+    })))
+    .await
+    .unwrap();
   assert_eq!(unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
   assert_eq!(
     unavailable.headers()["x-request-id"],
@@ -428,7 +410,7 @@ async fn model_failures_map_to_stable_redacted_problem_statuses() {
 
   let invalid = app(
     Ok(connected_output()),
-    Err(TranslationModelError::InvalidOutput),
+    Err(ModelOperationError::InvalidOutput),
   )
   .oneshot(request(json!({
     "text": "hot",
@@ -444,14 +426,10 @@ async fn model_failures_map_to_stable_redacted_problem_statuses() {
 
 #[tokio::test]
 async fn target_payload_limit_uses_the_shared_problem_contract() {
-  let orchestrator = TranslationOrchestrator::new(
-    Arc::new(FakeConnected {
-      outcome: Ok(connected_output()),
-    }),
-    Arc::new(FakeLexical {
-      outcome: Ok(lexical_output()),
-    }),
-  );
+  let orchestrator = TranslationOrchestrator::new(Arc::new(FakeGeneration {
+    connected: Ok(connected_output()),
+    lexical: Ok(lexical_output()),
+  }));
   let router = app_router_with_http_config(
     AppState::new(legacy_service()).with_translation_orchestrator(Arc::new(orchestrator)),
     &HttpConfig {

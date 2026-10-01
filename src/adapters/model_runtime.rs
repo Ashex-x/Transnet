@@ -14,9 +14,6 @@ use crate::{
   provider::TranslationService,
 };
 
-/// Prompt contract used by the compatibility generation adapter.
-pub const NEUTRAL_GENERATION_PROMPT_VERSION: &str = "neutral-generation-v1";
-
 /// Compatibility adapter exposing the existing Gemma endpoint through [`GenerationPort`].
 #[derive(Clone)]
 pub struct OpenAiGenerationAdapter {
@@ -52,8 +49,7 @@ impl GenerationPort for OpenAiGenerationAdapter {
     Ok(GenerationResponse {
       output: GenerationOutput::new(output).map_err(|_| ModelOperationError::InvalidOutput)?,
       model_version: ModelVersion::new(model).map_err(|_| ModelOperationError::InvalidOutput)?,
-      prompt_version: ModelVersion::new(NEUTRAL_GENERATION_PROMPT_VERSION)
-        .map_err(|_| ModelOperationError::InvalidOutput)?,
+      prompt_version: request.prompt_version,
     })
   }
 }

@@ -1,606 +1,401 @@
-//! Tests for unified translation orchestration, conservative intent routing, and request disposal.
+//! Tests for provider-neutral translation orchestration and request-local call policy.
 
-use std::sync::{Arc, Mutex};
-
-use async_trait::async_trait;
-use transnet::{
-  application::translation::{TranslationOrchestrationError, TranslationOrchestrator},
-  domain::translation_turn::{
-    LexicalMeaningDraft, LexicalTurnDraft, TranslationHistory, TranslationTurn,
-    TranslationTurnRequest, TranslationUnit, TurnExample, TurnLanguage, NORMALIZER_VERSION,
-    PROJECTION_VERSION, TRANSLATION_RESULT_SCHEMA_VERSION,
+use std::{
+  collections::VecDeque,
+  sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
   },
-  ports::translation_model::{
-    ConnectedTextModel, ConnectedTextOutput, ConnectedTextRequest, LexicalDraftModel,
-    LexicalDraftOutput, ModelOperationVersions, TranslationModelError,
-  },
+  time::Duration,
 };
 
-#[derive(Default)]
-struct Calls {
-  connected: Vec<usize>,
-  segments: Vec<String>,
-  terminology: Vec<Vec<String>>,
-  preceding: Vec<Option<String>>,
-  lexical: Vec<(TranslationUnit, usize)>,
+use async_trait::async_trait;
+use time::OffsetDateTime;
+use transnet::{
+  application::translation::{
+    TranslationOrchestrationError, TranslationOrchestrator, MAX_CONNECTED_CHUNK_CHARS,
+    MAX_PARALLEL_GENERATIONS,
+  },
+  domain::translation_turn::{
+    GuidanceAudience, GuidancePurpose, GuidanceRegister, TerminologyConstraint, TerminologyPolicy,
+    TranslationGuidance, TranslationHistory, TranslationTurn, TranslationTurnRequest,
+    TranslationUnit,
+  },
+  CancellationSignal, GenerationInput, GenerationOutput, GenerationPort, GenerationProfile,
+  GenerationRequest, GenerationResponse, ModelOperationContext, ModelOperationError, ModelVersion,
+  RequestContext, RequestId,
+};
+
+#[derive(Clone)]
+struct RecordedCall {
+  profile: GenerationProfile,
+  input: String,
+  deadline: OffsetDateTime,
 }
 
-struct FakeConnected {
-  calls: Arc<Mutex<Calls>>,
-  outcome: Result<String, TranslationModelError>,
-  echo: bool,
-  fail_on_call: Option<usize>,
+struct FakeGeneration {
+  outcomes: Mutex<VecDeque<Result<String, ModelOperationError>>>,
+  calls: Mutex<Vec<RecordedCall>>,
+  in_flight: AtomicUsize,
+  peak: AtomicUsize,
+  delay: Duration,
 }
 
-#[async_trait]
-impl ConnectedTextModel for FakeConnected {
-  async fn translate_connected_text(
-    &self,
-    request: ConnectedTextRequest<'_>,
-    _source_language: TurnLanguage,
-  ) -> Result<ConnectedTextOutput, TranslationModelError> {
-    let mut calls = self.calls.lock().unwrap();
-    let call_number = calls.connected.len() + 1;
-    calls.connected.push(request.turn.history().len());
-    calls.segments.push(request.text.to_string());
-    calls.terminology.push(request.terminology.to_vec());
-    calls
-      .preceding
-      .push(request.preceding_translation.map(str::to_string));
-    drop(calls);
-    if self.fail_on_call == Some(call_number) {
-      return Err(TranslationModelError::Unavailable);
+impl FakeGeneration {
+  fn new(outcomes: impl IntoIterator<Item = Result<String, ModelOperationError>>) -> Self {
+    Self {
+      outcomes: Mutex::new(outcomes.into_iter().collect()),
+      calls: Mutex::new(Vec::new()),
+      in_flight: AtomicUsize::new(0),
+      peak: AtomicUsize::new(0),
+      delay: Duration::ZERO,
     }
-    if self.echo {
-      return Ok(connected_output(request.text.to_string()));
+  }
+
+  fn delayed(
+    outcomes: impl IntoIterator<Item = Result<String, ModelOperationError>>,
+    delay: Duration,
+  ) -> Self {
+    Self {
+      delay,
+      ..Self::new(outcomes)
     }
-    self.outcome.clone().map(connected_output)
+  }
+
+  fn calls(&self) -> Vec<RecordedCall> {
+    self.calls.lock().unwrap().clone()
   }
 }
 
-struct FakeLexical {
-  calls: Arc<Mutex<Calls>>,
-  outcome: Result<LexicalTurnDraft, TranslationModelError>,
-}
-
 #[async_trait]
-impl LexicalDraftModel for FakeLexical {
-  async fn generate_lexical_draft(
+impl GenerationPort for FakeGeneration {
+  async fn generate(
     &self,
-    turn: &TranslationTurn,
-    unit: TranslationUnit,
-    _source_language: TurnLanguage,
-  ) -> Result<LexicalDraftOutput, TranslationModelError> {
-    self
-      .calls
+    context: ModelOperationContext<'_>,
+    request: GenerationRequest,
+  ) -> Result<GenerationResponse, ModelOperationError> {
+    context.ensure_active()?;
+    self.calls.lock().unwrap().push(RecordedCall {
+      profile: request.profile,
+      input: request.input.as_str().to_string(),
+      deadline: context.request.deadline_at(),
+    });
+    let current = self.in_flight.fetch_add(1, Ordering::AcqRel) + 1;
+    self.peak.fetch_max(current, Ordering::AcqRel);
+    if !self.delay.is_zero() {
+      tokio::select! {
+        _ = context.cancellation.cancelled() => {
+          self.in_flight.fetch_sub(1, Ordering::AcqRel);
+          return Err(ModelOperationError::Cancelled);
+        }
+        _ = tokio::time::sleep(self.delay) => {}
+      }
+    }
+    self.in_flight.fetch_sub(1, Ordering::AcqRel);
+    let output = self
+      .outcomes
       .lock()
       .unwrap()
-      .lexical
-      .push((unit, turn.history().len()));
-    self.outcome.clone().map(|draft| LexicalDraftOutput {
-      draft,
-      versions: versions("fake-lexical-v1", "lexical-draft-prompt-v1"),
+      .pop_front()
+      .unwrap_or_else(|| Ok(connected("default")))?;
+    Ok(GenerationResponse {
+      output: GenerationOutput::new(output).unwrap(),
+      model_version: ModelVersion::new("gemma4-test-r1").unwrap(),
+      prompt_version: request.prompt_version,
     })
   }
 }
 
-fn versions(model: &str, prompt: &'static str) -> ModelOperationVersions {
-  ModelOperationVersions {
-    model_version: model.to_string(),
-    prompt_version: prompt,
-  }
-}
-
-fn connected_output(translation: String) -> ConnectedTextOutput {
-  ConnectedTextOutput {
-    translation,
-    versions: versions("fake-connected-v1", "connected-text-prompt-v1"),
-  }
-}
-
-fn lexical_draft() -> LexicalTurnDraft {
-  LexicalTurnDraft {
-    translations: vec![LexicalMeaningDraft {
-      text: "译文".to_string(),
-      meaning: "material meaning".to_string(),
-      part_of_speech: "noun".to_string(),
-      phrase_type: "established expression".to_string(),
-      aliases: Vec::new(),
-      examples: Vec::new(),
-      usage_notes: Vec::new(),
-    }],
-  }
-}
-
-fn turn(text: &str) -> TranslationTurn {
-  turn_with_history(text, Vec::new())
-}
-
-fn turn_at_level(text: &str, response_level: &str) -> TranslationTurn {
-  TranslationTurn::new(TranslationTurnRequest {
-    text: Some(text.to_string()),
-    input: None,
-    source_language: "en".to_string(),
-    target_language: "zh-CN".to_string(),
-    response_level: response_level.to_string(),
-    history: Vec::new(),
-    guidance: None,
-  })
+fn context(seconds: i64) -> RequestContext {
+  let now = OffsetDateTime::now_utc();
+  let now = now
+    .replace_nanosecond(now.nanosecond() / 1_000 * 1_000)
+    .unwrap();
+  RequestContext::new(
+    RequestId::new("translation-orchestration-test").unwrap(),
+    now + time::Duration::seconds(seconds),
+    "transnet-service-v1",
+    None,
+  )
   .unwrap()
 }
 
-fn turn_with_history(text: &str, history: Vec<TranslationHistory>) -> TranslationTurn {
+fn turn(text: &str) -> TranslationTurn {
   TranslationTurn::new(TranslationTurnRequest {
     text: Some(text.to_string()),
     input: None,
     source_language: "en".to_string(),
     target_language: "zh-CN".to_string(),
     response_level: "full".to_string(),
-    history,
+    history: Vec::new(),
     guidance: None,
   })
   .unwrap()
 }
 
-fn orchestrator(
-  connected_outcome: Result<String, TranslationModelError>,
-  lexical_outcome: Result<LexicalTurnDraft, TranslationModelError>,
-) -> (TranslationOrchestrator, Arc<Mutex<Calls>>) {
-  let calls = Arc::new(Mutex::new(Calls::default()));
-  (
-    TranslationOrchestrator::new(
-      Arc::new(FakeConnected {
-        calls: Arc::clone(&calls),
-        outcome: connected_outcome,
-        echo: false,
-        fail_on_call: None,
-      }),
-      Arc::new(FakeLexical {
-        calls: Arc::clone(&calls),
-        outcome: lexical_outcome,
-      }),
-    ),
-    calls,
-  )
-}
-
-fn chunking_orchestrator(
-  fail_on_call: Option<usize>,
-) -> (TranslationOrchestrator, Arc<Mutex<Calls>>) {
-  let calls = Arc::new(Mutex::new(Calls::default()));
-  (
-    TranslationOrchestrator::new(
-      Arc::new(FakeConnected {
-        calls: Arc::clone(&calls),
-        outcome: Ok(String::new()),
-        echo: true,
-        fail_on_call,
-      }),
-      Arc::new(FakeLexical {
-        calls: Arc::clone(&calls),
-        outcome: Ok(lexical_draft()),
-      }),
-    ),
-    calls,
-  )
-}
-
-#[tokio::test]
-async fn high_confidence_words_terms_and_phrases_use_only_lexical_model() {
-  let (service, calls) = orchestrator(Ok("unused".to_string()), Ok(lexical_draft()));
-  let cases = [
-    ("hot", TranslationUnit::Word),
-    ("C", TranslationUnit::Word),
-    ("C++", TranslationUnit::Word),
-    ("C#", TranslationUnit::Word),
-    ("Node.js", TranslationUnit::Word),
-    ("machine learning", TranslationUnit::Phrase),
-    ("up in the air", TranslationUnit::Phrase),
-    (
-      "this_is_one_lexical_identifier_with_a_length_that_is_independent_of_any_provider_threshold",
-      TranslationUnit::Word,
-    ),
-  ];
-
-  for (text, expected) in cases {
-    let result = service.translate(&turn(text)).await.unwrap();
-    assert_eq!(result.translation.unit, expected);
-  }
-
-  let calls = calls.lock().unwrap();
-  assert!(calls.connected.is_empty());
-  assert_eq!(calls.lexical.len(), cases.len());
-}
-
-#[tokio::test]
-async fn clauses_sentences_passages_and_ambiguous_fragments_use_only_connected_model() {
-  let (service, calls) = orchestrator(Ok("连续译文".to_string()), Ok(lexical_draft()));
-  let cases = [
-    "Can run",
-    "The service is ready.",
-    "First paragraph.\n\nSecond paragraph.",
-    "This is a deliberately long passage whose structure clearly exceeds one lexical unit and must remain connected text even without relying on provider selection thresholds.",
-  ];
-
-  for text in cases {
-    let result = service.translate(&turn(text)).await.unwrap();
-    assert_eq!(result.translation.unit, TranslationUnit::Passage);
-  }
-
-  let calls = calls.lock().unwrap();
-  assert!(calls.lexical.is_empty());
-  assert_eq!(calls.connected.len(), cases.len());
-}
-
-#[tokio::test]
-async fn request_history_is_observed_only_on_its_own_call() {
-  let (service, calls) = orchestrator(Ok("连续译文".to_string()), Ok(lexical_draft()));
-  let history = vec![TranslationHistory {
-    source_text: "private prior source".to_string(),
-    translated_text: "private prior translation".to_string(),
+fn guided_turn(text: &str) -> TranslationTurn {
+  TranslationTurn::new(TranslationTurnRequest {
+    text: Some(text.to_string()),
+    input: None,
     source_language: "en".to_string(),
     target_language: "zh-CN".to_string(),
-  }];
+    response_level: "full".to_string(),
+    history: Vec::new(),
+    guidance: Some(TranslationGuidance {
+      purpose: Some(GuidancePurpose::Technical),
+      audience: Some(GuidanceAudience::Specialist),
+      register: Some(GuidanceRegister::Formal),
+      terminology: vec![TerminologyConstraint {
+        source: "torque".to_string(),
+        target: "扭矩".to_string(),
+        policy: TerminologyPolicy::Required,
+      }],
+      ..TranslationGuidance::default()
+    }),
+  })
+  .unwrap()
+}
 
-  service
-    .translate(&turn_with_history("This is ready.", history))
+fn connected(value: &str) -> String {
+  serde_json::json!({"status":"complete", "translation":value}).to_string()
+}
+
+fn lexical(value: &str) -> String {
+  serde_json::json!({"status":"complete", "translations":[{"text":value,
+    "meaning":"material meaning", "part_of_speech":"noun",
+    "phrase_type":"established expression", "aliases":[], "examples":[],
+    "usage_notes":[]}]})
+  .to_string()
+}
+
+#[tokio::test]
+async fn routing_uses_one_fast_profile_and_no_provider_selector() {
+  let fake = Arc::new(FakeGeneration::new([
+    Ok(lexical("译文")),
+    Ok(connected("句子译文")),
+  ]));
+  let orchestrator = TranslationOrchestrator::new(fake.clone());
+  let cancellation = Arc::new(CancellationSignal::default());
+  let request = context(30);
+  let word = orchestrator
+    .translate(&request, cancellation.clone(), &turn("hot"))
     .await
     .unwrap();
-  service.translate(&turn("This is fresh.")).await.unwrap();
-
-  assert_eq!(calls.lock().unwrap().connected, vec![1, 0]);
-}
-
-#[tokio::test]
-async fn structured_input_fails_before_either_model_port() {
-  let request = serde_json::from_value(serde_json::json!({
-    "input":{"type":"segments","segments":[{"segment_id":"private-segment-612",
-      "text":"Launch {name}","role":"title","format":"plain",
-      "protected_ranges":[{"start":7,"end":13}]}]},
-    "source_language":"en","target_language":"zh-CN","response_level":"standard",
-    "history":[{"source_text":"private-history-613","translated_text":"私密译文",
-      "source_language":"en","target_language":"zh-CN"}]
-  }))
-  .unwrap();
-  let turn = TranslationTurn::new(request).unwrap();
-  let (service, calls) = orchestrator(Ok("unused".to_string()), Ok(lexical_draft()));
-
-  let error = service.translate(&turn).await.unwrap_err();
-
-  assert_eq!(error, TranslationOrchestrationError::UnsupportedInput);
-  assert_eq!(
-    format!("{error:?} {error}"),
-    "UnsupportedInput translation input workflow unavailable"
-  );
-  let calls = calls.lock().unwrap();
-  assert!(calls.connected.is_empty());
-  assert!(calls.lexical.is_empty());
-}
-
-#[tokio::test]
-async fn model_failures_are_stable_and_redacted() {
-  let secret = "private-input-8127";
-  let credential = "credential-9931";
-  let (unavailable, _) = orchestrator(Err(TranslationModelError::Unavailable), Ok(lexical_draft()));
-  let error = unavailable
-    .translate(&turn(&format!("{secret}.")))
+  let sentence = orchestrator
+    .translate(&request, cancellation, &turn("The service is ready."))
     .await
-    .unwrap_err();
-  assert_eq!(error, TranslationOrchestrationError::ModelUnavailable);
+    .unwrap();
+  assert_eq!(word.translation.unit, TranslationUnit::Word);
+  assert_eq!(sentence.translation.unit, TranslationUnit::Passage);
+  assert!(fake
+    .calls()
+    .iter()
+    .all(|call| call.profile == GenerationProfile::Fast));
+  assert!(fake.calls()[0].input.contains("lexical_translation"));
+  assert!(fake.calls()[1].input.contains("connected_translation"));
+  assert!(!fake.calls()[0].input.contains("provider"));
+}
 
-  let (invalid, _) = orchestrator(
-    Ok("unused".to_string()),
-    Err(TranslationModelError::InvalidOutput),
+#[tokio::test]
+async fn validated_guidance_is_present_in_the_request_local_prompt() {
+  let fake = Arc::new(FakeGeneration::new([Ok(lexical("扭矩"))]));
+  let orchestrator = TranslationOrchestrator::new(fake.clone());
+  orchestrator
+    .translate(
+      &context(30),
+      Arc::new(CancellationSignal::default()),
+      &guided_turn("torque"),
+    )
+    .await
+    .unwrap();
+
+  let prompt: serde_json::Value = serde_json::from_str(&fake.calls()[0].input).unwrap();
+  assert_eq!(prompt["guidance"]["purpose"], "technical");
+  assert_eq!(prompt["guidance"]["audience"], "specialist");
+  assert_eq!(prompt["guidance"]["register"], "formal");
+  assert_eq!(prompt["guidance"]["terminology"][0]["target"], "扭矩");
+  assert_eq!(prompt["guidance"]["terminology"][0]["policy"], "required");
+}
+
+#[tokio::test]
+async fn long_chunks_run_in_bounded_parallel_and_reassemble_in_source_order() {
+  let source = format!(
+    "{} {} {} {}",
+    "a".repeat(MAX_CONNECTED_CHUNK_CHARS - 20),
+    "b".repeat(MAX_CONNECTED_CHUNK_CHARS - 20),
+    "c".repeat(MAX_CONNECTED_CHUNK_CHARS - 20),
+    "d".repeat(MAX_CONNECTED_CHUNK_CHARS - 20)
   );
-  let error = invalid.translate(&turn("lexeme")).await.unwrap_err();
-  assert_eq!(error, TranslationOrchestrationError::InvalidModelOutput);
+  let fake = Arc::new(FakeGeneration::delayed(
+    [
+      Ok(connected("一")),
+      Ok(connected("二")),
+      Ok(connected("三")),
+      Ok(connected("四")),
+    ],
+    Duration::from_millis(25),
+  ));
+  let orchestrator = TranslationOrchestrator::new(fake.clone());
+  let result = orchestrator
+    .translate(
+      &context(30),
+      Arc::new(CancellationSignal::default()),
+      &turn(&source),
+    )
+    .await
+    .unwrap();
+  assert_eq!(result.translation.translations[0].text, "一 二 三 四");
+  assert!(fake.peak.load(Ordering::Acquire) > 1);
+  assert!(fake.peak.load(Ordering::Acquire) <= MAX_PARALLEL_GENERATIONS);
+}
 
-  let rendered = format!("{error:?} {error}");
-  assert!(!rendered.contains(secret));
-  assert!(!rendered.contains(credential));
-  assert!(!rendered.contains("Gemma"));
+#[tokio::test]
+async fn repeated_terms_form_one_request_local_ledger_and_are_not_retained() {
+  let secret = "RequestLocalTerm991";
+  let source = format!(
+    "{} {secret}. {} {secret}.",
+    "x".repeat(MAX_CONNECTED_CHUNK_CHARS - 40),
+    "y".repeat(MAX_CONNECTED_CHUNK_CHARS - 40)
+  );
+  let fake = Arc::new(FakeGeneration::new([
+    Ok(connected("甲")),
+    Ok(connected("乙")),
+  ]));
+  let orchestrator = TranslationOrchestrator::new(fake.clone());
+  orchestrator
+    .translate(
+      &context(30),
+      Arc::new(CancellationSignal::default()),
+      &turn(&source),
+    )
+    .await
+    .unwrap();
+  assert!(fake.calls().iter().all(|call| call.input.contains(secret)));
+  assert!(!format!("{orchestrator:?}").contains(secret));
+}
+
+#[tokio::test]
+async fn first_invalid_output_gets_the_only_reasoning_repair() {
+  let fake = Arc::new(FakeGeneration::new([
+    Ok("not-json".to_string()),
+    Ok(lexical("修复译文")),
+  ]));
+  let orchestrator = TranslationOrchestrator::new(fake.clone());
+  let result = orchestrator
+    .translate(
+      &context(30),
+      Arc::new(CancellationSignal::default()),
+      &turn("hot"),
+    )
+    .await
+    .unwrap();
+  let calls = fake.calls();
+  assert_eq!(calls.len(), 2);
+  assert_eq!(calls[0].profile, GenerationProfile::Fast);
+  assert_eq!(calls[1].profile, GenerationProfile::Reasoning);
+  assert!(calls[1].input.contains("Never return analysis"));
+  assert!(calls[1].input.contains("do not include analysis"));
+  assert!(result.metadata.reasoning_escalated);
+  assert_eq!(
+    result.metadata.inference_profiles,
+    [GenerationProfile::Fast, GenerationProfile::Reasoning]
+  );
+}
+
+#[tokio::test]
+async fn two_invalid_chunks_never_consume_two_reasoning_calls() {
+  let source = format!(
+    "{}. {}.",
+    "a".repeat(MAX_CONNECTED_CHUNK_CHARS - 2),
+    "b".repeat(MAX_CONNECTED_CHUNK_CHARS - 2)
+  );
+  let fake = Arc::new(FakeGeneration::new([
+    Ok("invalid-one".to_string()),
+    Ok("invalid-two".to_string()),
+    Ok(connected("修复一")),
+  ]));
+  let orchestrator = TranslationOrchestrator::new(fake.clone());
+  assert_eq!(
+    orchestrator
+      .translate(
+        &context(30),
+        Arc::new(CancellationSignal::default()),
+        &turn(&source)
+      )
+      .await
+      .unwrap_err(),
+    TranslationOrchestrationError::InvalidModelOutput
+  );
+  assert_eq!(
+    fake
+      .calls()
+      .iter()
+      .filter(|call| call.profile == GenerationProfile::Reasoning)
+      .count(),
+    1
+  );
+}
+
+#[tokio::test]
+async fn deadline_and_cancellation_propagate_without_content_in_errors() {
+  let fake = Arc::new(FakeGeneration::delayed(
+    [Ok(connected("unused"))],
+    Duration::from_secs(2),
+  ));
+  let orchestrator = TranslationOrchestrator::new(fake.clone());
+  assert_eq!(
+    orchestrator
+      .translate(
+        &context(-1),
+        Arc::new(CancellationSignal::default()),
+        &turn("deadline-secret")
+      )
+      .await
+      .unwrap_err(),
+    TranslationOrchestrationError::DeadlineExceeded
+  );
+  let cancellation = Arc::new(CancellationSignal::default());
+  let cancel_for_task = cancellation.clone();
+  let request = context(30);
+  let input = turn("cancellation-secret sentence.");
+  let operation = orchestrator.translate(&request, cancellation, &input);
+  tokio::pin!(operation);
+  tokio::select! {
+    result = &mut operation => panic!("operation completed unexpectedly: {result:?}"),
+    _ = tokio::time::sleep(Duration::from_millis(20)) => cancel_for_task.cancel(),
+  }
+  let error = operation.await.unwrap_err();
+  assert_eq!(error, TranslationOrchestrationError::Cancelled);
+  assert!(!format!("{error:?} {error}").contains("secret"));
+  assert!(fake
+    .calls()
+    .iter()
+    .all(|call| call.deadline > OffsetDateTime::now_utc()));
 }
 
 #[test]
-fn callers_cannot_select_provider_model_or_workflow() {
-  for forbidden in ["provider", "model", "workflow"] {
-    let mut request = serde_json::json!({
-      "text": "hot",
-      "source_language": "en",
-      "target_language": "zh-CN",
-      "response_level": "brief"
-    });
-    request[forbidden] = serde_json::json!("caller-choice");
-    assert!(serde_json::from_value::<TranslationTurnRequest>(request).is_err());
-  }
+fn generation_input_debug_is_content_free() {
+  let secret = "generation-secret-114";
+  let input = GenerationInput::new(secret).unwrap();
+  assert!(!format!("{input:?}").contains(secret));
 }
 
-#[tokio::test]
-async fn short_connected_text_uses_one_direct_segment_without_a_ledger() {
-  let (service, calls) = chunking_orchestrator(None);
-  let source = "This sentence remains one direct model operation.";
-
-  let result = service.translate(&turn(source)).await.unwrap();
-
-  assert_eq!(result.translation.translations[0].text, source);
-  let calls = calls.lock().unwrap();
-  assert_eq!(calls.segments, [source]);
-  assert!(calls.terminology[0].is_empty());
-  assert_eq!(calls.preceding, [None]);
-}
-
-#[tokio::test]
-async fn long_text_splits_at_paragraphs_and_reassembles_without_loss_or_reordering() {
-  let first = "Database consistency matters. ".repeat(220);
-  let second = "Database terminology remains stable. ".repeat(220);
-  let source = format!("{first}\n\n{second}");
-  let (service, calls) = chunking_orchestrator(None);
-
-  let result = service.translate(&turn(&source)).await.unwrap();
-
-  assert_eq!(result.translation.translations[0].text, source);
-  let calls = calls.lock().unwrap();
-  assert_eq!(calls.segments.len(), 2);
-  assert!(calls
-    .segments
-    .iter()
-    .all(|segment| segment.chars().count() <= 8_192));
-  assert!(calls.terminology.iter().all(|ledger| {
-    ledger == &calls.terminology[0] && ledger.iter().any(|term| term == "Database")
-  }));
-  assert_eq!(calls.preceding[0], None);
-  assert_eq!(
-    calls.preceding[1].as_deref(),
-    Some(calls.segments[0].as_str())
-  );
-}
-
-#[tokio::test]
-async fn unbreakable_oversized_text_fails_before_model_work() {
-  let source = "x".repeat(8_193);
-  let (service, calls) = chunking_orchestrator(None);
-
-  assert_eq!(
-    service.translate(&turn(&source)).await.unwrap_err(),
-    TranslationOrchestrationError::ChunkPlanLimit
-  );
-  assert!(calls.lock().unwrap().connected.is_empty());
-}
-
-#[tokio::test]
-async fn excessive_natural_segments_fail_the_input_bound_before_model_work() {
-  let segment = format!("{} ", "x".repeat(4_097));
-  let source = segment.repeat(129);
-  assert_eq!(
-    TranslationTurn::new(TranslationTurnRequest {
-      text: Some(source),
-      input: None,
-      source_language: "en".to_string(),
-      target_language: "zh-CN".to_string(),
-      response_level: "standard".to_string(),
-      history: Vec::new(),
-      guidance: None,
-    })
-    .unwrap_err(),
-    transnet::domain::translation_turn::TurnValidationError::Field("input.text")
-  );
-}
-
-#[tokio::test]
-async fn terminology_ledger_is_bounded_and_rebuilt_for_each_request() {
-  let terms = (0..80)
-    .map(|index| format!("Term_{index:02}"))
-    .collect::<Vec<_>>();
-  let repeated = terms.join(" ");
-  let source = format!("{} {}.\n\n{} {}.", repeated, repeated, repeated, repeated);
-  let source = format!("{} {}", source.repeat(20), "closing sentence.");
-  let (service, calls) = chunking_orchestrator(None);
-
-  service.translate(&turn(&source)).await.unwrap();
-  service
-    .translate(&turn(&format!("{}.", "AnotherTerm ".repeat(800))))
-    .await
-    .unwrap();
-
-  let calls = calls.lock().unwrap();
-  assert!(calls.terminology.iter().all(|ledger| ledger.len() <= 64));
-  let second_request_ledger = calls.terminology.last().unwrap();
-  assert!(!second_request_ledger.iter().any(|term| term == "Term_00"));
-}
-
-#[tokio::test]
-async fn any_chunk_failure_fails_closed_without_a_partial_result() {
-  let source = format!(
-    "{}\n\n{}",
-    "First repeated terminology sentence. ".repeat(220),
-    "Second repeated terminology sentence. ".repeat(220)
-  );
-  let (service, calls) = chunking_orchestrator(Some(2));
-
-  assert_eq!(
-    service.translate(&turn(&source)).await.unwrap_err(),
-    TranslationOrchestrationError::ModelUnavailable
-  );
-  assert_eq!(calls.lock().unwrap().connected.len(), 2);
-}
-
-#[tokio::test]
-async fn auto_detection_rejects_symbol_only_input_without_calling_a_model() {
-  let (service, calls) = orchestrator(Ok("unused".to_string()), Ok(lexical_draft()));
-  let turn = TranslationTurn::new(TranslationTurnRequest {
-    text: Some("+++".to_string()),
+#[test]
+fn history_shape_remains_request_local() {
+  let request = TranslationTurn::new(TranslationTurnRequest {
+    text: Some("This is ready.".into()),
     input: None,
-    source_language: "auto".to_string(),
-    target_language: "zh-CN".to_string(),
-    response_level: "brief".to_string(),
-    history: Vec::new(),
+    source_language: "en".into(),
+    target_language: "zh-CN".into(),
+    response_level: "brief".into(),
+    history: vec![TranslationHistory {
+      source_text: "prior source".into(),
+      translated_text: "先前译文".into(),
+      source_language: "en".into(),
+      target_language: "zh-CN".into(),
+    }],
     guidance: None,
   })
   .unwrap();
-
-  assert_eq!(
-    service.translate(&turn).await.unwrap_err(),
-    TranslationOrchestrationError::UnsupportedSourceLanguage
-  );
-  let calls = calls.lock().unwrap();
-  assert!(calls.connected.is_empty());
-  assert!(calls.lexical.is_empty());
-}
-
-#[tokio::test]
-async fn lexical_levels_project_one_superset_without_changing_core_semantics() {
-  let draft = LexicalTurnDraft {
-    translations: vec![
-      LexicalMeaningDraft {
-        text: "热的".to_string(),
-        meaning: "having a high temperature".to_string(),
-        part_of_speech: "adjective".to_string(),
-        phrase_type: "".to_string(),
-        aliases: vec!["高温的".to_string()],
-        examples: vec![
-          TurnExample {
-            source_text: "hot tea".to_string(),
-            translated_text: "热茶".to_string(),
-          },
-          TurnExample {
-            source_text: "a hot day".to_string(),
-            translated_text: "炎热的一天".to_string(),
-          },
-        ],
-        usage_notes: vec![
-          "temperature".to_string(),
-          "literal use".to_string(),
-          "additional full detail".to_string(),
-        ],
-      },
-      LexicalMeaningDraft {
-        text: "热门的".to_string(),
-        meaning: "currently popular".to_string(),
-        part_of_speech: "adjective".to_string(),
-        phrase_type: "".to_string(),
-        aliases: vec!["流行的".to_string()],
-        examples: Vec::new(),
-        usage_notes: vec!["figurative use".to_string()],
-      },
-    ],
-  };
-  let (service, calls) = orchestrator(Ok("unused".to_string()), Ok(draft));
-
-  let brief = service
-    .translate(&turn_at_level("hot", "brief"))
-    .await
-    .unwrap();
-  let standard = service
-    .translate(&turn_at_level("hot", "standard"))
-    .await
-    .unwrap();
-  let full = service
-    .translate(&turn_at_level("hot", "full"))
-    .await
-    .unwrap();
-
-  let core = |result: &transnet::domain::translation_turn::ProjectedTranslationResult| {
-    result
-      .translation
-      .translations
-      .iter()
-      .map(|item| (item.text.clone(), item.meaning.clone()))
-      .collect::<Vec<_>>()
-  };
-  assert_eq!(core(&brief), core(&standard));
-  assert_eq!(core(&standard), core(&full));
-  assert_eq!(core(&full).len(), 2);
-  assert!(brief
-    .translation
-    .translations
-    .iter()
-    .all(|item| item.details.is_none()));
-  let standard_details = standard.translation.translations[0]
-    .details
-    .as_ref()
-    .unwrap();
-  assert!(standard_details.aliases.is_empty());
-  assert_eq!(standard_details.examples.len(), 1);
-  assert_eq!(standard_details.usage_notes.len(), 2);
-  let full_details = full.translation.translations[0].details.as_ref().unwrap();
-  assert_eq!(full_details.aliases.len(), 1);
-  assert_eq!(full_details.examples.len(), 2);
-  assert_eq!(full_details.usage_notes.len(), 3);
-  assert_eq!(calls.lock().unwrap().lexical.len(), 3);
-}
-
-#[tokio::test]
-async fn projected_metadata_reports_only_components_that_participated() {
-  let (service, _) = orchestrator(Ok("连续译文".to_string()), Ok(lexical_draft()));
-  let lexical = service
-    .translate(&turn_at_level("hot", "full"))
-    .await
-    .unwrap();
-  let passage = service
-    .translate(&turn_at_level("This is ready.", "brief"))
-    .await
-    .unwrap();
-
-  for result in [&lexical, &passage] {
-    assert_eq!(
-      result.metadata.schema_version,
-      TRANSLATION_RESULT_SCHEMA_VERSION
-    );
-    assert_eq!(result.metadata.normalizer_version, NORMALIZER_VERSION);
-    assert_eq!(result.metadata.projection_version, PROJECTION_VERSION);
-    assert_eq!(result.metadata.retrieval_version, None);
-    assert_eq!(result.metadata.content_release, None);
-    let json = serde_json::to_value(result).unwrap();
-    assert!(json["metadata"].get("retrieval_version").is_none());
-    assert!(json["metadata"].get("content_release").is_none());
-  }
-  assert_eq!(lexical.metadata.model_versions, ["fake-lexical-v1"]);
-  assert_eq!(
-    lexical.metadata.prompt_versions,
-    ["lexical-draft-prompt-v1"]
-  );
-  assert_eq!(passage.metadata.model_versions, ["fake-connected-v1"]);
-  assert_eq!(
-    passage.metadata.prompt_versions,
-    ["connected-text-prompt-v1"]
-  );
-  assert_eq!(passage.translation.translations[0].text, "连续译文");
-}
-
-#[tokio::test]
-async fn passage_levels_preserve_the_same_translation_without_extra_calls() {
-  let (service, calls) = orchestrator(Ok("同一段落译文".to_string()), Ok(lexical_draft()));
-  let mut translations = Vec::new();
-
-  for level in ["brief", "standard", "full"] {
-    let result = service
-      .translate(&turn_at_level("This is a complete sentence.", level))
-      .await
-      .unwrap();
-    assert_eq!(result.translation.unit, TranslationUnit::Passage);
-    assert_eq!(result.translation.translations.len(), 1);
-    assert!(result.translation.translations[0].details.is_none());
-    translations.push(result.translation.translations[0].text.clone());
-  }
-
-  assert_eq!(translations, ["同一段落译文"; 3]);
-  assert_eq!(calls.lock().unwrap().connected.len(), 3);
-}
-
-#[tokio::test]
-async fn outcome_debug_and_metadata_do_not_expose_request_content() {
-  let secret = "projection-secret-6019";
-  let (service, _) = orchestrator(Ok("安全译文".to_string()), Ok(lexical_draft()));
-  let outcome = service
-    .translate(&turn_at_level(
-      &format!("This contains {secret}."),
-      "standard",
-    ))
-    .await
-    .unwrap();
-
-  let rendered = format!("{outcome:?} {:?}", outcome.metadata);
-  assert!(!rendered.contains(secret));
-  assert!(!rendered.contains("安全译文"));
-  assert!(!rendered.contains("credential"));
+  assert_eq!(request.history().len(), 1);
 }

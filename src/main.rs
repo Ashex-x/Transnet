@@ -5,7 +5,7 @@ use std::{fs, net::IpAddr, path::Path, sync::Arc};
 use anyhow::{ensure, Context, Result};
 use transnet::{
   app_router_with_http_config, application::translation::TranslationOrchestrator, logger,
-  AppConfig, AppState, OpenAiLearningModel, TranslationService,
+  AppConfig, AppState, OpenAiGenerationAdapter, OpenAiLearningModel, TranslationService,
 };
 
 #[cfg(unix)]
@@ -69,7 +69,7 @@ async fn run(config: AppConfig) -> Result<()> {
     translate_gemma_policy,
   )?;
   let orchestrator =
-    TranslationOrchestrator::new(Arc::new(service.clone()), Arc::new(learning_model.clone()));
+    TranslationOrchestrator::new(Arc::new(OpenAiGenerationAdapter::new(service.clone())));
   let state = AppState::new(service)
     .with_learning_model(Arc::new(learning_model))
     .with_translation_orchestrator(Arc::new(orchestrator));

@@ -12,7 +12,7 @@ Port 模块定义 application service 从模型和数据依赖所需的窄操作
 
 [模型运行时参考](model-runtime_cn.md)负责调用预算、升级、视觉与 embedding 生命周期。隐藏 reasoning 绝不是 domain value 或响应字段。
 
-基础 `GenerationPort` 与 `EmbeddingPort` 已实现。两者都接收不可变请求 context 与协作式取消，使用有界脱敏值，并返回闭合错误。`ReasoningBudget` 为编排提供每请求一次的原子 claim；后续翻译工作必须在 application 中拥有符合条件的升级策略，而不是把该策略放入 adapter。
+基础 `GenerationPort` 与 `EmbeddingPort` 已实现。两者都接收不可变 request context 与协作式取消，使用有界脱敏 value，并返回闭合 error。翻译编排拥有 `ReasoningBudget`，只为 source 顺序中首个无效或明确歧义的 fast result claim 一次，且绝不暴露隐藏 reasoning。Adapter 不能自行升级。
 
 ## 数据操作
 

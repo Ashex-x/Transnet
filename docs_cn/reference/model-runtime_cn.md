@@ -4,7 +4,7 @@ English: [Model runtime](../../docs/reference/model-runtime.md)
 
 本子系统负责单个已配置 Gemma4-27B 视觉语言模型与独立 embedding 模型的目标推理策略。它不通过服务接口暴露 provider 品牌、reasoning 控制、prompt 或 embedding payload。
 
-状态：模型运行时基础类型和 adapter 已实现，application 迁移仍处于过渡期。公开 Rust 边界现在提供闭合的 `fast` 与 `reasoning` profile、有界且脱敏的输入/输出/版本值、deadline 与协作式取消 hook，以及原子化的单次 reasoning guard。当前可执行文件仍把短输入路由到 Gemma 4、把长输入路由到 TranslateGemma；该拆分会保留到后续编排变更，但并非目标部署拓扑。
+状态：模型运行时基础类型、adapter 与文本翻译编排已实现。公开 Rust 边界提供闭合的 `fast` 与 `reasoning` profile、有界且脱敏的输入/输出/版本值、deadline 与协作式取消 hook，以及原子化的单次 reasoning guard。目标翻译 route 只使用 provider-neutral generation port；旧的直接翻译 route 在最终移除前仍保留过渡期双 provider 拆分。
 
 ## 生成 profile
 
@@ -40,4 +40,4 @@ VLM 只接受来自 Transnet 请求合同、经过校验的 inline PNG、JPEG �
 
 测试零调用规范答案、fast 路径选择、闭合升级触发条件、单次升级限制、长输入 chunk 覆盖与顺序、术语一致性、图片边界、结构化输出修复、deadline 记账、取消、并发、脱敏，以及文本、图片、reasoning 输出和在线向量的丢弃。
 
-当前 unit 覆盖有界值、脱敏 Debug 输出、固定有限 embedding dimension、严格 embedding envelope、闭合错误和单次 reasoning budget claim。完整调用预算选择、chunk 编排与丢弃测试仍由后续翻译和检索组合切片负责。
+当前覆盖验证有界 value、脱敏 Debug 输出、固定有限 embedding dimension、严格 embedding envelope、闭合 error、单次 reasoning budget claim、确定性 lexical-versus-connected routing、有界并行 chunk 调用、有序重组、术语台账丢弃、deadline 与 cancellation 传播，以及针对无效或歧义输出的一次确定性 repair。结构化 segment、image-region、retrieval 与规范零调用组合仍属于后续切片。

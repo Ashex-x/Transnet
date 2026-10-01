@@ -14,6 +14,7 @@ use crate::{
     ProjectedTranslationResult, ResponseLevel, TranslationInputKind, TranslationTurn,
     TranslationTurnRequest, TranslationTurnResult, TurnValidationError,
   },
+  domain::{model_runtime::CancellationSignal, request_context::RequestContext},
 };
 
 use super::super::{problem, problem::FieldError, request_id::RequestId, AppState};
@@ -21,6 +22,7 @@ use super::super::{problem, problem::FieldError, request_id::RequestId, AppState
 pub(crate) async fn translate(
   State(state): State<AppState>,
   Extension(request_id): Extension<RequestId>,
+  Extension(context): Extension<RequestContext>,
   payload: Result<Json<TranslationTurnRequest>, JsonRejection>,
 ) -> Response {
   let Json(request) = match payload {
@@ -59,14 +61,27 @@ pub(crate) async fn translate(
     }
     TranslationInputKind::Text => {}
   }
-  if turn.requires_guidance_execution() {
-    return unsupported_capability("guidance", &request_id);
+  if matches!(
+    turn.guidance().freshness,
+    Some(
+      crate::domain::translation_turn::FreshnessPolicy::Allowed
+        | crate::domain::translation_turn::FreshnessPolicy::Required
+    )
+  ) {
+    return unsupported_capability("guidance.freshness", &request_id);
   }
   let Some(orchestrator) = state.translation_orchestrator() else {
     return translation_model_unavailable(&request_id);
   };
 
-  match orchestrator.translate(&turn).await {
+  match orchestrator
+    .translate(
+      &context,
+      std::sync::Arc::new(CancellationSignal::default()),
+      &turn,
+    )
+    .await
+  {
     Ok(result) => success(result, &request_id),
     Err(TranslationOrchestrationError::UnsupportedSourceLanguage) => {
       invalid_translation_field("source_language", &request_id)
@@ -85,6 +100,24 @@ pub(crate) async fn translate(
       "invalid_model_output",
       "Invalid model output",
       "The translation model could not satisfy the bounded output contract.",
+      &request_id,
+      true,
+      Vec::new(),
+    ),
+    Err(TranslationOrchestrationError::DeadlineExceeded) => problem::response(
+      StatusCode::GATEWAY_TIMEOUT,
+      "deadline_exceeded",
+      "Request deadline exceeded",
+      "The request deadline was exhausted during translation.",
+      &request_id,
+      true,
+      Vec::new(),
+    ),
+    Err(TranslationOrchestrationError::Cancelled) => problem::response(
+      StatusCode::SERVICE_UNAVAILABLE,
+      "request_cancelled",
+      "Request cancelled",
+      "The translation request was cancelled before completion.",
       &request_id,
       true,
       Vec::new(),
@@ -110,6 +143,8 @@ fn success(result: ProjectedTranslationResult, request_id: &RequestId) -> Respon
           projection_version: metadata.projection_version,
           model_versions: metadata.model_versions,
           prompt_versions: metadata.prompt_versions,
+          inference_profiles: metadata.inference_profiles,
+          reasoning_escalated: metadata.reasoning_escalated,
           retrieval_version: metadata.retrieval_version,
           content_release: metadata.content_release,
         },
@@ -217,7 +252,9 @@ struct TranslationMeta {
   normalizer_version: &'static str,
   projection_version: &'static str,
   model_versions: Vec<String>,
-  prompt_versions: Vec<&'static str>,
+  prompt_versions: Vec<String>,
+  inference_profiles: Vec<crate::domain::model_runtime::GenerationProfile>,
+  reasoning_escalated: bool,
   #[serde(skip_serializing_if = "Option::is_none")]
   retrieval_version: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
