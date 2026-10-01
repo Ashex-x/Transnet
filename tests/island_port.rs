@@ -1,5 +1,7 @@
 //! Contract tests for the outbound island-port canonical-read adapter.
 
+#![recursion_limit = "256"]
+
 use std::{
   sync::{Arc, Mutex},
   time::Duration,
@@ -9,20 +11,147 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use transnet::{
   adapters::island_port::{
-    BasicCardResolveInput, DomainResolveInput, IslandPortCallContext, IslandPortCanonicalClient,
-    IslandPortClientError, IslandPortTransport, LookupFormInput, SenseGetInput,
-    TranslationResolveInput,
+    BasicCardResolveInput, CanonicalAssertionsGetInput, DomainResolveInput, IslandPortCallContext,
+    IslandPortCanonicalClient, IslandPortClientError, IslandPortTransport, KnowledgeNodesGetInput,
+    LookupFormInput, SemanticScalesGetInput, SenseGetInput, TranslationResolveInput,
   },
   domain::{
-    canonical::{CanonicalId, EvidenceUse, LanguageTag},
+    canonical::{CanonicalId, CanonicalReleasePin, EvidenceUse, LanguageTag},
     canonical_translation::{SourceFingerprint, SOURCE_FINGERPRINT_VERSION},
+    graph::GraphRelationType,
+    knowledge_hydration::CanonicalAssertionProjectionRef,
     retrieval::LexicalMatchKind,
+    retrieval_data::RetrievalVerificationState,
   },
 };
 
 struct FakeTransport {
   response: Vec<u8>,
   request: Mutex<Option<(&'static str, Value, Duration)>>,
+}
+
+#[tokio::test]
+async fn exact_assertion_hydration_validates_traversal_registry_and_lineage() {
+  let transport = Arc::new(FakeTransport::new(json!({
+    "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+    "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v1",
+    "value":{"assertion_contract_version":"canonical-assertions-v1","assertions":[{
+      "projection":{"edge_id":"edge-1","relationship_revision":3,"assertion_id":"assertion-1","assertion_revision":2,"traversal_id":"traversal-1","source_node_id":"sense-a","target_node_id":"sense-b","relation_type":"associated_with","relation_registry_revision":1},
+      "assertion":{"assertion_id":"assertion-1","assertion_revision":2,"release_id":"knowledge-2026-09","relation_type_id":"relation-associated","relation_registry_revision":1,"statement":"A is associated with B.",
+        "participants":[{"role_id":"role-source","ordinal":0,"value":{"kind":"entity","family":"lexical_sense","id":"sense-a"}},{"role_id":"role-target","ordinal":0,"value":{"kind":"entity","family":"lexical_sense","id":"sense-b"}}],
+        "domain_ids":[],"conditions":[],"applicable_sense_ids":["sense-a"],"evidence_ids":["evidence-1"],"provenance_ids":["source-1"],"verification_state":"verified",
+        "evidence_lineage":[{"source":{"id":"source-1","name":"Reviewed source","version":"1","license":"internal","attribution":null,"permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true}},"fragment":{"id":"evidence-1","source_id":"source-1","source_reference":"entry:1","language":"en","kind":"other","confidence":"high","text":"Reviewed support","content_hash":"sha256:evidence","permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true},"status":"active"},"origin":{"kind":"licensed_source"}}]},
+      "registry":{"relation_type_id":"relation-associated","registry_revision":1,"participant_roles":[{"role_id":"role-source","minimum":1,"maximum":1,"value_rule":{"kind":"entity","families":["lexical_sense"]}},{"role_id":"role-target","minimum":1,"maximum":1,"value_rule":{"kind":"entity","families":["lexical_sense"]}}],"resolved_domains":[],"resolved_conditions":[],"binary_traversals":[{"traversal_id":"traversal-1","source_role_id":"role-source","target_role_id":"role-target","relation_type":"associated_with"}],"requires_evidence":true}
+    }]}
+  })));
+  let assertions = IslandPortCanonicalClient::new(transport.clone())
+    .get_canonical_assertions(
+      &context(),
+      &pin(),
+      CanonicalAssertionsGetInput {
+        projections: vec![assertion_ref()],
+        evidence_use: EvidenceUse::Embedding,
+        limit: 20,
+      },
+    )
+    .await
+    .unwrap();
+  assert_eq!(assertions[0].assertion().assertion_revision, 2);
+  let request = transport.request.lock().unwrap();
+  let (path, body, _) = request.as_ref().unwrap();
+  assert_eq!(*path, "/api/v1/assertions/get");
+  assert_eq!(body["input"]["content_release"], "knowledge-2026-09");
+  assert_eq!(body["input"]["canonical_schema_version"], "canonical-v1");
+  assert_eq!(
+    body["input"]["projections"][0]["traversal_id"],
+    "traversal-1"
+  );
+}
+
+#[tokio::test]
+async fn knowledge_hydration_rejects_canonical_schema_echo_mismatch() {
+  let transport = Arc::new(FakeTransport::new(json!({
+    "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+    "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v2",
+    "value":{"assertion_contract_version":"canonical-assertions-v1","assertions":[]}
+  })));
+  let result = IslandPortCanonicalClient::new(transport)
+    .get_canonical_assertions(
+      &context(),
+      &pin(),
+      CanonicalAssertionsGetInput {
+        projections: vec![assertion_ref()],
+        evidence_use: EvidenceUse::Embedding,
+        limit: 20,
+      },
+    )
+    .await;
+  assert_eq!(result, Err(IslandPortClientError::SchemaIncompatible));
+}
+
+fn assertion_ref() -> CanonicalAssertionProjectionRef {
+  CanonicalAssertionProjectionRef {
+    edge_id: id("edge-1"),
+    relationship_revision: 3,
+    assertion_id: id("assertion-1"),
+    assertion_revision: 2,
+    traversal_id: id("traversal-1"),
+    source_node_id: id("sense-a"),
+    target_node_id: id("sense-b"),
+    relation_type: GraphRelationType::AssociatedWith,
+    relation_registry_revision: 1,
+  }
+}
+
+#[tokio::test]
+async fn scale_and_node_hydration_validate_membership_order_and_evidence() {
+  let scale_transport = Arc::new(FakeTransport::new(json!({
+    "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+    "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v1", "value":{"scales":[{
+      "scale_id":"scale-heat", "revision":1, "dimension":"heat_intensity",
+      "direction":"increasing", "domain_ids":["domain_weather"], "conditions":[],
+      "members":[{"node_id":"node-warm","position":10},{"node_id":"node-hot","position":20}],
+      "evidence_ids":["evidence-1"], "verification_state":"verified"
+    }]}
+  })));
+  let scales = IslandPortCanonicalClient::new(scale_transport)
+    .get_semantic_scales(
+      &context(),
+      &pin(),
+      SemanticScalesGetInput {
+        scale_ids: vec![id("scale-heat")],
+        for_node_id: id("node-hot"),
+        verification_states: vec![RetrievalVerificationState::Verified],
+        limit: 5,
+      },
+    )
+    .await
+    .unwrap();
+  assert_eq!(scales[0].members.len(), 2);
+
+  let node_transport = Arc::new(FakeTransport::new(json!({
+    "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+    "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v1", "value":{"nodes":[{
+      "node_id":"node-hot", "revision":4, "node_type":"concept",
+      "sense_id":null, "canonical_label":"heat", "language":"en", "domain_ids":["domain_weather"],
+      "evidence_ids":["evidence-1"], "verification_state":"verified"
+    }]}
+  })));
+  let nodes = IslandPortCanonicalClient::new(node_transport.clone())
+    .get_knowledge_nodes(
+      &context(),
+      &pin(),
+      KnowledgeNodesGetInput {
+        node_ids: vec![id("node-hot")],
+        evidence_use: EvidenceUse::ApiRedistribution,
+        limit: 10,
+      },
+    )
+    .await
+    .unwrap();
+  assert_eq!(nodes[0].canonical_label, "heat");
+  let request = node_transport.request.lock().unwrap();
+  assert_eq!(request.as_ref().unwrap().0, "/api/v1/knowledge-nodes/get");
 }
 
 #[tokio::test]
@@ -155,6 +284,10 @@ impl IslandPortTransport for FakeTransport {
 
 fn id(value: &str) -> CanonicalId {
   CanonicalId::new(value).unwrap()
+}
+
+fn pin() -> CanonicalReleasePin {
+  CanonicalReleasePin::new(id("knowledge-2026-09"), "canonical-v1".into()).unwrap()
 }
 
 fn language(value: &str) -> LanguageTag {

@@ -62,7 +62,9 @@ Text is NFC-normalized exactly once and remains case-sensitive. NFKC, stemming, 
 
 The release-local lexical dictionary is the sorted set of distinct token UTF-8 byte strings from the complete frozen collection. Sorting is unsigned bytewise order. Index zero is reserved; the first term receives index 1 and subsequent terms receive consecutive `u32` indices. This is a collision-free dictionary assignment, not a truncated token hash. Dictionary overflow, duplicate index assignment, or any dictionary/input disagreement fails closed. The dictionary hash and encoder revision belong to the persisted collection manifest; neither changes a Stage 4 embedding input hash.
 
-Document-side sparse values use `tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl))`, with `k1 = 1.2`, `b = 0.75`, the exact token occurrence count as `dl`, and `avgdl` computed after the complete collection is frozen. Repeated occurrences across the frozen text fields count independently; no undocumented field boost is applied. Computation uses IEEE-754 binary64 intermediates and round-to-nearest, ties-to-even conversion to binary32 persisted values. The Qdrant sparse vector named `lexical` must enable its `idf` modifier. IDF is collection/query-time state derived from the persisted collection statistics and is deliberately absent from per-point canonical input bytes and input hashes. M4 must define a separate `query-lexical-input` contract before query encoding is implemented; publication does not reuse a document input contract as an undocumented query contract.
+Document-side sparse values use `tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl))`, with `k1 = 1.2`, `b = 0.75`, the exact token occurrence count as `dl`, and `avgdl` computed after the complete collection is frozen. Repeated occurrences across the frozen text fields count independently; no undocumented field boost is applied. Computation uses IEEE-754 binary64 intermediates and round-to-nearest, ties-to-even conversion to binary32 persisted values. The Qdrant sparse vector named `lexical` must enable its `idf` modifier. IDF is collection/query-time state derived from the persisted collection statistics and is deliberately absent from per-point canonical input bytes and input hashes.
+
+The query-side contract is `query-lexical-input-v1` under encoder identity `transnet-lexical-bm25` revision `v1`. A trusted request-local encoder receives the exact canonical release pin and the already normalized private query, applies the same NFC, case-sensitive tokenization and bounds above, and resolves tokens only through that release's frozen collision-free dictionary. Query values are finite binary32 term frequencies; Qdrant's configured `idf` modifier supplies collection statistics. Unknown tokens are omitted, and a query with no dictionary terms fails encoding instead of inventing an index. The encoder output contains sorted unique indices and never includes raw query text, a query hash, request ID, tenant, user, or history. Transnet passes only the resulting dense and sparse vectors to retrieval-data and discards both with the request. Publication inputs remain separate and unchanged.
 
 Every canonical embedding input is limited to 65,536 final canonical serialized bytes; 65,536 is accepted and 65,537 fails closed before hashing or publication. Publication batches are limited to 256 points and 1,048,576 serialized request bytes, with both limits enforced independently. These are execution bounds, not canonical identity. The four Stage 4 input formats and their hash domains remain unchanged.
 
@@ -238,6 +240,8 @@ Before projection, the implemented Transnet admission boundary requires the decl
 
 Admission resolves every evidence ID through the existing canonical evidence lineage. The exact ID set must match, every fragment must belong to the relationship release, both source and fragment permissions must allow storage and embedding, the fragment must be active, and generated evidence must have completed reviewed promotion. Evidence confidence uses the existing closed `High`, `Medium`, and `Low` domain values, so an absent or out-of-range numeric value cannot enter this domain boundary. Domain scope uses sorted, unique canonical `DomainId` values from the same release; labels and free-form strings are never domain identity. Each condition is a structured registry-owned object with `condition_id`, `condition_type`, and sorted `parameter_ids`; all three are canonical identifiers resolved in the same release, and prose belongs only in hydrated display data. The transitional `GraphScope.domain` and `GraphScope.note` strings therefore remain inadmissible to publication.
 
+The implemented assertion admission model preserves every documented node family as a typed publisher-owned canonical ID but does not claim a Qdrant node mapping for families the current node projector cannot reconstruct. N-ary participants retain registry-owned role and ordinal plus exactly one entity or typed literal. Domains, conditions, and parameters must resolve to explicit same-release registry records. A binary edge is eligible only when the pinned registry explicitly declares a traversal from two required singleton entity roles and the publisher's binary record independently echoes the exact assertion identity and revision. Transnet verifies role-to-endpoint families and IDs, exact release and full evidence lineage, and the existing binary relation rule. The edge projection retains and hashes the assertion/registry/traversal reference. Because the current edge point cannot yet encode structured domain and condition scope, any nonempty structured scope fails closed instead of being omitted. Unknown or cross-release registry records, unsupported conditions or parameters, role/order violations, endpoint mismatches, and altered evidence metadata are rejected rather than synthesizing an ID, endpoint, inverse, or edge.
+
 `is_a` points from a narrower sense to a broader category and `has_subtype` is its inverse. `lower_degree_than` and `higher_degree_than` compare members only within a named compatible dimension. No degree edge implies taxonomy, synonymy, or interchangeability.
 
 ## Semantic scale point
@@ -287,6 +291,13 @@ Request:
     "indices": [1842, 99104],
     "values": [1.0, 0.55]
   },
+  "execution": {
+    "dense_artifact_revision": "sha256:qwen-node-query-r1",
+    "dense_input_specification": "node-dense-input-v1",
+    "lexical_encoder_identity": "transnet-lexical-bm25",
+    "lexical_encoder_revision": "v1",
+    "lexical_input_specification": "node-lexical-input-v1"
+  },
   "filters": {
     "release_id": "knowledge-2026-09",
     "publication_states": ["published"],
@@ -311,6 +322,15 @@ Response:
   "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
+    "execution": {
+      "collection_id": "knowledge_nodes__knowledge_2026_09",
+      "collection_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dense_artifact_revision": "sha256:qwen-node-query-r1",
+      "dense_input_specification": "node-dense-input-v1",
+      "lexical_encoder_identity": "transnet-lexical-bm25",
+      "lexical_encoder_revision": "v1",
+      "lexical_input_specification": "node-lexical-input-v1"
+    },
     "candidates": [
       {
         "node_id": "node_sweltering_hot_01",
@@ -329,7 +349,7 @@ Response:
 }
 ```
 
-Scores are comparable only within the same model and release. Vector similarity is a candidate signal, never proof of translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
+The request binds the exact query-side dense artifact and frozen dense/lexical input contracts. The response must identify the immutable physical node collection, provide its exact SHA-256 content hash, and echo every execution member exactly; missing proof, malformed hash, or version drift fails the whole response closed. `matched_by` accepts only `dense`, `sparse`, `canonical_label`, `alias`, `translation`, `transliteration`, `abbreviation`, `formula`, and `domain_term`; duplicate mechanisms fail closed and never inflate rank. Scores are comparable only within that proven model, collection, and release. Vector similarity is a candidate signal, never proof of translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
 
 ## POST /api/v1/scales/search
 
@@ -420,8 +440,10 @@ Response:
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree_than",
         "relation_registry_version": 1,
-        "fact_id": "fact_sweltering_degree_scorching_01",
-        "fact_revision": 2,
+        "assertion_id": "assertion_sweltering_degree_scorching_01",
+        "assertion_revision": 2,
+        "relation_type_id": "relation_degree",
+        "traversal_id": "traversal_higher_degree",
         "verification_state": "verified"
       }
     ]
@@ -430,7 +452,7 @@ Response:
 }
 ```
 
-Each result is a candidate pointer. Before a factual explanation, evidence, or provenance is used in a response, Transnet hydrates the referenced fact revision through `POST /api/v1/knowledge-facts/get` for the same release.
+Each result is a candidate pointer. Before factual use, Transnet hydrates the exact assertion and validates its selected registry traversal through `POST /api/v1/assertions/get` for the same release. Similarity remains nomination only.
 
 ## POST /api/v1/neighbors/search
 
@@ -468,6 +490,11 @@ Response:
           "source_node_id": "node_sweltering_hot_01",
           "target_node_id": "node_scorching_heat_01",
           "relation_type": "higher_degree_than",
+          "relation_registry_version": 1,
+          "assertion_id": "assertion_sweltering_degree_scorching_01",
+          "assertion_revision": 2,
+          "relation_type_id": "relation_degree",
+          "traversal_id": "traversal_higher_degree",
           "verification_state": "verified"
         },
         "node": {
@@ -483,7 +510,7 @@ Response:
 }
 ```
 
-Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
+Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. Every neighbor edge carries exact assertion identity/revision, relation type identity, traversal identity, and registry version `1`; Transnet must hydrate and validate that exact assertion projection before treating the edge as a verified path step. A missing assertion, substituted revision, unknown traversal/relation, endpoint disagreement, or registry mismatch invalidates the candidate. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
 
 ## Internal publication operations
 

@@ -60,7 +60,9 @@ Island-port 是 embedding authority。`semantic` 向量使用 `Qwen/Qwen3-Embedd
 
 Release-local lexical dictionary 是完整冻结 collection 内所有不同 token UTF-8 byte string 的排序集合，按 unsigned bytewise order 排序。Index 0 保留，第一个 term 的 index 为 1，后续 term 使用连续 `u32` index。这是无碰撞 dictionary assignment，不是截断 token hash。Dictionary overflow、重复 index assignment 或 dictionary/input 不一致均闭合失败。Dictionary hash 与 encoder revision 属于 persisted collection manifest；两者都不会改变 Stage 4 embedding input hash。
 
-Document-side sparse value 使用公式 `tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl))`，其中 `k1 = 1.2`、`b = 0.75`，`dl` 为精确 token occurrence count，`avgdl` 在完整 collection 冻结后计算。冻结文本字段中的重复 occurrence 分别计数，不应用未声明的 field boost。计算使用 IEEE-754 binary64 中间值，并以 round-to-nearest、ties-to-even 转换为持久化 binary32 value。名为 `lexical` 的 Qdrant sparse vector 必须启用 `idf` modifier。IDF 是由 persisted collection statistics 得到的 collection/query-time state，因此明确不进入 per-point canonical input bytes 或 input hash。M4 必须先定义独立的 `query-lexical-input` 合同才能实现 query encoding；publication 不会把 document input contract 当作未声明的 query contract 复用。
+Document-side sparse value 使用公式 `tf * (k1 + 1) / (tf + k1 * (1 - b + b * dl / avgdl))`，其中 `k1 = 1.2`、`b = 0.75`，`dl` 为精确 token occurrence count，`avgdl` 在完整 collection 冻结后计算。冻结文本字段中的重复 occurrence 分别计数，不应用未声明的 field boost。计算使用 IEEE-754 binary64 中间值，并以 round-to-nearest、ties-to-even 转换为持久化 binary32 value。名为 `lexical` 的 Qdrant sparse vector 必须启用 `idf` modifier。IDF 是由 persisted collection statistics 得到的 collection/query-time state，因此明确不进入 per-point canonical input bytes 或 input hash。
+
+Query 侧合同为 `query-lexical-input-v1`，encoder identity 为 `transnet-lexical-bm25`、revision 为 `v1`。受信任的请求级 encoder 接收精确 canonical release pin 与已规范化的私有 query，应用上述相同 NFC、大小写敏感 tokenization 与边界，并且仅通过该 release 冻结的无碰撞 dictionary 解析 token。Query value 是有限 binary32 term frequency；Qdrant 配置的 `idf` modifier 提供 collection statistics。未知 token 被省略；若 query 没有任何 dictionary term，则 encoding 闭合失败，不得编造 index。Encoder 输出包含有序唯一 index，绝不包含原始 query text、query hash、request ID、tenant、user 或 history。Transnet 只把所得 dense/sparse vector 发送给 retrieval-data，并随请求丢弃二者。Publication input 保持独立且不变。
 
 每个 canonical embedding input 最多 65,536 个最终 canonical serialized bytes；65,536 可接受，65,537 在 hashing 或 publication 前闭合失败。Publication batch 最多 256 points 且 serialized request body 最多 1,048,576 bytes，两项限制独立执行。这些是执行边界，不是 canonical identity。Stage 4 的四类 input format 与 hash domain 均保持不变。
 
@@ -238,6 +240,8 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
 
 Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精确 ID 集必须匹配，每个 fragment 必须属于关系发布，source 与 fragment permission 都必须允许 storage 和 embedding，fragment 必须 active，generated evidence 必须已完成审核提升。Evidence confidence 使用现有闭合 `High`、`Medium`、`Low` domain 值，因此缺失或越界的数值无法进入该 domain boundary。Domain scope 使用同一发布中已排序、唯一的规范 `DomainId`；label 与自由文本绝不是 domain identity。每个 condition 都是 registry 自有的结构化对象，含 `condition_id`、`condition_type` 与已排序的 `parameter_ids`；三者均为在同一发布中解析的规范标识符，prose 只属于补全后的展示数据。因此过渡期 `GraphScope.domain` 与 `GraphScope.note` 字符串仍不得进入发布。
 
+已实现的 assertion admission model 将每个文档规定的 node family 保留为强类型、publisher 所有的 canonical ID，但不会为当前 node projector 无法重建的 family 声称 Qdrant node mapping。N-ary participant 保留 registry 自有 role 与 ordinal，并且只含 entity 或 typed literal 之一。Domain、condition 与 parameter 必须解析到显式同发布 registry record。只有固定 registry 从两个必填 singleton entity role 显式声明 traversal，且 publisher 的 binary record 独立回显精确 assertion identity/revision 时，binary edge 才合格。Transnet 会验证 role 到 endpoint 的 family/ID、精确 release、完整 evidence lineage 以及现有 binary relation rule；edge projection 会保留 assertion/registry/traversal reference 并将其纳入 hash。当前 edge point 尚不能编码结构化 domain/condition scope，因此任何非空结构化 scope 都会闭合失败而不是被省略。未知或跨发布 registry record、不支持的 condition/parameter、role/order 违规、endpoint 不匹配或被改变的 evidence metadata 都会被拒绝，不会合成 ID、endpoint、inverse 或 edge。
+
 `is_a` 从较窄词义指向较宽类别，`has_subtype` 是其逆关系。`lower_degree_than` 与 `higher_degree_than` 只在命名且兼容的维度内比较成员。程度边不暗示分类、同义或可互换。
 
 ## 语义尺度 point
@@ -287,6 +291,13 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
     "indices": [1842, 99104],
     "values": [1.0, 0.55]
   },
+  "execution": {
+    "dense_artifact_revision": "sha256:qwen-node-query-r1",
+    "dense_input_specification": "node-dense-input-v1",
+    "lexical_encoder_identity": "transnet-lexical-bm25",
+    "lexical_encoder_revision": "v1",
+    "lexical_input_specification": "node-lexical-input-v1"
+  },
   "filters": {
     "release_id": "knowledge-2026-09",
     "publication_states": ["published"],
@@ -311,6 +322,15 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
   "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
+    "execution": {
+      "collection_id": "knowledge_nodes__knowledge_2026_09",
+      "collection_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dense_artifact_revision": "sha256:qwen-node-query-r1",
+      "dense_input_specification": "node-dense-input-v1",
+      "lexical_encoder_identity": "transnet-lexical-bm25",
+      "lexical_encoder_revision": "v1",
+      "lexical_input_specification": "node-lexical-input-v1"
+    },
     "candidates": [
       {
         "node_id": "node_sweltering_hot_01",
@@ -329,7 +349,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 }
 ```
 
-分数只可在相同模型和发布内比较。向量相似度仅是候选信号，不能证明翻译、同义、层级、因果、共同机制或文化意义。
+请求绑定精确 query-side dense artifact 与冻结 dense/lexical input contract。响应必须标识不可变物理 node collection、提供其精确 SHA-256 content hash，并精确回显所有 execution member；proof 缺失、hash 格式错误或版本漂移会使整个响应闭合失败。`matched_by` 仅接受 `dense`、`sparse`、`canonical_label`、`alias`、`translation`、`transliteration`、`abbreviation`、`formula` 与 `domain_term`；重复 mechanism 闭合失败，绝不会抬高 rank。分数只可在该已证明模型、collection 与发布内比较。向量相似度仅是候选信号，不能证明翻译、同义、层级、因果、共同机制或文化意义。
 
 ## POST /api/v1/scales/search
 
@@ -420,8 +440,10 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree_than",
         "relation_registry_version": 1,
-        "fact_id": "fact_sweltering_degree_scorching_01",
-        "fact_revision": 2,
+        "assertion_id": "assertion_sweltering_degree_scorching_01",
+        "assertion_revision": 2,
+        "relation_type_id": "relation_degree",
+        "traversal_id": "traversal_higher_degree",
         "verification_state": "verified"
       }
     ]
@@ -430,7 +452,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 }
 ```
 
-每项结果均为候选指针。在响应使用事实性解释、证据或来源前，Transnet 必须针对同一发布通过 `POST /api/v1/knowledge-facts/get` 补全引用的事实修订。
+每项结果均为候选指针。在事实性使用前，Transnet 必须针对同一发布通过 `POST /api/v1/assertions/get` 补全精确 assertion，并校验所选 registry traversal。相似度始终只用于提名。
 
 ## POST /api/v1/neighbors/search
 
@@ -468,6 +490,11 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
           "source_node_id": "node_sweltering_hot_01",
           "target_node_id": "node_scorching_heat_01",
           "relation_type": "higher_degree_than",
+          "relation_registry_version": 1,
+          "assertion_id": "assertion_sweltering_degree_scorching_01",
+          "assertion_revision": 2,
+          "relation_type_id": "relation_degree",
+          "traversal_id": "traversal_higher_degree",
           "verification_state": "verified"
         },
         "node": {
@@ -483,7 +510,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 }
 ```
 
-扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
+扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。每个 neighbor edge 都携带精确 assertion identity/revision、relation type identity、traversal identity 与 registry 版本 `1`；Transnet 必须先补全并校验该精确 assertion projection，才能把 edge 作为 verified path step。Assertion 缺失、修订被替换、未知 traversal/relation、endpoint 不一致或 registry mismatch 都会使 candidate 无效。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
 
 ## Internal publication operations
 

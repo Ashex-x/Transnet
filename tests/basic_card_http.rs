@@ -70,6 +70,7 @@ fn candidate(release: &CanonicalReleasePin, suffix: &str) -> CanonicalCandidate 
   let lexeme_id = id(&format!("lexeme-{suffix}"));
   let sense_id = id(&format!("sense-{suffix}"));
   let evidence_id = id(&format!("evidence-{suffix}"));
+  let lemma_form_id = id(&format!("form-{suffix}-lemma"));
   CanonicalCandidate {
     lexeme: Lexeme {
       id: lexeme_id.clone(),
@@ -83,14 +84,24 @@ fn candidate(release: &CanonicalReleasePin, suffix: &str) -> CanonicalCandidate 
     },
     sense: Sense {
       id: sense_id,
-      lexeme_id,
+      lexeme_id: lexeme_id.clone(),
       release_id: release.release_id.clone(),
       sense_key: suffix.into(),
       definition: "uncomfortably hot".into(),
       definition_evidence_ids: vec![evidence_id.clone()],
       status: CanonicalStatus::Active,
     },
-    forms: Vec::new(),
+    forms: vec![WordForm {
+      id: lemma_form_id,
+      lexeme_id: lexeme_id.clone(),
+      release_id: release.release_id.clone(),
+      form: "sweltering".into(),
+      normalized_form: "sweltering".into(),
+      kind: FormKind::Lemma,
+      morphology: None,
+      evidence_ids: vec![evidence_id.clone()],
+      status: CanonicalStatus::Active,
+    }],
     evidence: vec![EvidenceFragment {
       id: evidence_id,
       source_id: id("source-reviewed"),
@@ -118,19 +129,21 @@ fn candidate(release: &CanonicalReleasePin, suffix: &str) -> CanonicalCandidate 
 fn oversized_candidate(release: &CanonicalReleasePin, suffix: &str) -> CanonicalCandidate {
   let mut value = candidate(release, suffix);
   value.evidence[0].text = "x".repeat(4_096);
-  value.forms = (0..24)
-    .map(|index| WordForm {
-      id: id(&format!("form-{suffix}-{index}")),
-      lexeme_id: value.lexeme.id.clone(),
-      release_id: release.release_id.clone(),
-      form: format!("form-{index}"),
-      normalized_form: format!("form-{index}"),
-      kind: FormKind::Inflection,
-      morphology: None,
-      evidence_ids: vec![value.evidence[0].id.clone()],
-      status: CanonicalStatus::Active,
-    })
-    .collect();
+  value.forms.extend(
+    (0..24)
+      .map(|index| WordForm {
+        id: id(&format!("form-{suffix}-{index}")),
+        lexeme_id: value.lexeme.id.clone(),
+        release_id: release.release_id.clone(),
+        form: format!("form-{index}"),
+        normalized_form: format!("form-{index}"),
+        kind: FormKind::Inflection,
+        morphology: None,
+        evidence_ids: vec![value.evidence[0].id.clone()],
+        status: CanonicalStatus::Active,
+      })
+      .collect::<Vec<_>>(),
+  );
   value
 }
 
@@ -168,16 +181,19 @@ impl CanonicalReadPort for Authority {
     };
     Ok(
       (0..count)
-        .map(|index| RepositoryMatch {
-          candidate: if matches!(self.mode, Mode::Oversized) {
+        .map(|index| {
+          let candidate = if matches!(self.mode, Mode::Oversized) {
             oversized_candidate(pin, &format!("s{index}"))
           } else {
             candidate(pin, &format!("s{index}"))
-          },
-          matched_form_id: None,
-          matched_form: "sweltering".into(),
-          kind: LexicalMatchKind::ExactCanonical,
-          score: RetrievalScore::exact(),
+          };
+          RepositoryMatch {
+            matched_form_id: Some(candidate.forms[0].id.clone()),
+            candidate,
+            matched_form: "sweltering".into(),
+            kind: LexicalMatchKind::ExactCanonical,
+            score: RetrievalScore::exact(),
+          }
         })
         .collect(),
     )

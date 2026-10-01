@@ -19,6 +19,12 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::{
+  assertion::{
+    AssertionCondition, AssertionLiteral, AssertionParticipant, AssertionParticipantValue,
+    AssertionRegistryEntry, BinaryTraversalRule, CanonicalAssertion, CanonicalNodeFamily,
+    CanonicalNodeId, ParticipantRoleRule, ParticipantValueRule, ResolvedConditionReference,
+    ResolvedDomainReference,
+  },
   canonical::{
     normalize_lookup_key, CanonicalId, CanonicalReleasePin, CanonicalStatus, EvidenceConfidence,
     EvidenceFragment, EvidenceKind, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech,
@@ -41,15 +47,24 @@ use crate::domain::{
     CanonicalDomain, DomainCoverageState, DomainInventory, DomainKnowledgeProfile,
     LocalizedDomainDefinition, LocalizedDomainTerm, MAX_DOMAIN_INVENTORY, MAX_DOMAIN_TERM_CHARS,
   },
+  knowledge_hydration::{
+    CanonicalAssertionProjectionRef, HydratedAssertionProjection, HydratedKnowledgeNode,
+    HydratedScaleMember, HydratedSemanticScale, KnowledgeCondition, SelectedBinaryTraversal,
+    SemanticScaleDirection, MAX_KNOWLEDGE_HYDRATION_ITEMS,
+  },
   retrieval::{CanonicalCandidate, LexicalMatchKind, RepositoryMatch, RetrievalScore},
+  retrieval_data::{RetrievalNodeType, RetrievalRelation, RetrievalVerificationState},
 };
 use crate::ports::canonical_read::{
-  CanonicalCandidateQuery, CanonicalDomainQuery, CanonicalReadContext, CanonicalReadError,
-  CanonicalReadPort, CanonicalSenseQuery, CanonicalTranslationQuery,
+  CanonicalAssertionQuery, CanonicalCandidateQuery, CanonicalDomainQuery,
+  CanonicalKnowledgeNodeQuery, CanonicalReadContext, CanonicalReadError, CanonicalReadPort,
+  CanonicalScaleQuery, CanonicalSenseQuery, CanonicalTranslationQuery,
 };
 
 /// Canonical-data wire schema implemented by this client.
 pub const ISLAND_PORT_SCHEMA_VERSION: &str = "canonical-data-v1";
+/// Frozen assertion hydration sub-contract carried inside canonical-data-v1 envelopes.
+pub const ASSERTION_HYDRATION_CONTRACT_VERSION: &str = "canonical-assertions-v1";
 const MAX_RESPONSE_BYTES: usize = 1_048_576;
 
 /// Per-call transport metadata propagated without becoming domain state.
@@ -436,6 +451,105 @@ impl IslandPortCanonicalClient {
     .map_err(inconsistent)
   }
 
+  /// Hydrates exact immutable assertion projections after omitted ineligible values.
+  pub async fn get_canonical_assertions(
+    &self,
+    context: &IslandPortCallContext,
+    pin: &CanonicalReleasePin,
+    input: CanonicalAssertionsGetInput,
+  ) -> Result<Vec<HydratedAssertionProjection>, IslandPortClientError> {
+    validate_exact_assertion_input(&input)?;
+    let requested = input.projections.clone();
+    let limit = input.limit;
+    let evidence_use = input.evidence_use;
+    let input = CanonicalAssertionsGetInputDto::new(input, pin);
+    let envelope = RequestEnvelope {
+      context: context_dto(context, &pin.release_id),
+      input,
+    };
+    let response: CanonicalAssertionsGetResponseDto = self
+      .call("/api/v1/assertions/get", context, &envelope)
+      .await?;
+    validate_pinned_response_context(&response.common, context, pin)?;
+    let value = response.common.value()?;
+    if value.assertion_contract_version != ASSERTION_HYDRATION_CONTRACT_VERSION
+      || value.assertions.len() > limit
+    {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let assertions = value
+      .assertions
+      .into_iter()
+      .map(|item| item.into_domain(&pin.release_id, evidence_use))
+      .collect::<Result<Vec<_>, _>>()?;
+    validate_assertion_subsequence(&requested, &assertions)?;
+    Ok(assertions)
+  }
+
+  /// Hydrates complete authoritative semantic scales for one explicit member.
+  pub async fn get_semantic_scales(
+    &self,
+    context: &IslandPortCallContext,
+    pin: &CanonicalReleasePin,
+    input: SemanticScalesGetInput,
+  ) -> Result<Vec<HydratedSemanticScale>, IslandPortClientError> {
+    validate_id_input(&input.scale_ids, input.limit)?;
+    validate_verified(&input.verification_states)?;
+    let requested = input.scale_ids.clone();
+    let for_node_id = input.for_node_id.clone();
+    let limit = input.limit;
+    let input = SemanticScalesGetInputDto::new(input, pin);
+    let envelope = RequestEnvelope {
+      context: context_dto(context, &pin.release_id),
+      input,
+    };
+    let response: SemanticScalesGetResponseDto = self
+      .call("/api/v1/semantic-scales/get", context, &envelope)
+      .await?;
+    validate_pinned_response_context(&response.common, context, pin)?;
+    let scales = response.common.value()?.scales;
+    if scales.len() > limit {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let scales = scales
+      .into_iter()
+      .map(|scale| scale.into_domain(&for_node_id))
+      .collect::<Result<Vec<_>, _>>()?;
+    validate_id_subsequence(&requested, scales.iter().map(|scale| &scale.scale_id))?;
+    Ok(scales)
+  }
+
+  /// Hydrates authoritative display-safe values for nominated canonical nodes.
+  pub async fn get_knowledge_nodes(
+    &self,
+    context: &IslandPortCallContext,
+    pin: &CanonicalReleasePin,
+    input: KnowledgeNodesGetInput,
+  ) -> Result<Vec<HydratedKnowledgeNode>, IslandPortClientError> {
+    validate_id_input(&input.node_ids, input.limit)?;
+    let requested = input.node_ids.clone();
+    let limit = input.limit;
+    let input = KnowledgeNodesGetInputDto::new(input, pin);
+    let envelope = RequestEnvelope {
+      context: context_dto(context, &pin.release_id),
+      input,
+    };
+    let response: KnowledgeNodesGetResponseDto = self
+      .call("/api/v1/knowledge-nodes/get", context, &envelope)
+      .await?;
+    validate_pinned_response_context(&response.common, context, pin)?;
+    let nodes = response.common.value()?.nodes;
+    if nodes.len() > limit {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let nodes = nodes
+      .into_iter()
+      .map(KnowledgeNodeDto::into_domain)
+      .collect::<Result<Vec<_>, _>>()?;
+    validate_id_subsequence(&requested, nodes.iter().map(|node| &node.node_id))?;
+    Ok(nodes)
+  }
+
   async fn call<T: Serialize, R: DeserializeOwned>(
     &self,
     path: &'static str,
@@ -521,6 +635,38 @@ pub struct DomainResolveInput {
   /// Languages useful for labels and coverage.
   pub languages: Vec<LanguageTag>,
   /// Candidate limit.
+  pub limit: usize,
+}
+
+/// Exact assertion projections accepted by the authoritative hydration operation.
+pub struct CanonicalAssertionsGetInput {
+  /// Ordered exact projection proofs.
+  pub projections: Vec<CanonicalAssertionProjectionRef>,
+  /// Evidence operation every lineage must permit.
+  pub evidence_use: crate::domain::canonical::EvidenceUse,
+  /// Response bound.
+  pub limit: usize,
+}
+
+/// Complete semantic-scale selectors accepted by the authoritative hydration operation.
+pub struct SemanticScalesGetInput {
+  /// Ordered stable scale identities.
+  pub scale_ids: Vec<CanonicalId>,
+  /// Required explicit member for scope and condition eligibility.
+  pub for_node_id: CanonicalId,
+  /// Eligible verification states; canonical hydration currently accepts only `verified`.
+  pub verification_states: Vec<RetrievalVerificationState>,
+  /// Response bound.
+  pub limit: usize,
+}
+
+/// Display-safe canonical node selectors accepted by the hydration operation.
+pub struct KnowledgeNodesGetInput {
+  /// Ordered stable node identities.
+  pub node_ids: Vec<CanonicalId>,
+  /// Required evidence permission enforced by island-port.
+  pub evidence_use: crate::domain::canonical::EvidenceUse,
+  /// Response bound.
   pub limit: usize,
 }
 
@@ -655,9 +801,70 @@ impl CanonicalReadPort for IslandPortCanonicalClient {
       .await
       .map_err(Into::into)
   }
+
+  async fn canonical_assertions(
+    &self,
+    context: &CanonicalReadContext,
+    pin: &CanonicalReleasePin,
+    query: CanonicalAssertionQuery,
+  ) -> Result<Vec<HydratedAssertionProjection>, CanonicalReadError> {
+    self
+      .get_canonical_assertions(
+        &call_context(context)?,
+        pin,
+        CanonicalAssertionsGetInput {
+          projections: query.projections,
+          evidence_use: query.evidence_use,
+          limit: query.limit,
+        },
+      )
+      .await
+      .map_err(Into::into)
+  }
+
+  async fn semantic_scales(
+    &self,
+    context: &CanonicalReadContext,
+    pin: &CanonicalReleasePin,
+    query: CanonicalScaleQuery,
+  ) -> Result<Vec<HydratedSemanticScale>, CanonicalReadError> {
+    self
+      .get_semantic_scales(
+        &call_context(context)?,
+        pin,
+        SemanticScalesGetInput {
+          scale_ids: query.scale_ids,
+          for_node_id: query.for_node_id,
+          verification_states: query.verification_states,
+          limit: query.limit,
+        },
+      )
+      .await
+      .map_err(Into::into)
+  }
+
+  async fn knowledge_nodes(
+    &self,
+    context: &CanonicalReadContext,
+    pin: &CanonicalReleasePin,
+    query: CanonicalKnowledgeNodeQuery,
+  ) -> Result<Vec<HydratedKnowledgeNode>, CanonicalReadError> {
+    self
+      .get_knowledge_nodes(
+        &call_context(context)?,
+        pin,
+        KnowledgeNodesGetInput {
+          node_ids: query.node_ids,
+          evidence_use: query.evidence_use,
+          limit: query.limit,
+        },
+      )
+      .await
+      .map_err(Into::into)
+  }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RequestEnvelope<C, T> {
   context: C,
@@ -722,6 +929,7 @@ struct CommonResponseDto<T> {
   schema_version: String,
   outcome: OutcomeDto,
   content_release: Option<String>,
+  canonical_schema_version: Option<String>,
   value: Option<T>,
   error: Option<ErrorDto>,
 }
@@ -810,6 +1018,18 @@ fn validate_response_context<T>(
       return Err(IslandPortClientError::InconsistentData)
     }
     _ => {}
+  }
+  Ok(())
+}
+
+fn validate_pinned_response_context<T>(
+  response: &CommonResponseDto<T>,
+  context: &IslandPortCallContext,
+  pin: &CanonicalReleasePin,
+) -> Result<(), IslandPortClientError> {
+  validate_response_context(response, context, &pin.release_id)?;
+  if response.canonical_schema_version.as_deref() != Some(pin.canonical_schema_version.as_str()) {
+    return Err(IslandPortClientError::SchemaIncompatible);
   }
   Ok(())
 }
@@ -2221,6 +2441,747 @@ impl CollocationTermDto {
 struct PeriodDto {
   first_year: Option<i32>,
   last_year: Option<i32>,
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalAssertionsGetInputDto {
+  projections: Vec<CanonicalAssertionProjectionRefDto>,
+  assertion_contract_version: &'static str,
+  content_release: String,
+  canonical_schema_version: String,
+  evidence_use: EvidenceUseDto,
+  limit: usize,
+}
+
+impl CanonicalAssertionsGetInputDto {
+  fn new(value: CanonicalAssertionsGetInput, pin: &CanonicalReleasePin) -> Self {
+    Self {
+      projections: value
+        .projections
+        .into_iter()
+        .map(|item| CanonicalAssertionProjectionRefDto {
+          edge_id: item.edge_id.to_string(),
+          relationship_revision: item.relationship_revision,
+          assertion_id: item.assertion_id.to_string(),
+          assertion_revision: item.assertion_revision,
+          traversal_id: item.traversal_id.to_string(),
+          source_node_id: item.source_node_id.to_string(),
+          target_node_id: item.target_node_id.to_string(),
+          relation_type: item
+            .relation_type
+            .rule()
+            .qdrant_wire_name
+            .unwrap_or("")
+            .to_string(),
+          relation_registry_revision: item.relation_registry_revision,
+        })
+        .collect(),
+      assertion_contract_version: ASSERTION_HYDRATION_CONTRACT_VERSION,
+      content_release: pin.release_id.to_string(),
+      canonical_schema_version: pin.canonical_schema_version.clone(),
+      evidence_use: value.evidence_use.into(),
+      limit: value.limit,
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalAssertionProjectionRefDto {
+  edge_id: String,
+  relationship_revision: u32,
+  assertion_id: String,
+  assertion_revision: u32,
+  traversal_id: String,
+  source_node_id: String,
+  target_node_id: String,
+  relation_type: String,
+  relation_registry_revision: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct CanonicalAssertionsGetResponseDto {
+  common: CommonResponseDto<CanonicalAssertionsValueDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalAssertionsValueDto {
+  assertion_contract_version: String,
+  assertions: Vec<HydratedAssertionDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HydratedAssertionDto {
+  projection: CanonicalAssertionProjectionRefDto,
+  assertion: CanonicalAssertionDto,
+  registry: AssertionRegistryDto,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalAssertionDto {
+  assertion_id: String,
+  assertion_revision: u32,
+  release_id: String,
+  relation_type_id: String,
+  relation_registry_revision: u32,
+  statement: String,
+  participants: Vec<AssertionParticipantDto>,
+  domain_ids: Vec<String>,
+  conditions: Vec<AssertionConditionDto>,
+  applicable_sense_ids: Vec<String>,
+  evidence_ids: Vec<String>,
+  evidence_lineage: Vec<LineageDto>,
+  provenance_ids: Vec<String>,
+  verification_state: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AssertionParticipantDto {
+  role_id: String,
+  ordinal: u16,
+  value: AssertionParticipantValueDto,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum AssertionParticipantValueDto {
+  Entity { family: String, id: String },
+  Text { value: String },
+  Integer { value: i64 },
+  Decimal { value: String },
+  Boolean { value: bool },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AssertionConditionDto {
+  condition_id: String,
+  condition_type: String,
+  parameter_ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AssertionRegistryDto {
+  relation_type_id: String,
+  registry_revision: u32,
+  participant_roles: Vec<ParticipantRoleDto>,
+  resolved_domains: Vec<ResolvedDomainDto>,
+  resolved_conditions: Vec<ResolvedConditionDto>,
+  binary_traversals: Vec<BinaryTraversalDto>,
+  requires_evidence: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ParticipantRoleDto {
+  role_id: String,
+  minimum: u16,
+  maximum: u16,
+  value_rule: ParticipantValueRuleDto,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum ParticipantValueRuleDto {
+  Entity { families: Vec<String> },
+  Text,
+  Integer,
+  Decimal,
+  Boolean,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResolvedDomainDto {
+  domain_id: String,
+  release_id: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResolvedConditionDto {
+  condition_id: String,
+  condition_type: String,
+  parameter_ids: Vec<String>,
+  release_id: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BinaryTraversalDto {
+  traversal_id: String,
+  source_role_id: String,
+  target_role_id: String,
+  relation_type: String,
+}
+
+impl HydratedAssertionDto {
+  fn into_domain(
+    self,
+    release_id: &crate::domain::canonical::ReleaseId,
+    evidence_use: crate::domain::canonical::EvidenceUse,
+  ) -> Result<HydratedAssertionProjection, IslandPortClientError> {
+    if self.assertion.verification_state != "verified"
+      || self.assertion.release_id != release_id.to_string()
+    {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let requested = self.projection.into_domain_ref()?;
+    let assertion = CanonicalAssertion {
+      assertion_id: canonical_id(self.assertion.assertion_id)?,
+      assertion_revision: self.assertion.assertion_revision,
+      release_id: release_id.clone(),
+      relation_type_id: canonical_id(self.assertion.relation_type_id)?,
+      relation_registry_revision: self.assertion.relation_registry_revision,
+      statement: self.assertion.statement,
+      participants: self
+        .assertion
+        .participants
+        .into_iter()
+        .map(AssertionParticipantDto::into_domain)
+        .collect::<Result<_, _>>()?,
+      domain_ids: self
+        .assertion
+        .domain_ids
+        .into_iter()
+        .map(DomainId::new)
+        .collect::<Result<_, _>>()
+        .map_err(inconsistent)?,
+      conditions: self
+        .assertion
+        .conditions
+        .into_iter()
+        .map(AssertionConditionDto::into_domain)
+        .collect::<Result<_, _>>()?,
+      applicable_sense_ids: self
+        .assertion
+        .applicable_sense_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+      evidence_ids: self
+        .assertion
+        .evidence_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+      evidence_lineage: self
+        .assertion
+        .evidence_lineage
+        .into_iter()
+        .map(|value| value.into_domain(release_id))
+        .collect::<Result<_, _>>()?,
+      provenance_ids: self
+        .assertion
+        .provenance_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+      verification_state: crate::domain::graph::RelationshipVerificationState::Verified,
+    };
+    let registry = self.registry.into_domain()?;
+    let traversal = SelectedBinaryTraversal {
+      edge_id: requested.edge_id.clone(),
+      relationship_revision: requested.relationship_revision,
+      assertion_id: requested.assertion_id.clone(),
+      assertion_revision: requested.assertion_revision,
+      traversal_id: requested.traversal_id.clone(),
+      source: endpoint_for(&assertion, &registry, &requested.traversal_id, true)?,
+      target: endpoint_for(&assertion, &registry, &requested.traversal_id, false)?,
+      relation_type: requested.relation_type,
+      relation_registry_revision: requested.relation_registry_revision,
+    };
+    HydratedAssertionProjection::new(
+      release_id,
+      evidence_use,
+      &requested,
+      assertion,
+      registry,
+      traversal,
+    )
+    .map_err(inconsistent)
+  }
+}
+
+impl CanonicalAssertionProjectionRefDto {
+  fn into_domain_ref(self) -> Result<CanonicalAssertionProjectionRef, IslandPortClientError> {
+    Ok(CanonicalAssertionProjectionRef {
+      edge_id: canonical_id(self.edge_id)?,
+      relationship_revision: self.relationship_revision,
+      assertion_id: canonical_id(self.assertion_id)?,
+      assertion_revision: self.assertion_revision,
+      traversal_id: canonical_id(self.traversal_id)?,
+      source_node_id: canonical_id(self.source_node_id)?,
+      target_node_id: canonical_id(self.target_node_id)?,
+      relation_type: RetrievalRelation::from_wire_name(&self.relation_type)
+        .map_err(inconsistent)?
+        .relation_type(),
+      relation_registry_revision: self.relation_registry_revision,
+    })
+  }
+}
+
+impl AssertionParticipantDto {
+  fn into_domain(self) -> Result<AssertionParticipant, IslandPortClientError> {
+    let value = match self.value {
+      AssertionParticipantValueDto::Entity { family, id } => AssertionParticipantValue::Entity(
+        CanonicalNodeId::publisher_assigned(node_family(&family)?, canonical_id(id)?),
+      ),
+      AssertionParticipantValueDto::Text { value } => {
+        AssertionParticipantValue::Literal(AssertionLiteral::Text(value))
+      }
+      AssertionParticipantValueDto::Integer { value } => {
+        AssertionParticipantValue::Literal(AssertionLiteral::Integer(value))
+      }
+      AssertionParticipantValueDto::Decimal { value } => {
+        AssertionParticipantValue::Literal(AssertionLiteral::Decimal(value))
+      }
+      AssertionParticipantValueDto::Boolean { value } => {
+        AssertionParticipantValue::Literal(AssertionLiteral::Boolean(value))
+      }
+    };
+    Ok(AssertionParticipant {
+      role_id: canonical_id(self.role_id)?,
+      ordinal: self.ordinal,
+      value,
+    })
+  }
+}
+
+impl AssertionConditionDto {
+  fn into_domain(self) -> Result<AssertionCondition, IslandPortClientError> {
+    Ok(AssertionCondition {
+      condition_id: canonical_id(self.condition_id)?,
+      condition_type: canonical_id(self.condition_type)?,
+      parameter_ids: self
+        .parameter_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+    })
+  }
+}
+
+impl AssertionRegistryDto {
+  fn into_domain(self) -> Result<AssertionRegistryEntry, IslandPortClientError> {
+    Ok(AssertionRegistryEntry {
+      relation_type_id: canonical_id(self.relation_type_id)?,
+      registry_revision: self.registry_revision,
+      participant_roles: self
+        .participant_roles
+        .into_iter()
+        .map(ParticipantRoleDto::into_domain)
+        .collect::<Result<_, _>>()?,
+      resolved_domains: self
+        .resolved_domains
+        .into_iter()
+        .map(|value| {
+          Ok(ResolvedDomainReference {
+            domain_id: DomainId::new(value.domain_id).map_err(inconsistent)?,
+            release_id: crate::domain::canonical::ReleaseId::new(value.release_id)
+              .map_err(inconsistent)?,
+          })
+        })
+        .collect::<Result<_, IslandPortClientError>>()?,
+      resolved_conditions: self
+        .resolved_conditions
+        .into_iter()
+        .map(|value| {
+          Ok(ResolvedConditionReference {
+            condition_id: canonical_id(value.condition_id)?,
+            condition_type: canonical_id(value.condition_type)?,
+            parameter_ids: value
+              .parameter_ids
+              .into_iter()
+              .map(canonical_id)
+              .collect::<Result<_, _>>()?,
+            release_id: crate::domain::canonical::ReleaseId::new(value.release_id)
+              .map_err(inconsistent)?,
+          })
+        })
+        .collect::<Result<_, IslandPortClientError>>()?,
+      binary_traversals: self
+        .binary_traversals
+        .into_iter()
+        .map(|value| {
+          Ok(BinaryTraversalRule {
+            traversal_id: canonical_id(value.traversal_id)?,
+            source_role_id: canonical_id(value.source_role_id)?,
+            target_role_id: canonical_id(value.target_role_id)?,
+            relation_type: RetrievalRelation::from_wire_name(&value.relation_type)
+              .map_err(inconsistent)?
+              .relation_type(),
+          })
+        })
+        .collect::<Result<_, IslandPortClientError>>()?,
+      requires_evidence: self.requires_evidence,
+    })
+  }
+}
+
+impl ParticipantRoleDto {
+  fn into_domain(self) -> Result<ParticipantRoleRule, IslandPortClientError> {
+    let value_rule = match self.value_rule {
+      ParticipantValueRuleDto::Entity { families } => ParticipantValueRule::Entity(
+        families
+          .into_iter()
+          .map(|value| node_family(&value))
+          .collect::<Result<_, _>>()?,
+      ),
+      ParticipantValueRuleDto::Text => ParticipantValueRule::Text,
+      ParticipantValueRuleDto::Integer => ParticipantValueRule::Integer,
+      ParticipantValueRuleDto::Decimal => ParticipantValueRule::Decimal,
+      ParticipantValueRuleDto::Boolean => ParticipantValueRule::Boolean,
+    };
+    Ok(ParticipantRoleRule {
+      role_id: canonical_id(self.role_id)?,
+      minimum: self.minimum,
+      maximum: self.maximum,
+      value_rule,
+    })
+  }
+}
+
+fn endpoint_for(
+  assertion: &CanonicalAssertion,
+  registry: &AssertionRegistryEntry,
+  traversal_id: &CanonicalId,
+  source: bool,
+) -> Result<CanonicalNodeId, IslandPortClientError> {
+  let (left, right, _) = assertion
+    .traversal_endpoints(registry, traversal_id)
+    .map_err(inconsistent)?;
+  Ok(if source { left.clone() } else { right.clone() })
+}
+
+fn node_family(value: &str) -> Result<CanonicalNodeFamily, IslandPortClientError> {
+  if value == "lexeme" {
+    return Ok(CanonicalNodeFamily::Lexeme);
+  }
+  let node_type = RetrievalNodeType::new(value).map_err(inconsistent)?;
+  Ok(node_type.into())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeConditionDto {
+  condition_id: String,
+  condition_type: String,
+  parameter_ids: Vec<String>,
+}
+
+impl KnowledgeConditionDto {
+  fn into_domain(self) -> Result<KnowledgeCondition, IslandPortClientError> {
+    let condition = KnowledgeCondition {
+      condition_id: canonical_id(self.condition_id)?,
+      condition_type: self.condition_type,
+      parameter_ids: self
+        .parameter_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+    };
+    condition.validate().map_err(inconsistent)?;
+    Ok(condition)
+  }
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct SemanticScalesGetInputDto {
+  scale_ids: Vec<String>,
+  for_node_id: String,
+  content_release: String,
+  canonical_schema_version: String,
+  verification_states: Vec<&'static str>,
+  limit: usize,
+}
+
+impl SemanticScalesGetInputDto {
+  fn new(value: SemanticScalesGetInput, pin: &CanonicalReleasePin) -> Self {
+    Self {
+      scale_ids: value
+        .scale_ids
+        .into_iter()
+        .map(|id| id.to_string())
+        .collect(),
+      for_node_id: value.for_node_id.to_string(),
+      content_release: pin.release_id.to_string(),
+      canonical_schema_version: pin.canonical_schema_version.clone(),
+      verification_states: value
+        .verification_states
+        .into_iter()
+        .map(verification_state_name)
+        .collect(),
+      limit: value.limit,
+    }
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct SemanticScalesGetResponseDto {
+  common: CommonResponseDto<SemanticScalesValueDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SemanticScalesValueDto {
+  scales: Vec<SemanticScaleDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SemanticScaleDto {
+  scale_id: String,
+  revision: u32,
+  dimension: String,
+  direction: String,
+  domain_ids: Vec<String>,
+  conditions: Vec<KnowledgeConditionDto>,
+  members: Vec<ScaleMemberDto>,
+  evidence_ids: Vec<String>,
+  verification_state: String,
+}
+
+impl SemanticScaleDto {
+  fn into_domain(
+    self,
+    for_node_id: &CanonicalId,
+  ) -> Result<HydratedSemanticScale, IslandPortClientError> {
+    if self.verification_state != "verified" {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let direction = match self.direction.as_str() {
+      "increasing" => SemanticScaleDirection::Increasing,
+      "decreasing" => SemanticScaleDirection::Decreasing,
+      _ => return Err(IslandPortClientError::InconsistentData),
+    };
+    let scale = HydratedSemanticScale {
+      scale_id: canonical_id(self.scale_id)?,
+      revision: self.revision,
+      dimension: self.dimension,
+      direction,
+      domain_ids: self
+        .domain_ids
+        .into_iter()
+        .map(DomainId::new)
+        .collect::<Result<_, _>>()
+        .map_err(inconsistent)?,
+      conditions: self
+        .conditions
+        .into_iter()
+        .map(KnowledgeConditionDto::into_domain)
+        .collect::<Result<_, _>>()?,
+      members: self
+        .members
+        .into_iter()
+        .map(ScaleMemberDto::into_domain)
+        .collect::<Result<_, _>>()?,
+      evidence_ids: self
+        .evidence_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+    };
+    scale.validate().map_err(inconsistent)?;
+    if !scale
+      .members
+      .iter()
+      .any(|member| member.node_id == *for_node_id)
+    {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    Ok(scale)
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScaleMemberDto {
+  node_id: String,
+  position: u32,
+}
+
+impl ScaleMemberDto {
+  fn into_domain(self) -> Result<HydratedScaleMember, IslandPortClientError> {
+    Ok(HydratedScaleMember {
+      node_id: canonical_id(self.node_id)?,
+      position: self.position,
+    })
+  }
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeNodesGetInputDto {
+  node_ids: Vec<String>,
+  content_release: String,
+  canonical_schema_version: String,
+  evidence_use: EvidenceUseDto,
+  limit: usize,
+}
+
+impl KnowledgeNodesGetInputDto {
+  fn new(value: KnowledgeNodesGetInput, pin: &CanonicalReleasePin) -> Self {
+    Self {
+      node_ids: value
+        .node_ids
+        .into_iter()
+        .map(|id| id.to_string())
+        .collect(),
+      content_release: pin.release_id.to_string(),
+      canonical_schema_version: pin.canonical_schema_version.clone(),
+      evidence_use: EvidenceUseDto::from(value.evidence_use),
+      limit: value.limit,
+    }
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct KnowledgeNodesGetResponseDto {
+  common: CommonResponseDto<KnowledgeNodesValueDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeNodesValueDto {
+  nodes: Vec<KnowledgeNodeDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeNodeDto {
+  node_id: String,
+  revision: u32,
+  node_type: String,
+  sense_id: Option<String>,
+  canonical_label: String,
+  language: Option<String>,
+  domain_ids: Vec<String>,
+  evidence_ids: Vec<String>,
+  verification_state: String,
+}
+
+impl KnowledgeNodeDto {
+  fn into_domain(self) -> Result<HydratedKnowledgeNode, IslandPortClientError> {
+    if self.verification_state != "verified" {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let node = HydratedKnowledgeNode {
+      node_id: canonical_id(self.node_id)?,
+      revision: self.revision,
+      node_type: RetrievalNodeType::new(self.node_type).map_err(inconsistent)?,
+      sense_id: self.sense_id.map(canonical_id).transpose()?,
+      canonical_label: self.canonical_label,
+      language: self.language.as_deref().map(language).transpose()?,
+      domain_ids: self
+        .domain_ids
+        .into_iter()
+        .map(DomainId::new)
+        .collect::<Result<_, _>>()
+        .map_err(inconsistent)?,
+      evidence_ids: self
+        .evidence_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+    };
+    node.validate().map_err(inconsistent)?;
+    Ok(node)
+  }
+}
+
+fn validate_exact_assertion_input(
+  input: &CanonicalAssertionsGetInput,
+) -> Result<(), IslandPortClientError> {
+  if input.projections.is_empty()
+    || input.projections.len() > MAX_KNOWLEDGE_HYDRATION_ITEMS
+    || input.limit == 0
+    || input.limit > MAX_KNOWLEDGE_HYDRATION_ITEMS
+    || input.projections.iter().any(|item| {
+      item.relationship_revision == 0
+        || item.assertion_revision == 0
+        || item.relation_registry_revision == 0
+    })
+    || input
+      .projections
+      .iter()
+      .map(|item| &item.edge_id)
+      .collect::<BTreeSet<_>>()
+      .len()
+      != input.projections.len()
+  {
+    return Err(IslandPortClientError::InvalidRequest);
+  }
+  Ok(())
+}
+
+fn validate_id_input(ids: &[CanonicalId], limit: usize) -> Result<(), IslandPortClientError> {
+  if ids.is_empty()
+    || ids.len() > MAX_KNOWLEDGE_HYDRATION_ITEMS
+    || limit == 0
+    || limit > MAX_KNOWLEDGE_HYDRATION_ITEMS
+    || ids.iter().collect::<BTreeSet<_>>().len() != ids.len()
+  {
+    return Err(IslandPortClientError::InvalidRequest);
+  }
+  Ok(())
+}
+
+fn validate_verified(states: &[RetrievalVerificationState]) -> Result<(), IslandPortClientError> {
+  if states != [RetrievalVerificationState::Verified] {
+    return Err(IslandPortClientError::InvalidRequest);
+  }
+  Ok(())
+}
+
+fn validate_assertion_subsequence(
+  requested: &[CanonicalAssertionProjectionRef],
+  returned: &[HydratedAssertionProjection],
+) -> Result<(), IslandPortClientError> {
+  let mut position = 0;
+  for projection in returned {
+    let traversal = projection.traversal();
+    let Some(offset) = requested[position..].iter().position(|item| {
+      item.edge_id == traversal.edge_id
+        && item.relationship_revision == traversal.relationship_revision
+        && item.assertion_id == traversal.assertion_id
+        && item.assertion_revision == traversal.assertion_revision
+        && item.traversal_id == traversal.traversal_id
+    }) else {
+      return Err(IslandPortClientError::InconsistentData);
+    };
+    position += offset + 1;
+  }
+  Ok(())
+}
+
+fn validate_id_subsequence<'a>(
+  requested: &[CanonicalId],
+  returned: impl Iterator<Item = &'a CanonicalId>,
+) -> Result<(), IslandPortClientError> {
+  let mut position = 0;
+  for id in returned {
+    let Some(offset) = requested[position..].iter().position(|item| item == id) else {
+      return Err(IslandPortClientError::InconsistentData);
+    };
+    position += offset + 1;
+  }
+  Ok(())
+}
+
+const fn verification_state_name(state: RetrievalVerificationState) -> &'static str {
+  match state {
+    RetrievalVerificationState::Verified => "verified",
+    RetrievalVerificationState::Exploratory => "exploratory",
+  }
 }
 impl PeriodDto {
   fn into_domain(self) -> Result<HistoricalRange, IslandPortClientError> {

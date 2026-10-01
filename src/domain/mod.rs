@@ -1,5 +1,7 @@
 //! Business types and invariants independent of HTTP and providers.
 
+/// Canonical n-ary assertions and explicit binary traversal admission.
+pub mod assertion;
 /// Canonical lexical entities, source permissions, and evidence.
 pub mod canonical;
 /// Bounded canonical lexical details with reviewed factual-evidence lineage.
@@ -16,6 +18,8 @@ pub mod domain_assessment;
 pub mod embedding_input;
 /// Typed, evidence-backed graph topology and traversal limits.
 pub mod graph;
+/// Authoritative facts, semantic scales, and node values hydrated after retrieval.
+pub mod knowledge_hydration;
 /// Deterministic pre-publication node and edge projection artifacts.
 pub mod knowledge_projection;
 /// Publication lifecycle, idempotency, manifest hashes, and execution receipts.
@@ -36,6 +40,8 @@ pub mod request_context;
 pub mod retrieval;
 /// Bounded storage-neutral requests and results for retrieval-data-v1.
 pub mod retrieval_data;
+/// Root-first canonical and exploratory retrieval outcomes.
+pub mod root_retrieval;
 /// Structured multilingual-to-English translation.
 pub mod translation;
 /// Request-local unified translation values, normalization, and response projection.
