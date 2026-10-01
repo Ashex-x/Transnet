@@ -160,7 +160,7 @@ impl UnixIslandPortTransport {
   /// Returns a redacted unavailable error if the HTTP client cannot be built.
   pub fn new(socket_path: impl AsRef<Path>) -> Result<Self, IslandPortClientError> {
     let client = reqwest::Client::builder()
-      .unix_socket(socket_path)
+      .unix_socket(socket_path.as_ref())
       .build()
       .map_err(|_| IslandPortClientError::Unavailable)?;
     Ok(Self { client })
