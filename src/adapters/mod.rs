@@ -20,5 +20,7 @@ pub mod island_port_retrieval;
 pub mod learning_model;
 /// Provider-neutral OpenAI-compatible generation and ephemeral embedding adapters.
 pub mod model_runtime;
+/// Public-network validation foundation for bounded live page fetching.
+pub mod public_http_fetcher;
 /// ULID-backed and deterministic public-ID implementations.
 pub mod public_id;

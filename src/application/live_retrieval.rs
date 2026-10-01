@@ -7,10 +7,7 @@ use crate::{
   },
   ports::live_retrieval::{LiveFetchPort, LiveSearchPort},
 };
-use std::sync::{
-  atomic::{AtomicBool, Ordering},
-  Arc,
-};
+use std::sync::Arc;
 use tokio::task::JoinSet;
 
 /// Deterministic facts used to decide whether policy permits the sole retrieval round.
@@ -22,21 +19,16 @@ pub struct LiveRetrievalDecision {
   pub canonical_insufficient: bool,
 }
 
-/// Request-scoped service that cannot spend more than one search round.
+/// Stateless service whose operation contains exactly one possible search round.
 pub struct LiveRetrievalService {
   search: Arc<dyn LiveSearchPort>,
   fetch: Arc<dyn LiveFetchPort>,
-  spent: AtomicBool,
 }
 
 impl LiveRetrievalService {
   /// Creates a request-scoped service from isolated search and fetch boundaries.
   pub fn new(search: Arc<dyn LiveSearchPort>, fetch: Arc<dyn LiveFetchPort>) -> Self {
-    Self {
-      search,
-      fetch,
-      spent: AtomicBool::new(false),
-    }
+    Self { search, fetch }
   }
 
   /// Executes policy, one search, and at most three concurrent fetches.
@@ -56,15 +48,10 @@ impl LiveRetrievalService {
     if !should_run {
       return Ok(None);
     }
-    if self.spent.swap(true, Ordering::AcqRel) {
-      return Err(LiveRetrievalError::Invalid);
-    }
     ensure_active(context, &cancellation)?;
     let mut results = self.search.search(context, &cancellation, &query).await?;
     ensure_active(context, &cancellation)?;
-    if results.len() > MAX_LIVE_SEARCH_RESULTS {
-      return Err(LiveRetrievalError::Invalid);
-    }
+    results.truncate(MAX_LIVE_SEARCH_RESULTS);
     results.truncate(MAX_LIVE_FETCHES);
     let mut set = JoinSet::new();
     for (ordinal, result) in results.into_iter().enumerate() {
