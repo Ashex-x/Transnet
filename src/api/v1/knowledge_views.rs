@@ -641,7 +641,6 @@ mod tests {
   use super::*;
   use crate::{
     api::{app_router, AppState},
-    config::{ProviderApiKey, ProviderConfig, TranslationConfig},
     domain::{
       canonical::CanonicalReleasePin,
       canonical_content::CanonicalSenseDetails,
@@ -666,7 +665,6 @@ mod tests {
       },
       retrieval_data::{RetrievalDataError, RetrievalDataPort},
     },
-    provider::TranslationService,
   };
 
   struct EmptyRetrieval {
@@ -930,23 +928,7 @@ mod tests {
   }
 
   fn composed_app(with_knowledge: bool) -> Router {
-    let provider = ProviderConfig {
-      base_url: "http://127.0.0.1:1/v1".into(),
-      model: "unused".into(),
-      api_key: ProviderApiKey::new("unused"),
-    };
-    let legacy = TranslationService::new(
-      TranslationConfig {
-        long_text_chars: 4_000,
-        timeout_seconds: 1,
-        max_retries: 0,
-        retry_delay_ms: 0,
-      },
-      provider.clone(),
-      provider,
-    )
-    .unwrap();
-    let app_state = AppState::new(legacy);
+    let app_state = AppState::new();
     app_router(if with_knowledge {
       app_state
         .with_knowledge_routes(state())

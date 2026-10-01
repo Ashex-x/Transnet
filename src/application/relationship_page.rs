@@ -1,11 +1,13 @@
 //! Relationship-centered lexical-page assembly from release-pinned verified material.
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
+use async_trait::async_trait;
 use thiserror::Error;
 
 use crate::domain::{
   knowledge_view::{KnowledgeEvidenceState, KnowledgeLens, KnowledgeViewSuperset},
+  model_runtime::CancellationSignal,
   relationship_page::{
     LabeledAlternative, PageDomainContext, PageFact, PageGeneratedExample, PageInferredExplanation,
     PageNamedPath, PageRelationship, PageRelationshipGroup, PageSemanticScale,
@@ -13,8 +15,47 @@ use crate::domain::{
     RelationshipPageSummaryRef, RelationshipPageSuperset, RelationshipPageValidationError,
     RelationshipPageVersionMetadata,
   },
-  translation_turn::{ProjectedTranslationResult, TranslationResultKind},
+  request_context::RequestContext,
+  translation_turn::{ProjectedTranslationResult, TranslationResultKind, TranslationTurn},
 };
+
+/// Release-pinned inputs returned by the complete relationship-page authority composition.
+pub struct RelationshipPageInputs {
+  /// Request bound to the resolved canonical lexical root and release.
+  pub request: RelationshipPageRequest,
+  /// Fully hydrated authoritative and request-local material.
+  pub material: RelationshipPageMaterial,
+}
+
+/// Optional runtime authority that resolves and hydrates one lexical relationship page.
+#[async_trait]
+pub trait RelationshipPageMaterialPort: Send + Sync {
+  /// Returns no inputs for unresolved, ambiguous, or non-established lexical results.
+  async fn material(
+    &self,
+    context: &RequestContext,
+    cancellation: &CancellationSignal,
+    turn: &TranslationTurn,
+    translation: &ProjectedTranslationResult,
+  ) -> Result<Option<RelationshipPageInputs>, RelationshipPageMaterialError>;
+}
+
+/// Content-free failure while resolving or hydrating page material.
+#[derive(Clone, Copy, Debug, Error, Eq, PartialEq)]
+pub enum RelationshipPageMaterialError {
+  /// A required canonical or retrieval dependency was unavailable.
+  #[error("relationship page dependency unavailable")]
+  Unavailable,
+  /// Returned material contradicted the root or immutable release.
+  #[error("relationship page dependency returned inconsistent material")]
+  Inconsistent,
+  /// The shared request deadline elapsed.
+  #[error("relationship page deadline exceeded")]
+  DeadlineExceeded,
+  /// The request was cancelled.
+  #[error("relationship page request cancelled")]
+  Cancelled,
+}
 
 /// Verified and request-local inputs admitted by the page composer.
 pub struct RelationshipPageMaterial {
@@ -39,6 +80,7 @@ pub struct RelationshipPageMaterial {
 }
 
 /// Explicit result distinguishing full verified composition from canonical-only degradation.
+#[derive(Clone)]
 pub enum RelationshipPageOutcome {
   /// Verified knowledge material was available and admitted.
   Complete(ProjectedRelationshipPage),
@@ -76,6 +118,58 @@ impl From<RelationshipPageValidationError> for RelationshipPageCompositionError 
 
 /// Stateless composer that never persists generated or query-derived page material.
 pub struct RelationshipPageComposer;
+
+/// Optional request-local runtime that invokes authoritative material only for lexical results.
+pub struct RelationshipPageRuntime {
+  source: Arc<dyn RelationshipPageMaterialPort>,
+}
+
+impl RelationshipPageRuntime {
+  /// Creates a runtime from one atomic material authority.
+  pub fn new(source: Arc<dyn RelationshipPageMaterialPort>) -> Self {
+    Self { source }
+  }
+
+  /// Attaches a validated page only when an exact lexical root resolves.
+  pub async fn enrich(
+    &self,
+    context: &RequestContext,
+    cancellation: &CancellationSignal,
+    turn: &TranslationTurn,
+    mut translation: ProjectedTranslationResult,
+  ) -> Result<ProjectedTranslationResult, RelationshipPageMaterialError> {
+    if !matches!(
+      translation.translation.kind(),
+      TranslationResultKind::Word | TranslationResultKind::Phrase
+    ) {
+      return Ok(translation);
+    }
+    let Some(inputs) = self
+      .source
+      .material(context, cancellation, turn, &translation)
+      .await?
+    else {
+      return Ok(translation);
+    };
+    if inputs.request.max_alternatives != turn.guidance().max_alternatives
+      || inputs.request.response_level != turn.response_level()
+      || inputs.request.target_language.as_str() != turn.target_language().as_str()
+    {
+      return Err(RelationshipPageMaterialError::Inconsistent);
+    }
+    let composed = RelationshipPageComposer::compose(translation, inputs.request, inputs.material)
+      .map_err(|_| RelationshipPageMaterialError::Inconsistent)?;
+    let (page, canonical_only) = match composed.relationship_page {
+      RelationshipPageOutcome::Complete(page) => (page, false),
+      RelationshipPageOutcome::CanonicalOnly(page) => (page, true),
+    };
+    translation = composed.translation;
+    translation.metadata.content_release = Some(page.release.release_id.to_string());
+    translation.relationship_page = Some(page);
+    translation.relationship_page_canonical_only = canonical_only;
+    Ok(translation)
+  }
+}
 
 impl RelationshipPageComposer {
   /// Composes, validates, projects, and embeds a page into one lexical translation result.
@@ -167,7 +261,9 @@ impl RelationshipPageComposer {
       gap_proposals: Vec::new(),
       versions: RelationshipPageVersionMetadata::default(),
     };
-    let degraded = superset.groups.is_empty();
+    let degraded = superset.groups.is_empty()
+      && superset.paths.is_empty()
+      && superset.inferred_explanations.is_empty();
     let page = superset.project()?;
     Ok(LexicalRelationshipResult {
       translation,
@@ -206,6 +302,7 @@ mod tests {
       TurnLanguage,
     },
   };
+  use std::sync::Mutex;
 
   fn pin() -> CanonicalReleasePin {
     CanonicalReleasePin::new(
@@ -231,6 +328,8 @@ mod tests {
         content_release: Some("release-1".into()),
       },
       external_sources: Vec::new(),
+      relationship_page: None,
+      relationship_page_canonical_only: false,
     }
   }
 
@@ -240,7 +339,7 @@ mod tests {
         CanonicalNodeFamily::LexicalSense,
         CanonicalId::new("sense-1").unwrap(),
       ),
-      target_language: LanguageTag::parse("en").unwrap(),
+      target_language: LanguageTag::parse("zh-CN").unwrap(),
       response_level: ResponseLevel::Standard,
       release: pin(),
       max_alternatives: 0,
@@ -270,6 +369,21 @@ mod tests {
       generated_examples: Vec::new(),
       inferred_explanations: Vec::new(),
       alternatives: Vec::new(),
+    }
+  }
+
+  struct MaterialSource(Mutex<Option<RelationshipPageInputs>>);
+
+  #[async_trait]
+  impl RelationshipPageMaterialPort for MaterialSource {
+    async fn material(
+      &self,
+      _context: &RequestContext,
+      _cancellation: &CancellationSignal,
+      _turn: &TranslationTurn,
+      _translation: &ProjectedTranslationResult,
+    ) -> Result<Option<RelationshipPageInputs>, RelationshipPageMaterialError> {
+      Ok(self.0.lock().unwrap().take())
     }
   }
 
@@ -307,5 +421,67 @@ mod tests {
       RelationshipPageComposer::compose(translation(passage), request(), material()),
       Err(RelationshipPageCompositionError::NonLexicalResult)
     ));
+  }
+
+  #[tokio::test]
+  async fn runtime_embeds_canonical_only_page_only_for_a_resolved_lexical_result() {
+    let runtime = RelationshipPageRuntime::new(Arc::new(MaterialSource(Mutex::new(Some(
+      RelationshipPageInputs {
+        request: request(),
+        material: material(),
+      },
+    )))));
+    let turn = TranslationTurn::new(crate::domain::translation_turn::TranslationTurnRequest {
+      text: Some("term".into()),
+      input: None,
+      source_language: "en".into(),
+      target_language: "zh-CN".into(),
+      response_level: "standard".into(),
+      history: Vec::new(),
+      guidance: None,
+    })
+    .unwrap();
+    let context = RequestContext::new(
+      crate::domain::request_context::RequestId::new("relationship-test").unwrap(),
+      time::OffsetDateTime::now_utc()
+        .replace_nanosecond(0)
+        .unwrap()
+        + time::Duration::seconds(5),
+      "translation-result-v1",
+      None,
+    )
+    .unwrap();
+    let result = runtime
+      .enrich(
+        &context,
+        &CancellationSignal::default(),
+        &turn,
+        translation(
+          crate::domain::translation_turn::TranslationTurnResult::lexical(
+            crate::domain::translation_turn::LexicalTurnDraft {
+              translations: vec![crate::domain::translation_turn::LexicalMeaningDraft {
+                text: "词".into(),
+                meaning: "meaning".into(),
+                part_of_speech: "noun".into(),
+                phrase_type: String::new(),
+                aliases: Vec::new(),
+                examples: Vec::new(),
+                usage_notes: Vec::new(),
+              }],
+            },
+            crate::domain::translation_turn::TranslationUnit::Word,
+            TurnLanguage::English,
+            TurnLanguage::Chinese,
+          ),
+        ),
+      )
+      .await
+      .unwrap();
+    assert!(result.relationship_page.is_some());
+    assert!(result.relationship_page_canonical_only);
+    assert_eq!(
+      result.metadata.content_release.as_deref(),
+      Some("release-1")
+    );
   }
 }

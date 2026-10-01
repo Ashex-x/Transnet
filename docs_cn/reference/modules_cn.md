@@ -4,7 +4,7 @@ English: [Module reference](../../docs/reference/modules.md)
 
 本目录记录重要服务模块及其所有权边界。先读本索引，再打开负责该行为的模块页。精确线上与存储 Schema 保留在[接口](../interfaces/README_cn.md)，产品语义保留在[系统设计](../transnet_cn.md)，操作步骤保留在[指南](../documentation-index_cn.md#指南)，Rust 公共项细节保留在源码注释与 rustdoc。
 
-状态：当前可执行文件使用过渡期回环 HTTP。除非状态段明确说明行为已组合进默认运行时，否则目标页面描述的是预期边界。
+状态：可执行文件使用基于 UDS 的目标 HTTP/1.1。除非状态段明确说明行为已组合进运行时，否则目标页面描述的是预期边界。
 
 ## 模块地图
 

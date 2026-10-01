@@ -4,7 +4,7 @@ English: [Runtime module](../../docs/reference/runtime.md)
 
 运行时模块负责进程配置、启动、依赖组合、就绪、listener 生命周期与优雅停机。它包含生命周期接线，不包含翻译或检索策略。
 
-状态：当前可执行文件绑定过渡期回环 TCP。目标组合使用 [Transnet 服务接口](../interfaces/transnet_cn.md)定义的 UDS 边界。
+状态：可执行文件只绑定 [Transnet 服务接口](../interfaces/transnet_cn.md)定义的 UDS 边界，并拒绝旧 TCP 与 CORS 配置。
 
 当前公共库与路由已移除学习者状态、练习、私有反馈、保存布局和查询任务；健康检查、翻译及旧版模型查询经过无状态请求边界后执行。
 
@@ -16,7 +16,7 @@ Provider 凭据是 secret，绝不能出现在已提交文件、Debug 输出、�
 
 ## 启动与组合
 
-当前入口加载配置、初始化脱敏日志与 provider client、构造过渡 router、绑定 listener 并等待停机。默认可执行文件组合健康、翻译与旧模型查询；其他已纳入仓库的基础不一定完成生产组合。
+当前入口加载配置、初始化脱敏日志与单一 generation provider、构造目标 router、绑定所属 Unix socket，并等待有界停机。默认组合探针与 translation；只有完整 dependency bundle 存在时才增加 canonical 或 knowledge route。旧 translation/provider API 已移除。
 
 目标 bootstrap 在副作用前校验设置，由外向内构造 adapter，绑定所属 Unix socket，只注册依赖存在的路由，并仅在必需依赖可用后报告就绪。Handler 与 adapter 接收显式依赖，不创建全局 client。
 

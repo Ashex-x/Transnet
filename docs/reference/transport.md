@@ -6,7 +6,7 @@ This module owns request admission and mapping between HTTP/JSON and application
 
 ## Current runtime
 
-The executable currently binds loopback TCP, preserves the transitional `POST /translate`, and exposes the unified `POST /api/v1/translations` handler with the shared problem-response infrastructure. This does not implement the target UDS listener; that remains separate transport work.
+The executable binds only its owned Unix socket and exposes the target `/api/v1` operations with shared envelope and problem-response infrastructure. TCP, CORS, `POST /translate`, `/v1/lookups`, `/v1/senses/*`, and raw `/v1/graph*` routes are absent.
 
 ## Target server
 
@@ -14,11 +14,11 @@ The target listener serves HTTP/1.1 JSON on one owned Unix socket. Admission enf
 
 Middleware order is deterministic: identify the route, establish safe request context, apply limits and deadlines, invoke the handler, map failures, and record content-free telemetry. Cancellation and permits must be released on every exit path.
 
-The implemented admission middleware now validates or generates one safe request ID and derives one absolute request deadline from optional `X-Deadline-At`, using a 30-second default and rejecting caller budgets beyond 120 seconds. It inserts the public request-safe context into request extensions before a handler runs. The context exposes only correlation, schema, deadline budget, and an optional immutable release ID; it contains no request body, identity, credentials, or arbitrary headers. The optional `AppState` knowledge-route bundle atomically registers both relative routes under `/api/v1`, activates the matching capabilities and exact-snapshot readiness, and creates a request-owned cancellation guard. Dropping the request cancels its path work, and an injectable runtime signal can cancel it during drain. The current executable does not inject this optional bundle. Automatic timeout cancellation and propagation into every other application port remain target work.
+The implemented admission middleware validates or generates one safe request ID and derives one absolute request deadline from optional `X-Deadline-At`, using a 30-second default and rejecting caller budgets beyond 120 seconds. It inserts the public request-safe context into request extensions before a handler runs. The context exposes only correlation, schema, deadline budget, and an optional immutable release ID; it contains no request body, identity, credentials, or arbitrary headers. The optional `AppState` knowledge-route bundle atomically registers both relative routes under `/api/v1`, activates matching capabilities and exact-snapshot readiness, and creates a request-owned cancellation guard. Dropping the request or draining the runtime cancels in-flight work. The executable injects this bundle only after optional knowledge configuration and the active release trio validate successfully.
 
 ## Handler rule
 
-Probe, translation, sense, and graph handlers are thin. They decode and validate wire shapes, call one application operation, and encode the documented result. They do not select models, infer domains, construct database queries, traverse graphs, or persist request data.
+Probe, translation, BasicCard, sense-read, knowledge-view, and knowledge-path handlers are thin. They decode and validate wire shapes, call one application operation, and encode the documented result. They do not select models, infer domains, construct database queries, traverse graphs, or persist request data.
 
 ## Verification
 

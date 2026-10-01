@@ -4,7 +4,7 @@
 
 This subsystem owns target inference policy for the one configured Gemma4-27B vision-language model and the separate embedding model. It does not expose provider brands, reasoning controls, prompts, or embedding payloads through the service interface.
 
-Status: foundational model-runtime types, adapters, and text-translation orchestration are implemented. The public Rust boundary provides closed `fast` and `reasoning` profiles, bounded redacted input/output/version values, deadline and cooperative-cancellation hooks, and an atomic one-reasoning-call guard. The target translation route uses only the provider-neutral generation port; the legacy direct translation route retains the transitional two-provider split until final route removal.
+Status: the executable and public Rust boundary use one provider-neutral generation port with closed `fast` and `reasoning` profiles, bounded redacted values, deadlines, cooperative cancellation, and an atomic one-reasoning-call guard. The legacy direct translation API and two-provider length router are removed.
 
 ## Generation profiles
 
@@ -40,4 +40,4 @@ The VLM accepts only validated inline PNG, JPEG, or WebP data and bounded image 
 
 Test zero-call canonical answers, fast-path selection, the closed escalation triggers, the one-escalation limit, long-input chunk coverage and ordering, terminology consistency, image bounds, structured-output repair, deadline accounting, cancellation, concurrency, redaction, and disposal of text, images, reasoning output, and online vectors.
 
-Current coverage verifies bounded values, redacted debug output, fixed finite embedding dimensions, strict embedding envelopes, closed errors, one-time reasoning-budget claims, deterministic lexical-versus-connected routing, bounded parallel chunk calls, ordered reassembly, terminology-ledger disposal, deadline and cancellation propagation, first-participation version ordering, and the single deterministic invalid-or-ambiguous output repair. Valid guidance that the runtime cannot yet enforce fails explicitly before generation. Structured segment, image-region, guidance execution, retrieval, and canonical zero-call composition remain later slices.
+Current coverage verifies bounded values, redacted debug output, fixed finite embedding dimensions, strict embedding envelopes, closed errors, one-time reasoning-budget claims, deterministic lexical-versus-connected routing, bounded parallel chunk calls, ordered reassembly, terminology-ledger disposal, deadline and cancellation propagation, first-participation version ordering, and the single deterministic invalid-or-ambiguous output repair. Guided text, structured segment, image-region, claim-bound live-retrieval orchestration, and canonical zero-call behavior are executable and fail closed where an input family or production authority is unavailable. Production embedding composition and provider artifact attestation remain external deployment blockers.

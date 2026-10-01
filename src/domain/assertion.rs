@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::Serialize;
 use thiserror::Error;
 
 use super::{
@@ -29,7 +30,8 @@ pub const MAX_ASSERTION_STATEMENT_CHARS: usize = 4_096;
 pub const MAX_ASSERTION_REFERENCES: usize = 32;
 
 /// Closed canonical entity families that may participate in the assertion graph.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CanonicalNodeFamily {
   /// One language-specific lexical form and part of speech.
   Lexeme,
@@ -122,7 +124,7 @@ impl From<super::retrieval_data::RetrievalNodeType> for CanonicalNodeFamily {
 }
 
 /// Publisher-assigned, family-qualified canonical node identity.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub struct CanonicalNodeId {
   family: CanonicalNodeFamily,
   id: CanonicalId,
@@ -565,9 +567,6 @@ impl CanonicalAssertion {
     {
       return Err(AssertionValidationError::ProjectionMismatch);
     }
-    if !self.domain_ids.is_empty() || !self.conditions.is_empty() {
-      return Err(AssertionValidationError::ProjectionScopeMismatch);
-    }
     relationship.validate()?;
     Ok(())
   }
@@ -799,6 +798,29 @@ pub const fn graph_family(key: &GraphNodeKey) -> CanonicalNodeFamily {
     super::graph::GraphNodeKind::Lexeme => CanonicalNodeFamily::Lexeme,
     super::graph::GraphNodeKind::Construction => CanonicalNodeFamily::GrammarPattern,
     super::graph::GraphNodeKind::Scale => CanonicalNodeFamily::SemanticScale,
+    super::graph::GraphNodeKind::Phrase => CanonicalNodeFamily::Phrase,
+    super::graph::GraphNodeKind::MultilingualTerm => CanonicalNodeFamily::MultilingualTerm,
+    super::graph::GraphNodeKind::Concept => CanonicalNodeFamily::Concept,
+    super::graph::GraphNodeKind::Entity => CanonicalNodeFamily::Entity,
+    super::graph::GraphNodeKind::Phenomenon => CanonicalNodeFamily::Phenomenon,
+    super::graph::GraphNodeKind::Mechanism => CanonicalNodeFamily::Mechanism,
+    super::graph::GraphNodeKind::Process => CanonicalNodeFamily::Process,
+    super::graph::GraphNodeKind::Equation => CanonicalNodeFamily::Equation,
+    super::graph::GraphNodeKind::Quantity => CanonicalNodeFamily::Quantity,
+    super::graph::GraphNodeKind::Material => CanonicalNodeFamily::Material,
+    super::graph::GraphNodeKind::Instrument => CanonicalNodeFamily::Instrument,
+    super::graph::GraphNodeKind::Method => CanonicalNodeFamily::Method,
+    super::graph::GraphNodeKind::Technology => CanonicalNodeFamily::Technology,
+    super::graph::GraphNodeKind::Application => CanonicalNodeFamily::Application,
+    super::graph::GraphNodeKind::Standard => CanonicalNodeFamily::Standard,
+    super::graph::GraphNodeKind::Organization => CanonicalNodeFamily::Organization,
+    super::graph::GraphNodeKind::Person => CanonicalNodeFamily::Person,
+    super::graph::GraphNodeKind::Place => CanonicalNodeFamily::Place,
+    super::graph::GraphNodeKind::Idiom => CanonicalNodeFamily::Idiom,
+    super::graph::GraphNodeKind::Metaphor => CanonicalNodeFamily::Metaphor,
+    super::graph::GraphNodeKind::Collocation => CanonicalNodeFamily::Collocation,
+    super::graph::GraphNodeKind::Misconception => CanonicalNodeFamily::Misconception,
+    super::graph::GraphNodeKind::Domain => CanonicalNodeFamily::Domain,
   }
 }
 
@@ -1139,7 +1161,7 @@ mod tests {
   }
 
   #[test]
-  fn binary_projection_requires_independent_identity_scope_and_full_lineage_match() {
+  fn binary_projection_retains_validated_scope_and_requires_identity_and_lineage_match() {
     let scoped = assertion();
     let relationship = published();
     let assertion_id = scoped.assertion_id.clone();
@@ -1149,10 +1171,9 @@ mod tests {
       traversal_id: &id("traversal-has-subtype"),
       relationship: &relationship,
     };
-    assert_eq!(
-      scoped.validate_binary_projection(&registry(), projection),
-      Err(AssertionValidationError::ProjectionScopeMismatch)
-    );
+    assert!(scoped
+      .validate_binary_projection(&registry(), projection)
+      .is_ok());
 
     let mut unscoped = scoped;
     unscoped.domain_ids.clear();

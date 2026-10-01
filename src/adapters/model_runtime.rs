@@ -12,18 +12,18 @@ use crate::{
     EmbeddingPort, EmbeddingRequest, GenerationPort, GenerationRequest, GenerationResponse,
     ModelOperationContext, ModelOperationError,
   },
-  provider::TranslationService,
+  provider::GemmaGenerationProvider,
 };
 
-/// Compatibility adapter exposing the existing Gemma endpoint through [`GenerationPort`].
+/// Adapter exposing the configured Gemma4-27B endpoint through [`GenerationPort`].
 #[derive(Clone)]
 pub struct OpenAiGenerationAdapter {
-  service: TranslationService,
+  service: GemmaGenerationProvider,
 }
 
 impl OpenAiGenerationAdapter {
-  /// Wraps the existing resilient provider service without changing legacy routing.
-  pub fn new(service: TranslationService) -> Self {
+  /// Wraps the single resilient generation provider.
+  pub fn new(service: GemmaGenerationProvider) -> Self {
     Self { service }
   }
 }

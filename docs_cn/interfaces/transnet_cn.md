@@ -4,7 +4,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本合同定义目标 island-port 到 Transnet 接口及内部共享 HTTP/1.1-over-UDS 规则。Island-port 负责互联网传输、认证、用户状态、文件接入、文档重建和最终展示。Transnet 不接收终端用户身份，也不持久化实时请求内容。
 
-状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。翻译边界严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；带 guidance 的 text、结构化 segment 与有界 image region 都会进入当前中立 Gemma VLM orchestrator。迁移期间可以通过显式配置保留 loopback listener。严格 knowledge-path handler 及其 application service 已在隔离 route-composition seam 后实现，但默认 runtime 尚未注入该 service 或公开 route。实时检索现在具备下文描述的请求级 policy orchestrator 与强化的生产 page-fetch adapter，但尚无生产 search adapter 或 runtime composition；因此 capability 继续将其报告为不可用。引导式知识视图仍未实现为 runtime capability。
+状态：修订后的目标 v1 合同。仓库中的可执行文件只通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery、探针、翻译、BasicCard 与固定发布 sense read，以及按条件组合的 knowledge view/path。翻译边界严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；带 guidance 的 text、结构化 segment 与有界 image region 都会进入当前中立 Gemma VLM orchestrator。缺少完整 search/fetch runtime composition 时，实时检索仍不可用。
 
 ## 目录
 
@@ -156,7 +156,7 @@ HTTP boundary 已在过渡期与目标 path 上实现请求上下文基础。若
 
 ## 专业 guidance
 
-`guidance` 可选且仅属于当前请求。省略时分别使用 `general`、`general`、`preserve`、零个 alternative、response-level 默认 annotation 与 `offline` freshness。`max_alternatives` 是 Milestone 5 的结果组合能力；Milestone 1 在对应 application result 存在前不接受非零值，也不伪造 alternative。
+`guidance` 可选且仅属于当前请求。省略时分别使用 `general`、`general`、`preserve`、零个 alternative、response-level 默认 annotation 与 `offline` freshness。`max_alternatives` 接受零至二。非零值要求可选 relationship-page runtime 与精确解析的 lexical result；否则请求会在 generation 前失败，而不会伪造 alternative。
 
 ```json
 {
@@ -252,7 +252,7 @@ HTTP 序列化之前会执行 request-bound validation：structured result 的 I
 
 实时检索 capability 还会声明具备完整 claim-bound attribution 的精确 `input_types`。当前已组合实现只报告 `text`，并增加用于 `live_external` attribution 的 `review` annotation family；不可用 deployment 会同时报告空 input 列表、没有 live review family 与 `available: false`。
 
-知识 lens 的激活是原子的。`AppState` 只接受一个经过验证且不可拆分的 knowledge route dependency bundle，其中 view 与 path service 必须共享同一个完整不可变 projection expectation；安装它时也会同时安装与该快照匹配的 active-release readiness。未提供 bundle 时两个 route 都不存在。只有安装该 bundle 时，runtime 才公布 `meaning`、`contrast`、`usage`、`form`、`origin` 和 `domain`，即使调用方提供了陈旧 capability 声明也不例外。`mechanism` 与 `application` 仍不公布，因为其显式技术关系策略尚不可执行。默认 executable 尚未构造该 bundle。
+知识 lens 的激活是原子的。`AppState` 只接受一个经过验证且不可拆分的 knowledge route dependency bundle，其中 view 与 path service 必须共享同一个完整不可变 projection expectation；安装它时也会同时安装与该快照匹配的 active-release readiness。未提供 bundle 时两个 route 都不存在。只有安装该 bundle 时，runtime 才公布 `meaning`、`contrast`、`usage`、`form`、`origin` 和 `domain`，即使调用方提供了陈旧 capability 声明也不例外。`mechanism` 与 `application` 仍不公布，因为其显式技术关系策略尚不可执行。只有可选 knowledge 配置与完整 active release trio 校验成功后，executable 才构造该 bundle。
 
 Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cache-Control: no-store`。调用方可以在需要当前部署信息时重新获取，但合同不承诺 HTTP cache 或 validator 语义。
 
@@ -311,7 +311,7 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 
 成功 metadata 包含实际参与的 result、normalizer、projection、model 与 prompt 版本；可选 `content_release`、`retrieval_version`、`embedding_version` 与 `live_retrieval` 只在使用时出现。`inference_profiles` 有序且去重。`reasoning_escalated` 报告安全策略结果而不暴露 reasoning 内容。
 
-只有已解析的 word 与 established-phrase 结果可以嵌入 relationship-page object。Passage、segment 与 image-region 结果绝不包含它。页面先给出绑定完整 release pin 的 BasicCard 或 concept-summary authority receipt，再对受支持 direct group、完整 semantic scale、可选 verified short path、带标签的 generated example 与 inferred explanation，以及视觉上独立的 exploratory section 应用确定性 progressive disclosure。Verified group 保留精确的第一步 hydration proof，且只接纳闭合 grouping policy 声明的 relation；不受支持的 mechanism 与 application claim 会 fail closed。完整 semantic scale 与被接纳的 taxonomy group 原子化包含。显式请求的 labeled alternative 每个 lexical unit 最多两个，绑定 stable translation ID 与 order，并说明改变的维度、实际后果与 usefulness reason；它们不是 alias 或 normalized lookup form。request-local relationship-gap nomination 不携带规范 endpoint、relation 或 evidence authority，不进入在线 response，只作为独立 offline review workflow 的输入。系统不新增公开 relationship-page route。
+只有已解析的 word 与 established-phrase 结果可以嵌入 relationship-page object。Passage、segment 与 image-region 结果绝不包含它。页面先给出绑定完整 release pin 的 BasicCard 或 concept-summary authority receipt，再对受支持 direct group、完整 semantic scale、可选 verified short path、带标签的 generated example 与 inferred explanation，以及视觉上独立的 exploratory section 应用确定性 progressive disclosure。Verified group 保留精确的第一步 hydration proof，且只接纳闭合 grouping policy 声明的 relation；不受支持的 mechanism 与 application claim 会 fail closed。完整 semantic scale 与被接纳的 taxonomy group 原子化包含。显式请求的 labeled alternative 每个 lexical unit 最多两个，绑定 stable translation ID 与 order，并说明改变的维度、实际后果与 usefulness reason；它们不是 alias 或 normalized lookup form。request-local relationship-gap nomination 不携带规范 endpoint、relation 或 evidence authority，不进入在线 response，只作为独立 offline review workflow 的输入。系统不新增公开 relationship-page route。只有原子配置的 material authority 提供匹配 root、目标语言、response level、完整 release pin 与已校验 material 时，response 才嵌入页面。存在 verified group、path 或 evidence-grounded explanation 时状态为 `complete`；只有这些 relationship section 均为空时才是 `canonical_only`。仅在 translation orchestrator 与该 authority 都已安装时，capabilities 才包含 `relationship-page-v1`，builder 顺序不能公布部分 runtime。Authority deadline 与 cancellation 保留标准闭合 problem 语义；请求 labeled alternative 的结构化输入在 generation 前失败。默认 executable 因生产 root-resolution 与 canonical/retrieval composition 尚未完成而省略 material authority。
 
 闭合路由错误还包括 `invalid_translation_request`、`constraint_conflict`、`unsupported_input_type`、`unsupported_language_pair`、`invalid_image`、`invalid_model_output`、`translation_model_unavailable` 与 `live_retrieval_unavailable`。
 
@@ -437,7 +437,7 @@ request body 与两个嵌套 node reference 都拒绝未知字段。Node kind �
 
 畸形 JSON 或 content type 返回 `400 invalid_json`；无效字段返回 `422 invalid_knowledge_path_request`；退役 pin 返回 `409 content_release_unavailable`；dependency 与 incomplete-search failure 返回可重试 `503` problem；deadline 耗尽返回可重试 `504 deadline_exceeded`；矛盾不可变 proof 返回 `502 invalid_knowledge_proof`。每个 success 与 problem response 都使用 `Cache-Control: no-store`；错误绝不回显 node ID 或 dependency payload。
 
-旧目标草案 `POST /api/v1/graph/get` 与 `POST /api/v1/graph/neighbors` 已从修订目标合同移除。当前可执行文件中的过渡期 `GET /v1/graph...` handler 在迁移或移除前仍是实现兼容行为；它们的存在不使其成为目标 v1 路由。
+旧目标草案 `POST /api/v1/graph/get`、`POST /api/v1/graph/neighbors` 与过渡期 `GET /v1/graph...` handler 均已移除。引导式 view/path 是唯一公共 relationship traversal 表面。
 
 ## 相关文档
 

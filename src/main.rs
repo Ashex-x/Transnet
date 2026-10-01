@@ -1,14 +1,13 @@
 //! Transnet process entry point.
 
-use std::{net::IpAddr, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result};
 #[cfg(unix)]
 use async_trait::async_trait;
 use transnet::{
   app_router_with_http_config, application::translation::TranslationOrchestrator, logger,
-  AppConfig, AppState, CancellationSignal, OpenAiGenerationAdapter, OpenAiLearningModel,
-  TranslationService,
+  AppConfig, AppState, CancellationSignal, GemmaGenerationProvider, OpenAiGenerationAdapter,
 };
 
 #[cfg(unix)]
@@ -59,41 +58,17 @@ async fn run(config: AppConfig) -> Result<()> {
     .knowledge
     .resolve(canonical.as_ref())
     .context("invalid knowledge runtime configuration")?;
-  let host = config
-    .server
-    .host
-    .parse::<IpAddr>()
-    .context("server.host must be a loopback IP address")?;
-  ensure!(
-    host.is_loopback(),
-    "server.host must be loopback; public exposure belongs to Island-port"
-  );
-  let address = std::net::SocketAddr::from((host, config.server.port));
   let gemma4_policy = config
     .provider_resilience
     .gemma4
     .resolve(&config.translation)
     .context("invalid Gemma 4 provider resilience policy")?;
-  let translate_gemma_policy = config
-    .provider_resilience
-    .translate_gemma
-    .resolve(&config.translation)
-    .context("invalid TranslateGemma provider resilience policy")?;
-  let learning_model =
-    OpenAiLearningModel::with_provider_policy(config.gemma4.clone(), gemma4_policy.clone())?;
-  let service = TranslationService::with_provider_policies(
-    config.translation,
-    config.gemma4,
-    gemma4_policy,
-    config.translate_gemma,
-    translate_gemma_policy,
-  )?;
+  let service = GemmaGenerationProvider::new(config.gemma4, gemma4_policy)?;
   let orchestrator =
     TranslationOrchestrator::new(Arc::new(OpenAiGenerationAdapter::new(service.clone())));
   let runtime_cancellation = Arc::new(CancellationSignal::default());
-  let state = AppState::new(service)
+  let state = AppState::new()
     .with_runtime_cancellation(runtime_cancellation.clone())
-    .with_learning_model(Arc::new(learning_model))
     .with_translation_orchestrator(Arc::new(orchestrator));
   let state = match canonical {
     Some(canonical) => {
@@ -109,29 +84,20 @@ async fn run(config: AppConfig) -> Result<()> {
   };
   let router =
     app_router_with_http_config(state, &config.http).context("invalid HTTP configuration")?;
-  if let Some(socket_path) = config.server.socket_path.as_deref() {
-    #[cfg(unix)]
-    {
-      let socket =
-        transnet::server::UnixListenerConfig::new(socket_path, &config.server.socket_mode)?;
-      let listener = transnet::server::OwnedUnixListener::bind(&socket).await?;
-      tracing::info!("starting transnet Unix listener");
-      listener
-        .serve(router, shutdown_and_cancel(runtime_cancellation.clone()))
-        .await?;
-    }
-    #[cfg(not(unix))]
-    anyhow::bail!("server.socket_path requires Unix domain socket support");
-  } else {
-    let listener = tokio::net::TcpListener::bind(address)
-      .await
-      .with_context(|| format!("failed to bind to {address}"))?;
-    tracing::info!(address = %address, "starting transitional transnet TCP listener");
-    axum::serve(listener, router)
-      .with_graceful_shutdown(shutdown_and_cancel(runtime_cancellation.clone()))
-      .await
-      .context("transnet server failed")?;
+  #[cfg(unix)]
+  {
+    let socket = transnet::server::UnixListenerConfig::new(
+      &config.server.socket_path,
+      &config.server.socket_mode,
+    )?;
+    let listener = transnet::server::OwnedUnixListener::bind(&socket).await?;
+    tracing::info!("starting transnet Unix listener");
+    listener
+      .serve(router, shutdown_and_cancel(runtime_cancellation.clone()))
+      .await?;
   }
+  #[cfg(not(unix))]
+  anyhow::bail!("Transnet requires Unix domain socket support");
   Ok(())
 }
 

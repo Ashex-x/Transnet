@@ -4,7 +4,7 @@ English: [Model runtime](../../docs/reference/model-runtime.md)
 
 本子系统负责单个已配置 Gemma4-27B 视觉语言模型与独立 embedding 模型的目标推理策略。它不通过服务接口暴露 provider 品牌、reasoning 控制、prompt 或 embedding payload。
 
-状态：模型运行时基础类型、adapter 与文本翻译编排已实现。公开 Rust 边界提供闭合的 `fast` 与 `reasoning` profile、有界且脱敏的输入/输出/版本值、deadline 与协作式取消 hook，以及原子化的单次 reasoning guard。目标翻译 route 只使用 provider-neutral generation port；旧的直接翻译 route 在最终移除前仍保留过渡期双 provider 拆分。
+状态：可执行文件与公开 Rust 边界使用单一 provider-neutral generation port，提供闭合 `fast` 与 `reasoning` profile、有界脱敏值、deadline、协作式取消与原子单次 reasoning guard。旧 direct translation API 与双 provider 长度分流已移除。
 
 ## 生成 profile
 
@@ -40,4 +40,4 @@ VLM 只接受来自 Transnet 请求合同、经过校验的 inline PNG、JPEG �
 
 测试零调用规范答案、fast 路径选择、闭合升级触发条件、单次升级限制、长输入 chunk 覆盖与顺序、术语一致性、图片边界、结构化输出修复、deadline 记账、取消、并发、脱敏，以及文本、图片、reasoning 输出和在线向量的丢弃。
 
-当前覆盖验证有界 value、脱敏 Debug 输出、固定有限 embedding dimension、严格 embedding envelope、闭合 error、单次 reasoning budget claim、确定性 lexical-versus-connected routing、有界并行 chunk 调用、有序重组、术语台账丢弃、deadline 与 cancellation 传播、按首次参与顺序报告 version，以及针对无效或歧义输出的一次确定性 repair。Runtime 尚不能强制执行的有效 guidance 会在生成前显式失败。结构化 segment、image-region、guidance 执行、retrieval 与规范零调用组合仍属于后续切片。
+当前覆盖验证有界 value、脱敏 Debug 输出、固定有限 embedding dimension、严格 embedding envelope、闭合 error、单次 reasoning budget claim、确定性 lexical-versus-connected routing、有界并行 chunk 调用、有序重组、术语台账丢弃、deadline 与 cancellation 传播、按首次参与顺序报告 version，以及针对无效或歧义输出的一次确定性 repair。Guided text、结构化 segment、image-region、claim-bound live-retrieval orchestration 与 canonical zero-call 行为均可执行，并在某输入族或生产 authority 不可用时 fail closed。生产 embedding composition 与 provider artifact attestation 仍是外部部署阻塞项。

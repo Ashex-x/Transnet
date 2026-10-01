@@ -6,11 +6,15 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use super::assertion::{
-  AssertionRegistryEntry, AssertionValidationError, BinaryAssertionProjection, CanonicalAssertion,
+  AssertionCondition, AssertionRegistryEntry, AssertionValidationError, BinaryAssertionProjection,
+  CanonicalAssertion, CanonicalNodeFamily,
 };
 use super::canonical::{
-  CanonicalId, CanonicalStatus, EvidenceConfidence, LexicalPartOfSpeech, ReleaseId,
+  CanonicalId, CanonicalStatus, EvidenceConfidence, EvidenceUse, LanguageTag, LexicalPartOfSpeech,
+  ReleaseId,
 };
+use super::canonical_content::CanonicalEvidenceLineage;
+use super::canonical_translation::DomainId;
 use super::embedding_input::{
   AuthoritativeEmbeddingMaterial, CanonicalEmbeddingInput, EmbeddingInputFamily,
   EDGE_DENSE_INPUT_VERSION, EDGE_LEXICAL_INPUT_VERSION, NODE_DENSE_INPUT_VERSION,
@@ -40,6 +44,51 @@ pub const LEXICAL_CONTRACT_IDENTITY: &str = "transnet-lexical-bm25-v1";
 pub const PROJECTION_HASH_VERSION: &str = "knowledge-projection-hash-v1";
 
 const MAX_VERSION_LENGTH: usize = 128;
+const MAX_CATALOG_LABEL_CHARS: usize = 512;
+const MAX_CATALOG_DOMAINS: usize = 16;
+const MAX_CATALOG_EVIDENCE: usize = 32;
+
+/// Frozen publisher-owned material for a non-lexical canonical node.
+#[derive(Clone, PartialEq, Eq)]
+pub struct AuthoritativeCatalogNodeMaterial {
+  /// Publisher-assigned family-qualified identity.
+  pub family: CanonicalNodeFamily,
+  /// Stable publisher identity.
+  pub id: CanonicalId,
+  /// Positive immutable revision.
+  pub revision: u32,
+  /// Immutable release containing this revision.
+  pub release_id: ReleaseId,
+  /// Canonical lifecycle state; only active records are eligible.
+  pub status: CanonicalStatus,
+  /// Explicit publisher review decision.
+  pub reviewed: bool,
+  /// Bounded reviewed canonical label; never generated prose.
+  pub canonical_label: String,
+  /// Optional canonical language for language-bearing families.
+  pub language: Option<LanguageTag>,
+  /// Sorted unique canonical domain memberships.
+  pub domain_ids: Vec<DomainId>,
+  /// Full sorted evidence lineage supporting the published material.
+  pub evidence_lineage: Vec<CanonicalEvidenceLineage>,
+}
+
+impl std::fmt::Debug for AuthoritativeCatalogNodeMaterial {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter
+      .debug_struct("AuthoritativeCatalogNodeMaterial")
+      .field("family", &self.family)
+      .field("id", &self.id)
+      .field("revision", &self.revision)
+      .field("release_id", &self.release_id)
+      .field("status", &self.status)
+      .field("reviewed", &self.reviewed)
+      .field("language", &self.language)
+      .field("domains", &self.domain_ids.len())
+      .field("evidence", &self.evidence_lineage.len())
+      .finish_non_exhaustive()
+  }
+}
 
 /// One closed compatibility entry configured by the controlled embedding authority.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -240,6 +289,8 @@ pub enum CanonicalNodeProjectionInput {
   Lexeme(AuthoritativeEmbeddingMaterial),
   /// One active sense with fully resolved authoritative embedding material.
   Sense(AuthoritativeEmbeddingMaterial),
+  /// One reviewed publisher-owned record from the frozen canonical catalog.
+  Catalog(AuthoritativeCatalogNodeMaterial),
   /// A graph family for which no authoritative publisher source is currently frozen.
   Unresolved(GraphNodeKey),
 }
@@ -275,6 +326,34 @@ pub enum NodeProjectionPayload {
     /// Ordered evidence identities supporting the definition.
     definition_evidence_ids: Vec<CanonicalId>,
   },
+  /// Conservative common payload for a reviewed catalog family.
+  Catalog {
+    /// Closed canonical family.
+    family: CanonicalNodeFamily,
+    /// Positive immutable publisher revision.
+    revision: u32,
+    /// Reviewed canonical label.
+    canonical_label: String,
+    /// Optional canonical language.
+    language: Option<String>,
+    /// Sorted canonical domain identities.
+    domain_ids: Vec<DomainId>,
+    /// Sorted evidence identities whose lineage was validated.
+    evidence_ids: Vec<CanonicalId>,
+  },
+}
+
+/// Lossless structured applicability scope retained in an edge projection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EdgeProjectionScope {
+  /// Optional canonical dialect selector retained by the legacy relation record.
+  pub dialect: Option<LanguageTag>,
+  /// Optional bounded register selector retained by the legacy relation record.
+  pub register: Option<String>,
+  /// Sorted canonical domain identities validated against the pinned registry.
+  pub domain_ids: Vec<DomainId>,
+  /// Sorted registry-owned applicability conditions.
+  pub conditions: Vec<AssertionCondition>,
 }
 
 /// One deterministic node point ready for a later embedding and Qdrant write step.
@@ -368,7 +447,7 @@ pub struct EdgeProjection {
   /// Exact relationship name frozen by the Qdrant contract.
   pub wire_relation: String,
   /// Admitted bounded scope.
-  pub scope: GraphScope,
+  pub scope: EdgeProjectionScope,
   /// Originating assertion proof for assertion-backed edges; absent only on the legacy path.
   pub assertion: Option<AssertionProjectionReference>,
   /// Ordered evidence and provenance references.
@@ -625,7 +704,16 @@ pub fn build_assertion_edge_projection(
       relation_registry_revision: input.assertion.relation_registry_revision,
       traversal_id: input.traversal_id,
     };
-    if assertion_by_edge.insert(identity, reference).is_some() {
+    let scope = EdgeProjectionScope {
+      dialect: input.relationship.relation.scope.dialect.clone(),
+      register: input.relationship.relation.scope.register.clone(),
+      domain_ids: input.assertion.domain_ids.clone(),
+      conditions: input.assertion.conditions.clone(),
+    };
+    if assertion_by_edge
+      .insert(identity, (reference, scope))
+      .is_some()
+    {
       return Err(ProjectionValidationError::RelationshipAdmission(
         GraphValidationError::DuplicateTypedRelationship,
       ));
@@ -633,11 +721,51 @@ pub fn build_assertion_edge_projection(
     relationships.push(input.relationship);
   }
   let mut build = build_edge_projection(nodes, embedding.clone(), relationships)?;
+  let node_by_id = nodes
+    .points
+    .iter()
+    .map(|point| (&point.node, point))
+    .collect::<BTreeMap<_, _>>();
   for point in &mut build.points {
-    point.assertion = assertion_by_edge.remove(&point.identity);
-    if point.assertion.is_none() {
+    let Some((reference, scope)) = assertion_by_edge.remove(&point.identity) else {
       return Err(ProjectionValidationError::NodeBuildMismatch);
-    }
+    };
+    point.assertion = Some(reference);
+    point.scope = scope;
+    point.point_id = point_id(
+      "edge",
+      &point.release_id,
+      &embedding.payload_schema_version,
+      &structured_edge_identity_bytes(&point.identity, &point.scope),
+    );
+    let source = node_by_id
+      .get(&point.identity.source)
+      .ok_or(ProjectionValidationError::MissingSourceEndpoint)?;
+    let target = node_by_id
+      .get(&point.identity.target)
+      .ok_or(ProjectionValidationError::MissingTargetEndpoint)?;
+    point.dense_input = edge_input(
+      EmbeddingInputFamily::Dense,
+      EDGE_DENSE_INPUT_VERSION,
+      &point.identity,
+      &point.wire_relation,
+      &point.scope,
+      &source.dense_input,
+      &target.dense_input,
+      &point.evidence,
+      &point.verification,
+    )?;
+    point.lexical_input = edge_input(
+      EmbeddingInputFamily::Lexical,
+      EDGE_LEXICAL_INPUT_VERSION,
+      &point.identity,
+      &point.wire_relation,
+      &point.scope,
+      &source.lexical_input,
+      &target.lexical_input,
+      &point.evidence,
+      &point.verification,
+    )?;
     point.content_hash = hash_edge_point(&embedding, point);
   }
   build.content_hash = hash_edge_build(
@@ -700,6 +828,84 @@ fn project_node(
       let lexical = material.lexical_input(&node.id)?;
       (node, payload, dense, lexical)
     }
+    CanonicalNodeProjectionInput::Catalog(material) => {
+      if matches!(
+        material.family,
+        CanonicalNodeFamily::Lexeme | CanonicalNodeFamily::LexicalSense
+      ) || material.revision == 0
+        || material.release_id != *release_id
+        || material.status != CanonicalStatus::Active
+        || !material.reviewed
+        || material.canonical_label.trim() != material.canonical_label
+        || material.canonical_label.is_empty()
+        || material.canonical_label.chars().count() > MAX_CATALOG_LABEL_CHARS
+        || material.domain_ids.len() > MAX_CATALOG_DOMAINS
+        || material
+          .domain_ids
+          .windows(2)
+          .any(|pair| pair[0] >= pair[1])
+        || material.evidence_lineage.is_empty()
+        || material.evidence_lineage.len() > MAX_CATALOG_EVIDENCE
+      {
+        return Err(ProjectionValidationError::IneligibleCanonicalRecord);
+      }
+      let evidence_ids = material
+        .evidence_lineage
+        .iter()
+        .map(|lineage| lineage.fragment().id.clone())
+        .collect::<Vec<_>>();
+      if evidence_ids.windows(2).any(|pair| pair[0] >= pair[1])
+        || material
+          .evidence_lineage
+          .iter()
+          .any(|lineage| !lineage.permits(release_id, EvidenceUse::Embedding))
+      {
+        return Err(ProjectionValidationError::IneligibleCanonicalRecord);
+      }
+      let node = GraphNodeKey::new(graph_kind(material.family), material.id.clone());
+      let payload = NodeProjectionPayload::Catalog {
+        family: material.family,
+        revision: material.revision,
+        canonical_label: material.canonical_label.clone(),
+        language: material
+          .language
+          .as_ref()
+          .map(|value| value.as_str().to_string()),
+        domain_ids: material.domain_ids.clone(),
+        evidence_ids: evidence_ids.clone(),
+      };
+      let make_input = |family, version| {
+        CanonicalEmbeddingInput::from_fields(family, version, |out| {
+          out.field("release", release_id.as_str());
+          out.field("node_family", canonical_family_name(material.family));
+          out.field("node_id", material.id.as_str());
+          out.field("revision", &material.revision.to_string());
+          out.field("canonical_label", &material.canonical_label);
+          out.optional(
+            "language",
+            material.language.as_ref().map(LanguageTag::as_str),
+          );
+          out.list(
+            "domain_ids",
+            material.domain_ids.iter().map(|id| id.as_str().to_string()),
+          );
+          out.list(
+            "evidence_ids",
+            evidence_ids.iter().map(|id| id.as_str().to_string()),
+          );
+          out.list(
+            "evidence_hashes",
+            material
+              .evidence_lineage
+              .iter()
+              .map(|lineage| lineage.fragment().content_hash.clone()),
+          );
+        })
+      };
+      let dense = make_input(EmbeddingInputFamily::Dense, NODE_DENSE_INPUT_VERSION)?;
+      let lexical = make_input(EmbeddingInputFamily::Lexical, NODE_LEXICAL_INPUT_VERSION)?;
+      (node, payload, dense, lexical)
+    }
     CanonicalNodeProjectionInput::Unresolved(_) => {
       return Err(ProjectionValidationError::UnresolvedNodeFamily);
     }
@@ -756,7 +962,12 @@ fn project_edge(
   };
   let release_id = relationship.relation_release_id;
   let wire_relation = relationship.declared_wire_relation;
-  let scope = relationship.relation.scope;
+  let scope = EdgeProjectionScope {
+    dialect: relationship.relation.scope.dialect,
+    register: relationship.relation.scope.register,
+    domain_ids: Vec::new(),
+    conditions: Vec::new(),
+  };
   let point_id = point_id(
     "edge",
     &release_id,
@@ -824,7 +1035,7 @@ fn edge_input(
   version: &'static str,
   identity: &PublishedEdgeIdentity,
   wire_relation: &str,
-  scope: &GraphScope,
+  scope: &EdgeProjectionScope,
   source: &CanonicalEmbeddingInput,
   target: &CanonicalEmbeddingInput,
   evidence: &[ProjectionEvidenceReference],
@@ -844,9 +1055,36 @@ fn edge_input(
       "scope_dialect",
       scope.dialect.as_ref().map(|value| value.as_str()),
     );
-    out.optional("scope_domain", scope.domain.as_deref());
     out.optional("scope_register", scope.register.as_deref());
-    out.optional("scope_note", scope.note.as_deref());
+    out.list(
+      "scope_domain_ids",
+      scope.domain_ids.iter().map(|id| id.as_str().to_string()),
+    );
+    out.list(
+      "scope_condition_ids",
+      scope
+        .conditions
+        .iter()
+        .map(|item| item.condition_id.as_str().to_string()),
+    );
+    out.list(
+      "scope_condition_types",
+      scope
+        .conditions
+        .iter()
+        .map(|item| item.condition_type.as_str().to_string()),
+    );
+    out.list(
+      "scope_condition_parameters",
+      scope.conditions.iter().map(|item| {
+        item
+          .parameter_ids
+          .iter()
+          .map(|id| id.as_str())
+          .collect::<Vec<_>>()
+          .join("\u{1f}")
+      }),
+    );
     out.list(
       "evidence_ids",
       evidence
@@ -1032,7 +1270,16 @@ fn edge_identity_bytes(identity: &PublishedEdgeIdentity) -> Vec<u8> {
       .qdrant_wire_name
       .unwrap_or("unresolved"),
   );
-  scope_bytes(&mut out, &identity.scope);
+  graph_scope_bytes(&mut out, &identity.scope);
+  out.finish()
+}
+fn structured_edge_identity_bytes(
+  identity: &PublishedEdgeIdentity,
+  scope: &EdgeProjectionScope,
+) -> Vec<u8> {
+  let mut out = CanonicalBytes::new();
+  out.bytes(&edge_identity_bytes(identity));
+  scope_bytes(&mut out, scope);
   out.finish()
 }
 fn payload_bytes(out: &mut CanonicalBytes, payload: &NodeProjectionPayload) {
@@ -1070,21 +1317,119 @@ fn payload_bytes(out: &mut CanonicalBytes, payload: &NodeProjectionPayload) {
         out.string(id.as_str());
       }
     }
+    NodeProjectionPayload::Catalog {
+      family,
+      revision,
+      canonical_label,
+      language,
+      domain_ids,
+      evidence_ids,
+    } => {
+      out.string("catalog");
+      out.string(canonical_family_name(*family));
+      out.u32(*revision);
+      out.string(canonical_label);
+      out.optional(language.as_deref());
+      out.usize(domain_ids.len());
+      for id in domain_ids {
+        out.string(id.as_str());
+      }
+      out.usize(evidence_ids.len());
+      for id in evidence_ids {
+        out.string(id.as_str());
+      }
+    }
   }
 }
-fn scope_bytes(out: &mut CanonicalBytes, scope: &GraphScope) {
+fn scope_bytes(out: &mut CanonicalBytes, scope: &EdgeProjectionScope) {
+  out.optional(scope.dialect.as_ref().map(|value| value.as_str()));
+  out.optional(scope.register.as_deref());
+  out.usize(scope.domain_ids.len());
+  for id in &scope.domain_ids {
+    out.string(id.as_str());
+  }
+  out.usize(scope.conditions.len());
+  for condition in &scope.conditions {
+    out.string(condition.condition_id.as_str());
+    out.string(condition.condition_type.as_str());
+    out.usize(condition.parameter_ids.len());
+    for id in &condition.parameter_ids {
+      out.string(id.as_str());
+    }
+  }
+}
+fn graph_scope_bytes(out: &mut CanonicalBytes, scope: &GraphScope) {
   out.optional(scope.dialect.as_ref().map(|value| value.as_str()));
   out.optional(scope.domain.as_deref());
   out.optional(scope.register.as_deref());
   out.optional(scope.note.as_deref());
 }
-fn node_kind_name(kind: GraphNodeKind) -> &'static str {
+const fn node_kind_name(kind: GraphNodeKind) -> &'static str {
   match kind {
     GraphNodeKind::Sense => "sense",
     GraphNodeKind::Lexeme => "lexeme",
     GraphNodeKind::Construction => "construction",
     GraphNodeKind::Scale => "scale",
+    GraphNodeKind::Phrase => "phrase",
+    GraphNodeKind::MultilingualTerm => "multilingual_term",
+    GraphNodeKind::Concept => "concept",
+    GraphNodeKind::Entity => "entity",
+    GraphNodeKind::Phenomenon => "phenomenon",
+    GraphNodeKind::Mechanism => "mechanism",
+    GraphNodeKind::Process => "process",
+    GraphNodeKind::Equation => "equation",
+    GraphNodeKind::Quantity => "quantity",
+    GraphNodeKind::Material => "material",
+    GraphNodeKind::Instrument => "instrument",
+    GraphNodeKind::Method => "method",
+    GraphNodeKind::Technology => "technology",
+    GraphNodeKind::Application => "application",
+    GraphNodeKind::Standard => "standard",
+    GraphNodeKind::Organization => "organization",
+    GraphNodeKind::Person => "person",
+    GraphNodeKind::Place => "place",
+    GraphNodeKind::Idiom => "idiom",
+    GraphNodeKind::Metaphor => "metaphor",
+    GraphNodeKind::Collocation => "collocation",
+    GraphNodeKind::Misconception => "misconception",
+    GraphNodeKind::Domain => "domain",
   }
+}
+
+const fn graph_kind(family: CanonicalNodeFamily) -> GraphNodeKind {
+  match family {
+    CanonicalNodeFamily::Lexeme => GraphNodeKind::Lexeme,
+    CanonicalNodeFamily::LexicalSense => GraphNodeKind::Sense,
+    CanonicalNodeFamily::Phrase => GraphNodeKind::Phrase,
+    CanonicalNodeFamily::MultilingualTerm => GraphNodeKind::MultilingualTerm,
+    CanonicalNodeFamily::Concept => GraphNodeKind::Concept,
+    CanonicalNodeFamily::Entity => GraphNodeKind::Entity,
+    CanonicalNodeFamily::Phenomenon => GraphNodeKind::Phenomenon,
+    CanonicalNodeFamily::Mechanism => GraphNodeKind::Mechanism,
+    CanonicalNodeFamily::Process => GraphNodeKind::Process,
+    CanonicalNodeFamily::Equation => GraphNodeKind::Equation,
+    CanonicalNodeFamily::Quantity => GraphNodeKind::Quantity,
+    CanonicalNodeFamily::Material => GraphNodeKind::Material,
+    CanonicalNodeFamily::Instrument => GraphNodeKind::Instrument,
+    CanonicalNodeFamily::Method => GraphNodeKind::Method,
+    CanonicalNodeFamily::Technology => GraphNodeKind::Technology,
+    CanonicalNodeFamily::Application => GraphNodeKind::Application,
+    CanonicalNodeFamily::Standard => GraphNodeKind::Standard,
+    CanonicalNodeFamily::Organization => GraphNodeKind::Organization,
+    CanonicalNodeFamily::Person => GraphNodeKind::Person,
+    CanonicalNodeFamily::Place => GraphNodeKind::Place,
+    CanonicalNodeFamily::Idiom => GraphNodeKind::Idiom,
+    CanonicalNodeFamily::Metaphor => GraphNodeKind::Metaphor,
+    CanonicalNodeFamily::GrammarPattern => GraphNodeKind::Construction,
+    CanonicalNodeFamily::Collocation => GraphNodeKind::Collocation,
+    CanonicalNodeFamily::Misconception => GraphNodeKind::Misconception,
+    CanonicalNodeFamily::Domain => GraphNodeKind::Domain,
+    CanonicalNodeFamily::SemanticScale => GraphNodeKind::Scale,
+  }
+}
+
+const fn canonical_family_name(family: CanonicalNodeFamily) -> &'static str {
+  node_kind_name(graph_kind(family))
 }
 fn pos_name(value: LexicalPartOfSpeech) -> &'static str {
   match value {
@@ -1433,6 +1778,97 @@ mod tests {
   }
 
   #[test]
+  fn every_non_lexical_catalog_family_projects_from_reviewed_publisher_material() {
+    let families = [
+      CanonicalNodeFamily::Phrase,
+      CanonicalNodeFamily::MultilingualTerm,
+      CanonicalNodeFamily::Concept,
+      CanonicalNodeFamily::Entity,
+      CanonicalNodeFamily::Phenomenon,
+      CanonicalNodeFamily::Mechanism,
+      CanonicalNodeFamily::Process,
+      CanonicalNodeFamily::Equation,
+      CanonicalNodeFamily::Quantity,
+      CanonicalNodeFamily::Material,
+      CanonicalNodeFamily::Instrument,
+      CanonicalNodeFamily::Method,
+      CanonicalNodeFamily::Technology,
+      CanonicalNodeFamily::Application,
+      CanonicalNodeFamily::Standard,
+      CanonicalNodeFamily::Organization,
+      CanonicalNodeFamily::Person,
+      CanonicalNodeFamily::Place,
+      CanonicalNodeFamily::Idiom,
+      CanonicalNodeFamily::Metaphor,
+      CanonicalNodeFamily::GrammarPattern,
+      CanonicalNodeFamily::Collocation,
+      CanonicalNodeFamily::Misconception,
+      CanonicalNodeFamily::Domain,
+      CanonicalNodeFamily::SemanticScale,
+    ];
+    let inputs = families
+      .into_iter()
+      .enumerate()
+      .map(|(index, family)| {
+        CanonicalNodeProjectionInput::Catalog(AuthoritativeCatalogNodeMaterial {
+          family,
+          id: id(&format!("catalog-{index}")),
+          revision: 1,
+          release_id: id("release-1"),
+          status: CanonicalStatus::Active,
+          reviewed: true,
+          canonical_label: format!("Reviewed catalog node {index}"),
+          language: Some(LanguageTag::parse("en").unwrap()),
+          domain_ids: vec![DomainId::new("domain_general").unwrap()],
+          evidence_lineage: relationship(&format!("catalog-{index}"), "alpha", "beta")
+            .evidence_lineage,
+        })
+      })
+      .collect::<Vec<_>>();
+    let build =
+      build_node_projection(id("release-1"), embedding("knowledge-graph-v1"), inputs).unwrap();
+    assert_eq!(build.point_count, 25);
+    assert!(build
+      .points
+      .iter()
+      .all(|point| matches!(point.payload, NodeProjectionPayload::Catalog { .. })));
+  }
+
+  #[test]
+  fn catalog_projection_rejects_unreviewed_or_lexical_generic_material() {
+    let mut material = AuthoritativeCatalogNodeMaterial {
+      family: CanonicalNodeFamily::Concept,
+      id: id("concept-1"),
+      revision: 1,
+      release_id: id("release-1"),
+      status: CanonicalStatus::Active,
+      reviewed: false,
+      canonical_label: "Reviewed concept".into(),
+      language: None,
+      domain_ids: Vec::new(),
+      evidence_lineage: relationship("catalog-invalid", "alpha", "beta").evidence_lineage,
+    };
+    assert!(matches!(
+      build_node_projection(
+        id("release-1"),
+        embedding("knowledge-graph-v1"),
+        vec![CanonicalNodeProjectionInput::Catalog(material.clone())]
+      ),
+      Err(ProjectionValidationError::IneligibleCanonicalRecord)
+    ));
+    material.reviewed = true;
+    material.family = CanonicalNodeFamily::Lexeme;
+    assert!(matches!(
+      build_node_projection(
+        id("release-1"),
+        embedding("knowledge-graph-v1"),
+        vec![CanonicalNodeProjectionInput::Catalog(material)]
+      ),
+      Err(ProjectionValidationError::IneligibleCanonicalRecord)
+    ));
+  }
+
+  #[test]
   fn exact_duplicate_nodes_deduplicate_but_conflicts_fail_closed() {
     let item = CanonicalNodeProjectionInput::Lexeme(material(lexeme("alpha", "release-1"), None));
     let build = build_node_projection(
@@ -1538,7 +1974,26 @@ mod tests {
       node_inputs("release-1"),
     )
     .unwrap();
-    let admitted = asserted_relationship("edge-1", "alpha", "beta");
+    let mut admitted = asserted_relationship("edge-1", "alpha", "beta");
+    let domain_id = DomainId::new("domain_weather").unwrap();
+    let condition = AssertionCondition {
+      condition_id: id("condition-weather"),
+      condition_type: id("usage-context"),
+      parameter_ids: vec![id("parameter-outdoors")],
+    };
+    admitted.assertion.domain_ids = vec![domain_id.clone()];
+    admitted.assertion.conditions = vec![condition.clone()];
+    admitted.registry.resolved_domains = vec![super::super::assertion::ResolvedDomainReference {
+      domain_id: domain_id.clone(),
+      release_id: id("release-1"),
+    }];
+    admitted.registry.resolved_conditions =
+      vec![super::super::assertion::ResolvedConditionReference {
+        condition_id: condition.condition_id.clone(),
+        condition_type: condition.condition_type.clone(),
+        parameter_ids: condition.parameter_ids.clone(),
+        release_id: id("release-1"),
+      }];
     let build = build_assertion_edge_projection(
       &nodes,
       embedding("knowledge-graph-v1"),
@@ -1549,6 +2004,8 @@ mod tests {
     let assertion = build.points[0].assertion.as_ref().unwrap();
     assert_eq!(assertion.assertion_id, id("fact-edge-1"));
     assert_eq!(assertion.assertion_revision, 1);
+    assert_eq!(build.points[0].scope.domain_ids, vec![domain_id]);
+    assert_eq!(build.points[0].scope.conditions, vec![condition]);
 
     let mut identity_mismatch = admitted.clone();
     identity_mismatch.projected_assertion_id = id("fact-other");

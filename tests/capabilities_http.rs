@@ -12,8 +12,7 @@ use tower::ServiceExt;
 use transnet::{
   app_router_with_http_config, application::translation::TranslationOrchestrator, AppState,
   GenerationPort, GenerationRequest, GenerationResponse, HttpConfig, KnowledgeCapabilityBundle,
-  ModelOperationContext, ModelOperationError, ProviderConfig, ServiceCapabilities,
-  TranslationConfig, TranslationService,
+  ModelOperationContext, ModelOperationError, ServiceCapabilities,
 };
 
 struct UnusedGeneration;
@@ -37,28 +36,10 @@ fn app_with_state(
   max_request_body_bytes: usize,
   configure: impl FnOnce(AppState) -> AppState,
 ) -> axum::Router {
-  let provider = ProviderConfig {
-    base_url: "http://provider-secret.invalid/v1".to_string(),
-    model: "private-model-name".to_string(),
-    api_key: "private-capability-secret".into(),
-  };
-  let service = TranslationService::new(
-    TranslationConfig {
-      long_text_chars: 4_000,
-      timeout_seconds: 1,
-      max_retries: 0,
-      retry_delay_ms: 0,
-    },
-    provider.clone(),
-    provider,
-  )
-  .unwrap();
   app_router_with_http_config(
-    configure(AppState::new(service)),
+    configure(AppState::new()),
     &HttpConfig {
       max_request_body_bytes,
-      allowed_origins: Vec::new(),
-      allow_credentials: false,
     },
   )
   .unwrap()

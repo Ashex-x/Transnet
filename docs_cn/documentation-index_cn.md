@@ -35,7 +35,7 @@ English: [Transnet documentation](../docs/documentation-index.md)
 
 ## 术语与实现状态
 
-- **当前运行时：**今天可由本仓库构建的可执行文件。它提供回环地址上的翻译、模型驱动的结构化查询，以及通过出站 island-port UDS client 按需启用的 canonical-only 读取。启用 canonical 读取后，运行时固定一次 active release、检查该依赖的 readiness，并通过 `POST /api/v1/basic-cards/lookup` 与固定发布的 `POST /api/v1/senses/get` 提供结构化的发布/schema 失败及带证据 attribution 的响应。本仓库尚未实现或验证 island-port canonical server、生产 MySQL migration 与发布工作流、真实旧发布保留、MySQL 端到端验收、目标 Transnet 入站 UDS 及生产向量组合。
+- **当前运行时：**今天可由本仓库构建的可执行文件。它通过一个所属 UDS 提供目标 `/api/v1` 表面，并支持翻译以及通过出站 island-port UDS client 按需启用的 canonical/knowledge 读取。旧 TCP、CORS、lookup、sense-detail 与原始 graph 路由均不存在。island-port canonical server、生产 MySQL migration 与发布工作流、真实旧发布保留、MySQL 端到端验收及生产向量执行仍由外部负责或尚未在此验证。
 - **目标服务 / 目标合同：**设计和接口文档所定义的预期且版本化的服务行为。目标路由或 Schema 并不表示当前运行时已经启用它。
 - **规范内容：**经发布工作流审查、版本化并确认为权威的知识。它不同于模型响应、请求内容或相似度结果。
 - **基础卡（`BasicCard`）：**一个可独立选择的词汇词义对应的精简、发布版本固定的 MySQL 记录；即使图检索不可用，它仍应有用。
@@ -43,7 +43,7 @@ English: [Transnet documentation](../docs/documentation-index.md)
 - **发布三元组：**一份兼容的 MySQL 卡片发布版本，加上配对的不可变 Qdrant 节点集合和边集合。每个请求同时固定这三个版本。
 - **MySQL：**目标架构中用于规范卡片、经审慎选择的翻译、发布元数据和发布状态的权威关系型存储。
 - **Qdrant：**目标架构中用于检索已发布规范节点和有类型边的、可重建的向量与 Payload 索引投影。
-- **Gemma 4 / TranslateGemma：**当前运行时使用的 OpenAI-compatible 模型 Provider。Gemma 4 处理短文本翻译和结构化查询；TranslateGemma 处理较长的翻译请求。
+- **Gemma4-27B：**当前运行时通过闭合 fast 与 reasoning profile 使用的单一 OpenAI-compatible generation provider。
 - **`verified` / `inferred` / `exploratory`：**分别是已发布的规范关系、仅限当前请求的有证据推断说明，以及向量或模型候选。只有 `verified` 是规范事实；后两者绝不作为事实持久化。
 - **关系状态字段：**公共页面将上述三种标签命名为 `evidence_state`。在 Qdrant 存储合同中，`evidence_state` 表示附带证据是否支持某条边（例如 `supported`），而 `verification_state` 表示存储的边是否为规范边（`verified`）或探索性边。它们相关，但不可互换。
 

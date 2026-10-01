@@ -190,7 +190,7 @@ island-port server 不在当前仓库，仍需实现该 operation、原子选择
 
 两个 collection ID 必须不同。两个 hash 都是规范小写 SHA-256 值，registry revision 精确为 `1`，两个 edge input version 是冻结的 retrieval-data 值。只有当 active pointer 命名一个可安全读取的 canonical release、两个不可变 verified collection 且 endpoint reconciliation 完整时，island-port 才返回 `ok`。Code 为 `not_found` 的 `not_found` 表示没有完整 tuple 处于 active。其他精确组合为 `version_mismatch` 与 `schema_incompatible`、`unavailable` 与 `dependency_unavailable`、`timeout` 与 `timeout`。所有失败均无 value；所有成功均无 error。未知字段、部分 value、变化的 echo、发布成员不匹配、alias、未验证 collection、相同 collection ID、不兼容 version 或矛盾 outcome topology 全部闭合失败。
 
-已实现的 Transnet `ActiveKnowledgeReleasePort` 与严格 island-port adapter 会重建完整 `NeighborProjectionExecutionExpectation` 并在返回前验证。该能力目前只是 readiness foundation，尚未组合到 online `AppState`。外部 island-port server 及其原子 active-pointer read 仍是外部工作。
+已实现的 Transnet `ActiveKnowledgeReleasePort` 与严格 island-port adapter 会重建完整 `NeighborProjectionExecutionExpectation` 并在返回前验证。启用的 knowledge composition 将其用于启动选择、route-bundle 一致性与 readiness。外部 island-port server 及其原子 active-pointer read 仍是外部工作。
 
 对于下文有界的翻译及基础卡候选列表读取，合格的零命中搜索使用 `ok` 与空 `matches` 列表。Stage 4 组合不会把下游 `not_found` 悄悄转换为空结果；它仍是闭合错误，避免不可读取的固定发布被伪装成搜索未命中。
 

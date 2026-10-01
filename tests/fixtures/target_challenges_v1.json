@@ -2,6 +2,9 @@
   "schema_version": "transnet-challenges-v1",
   "license": "Apache-2.0",
   "provenance": "synthetic",
+  "provenance_policy": "repository_authored_synthetic_only",
+  "reviewed": true,
+  "contains_production_data": false,
   "cases": [
     {"id":"routing-word-001","category":"routing","source_language":"en","target_language":"zh-CN","input":"bank","expected_codes":["preserve_lexical_ambiguity"]},
     {"id":"translation-fidelity-001","category":"translation_fidelity","source_language":"en","target_language":"zh-CN","input":"The valve remains closed.","expected_codes":["preserve_negation"]},

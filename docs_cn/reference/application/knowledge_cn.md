@@ -4,7 +4,7 @@ English: [Knowledge application](../../../docs/reference/application/knowledge.m
 
 本模块负责单词与固定短语请求的词义解析、领域评估、发布固定检索、关系排序、页面组织与确定性投影。
 
-状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。有界领域评估基础与严格出站 inventory client 已实现，但尚未由默认在线 composition 暴露。新的有界 root-retrieval application boundary 已组合注入式 canonical root resolver、共享 canonical-data knowledge-node hydration client、ephemeral embedding、query lexical encoding 与严格 retrieval-data port。Root resolver 当前仍只有 fake 实现，且该流程尚未暴露公开 route。Guided-view 与 path-search application service 会校验不可变 projection proof 并补全精确 canonical assertion。Relationship-page application composer 现会把这些 verified output 纳入已校验 page superset，并只在 lexical translation result 旁嵌入 projection。默认 translation orchestration 与 wire serialization 仍属于目标行为。
+状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除；图拓扑缓存仍只缓存固定发布的规范内容。有界 root-retrieval boundary 组合注入式 canonical 与 retrieval port。Guided-view 与 path-search service 会校验不可变 projection proof 并补全精确 assertion。现在可选的原子 material-source seam 能为已解析 lexical translation 组装并序列化同一发布的 relationship page，并显式表示 canonical-only degradation。默认进程不安装该 seam，也不宣告 `relationship-page-v1`：生产环境仍缺少能如实提供完整 material 的 root resolver 与 canonical/retrieval authority composition。
 
 canonical-only 服务从权威端选择一次发布 pin，再通过读取 port 组合已审核翻译候选、确定性排序的词汇候选和无歧义的词义详情。它使用带 canonical-only content pin 的现有 lookup-card 类型，不伪造向量集合，也不把有意的纯词法读取误称为向量故障降级。可执行文件只在显式配置时构造并保存该依赖，用 active-release 只读探针检查就绪，并通过冻结的 BasicCard lookup 与固定发布 sense 路由提供该能力。外部 island-port server 仍需实现匹配的内部合同。请求局部查询形式有界且去重：基线规范化形式最强，谨慎的空白或外围标点变体只是较低优先级的拼写候选。已发布别名、形态、转写和语义归属由权威端确定，不从查询字符串猜测。
 

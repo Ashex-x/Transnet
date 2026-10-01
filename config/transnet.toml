@@ -1,6 +1,4 @@
 [server]
-host = "127.0.0.1"
-port = 16002
 socket_path = "/run/transnet/transnet.sock"
 socket_mode = "0660"
 log_level = "info"
@@ -8,8 +6,6 @@ log_format = "json"
 
 [http]
 max_request_body_bytes = 1048576
-allowed_origins = []
-allow_credentials = false
 
 [canonical]
 enabled = false
@@ -19,7 +15,6 @@ enabled = false
 required = false
 
 [translation]
-long_text_chars = 4000
 timeout_seconds = 60
 max_retries = 3
 retry_delay_ms = 250
@@ -29,19 +24,8 @@ base_url = "http://127.0.0.1:18011/v1"
 model = "Gemma4"
 api_key = "local-model-server"
 
-[translate_gemma]
-base_url = "http://127.0.0.1:18007/v1"
-model = "TranslateGemma"
-api_key = "local-model-server"
-
 [provider_resilience.gemma4]
 max_retry_delay_ms = 5000
 max_concurrent_requests = 8
-circuit_failure_threshold = 5
-circuit_open_ms = 30000
-
-[provider_resilience.translate_gemma]
-max_retry_delay_ms = 5000
-max_concurrent_requests = 4
 circuit_failure_threshold = 5
 circuit_open_ms = 30000

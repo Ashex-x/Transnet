@@ -1,5 +1,6 @@
 //! Bounded canonical-domain inventory and request-local assessment values.
 
+use serde::Serialize;
 use thiserror::Error;
 
 use super::{
@@ -46,7 +47,7 @@ pub enum DomainAssessmentError {
 }
 
 /// One bounded multilingual canonical label or alias.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct LocalizedDomainTerm {
   language: LanguageTag,
   text: String,
@@ -110,7 +111,8 @@ impl LocalizedDomainTerm {
 }
 
 /// Closed release-pinned knowledge coverage state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DomainCoverageState {
   /// A small reviewed seed is available.
   Seed,
@@ -344,7 +346,7 @@ impl DomainInventory {
 }
 
 /// Structured request-local proposal emitted only when no complete-catalog scope fits.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct ProposedDomain {
   label: LocalizedDomainTerm,
   definition: String,
@@ -425,7 +427,8 @@ pub enum DomainNomination {
 }
 
 /// Validated closed outcome of one domain assessment.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "assessment", rename_all = "snake_case")]
 pub enum DomainAssessment {
   /// One or more supplied canonical domains apply.
   Existing {

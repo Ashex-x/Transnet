@@ -4,7 +4,7 @@
 
 The runtime module owns process configuration, startup, dependency composition, readiness, listener lifetime, and graceful shutdown. It contains lifecycle wiring, not translation or retrieval policy.
 
-Status: the current executable binds transitional loopback TCP. The target composition uses the UDS boundary defined by the [Transnet service interface](../interfaces/transnet.md).
+Status: the executable binds only the UDS boundary defined by the [Transnet service interface](../interfaces/transnet.md). Legacy TCP and CORS configuration is rejected.
 
 ## Configuration
 
@@ -14,7 +14,7 @@ Provider credentials are secrets. They must never appear in checked-in files, De
 
 ## Startup and composition
 
-The current entry point loads configuration, initializes redacted logging and provider clients, builds the transitional router, binds the listener, and waits for shutdown. The default executable composes health, translation, and legacy model-backed lookup behind stateless admission. Learner state, practice, private feedback, saved layouts, and lookup jobs are not exposed by the public library or router. Other checked-in foundations are not necessarily production-composed.
+The current entry point loads configuration, initializes redacted logging and the single generation provider, builds the target router, binds its owned Unix socket, and waits for bounded shutdown. It composes probes and translation by default, and adds canonical or knowledge routes only with complete dependency bundles. Legacy translation/provider APIs are absent.
 
 The target bootstrap validates settings before side effects, constructs adapters outside-in, binds the owned Unix socket, registers only routes whose dependencies exist, and reports ready only after required dependencies are usable. Handlers and adapters receive explicit dependencies; they do not create global clients.
 

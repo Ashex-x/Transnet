@@ -1,172 +1,16 @@
-//! `GET /v1/senses/{sense_id}` active-release-pinned canonical detail contract.
-//!
-//! This conditional route exposes one complete, bounded canonical sense-detail aggregate only
-//! after its injected active-content reader selects a safe release and every assertion permits
-//! public API redistribution. It contains no cache, persistence, generator invocation,
-//! authentication, or source-import behavior.
+//! Canonical sense-detail response projection shared by target BasicCard operations.
 
-use axum::{
-  extract::{rejection::PathRejection, Extension, Path, State},
-  http::StatusCode,
-  response::{IntoResponse, Response},
-  Json,
-};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-use crate::{
-  api::{
-    problem::{self, FieldError},
-    request_id::RequestId,
-    AppState,
-  },
-  application::canonical_sense_details::{
-    ActiveCanonicalSenseDetails, ActiveCanonicalSenseDetailsError, CanonicalSenseDetailsReadError,
-  },
-  domain::{
-    canonical::{CanonicalId, EvidenceConfidence, EvidenceKind},
-    canonical_content::{
-      CanonicalDetailKind, CanonicalFactualAssertion, CanonicalSenseDetails,
-      CollocationConstruction, CollocationRole, EtymologyKind, EtymologyScope, GrammarPatternKind,
-      HistoricalRange, LearnerPitfallKind, PronunciationNotation, PronunciationScope,
-      SenseHistoryEventKind, UsageLabelKind,
-    },
-  },
-  ports::{
-    active_content_reader::ActiveContentReaderError,
-    canonical_sense_details_repository::CanonicalSenseDetailsRepositoryError,
+use crate::domain::{
+  canonical::{EvidenceConfidence, EvidenceKind},
+  canonical_content::{
+    CanonicalDetailKind, CanonicalFactualAssertion, CanonicalSenseDetails, CollocationConstruction,
+    CollocationRole, EtymologyKind, EtymologyScope, GrammarPatternKind, HistoricalRange,
+    LearnerPitfallKind, PronunciationNotation, PronunciationScope, SenseHistoryEventKind,
+    UsageLabelKind,
   },
 };
-
-const MAX_SENSE_ID_LENGTH: usize = 256;
-
-/// Reads one public canonical sense-details aggregate when the conditional service is present.
-pub(super) async fn read(
-  State(state): State<AppState>,
-  Extension(request_id): Extension<RequestId>,
-  path: Result<Path<SenseDetailsPath>, PathRejection>,
-) -> Response {
-  let Path(path) = match path {
-    Ok(path) => path,
-    Err(_) => return malformed_path_problem(&request_id),
-  };
-  let sense_id = match parse_sense_id(&path.sense_id) {
-    Ok(sense_id) => sense_id,
-    Err(error) => return invalid_sense_request(error, &request_id),
-  };
-  let Some(service) = state.canonical_sense_details_service() else {
-    return sense_details_unavailable(&request_id, false);
-  };
-
-  match service.read(sense_id).await {
-    Ok(Some(outcome)) => {
-      let response = CanonicalSenseDetailsResponse::from_outcome(outcome);
-      problem::no_store((StatusCode::OK, Json(response)).into_response())
-    }
-    Ok(None) => sense_not_found(&request_id),
-    Err(error) => {
-      tracing::warn!(
-        error_category = sense_details_error_category(&error),
-        "canonical sense-details dependency could not serve a request"
-      );
-      sense_details_unavailable(&request_id, error.is_retryable())
-    }
-  }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct SenseDetailsPath {
-  sense_id: String,
-}
-
-#[derive(Debug)]
-struct SenseRequestValidation {
-  field: &'static str,
-  message: &'static str,
-}
-
-impl SenseRequestValidation {
-  const fn new(field: &'static str, message: &'static str) -> Self {
-    Self { field, message }
-  }
-}
-
-fn parse_sense_id(value: &str) -> Result<CanonicalId, SenseRequestValidation> {
-  if value.chars().count() > MAX_SENSE_ID_LENGTH {
-    return Err(SenseRequestValidation::new(
-      "sense_id",
-      "must not exceed the canonical sense identifier length limit.",
-    ));
-  }
-  CanonicalId::new(value).map_err(|_| {
-    SenseRequestValidation::new("sense_id", "must be a nonblank canonical sense identifier.")
-  })
-}
-
-fn malformed_path_problem(request_id: &RequestId) -> Response {
-  problem::response(
-    StatusCode::BAD_REQUEST,
-    "invalid_sense_request",
-    "Invalid canonical sense request",
-    "The canonical sense path is malformed.",
-    request_id,
-    false,
-    Vec::new(),
-  )
-}
-
-fn invalid_sense_request(error: SenseRequestValidation, request_id: &RequestId) -> Response {
-  problem::response(
-    StatusCode::UNPROCESSABLE_ENTITY,
-    "invalid_sense_request",
-    "Invalid canonical sense request",
-    "The canonical sense identifier is invalid.",
-    request_id,
-    false,
-    vec![FieldError::new(error.field, error.message)],
-  )
-}
-
-fn sense_not_found(request_id: &RequestId) -> Response {
-  problem::response(
-    StatusCode::NOT_FOUND,
-    "canonical_sense_not_found",
-    "Canonical sense not found",
-    "The requested canonical sense is not available in the active content.",
-    request_id,
-    false,
-    Vec::new(),
-  )
-}
-
-fn sense_details_unavailable(request_id: &RequestId, retryable: bool) -> Response {
-  problem::response(
-    StatusCode::SERVICE_UNAVAILABLE,
-    "canonical_sense_details_unavailable",
-    "Canonical sense details unavailable",
-    "Canonical sense details are temporarily unavailable.",
-    request_id,
-    retryable,
-    Vec::new(),
-  )
-}
-
-fn sense_details_error_category(error: &ActiveCanonicalSenseDetailsError) -> &'static str {
-  match error {
-    ActiveCanonicalSenseDetailsError::ActiveContent(ActiveContentReaderError::Unavailable) => {
-      "active_content_unavailable"
-    }
-    ActiveCanonicalSenseDetailsError::ActiveContent(ActiveContentReaderError::InconsistentData) => {
-      "active_content_inconsistent"
-    }
-    ActiveCanonicalSenseDetailsError::Details(CanonicalSenseDetailsReadError::Repository(
-      CanonicalSenseDetailsRepositoryError::Unavailable,
-    )) => "canonical_sense_details_repository_unavailable",
-    ActiveCanonicalSenseDetailsError::Details(CanonicalSenseDetailsReadError::Repository(
-      CanonicalSenseDetailsRepositoryError::InconsistentData,
-    )) => "canonical_sense_details_repository_inconsistent",
-  }
-}
 
 #[derive(Debug, Serialize)]
 pub(super) struct CanonicalSenseDetailsResponse {
@@ -185,12 +29,6 @@ pub(super) struct CanonicalSenseDetailsResponse {
 }
 
 impl CanonicalSenseDetailsResponse {
-  fn from_outcome(outcome: ActiveCanonicalSenseDetails) -> Self {
-    let content = outcome.content();
-    let details = outcome.details();
-    Self::from_details(details, content.release_id.as_str())
-  }
-
   pub(super) fn pinned_value(details: &CanonicalSenseDetails) -> serde_json::Value {
     let mut value = serde_json::to_value(Self::from_details(
       details,

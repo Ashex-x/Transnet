@@ -699,11 +699,6 @@ fn validate_guidance(guidance: &TranslationGuidance) -> Result<(), TurnValidatio
   if guidance.max_alternatives > 2 {
     return Err(TurnValidationError::Field("guidance.max_alternatives"));
   }
-  if guidance.max_alternatives != 0 {
-    return Err(TurnValidationError::Unsupported(
-      "guidance.max_alternatives",
-    ));
-  }
   if guidance.terminology.len() > MAX_TERMINOLOGY {
     return Err(TurnValidationError::Field("guidance.terminology"));
   }
@@ -1457,6 +1452,12 @@ pub struct ProjectedTranslationResult {
   /// Response-local sources referenced by annotations or generated claims.
   #[serde(skip_serializing_if = "Vec::is_empty")]
   pub external_sources: Vec<ExternalSourceReference>,
+  /// Optional validated relationship page for a resolved lexical word or established phrase.
+  #[serde(skip)]
+  pub relationship_page: Option<crate::domain::relationship_page::ProjectedRelationshipPage>,
+  /// True only when the page contains its canonical summary without verified relationship groups.
+  #[serde(skip)]
+  pub relationship_page_canonical_only: bool,
 }
 
 impl ProjectedTranslationResult {
@@ -1464,6 +1465,22 @@ impl ProjectedTranslationResult {
   pub fn validate(&self) -> Result<(), TranslationResultValidationError> {
     self.translation.validate()?;
     validate_metadata(&self.metadata)?;
+    match &self.relationship_page {
+      Some(page)
+        if !matches!(
+          self.translation.kind(),
+          TranslationResultKind::Word | TranslationResultKind::Phrase
+        ) || self.metadata.content_release.as_deref()
+          != Some(page.release.release_id.as_str())
+          || self.relationship_page_canonical_only != page.groups.is_empty() =>
+      {
+        return Err(TranslationResultValidationError::InvalidValue);
+      }
+      None if self.relationship_page_canonical_only => {
+        return Err(TranslationResultValidationError::InvalidValue);
+      }
+      _ => {}
+    }
     let mut source_ids = std::collections::BTreeSet::new();
     let mut cited_source_ids = std::collections::BTreeSet::new();
     if self.external_sources.len() > 5
@@ -2521,15 +2538,18 @@ mod tests {
   }
 
   #[test]
-  fn alternatives_and_conflicting_required_terms_are_rejected_without_content() {
+  fn bounded_alternatives_are_retained_and_conflicting_terms_are_rejected() {
     let mut input = request();
     input.guidance = Some(TranslationGuidance {
       max_alternatives: 1,
       ..Default::default()
     });
     assert_eq!(
-      TranslationTurn::new(input).unwrap_err(),
-      TurnValidationError::Unsupported("guidance.max_alternatives")
+      TranslationTurn::new(input)
+        .unwrap()
+        .guidance()
+        .max_alternatives,
+      1
     );
     let mut input = request();
     input.guidance = Some(TranslationGuidance {
@@ -2781,6 +2801,8 @@ mod tests {
         url: "https://example.invalid/notice".into(),
         evidence_state: ExternalEvidenceState::LiveExternal,
       }],
+      relationship_page: None,
+      relationship_page_canonical_only: false,
     };
     assert_eq!(projected.validate(), Ok(()));
     let mut invalid = projected;
@@ -2862,6 +2884,8 @@ mod tests {
       },
       metadata: metadata(ResponseLevel::Brief),
       external_sources: Vec::new(),
+      relationship_page: None,
+      relationship_page_canonical_only: false,
     };
     assert_eq!(
       result.validate_for_turn(&turn),
@@ -2902,6 +2926,8 @@ mod tests {
         url: "https://example.invalid/notice".into(),
         evidence_state: ExternalEvidenceState::LiveExternal,
       }],
+      relationship_page: None,
+      relationship_page_canonical_only: false,
     }
     .project(ResponseLevel::Brief);
     assert!(projected.external_sources.is_empty());
@@ -2935,6 +2961,8 @@ mod tests {
       ),
       metadata: metadata(ResponseLevel::Brief),
       external_sources: Vec::new(),
+      relationship_page: None,
+      relationship_page_canonical_only: false,
     };
     result.metadata.schema_version = "translation-result-v0";
     assert_eq!(

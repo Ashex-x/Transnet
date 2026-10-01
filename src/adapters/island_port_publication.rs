@@ -647,6 +647,19 @@ fn node_point(point: &NodeProjection) -> Value {
       "part_of_speech": part_of_speech_name(*part_of_speech),
       "definition_evidence_ids": definition_evidence_ids.iter().map(|id| id.as_str()).collect::<Vec<_>>()
     }),
+    NodeProjectionPayload::Catalog {
+      family,
+      revision,
+      canonical_label,
+      language,
+      domain_ids,
+      evidence_ids,
+    } => json!({
+      "kind": "catalog", "family": canonical_family_name(*family), "revision": revision,
+      "canonical_label": canonical_label, "language": language,
+      "domain_ids": domain_ids.iter().map(|id| id.as_str()).collect::<Vec<_>>(),
+      "evidence_ids": evidence_ids.iter().map(|id| id.as_str()).collect::<Vec<_>>()
+    }),
   };
   json!({
     "point_id": point.point_id.as_str(),
@@ -674,9 +687,13 @@ fn edge_point(point: &EdgeProjection) -> Value {
     "wire_relation": point.wire_relation,
     "scope": {
       "dialect": point.scope.dialect.as_ref().map(|v| v.as_str()),
-      "domain": point.scope.domain,
       "register": point.scope.register,
-      "note": point.scope.note
+      "domain_ids": point.scope.domain_ids.iter().map(|id| id.as_str()).collect::<Vec<_>>(),
+      "conditions": point.scope.conditions.iter().map(|condition| json!({
+        "condition_id": condition.condition_id.as_str(),
+        "condition_type": condition.condition_type.as_str(),
+        "parameter_ids": condition.parameter_ids.iter().map(|id| id.as_str()).collect::<Vec<_>>()
+      })).collect::<Vec<_>>()
     },
     "evidence": point.evidence.iter().map(|e| json!({
       "evidence_id": e.evidence_id.as_str(), "source_id": e.source_id.as_str(),
@@ -1426,6 +1443,64 @@ const fn node_kind(value: GraphNodeKind) -> &'static str {
     GraphNodeKind::Lexeme => "lexeme",
     GraphNodeKind::Construction => "construction",
     GraphNodeKind::Scale => "scale",
+    GraphNodeKind::Phrase => "phrase",
+    GraphNodeKind::MultilingualTerm => "multilingual_term",
+    GraphNodeKind::Concept => "concept",
+    GraphNodeKind::Entity => "entity",
+    GraphNodeKind::Phenomenon => "phenomenon",
+    GraphNodeKind::Mechanism => "mechanism",
+    GraphNodeKind::Process => "process",
+    GraphNodeKind::Equation => "equation",
+    GraphNodeKind::Quantity => "quantity",
+    GraphNodeKind::Material => "material",
+    GraphNodeKind::Instrument => "instrument",
+    GraphNodeKind::Method => "method",
+    GraphNodeKind::Technology => "technology",
+    GraphNodeKind::Application => "application",
+    GraphNodeKind::Standard => "standard",
+    GraphNodeKind::Organization => "organization",
+    GraphNodeKind::Person => "person",
+    GraphNodeKind::Place => "place",
+    GraphNodeKind::Idiom => "idiom",
+    GraphNodeKind::Metaphor => "metaphor",
+    GraphNodeKind::Collocation => "collocation",
+    GraphNodeKind::Misconception => "misconception",
+    GraphNodeKind::Domain => "domain",
+  }
+}
+
+const fn canonical_family_name(
+  value: crate::domain::assertion::CanonicalNodeFamily,
+) -> &'static str {
+  use crate::domain::assertion::CanonicalNodeFamily;
+  match value {
+    CanonicalNodeFamily::Lexeme => "lexeme",
+    CanonicalNodeFamily::LexicalSense => "lexical_sense",
+    CanonicalNodeFamily::Phrase => "phrase",
+    CanonicalNodeFamily::MultilingualTerm => "multilingual_term",
+    CanonicalNodeFamily::Concept => "concept",
+    CanonicalNodeFamily::Entity => "entity",
+    CanonicalNodeFamily::Phenomenon => "phenomenon",
+    CanonicalNodeFamily::Mechanism => "mechanism",
+    CanonicalNodeFamily::Process => "process",
+    CanonicalNodeFamily::Equation => "equation",
+    CanonicalNodeFamily::Quantity => "quantity",
+    CanonicalNodeFamily::Material => "material",
+    CanonicalNodeFamily::Instrument => "instrument",
+    CanonicalNodeFamily::Method => "method",
+    CanonicalNodeFamily::Technology => "technology",
+    CanonicalNodeFamily::Application => "application",
+    CanonicalNodeFamily::Standard => "standard",
+    CanonicalNodeFamily::Organization => "organization",
+    CanonicalNodeFamily::Person => "person",
+    CanonicalNodeFamily::Place => "place",
+    CanonicalNodeFamily::Idiom => "idiom",
+    CanonicalNodeFamily::Metaphor => "metaphor",
+    CanonicalNodeFamily::GrammarPattern => "grammar_pattern",
+    CanonicalNodeFamily::Collocation => "collocation",
+    CanonicalNodeFamily::Misconception => "misconception",
+    CanonicalNodeFamily::Domain => "domain",
+    CanonicalNodeFamily::SemanticScale => "semantic_scale",
   }
 }
 

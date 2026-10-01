@@ -11,11 +11,41 @@ use axum::{
 use serde_json::{json, Value};
 use tower::ServiceExt;
 use transnet::{
-  app_router, app_router_with_http_config, application::translation::TranslationOrchestrator,
+  app_router, app_router_with_http_config,
+  application::{
+    relationship_page::{
+      RelationshipPageInputs, RelationshipPageMaterialError, RelationshipPageMaterialPort,
+      RelationshipPageRuntime,
+    },
+    translation::TranslationOrchestrator,
+  },
+  domain::translation_turn::{ProjectedTranslationResult, TranslationTurn},
   AppState, CancellationSignal, GenerationOutput, GenerationPort, GenerationRequest,
   GenerationResponse, HttpConfig, ModelOperationContext, ModelOperationError, ModelVersion,
-  ProviderConfig, TranslationConfig, TranslationService,
+  RequestContext,
 };
+
+#[derive(Clone, Copy)]
+struct FailingPageSource(RelationshipPageMaterialError);
+
+#[async_trait]
+impl RelationshipPageMaterialPort for FailingPageSource {
+  async fn material(
+    &self,
+    _context: &RequestContext,
+    _cancellation: &CancellationSignal,
+    _turn: &TranslationTurn,
+    _translation: &ProjectedTranslationResult,
+  ) -> Result<Option<RelationshipPageInputs>, RelationshipPageMaterialError> {
+    Err(self.0)
+  }
+}
+
+fn relationship_runtime(error: RelationshipPageMaterialError) -> Arc<RelationshipPageRuntime> {
+  Arc::new(RelationshipPageRuntime::new(Arc::new(FailingPageSource(
+    error,
+  ))))
+}
 
 #[derive(Clone)]
 struct FakeGeneration {
@@ -67,31 +97,12 @@ fn lexical_output() -> String {
   .to_string()
 }
 
-fn legacy_service() -> TranslationService {
-  let provider = |model: &str| ProviderConfig {
-    base_url: "http://127.0.0.1:9/v1".to_string(),
-    model: model.to_string(),
-    api_key: "unused-test-credential".into(),
-  };
-  TranslationService::new(
-    TranslationConfig {
-      long_text_chars: 4_000,
-      timeout_seconds: 1,
-      max_retries: 0,
-      retry_delay_ms: 0,
-    },
-    provider("legacy-short"),
-    provider("legacy-long"),
-  )
-  .unwrap()
-}
-
 fn app(
   connected: Result<String, ModelOperationError>,
   lexical: Result<String, ModelOperationError>,
 ) -> Router {
   let orchestrator = TranslationOrchestrator::new(Arc::new(FakeGeneration { connected, lexical }));
-  app_router(AppState::new(legacy_service()).with_translation_orchestrator(Arc::new(orchestrator)))
+  app_router(AppState::new().with_translation_orchestrator(Arc::new(orchestrator)))
 }
 
 fn request(body: Value) -> Request<Body> {
@@ -131,6 +142,118 @@ async fn composed_vlm_truthfully_activates_image_capabilities() {
 }
 
 #[tokio::test]
+async fn relationship_page_capability_requires_both_runtime_dependencies_in_any_builder_order() {
+  let runtime = relationship_runtime(RelationshipPageMaterialError::Unavailable);
+  let capability_request = || {
+    Request::post("/api/v1/capabilities")
+      .header(header::CONTENT_TYPE, "application/json")
+      .body(Body::from("{}"))
+      .unwrap()
+  };
+  let page_only = app_router(AppState::new().with_relationship_page_runtime(runtime.clone()))
+    .oneshot(capability_request())
+    .await
+    .unwrap();
+  assert!(!body(page_only).await["data"]["schema_versions"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .any(|value| value == "relationship-page-v1"));
+
+  for state in [
+    AppState::new()
+      .with_translation_orchestrator(Arc::new(TranslationOrchestrator::new(Arc::new(
+        FakeGeneration {
+          connected: Ok(connected_output()),
+          lexical: Ok(lexical_output()),
+        },
+      ))))
+      .with_relationship_page_runtime(runtime.clone()),
+    AppState::new()
+      .with_relationship_page_runtime(runtime.clone())
+      .with_translation_orchestrator(Arc::new(TranslationOrchestrator::new(Arc::new(
+        FakeGeneration {
+          connected: Ok(connected_output()),
+          lexical: Ok(lexical_output()),
+        },
+      )))),
+  ] {
+    let response = app_router(state)
+      .oneshot(capability_request())
+      .await
+      .unwrap();
+    assert!(body(response).await["data"]["schema_versions"]
+      .as_array()
+      .unwrap()
+      .iter()
+      .any(|value| value == "relationship-page-v1"));
+  }
+}
+
+#[tokio::test]
+async fn relationship_page_deadline_and_cancellation_keep_closed_problem_semantics() {
+  for (error, status, code) in [
+    (
+      RelationshipPageMaterialError::DeadlineExceeded,
+      StatusCode::GATEWAY_TIMEOUT,
+      "deadline_exceeded",
+    ),
+    (
+      RelationshipPageMaterialError::Cancelled,
+      StatusCode::SERVICE_UNAVAILABLE,
+      "request_cancelled",
+    ),
+  ] {
+    let orchestrator = TranslationOrchestrator::new(Arc::new(FakeGeneration {
+      connected: Ok(connected_output()),
+      lexical: Ok(lexical_output()),
+    }));
+    let response = app_router(
+      AppState::new()
+        .with_translation_orchestrator(Arc::new(orchestrator))
+        .with_relationship_page_runtime(relationship_runtime(error)),
+    )
+    .oneshot(request(json!({
+      "text":"hot", "source_language":"en", "target_language":"zh-CN",
+      "response_level":"standard"
+    })))
+    .await
+    .unwrap();
+    assert_eq!(response.status(), status);
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    assert_eq!(body(response).await["code"], code);
+  }
+}
+
+#[tokio::test]
+async fn structured_alternatives_fail_before_model_or_material_execution() {
+  let orchestrator = TranslationOrchestrator::new(Arc::new(FakeGeneration {
+    connected: Err(ModelOperationError::Unavailable),
+    lexical: Err(ModelOperationError::Unavailable),
+  }));
+  let response = app_router(
+    AppState::new()
+      .with_translation_orchestrator(Arc::new(orchestrator))
+      .with_relationship_page_runtime(relationship_runtime(
+        RelationshipPageMaterialError::Unavailable,
+      )),
+  )
+  .oneshot(request(json!({
+    "input":{"type":"segments","segments":[{"segment_id":"s1","text":"hot",
+      "role":"title","format":"plain","protected_ranges":[]}]},
+    "source_language":"en","target_language":"zh-CN","response_level":"standard",
+    "guidance":{"max_alternatives":1}
+  })))
+  .await
+  .unwrap();
+  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  assert_eq!(
+    body(response).await["errors"][0]["field"],
+    "guidance.max_alternatives"
+  );
+}
+
+#[tokio::test]
 async fn production_router_propagates_runtime_drain_to_translation() {
   let runtime = Arc::new(CancellationSignal::default());
   let orchestrator = TranslationOrchestrator::new(Arc::new(FakeGeneration {
@@ -138,7 +261,7 @@ async fn production_router_propagates_runtime_drain_to_translation() {
     lexical: Ok(lexical_output()),
   }));
   let app = app_router(
-    AppState::new(legacy_service())
+    AppState::new()
       .with_runtime_cancellation(runtime.clone())
       .with_translation_orchestrator(Arc::new(orchestrator)),
   );
@@ -596,11 +719,9 @@ async fn target_payload_limit_uses_the_shared_problem_contract() {
     lexical: Ok(lexical_output()),
   }));
   let router = app_router_with_http_config(
-    AppState::new(legacy_service()).with_translation_orchestrator(Arc::new(orchestrator)),
+    AppState::new().with_translation_orchestrator(Arc::new(orchestrator)),
     &HttpConfig {
       max_request_body_bytes: 32,
-      allowed_origins: Vec::new(),
-      allow_credentials: false,
     },
   )
   .unwrap();
@@ -619,8 +740,8 @@ async fn target_payload_limit_uses_the_shared_problem_contract() {
 }
 
 #[tokio::test]
-async fn missing_orchestrator_fails_closed_without_affecting_the_legacy_route() {
-  let router = app_router(AppState::new(legacy_service()));
+async fn missing_orchestrator_fails_closed_on_the_target_route() {
+  let router = app_router(AppState::new());
   let response = router
     .oneshot(request(json!({
       "text": "hot",

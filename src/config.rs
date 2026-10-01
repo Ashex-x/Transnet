@@ -2,7 +2,6 @@
 
 use std::{fmt, fs, path::Path, sync::Arc, time::Duration};
 
-use axum::http::{HeaderValue, Uri};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -26,8 +25,6 @@ pub struct AppConfig {
   pub translation: TranslationConfig,
   /// Provider used for short text.
   pub gemma4: ProviderConfig,
-  /// Provider used for long text.
-  pub translate_gemma: ProviderConfig,
   /// Per-provider timeout, retry, bulkhead, and circuit-breaker policy.
   #[serde(default)]
   pub provider_resilience: ProviderResilienceConfigs,
@@ -394,14 +391,10 @@ fn load_secret_file(_path: &str) -> Result<Vec<u8>, KnowledgeRuntimeConfigError>
 
 /// Listener and logging settings.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServerConfig {
-  /// Listener host.
-  pub host: String,
-  /// Listener port.
-  pub port: u16,
-  /// Optional absolute Unix socket path that selects the target listener instead of TCP.
-  #[serde(default)]
-  pub socket_path: Option<String>,
+  /// Absolute Unix socket path for the only supported listener.
+  pub socket_path: String,
   /// Octal Unix socket permissions applied after binding.
   #[serde(default = "default_socket_mode")]
   pub socket_mode: String,
@@ -417,102 +410,45 @@ fn default_socket_mode() -> String {
 
 /// HTTP request-size and browser-origin settings.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct HttpConfig {
   /// Maximum accepted request body size in bytes.
   pub max_request_body_bytes: usize,
-  /// Exact browser origins allowed to make cross-origin requests.
-  pub allowed_origins: Vec<String>,
-  /// Transitional compatibility setting; must be false because end-user credentials are rejected.
-  pub allow_credentials: bool,
 }
 
 impl Default for HttpConfig {
   fn default() -> Self {
     Self {
       max_request_body_bytes: DEFAULT_MAX_REQUEST_BODY_BYTES,
-      allowed_origins: Vec::new(),
-      allow_credentials: false,
     }
   }
 }
 
 impl HttpConfig {
-  /// Validates the request-size and exact-origin policy.
+  /// Validates the request-size policy.
   ///
   /// # Errors
   ///
-  /// Returns an error when the body limit is zero or an origin is not a single, explicit origin.
+  /// Returns an error when the body limit is zero.
   pub fn validate(&self) -> Result<(), HttpConfigError> {
     if self.max_request_body_bytes == 0 {
       return Err(HttpConfigError::ZeroRequestBodyLimit);
     }
-
-    for origin in &self.allowed_origins {
-      validate_origin(origin)?;
-    }
-    if self.allow_credentials {
-      return Err(HttpConfigError::CredentialsNotAllowed);
-    }
     Ok(())
-  }
-
-  pub(crate) fn origin_header_values(&self) -> Result<Vec<HeaderValue>, HttpConfigError> {
-    self.validate()?;
-    self
-      .allowed_origins
-      .iter()
-      .map(|origin| {
-        HeaderValue::from_str(origin)
-          .map_err(|_| HttpConfigError::InvalidOrigin(origin.to_string()))
-      })
-      .collect()
   }
 }
 
 /// Invalid HTTP boundary configuration.
 #[derive(Debug, Error)]
 pub enum HttpConfigError {
-  /// Browser credential forwarding conflicts with the stateless service boundary.
-  #[error("allow_credentials must be false; end-user authentication belongs to island-port")]
-  CredentialsNotAllowed,
   /// The configured body limit would reject every nonempty request.
   #[error("max_request_body_bytes must be greater than zero")]
   ZeroRequestBodyLimit,
-  /// An origin is wildcarded, malformed, or includes a path, query, or fragment.
-  #[error("allowed origin `{0}` must be one exact http or https origin without a path")]
-  InvalidOrigin(String),
-}
-
-fn validate_origin(origin: &str) -> Result<(), HttpConfigError> {
-  if origin == "*" || origin.ends_with('/') {
-    return Err(HttpConfigError::InvalidOrigin(origin.to_string()));
-  }
-
-  let uri = origin
-    .parse::<Uri>()
-    .map_err(|_| HttpConfigError::InvalidOrigin(origin.to_string()))?;
-  if !matches!(uri.scheme_str(), Some("http" | "https"))
-    || uri.authority().is_none()
-    || uri
-      .authority()
-      .is_some_and(|authority| authority.as_str().contains('@'))
-    || uri
-      .path_and_query()
-      .is_some_and(|path_and_query| path_and_query.as_str() != "/")
-  {
-    return Err(HttpConfigError::InvalidOrigin(origin.to_string()));
-  }
-
-  HeaderValue::from_str(origin).map_err(|_| HttpConfigError::InvalidOrigin(origin.to_string()))?;
-  Ok(())
 }
 
 /// Translation routing and provider-call settings.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TranslationConfig {
-  /// Maximum Unicode character count routed to Gemma 4.
-  pub long_text_chars: usize,
   /// Timeout for one provider request.
   pub timeout_seconds: u64,
   /// Retry count after the initial provider request.
@@ -531,8 +467,6 @@ pub struct TranslationConfig {
 pub struct ProviderResilienceConfigs {
   /// Policy for the short-text Gemma 4 provider and structured lexical-card requests.
   pub gemma4: ProviderResilienceConfig,
-  /// Policy for the long-text TranslateGemma provider.
-  pub translate_gemma: ProviderResilienceConfig,
 }
 
 /// Configurable resilience bounds for one outbound provider.
@@ -647,7 +581,6 @@ mod tests {
   #[test]
   fn provider_resilience_overrides_only_the_selected_provider_values() {
     let translation = TranslationConfig {
-      long_text_chars: 4_000,
       timeout_seconds: 60,
       max_retries: 3,
       retry_delay_ms: 250,
@@ -680,7 +613,6 @@ mod tests {
   #[test]
   fn provider_resilience_rejects_zero_critical_bounds() {
     let translation = TranslationConfig {
-      long_text_chars: 4_000,
       timeout_seconds: 60,
       max_retries: 0,
       retry_delay_ms: 0,
@@ -701,13 +633,12 @@ mod tests {
     let config: AppConfig = toml::from_str(
       r#"
 [server]
-host = "127.0.0.1"
-port = 3000
+socket_path = "/run/transnet/transnet.sock"
+socket_mode = "0660"
 log_level = "info"
 log_format = "compact"
 
 [translation]
-long_text_chars = 4000
 timeout_seconds = 2
 max_retries = 0
 retry_delay_ms = 0
@@ -717,23 +648,15 @@ base_url = "http://127.0.0.1:18011/v1"
 model = "Gemma4"
 api_key = "GEMMA4_CREDENTIAL_SECRET"
 
-[translate_gemma]
-base_url = "http://127.0.0.1:18007/v1"
-model = "TranslateGemma"
-api_key = "TRANSLATE_GEMMA_CREDENTIAL_SECRET"
 "#,
     )
     .unwrap();
 
     let app_debug = format!("{config:?}");
     let provider_debug = format!("{:?}", config.gemma4);
-    for credential in [
-      "GEMMA4_CREDENTIAL_SECRET",
-      "TRANSLATE_GEMMA_CREDENTIAL_SECRET",
-    ] {
-      assert!(!app_debug.contains(credential));
-      assert!(!provider_debug.contains(credential));
-    }
+    let credential = "GEMMA4_CREDENTIAL_SECRET";
+    assert!(!app_debug.contains(credential));
+    assert!(!provider_debug.contains(credential));
     assert!(app_debug.contains("ProviderApiKey([REDACTED])"));
   }
 
@@ -902,6 +825,26 @@ cursor_secret = "INLINE_SECRET_MUST_NEVER_BE_ACCEPTED"
     assert_eq!(error, AppConfigLoadError::Invalid);
     assert!(!diagnostics.contains("INLINE_SECRET_MUST_NEVER_BE_ECHOED"));
     assert!(!diagnostics.contains("cursor_secret"));
+  }
+
+  #[test]
+  fn listener_and_http_configuration_reject_transitional_keys() {
+    let server = toml::from_str::<ServerConfig>(
+      r#"socket_path = "/run/transnet/transnet.sock"
+socket_mode = "0660"
+log_level = "info"
+log_format = "compact"
+host = "127.0.0.1"
+port = 16002"#,
+    );
+    assert!(server.unwrap_err().to_string().contains("unknown field"));
+
+    let http = toml::from_str::<HttpConfig>(
+      r#"max_request_body_bytes = 1048576
+allowed_origins = ["http://localhost"]
+allow_credentials = false"#,
+    );
+    assert!(http.unwrap_err().to_string().contains("unknown field"));
   }
 
   fn enabled_canonical() -> EnabledCanonicalRuntimeConfig {

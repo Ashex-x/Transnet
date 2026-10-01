@@ -17,7 +17,7 @@ sudo systemctl enable transnet
 sudo systemctl restart transnet
 ```
 
-The unit creates `/run/transnet` with mode `0770` and a process umask of `0007`. The target runtime binds `/run/transnet/transnet.sock` inside that directory; grant only the island-port runtime access through the configured group. The current executable still uses its configured loopback TCP listener until the inbound UDS migration is complete.
+The unit creates `/run/transnet` with mode `0770` and a process umask of `0007`. The runtime binds only `/run/transnet/transnet.sock` inside that directory; grant only the island-port runtime access through the configured group.
 
 Production configuration and any provider credentials remain outside version control. Never add credentials, request text, generated output, logs, or runtime state to this repository. See the [configuration guide](configuration.md) for the current and target settings.
 
@@ -46,14 +46,7 @@ The remote hard reset intentionally makes the dedicated production checkout matc
 
 ## Release check
 
-Until the UDS transport migration is complete, verify the configured transitional loopback listener and inspect the service:
-
-```bash
-curl --fail http://127.0.0.1:16002/health
-sudo systemctl status transnet
-```
-
-After the target listener is implemented, use the documented UDS probe instead:
+Verify the target UDS probe and inspect the service:
 
 ```bash
 curl --fail --unix-socket /run/transnet/transnet.sock \

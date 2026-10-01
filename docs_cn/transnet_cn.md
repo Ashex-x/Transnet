@@ -2,7 +2,7 @@
 
 English: [Transnet: LLM translation and relationship knowledge design](../docs/transnet.md)
 
-状态：权威目标设计。仓库中的当前运行时已实现回环地址上的翻译、模型驱动的结构化查询，以及按需启用的 Transnet-side canonical BasicCard 与固定发布 sense 读取。对应的 island-port/MySQL 服务端与生产验收、Qdrant 落地和高级编排仍属于目标能力，除非相关接口文档另有说明。
+状态：权威目标设计。当前运行时通过所属 Unix socket 提供目标 API，使用单一中立 Gemma4-27B generation provider，并按需启用 canonical/knowledge read。Island-port server、生产 MySQL/Qdrant 执行、relationship-page authority composition 与生产验收仍属外部或未验证工作，除非接口文档另有说明。
 
 ## 产品焦点
 
