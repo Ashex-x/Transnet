@@ -306,7 +306,8 @@ impl TranslationOrchestrator {
           versions.push(operation_version(&repaired, GenerationProfile::Reasoning));
           value
         }
-        Ok(_) | Err(_) => return Err(TranslationOrchestrationError::GuidanceViolation),
+        Ok(_) => return Err(TranslationOrchestrationError::GuidanceViolation),
+        Err(_) => return Err(TranslationOrchestrationError::InvalidModelOutput),
       };
       assembled.push_str(&translation);
       assembled.push_str(&text[chunk.separator]);
@@ -438,8 +439,14 @@ fn guidance_satisfied(turn: &TranslationTurn, source: &str, translated: &str) ->
 }
 
 fn contains_term(haystack: &str, needle: &str) -> bool {
-  let haystack = haystack.nfkc().flat_map(char::to_lowercase).collect::<String>();
-  let needle = needle.nfkc().flat_map(char::to_lowercase).collect::<String>();
+  let haystack = haystack
+    .nfkc()
+    .flat_map(char::to_lowercase)
+    .collect::<String>();
+  let needle = needle
+    .nfkc()
+    .flat_map(char::to_lowercase)
+    .collect::<String>();
   haystack.match_indices(&needle).any(|(start, value)| {
     let end = start + value.len();
     let left = haystack[..start].chars().next_back();
