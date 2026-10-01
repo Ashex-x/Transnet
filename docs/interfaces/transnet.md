@@ -152,7 +152,7 @@ Text is limited to 131,072 Unicode scalars. Segmented input accepts at most 256 
 
 ## Professional guidance
 
-`guidance` is optional and request-scoped. Omitted values use `general`, `general`, `preserve`, zero alternatives, the response-level default annotations, and `offline` freshness.
+`guidance` is optional and request-scoped. Omitted values use `general`, `general`, `preserve`, zero alternatives, the response-level default annotations, and `offline` freshness. `max_alternatives` is a Milestone 5 result-composition capability; Milestone 1 accepts and validates no nonzero value and does not fabricate alternatives before that application result exists.
 
 ```json
 {
@@ -237,6 +237,8 @@ Each displayed item is the root or includes an explicit path to the root, a conc
 ## POST /api/v1/capabilities
 
 Returns configured BCP 47 language pairs, input kinds, image types, purposes, annotation families, knowledge lenses, body and semantic limits, live-retrieval availability, and schema versions. It exposes no credentials, provider URLs, socket paths, concurrency state, or private feature flags.
+
+Capabilities follows the interface-wide response policy: every response carries `Cache-Control: no-store`. Callers may refresh it when they need current deployment information, but the contract promises no HTTP caching or validator semantics.
 
 Request: `{}`
 

@@ -6,7 +6,7 @@ The ports module defines narrow operations that application services require fro
 
 ## Model operations
 
-The generation port provides bounded translation, visual reading, and structured generation through `fast` or `reasoning` profiles of the same configured VLM. Application code selects an operation and the orchestrator applies the closed escalation policy; neither selects a provider brand. The embedding port separately exposes publication-time canonical embedding and request-local candidate nomination. Provider URLs, credentials, HTTP envelopes, prompts, reasoning controls, image encoding, JSON Schema mechanics, retry headers, and model-specific payloads belong to adapters.
+The generation port provides bounded translation, visual reading, and structured generation through `fast` or `reasoning` profiles of the same configured VLM. Application code selects an operation and the orchestrator applies the closed escalation policy; neither selects a provider brand. The embedding port exposes only request-local candidate nomination. Publication sends frozen canonical dense and lexical inputs to island-port, which alone executes and attests publication embeddings and lexical encoding. Provider URLs, credentials, HTTP envelopes, prompts, reasoning controls, image encoding, JSON Schema mechanics, retry headers, and model-specific payloads belong to adapters.
 
 Model output is never canonical evidence. Callers validate structure and references before use and discard request content and generated material when the request ends.
 

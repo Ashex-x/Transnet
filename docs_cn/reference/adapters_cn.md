@@ -6,7 +6,7 @@ Adapter 模块实现模型与数据 port。它负责外部协议机制，同时�
 
 ## 模型 provider
 
-目标 OpenAI-compatible 生成 adapter 负责单个 Gemma4-27B VLM 的 HTTP 构造、认证、响应大小限制、图片编码、严格结构化输出解码、安全错误映射与容错集成。它把 domain-neutral `fast` 与 `reasoning` profile 映射到 provider 设置，而不暴露 provider-native reasoning 字段。独立 embedding adapter 服务于离线规范发布与在线临时候选提名。
+目标 OpenAI-compatible 生成 adapter 负责单个 Gemma4-27B VLM 的 HTTP 构造、认证、响应大小限制、图片编码、严格结构化输出解码、安全错误映射与容错集成。它把 domain-neutral `fast` 与 `reasoning` profile 映射到 provider 设置，而不暴露 provider-native reasoning 字段。独立 embedding adapter 只服务在线临时候选提名。发布 embedding 与 lexical encoding 是 island-port 的执行职责，并通过 publication adapter 返回经证明的 receipt。
 
 当前运行时仍在 `translation.long_text_chars` 处选择 Gemma 4 或 TranslateGemma。这是过渡期已实现行为，不是目标 provider 拓扑。后续运行时切片将移除第二个生成模型，并通过 application 自有分块在同一 VLM 上处理长输入。
 

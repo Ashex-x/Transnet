@@ -18,7 +18,7 @@ Neither prompts nor hidden reasoning are response data. The service may return c
 
 ## Embedding operations
 
-The embedding port has two bounded uses. Offline publication embeds reviewed canonical nodes and relationship explanations into an immutable release projection. Online requests may embed a query or an explicitly permitted live-retrieval fragment in memory to nominate candidates. Online vectors are discarded with the request and never enter logs, traces, metrics, caches, canonical storage, or a later release.
+The Transnet embedding port has one bounded use: online requests may embed a query or an explicitly permitted live-retrieval fragment in memory to nominate candidates. Online vectors are discarded with the request and never enter logs, traces, metrics, caches, canonical storage, or a later release. Offline publication instead sends frozen canonical inputs to island-port; island-port executes dense embedding and lexical encoding and attests the exact revisions and dimensions in publication receipts. Edge inputs contain structured endpoints, typed relation, scope, and verified evidence metadata, never newly generated relationship prose.
 
 Vector similarity is a ranking signal only. It cannot establish translation equivalence, synonymy, taxonomy, causality, mechanism, cultural meaning, evidence, or truth.
 

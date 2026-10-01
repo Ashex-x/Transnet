@@ -56,7 +56,7 @@ flowchart LR
 
 节点先于边构建。每条规范断言指定关系注册表版本、角色参与者、陈述、适用词义与领域、条件、语言、方言、地区、时代、证据状态、置信度、来源、验证状态和发布。Registry 定义元数、角色约束、逆关系、对称性、传递性、因果性及允许的二元遍历投影，不从标签猜测。不存在新的权威关系解释 prose：每个 Qdrant edge 都是一个已声明二元投影，其带版本 input 由冻结 endpoint lexical input、typed wire relation、已接纳 structured scope 与 verified evidence metadata 确定性组装，并保留来源断言身份。
 
-已实现的 admission foundation 还要求精确且已冻结的 Qdrant wire 映射、精确 inverse 声明、规范端点 kind 与发布所有权、verified lifecycle，以及 evidence ID 到具有 storage/embedding permission 的 active、source-qualified lineage 的一对一解析。对称输入只为 identity 进行规范化；publisher 不合成 inverse record。重复 typed assertion 不受输入顺序或替代 edge ID 影响，均被确定性拒绝。在 canonical domain ID 和 condition schema 冻结前，字符串 domain scope 与自由文本 condition 闭合失败，不进入投影 payload。
+已实现的 admission foundation 还要求精确且已冻结的 Qdrant wire 映射、精确 inverse 声明、规范端点 kind 与发布所有权、verified lifecycle，以及 evidence ID 到具有 storage/embedding permission 的 active、source-qualified lineage 的一对一解析。对称输入只为 identity 进行规范化；publisher 不合成 inverse record。重复 typed assertion 不受输入顺序或替代 edge ID 影响，均被确定性拒绝。Domain scope 使用已排序的规范 `DomainId`，condition 使用 registry 自有的 `condition_id`、`condition_type` 与已排序 `parameter_ids`；过渡期字符串 domain scope 与自由文本 condition 闭合失败，不进入投影 payload。
 
 ## 构建不可变 Qdrant 集合
 

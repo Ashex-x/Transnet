@@ -152,7 +152,7 @@ Transnet 不接受用户、学习者、账户、owner、session、cookie、beare
 
 ## 专业 guidance
 
-`guidance` 可选且仅属于当前请求。省略时分别使用 `general`、`general`、`preserve`、零个 alternative、response-level 默认 annotation 与 `offline` freshness。
+`guidance` 可选且仅属于当前请求。省略时分别使用 `general`、`general`、`preserve`、零个 alternative、response-level 默认 annotation 与 `offline` freshness。`max_alternatives` 是 Milestone 5 的结果组合能力；Milestone 1 在对应 application result 存在前不接受非零值，也不伪造 alternative。
 
 ```json
 {
@@ -237,6 +237,8 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 ## POST /api/v1/capabilities
 
 返回已配置 BCP 47 语言对、输入类型、图片类型、purpose、annotation family、知识 lens、body 与语义限制、实时检索可用性和 schema 版本。它不暴露凭据、provider URL、socket 路径、并发状态或私有 feature flag。
+
+Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cache-Control: no-store`。调用方可以在需要当前部署信息时重新获取，但合同不承诺 HTTP cache 或 validator 语义。
 
 请求：`{}`
 

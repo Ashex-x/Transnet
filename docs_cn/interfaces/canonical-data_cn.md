@@ -85,6 +85,8 @@ erDiagram
 
 `canonical_relationship_revision` 是一个精确 assertion 修订的已校验二元 traversal 投影。它把稳定公开 edge ID 和正关系版本映射到 source/target endpoint、固定 relation-registry 版本、方向、限制与评估资格。Endpoint 和关系字段保留为索引列；解释及有界范围/支持列表使用带版本 payload。该投影支持高效知识视图，但不成为第二权威来源。关系判断与聚合保留在[目标 MySQL 实现](../../docs/interfaces/tables/mysql.sql)定义的独立授权 island-port 产品 schema 中；Transnet 无法访问私有行。
 
+每个 domain 引用都是在同一发布中解析的规范 `DomainId`；label 或自由文本领域名绝不是 identity。关系与 scale condition 使用 registry 自有对象，包含 `condition_id`、`condition_type` 和已排序的 `parameter_ids`，并全部在该发布中解析。展示 prose 可以从这些记录补全，但自由文本 condition 不得进入规范 scope 或 projection identity。
+
 语义尺度使用 `entity_type = 'semantic_scale'` 的 `canonical_entity`。其不可变修订 payload 存储命名维度、递增或递减方向、适用领域与条件、有序词义限定节点成员及证据引用。成员位置只定义顺序。发布拒绝重复位置、缺失成员、混合不兼容词义、缺失证据，以及把尺度编码成 `is_a` 分类的行为。基础卡、事实、profile 与尺度均通过 `release_member` 加入发布。
 
 ## 通用操作 envelope
@@ -432,7 +434,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
         "object_node_id": "node_sweltering_hot_01",
         "domain_ids": ["domain_weather"],
         "applicable_sense_ids": ["sense_sweltering_hot_01"],
-        "conditions": ["describes weather or an environment"],
+        "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
         "evidence_ids": ["evidence_dictionary_1042"],
         "provenance": ["source_dictionary_2026_01"],
         "verification_state": "verified"
@@ -474,7 +476,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
         "dimension": "environmental_heat_intensity",
         "direction": "increasing",
         "domain_ids": ["domain_weather"],
-        "conditions": ["describes weather or an environment"],
+        "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
         "members": [
           {"node_id": "node_warm_temperature_01", "position": 10},
           {"node_id": "node_hot_temperature_01", "position": 20},

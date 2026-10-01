@@ -38,7 +38,7 @@ Repository-side admission, request/result Debug redaction, closed telemetry, and
 
 ## Milestone 1: freeze translation and intent routing
 
-- [ ] Replace the transitional Gemma 4/TranslateGemma length router with one Gemma4-27B VLM exposing internal fast and reasoning profiles plus one embedding port.
+- [ ] Replace the transitional Gemma 4/TranslateGemma length router with one Gemma4-27B VLM exposing internal fast and reasoning profiles plus one request-local nomination embedding port; publication embedding remains island-port-owned.
 - [ ] Keep ordinary and chunked translation on the fast profile, permit at most one closed-policy reasoning escalation per request, and prove hidden reasoning is never returned or logged.
 - [ ] Implement shared success and error envelopes, strict unknown-field rejection, language-tag validation, request metadata, and safe status mapping.
 - [ ] Implement the simple text, source-language, target-language, response-level, and optional minimal-history request plus the discriminated word, phrase, and passage `TranslationResult` response.
@@ -94,9 +94,10 @@ Exit criteria: retrieval is bounded, release-pinned, filter-safe, and useful for
 
 ## Milestone 5: compose relationship-centered translation-wiki pages
 
-- [ ] Add a bounded domain assessment after sense resolution with `general`, `domain_specific`, `mixed`, or `uncertain`, validated candidate domain IDs, and a concise reason.
+- [ ] Add a bounded domain assessment after sense resolution with the closed outcomes `existing`, `proposed_new`, `general`, or `uncertain`, validated canonical domain IDs, and a concise reason.
 - [ ] Retrieve the existing-domain inventory and RAG coverage before assessment; return `proposed_new` only when the available catalog succeeds and no supplied scope fits, with no live creation endpoint.
 - [ ] Publish and hydrate atomic basic facts, domain knowledge profiles, and first-class semantic scales; allow LLM bootstrap only through quarantined offline candidates.
+- [ ] Add explicitly requested labeled alternatives, capped at two per unit, through application/domain result types and deterministic usefulness evaluation rather than transport-only fabrication.
 - [ ] Resolve multilingual terms and aliases to shared concepts while preserving preferred term, translated term, alias, region, discipline, and usage status.
 - [ ] Rank and group only useful supported content: meaning, terminology, taxonomy or degree, contrasts, valency, collocations, suitability, morphology, cultural extensions, mechanisms, neighboring phenomena, applications, measurements, standards, and usage conventions.
 - [ ] Use progressive disclosure: begin with the basic card or concept summary, then high-value direct groups, optional named short paths, and a visibly separate exploratory section.

@@ -204,9 +204,9 @@ An edge is a typed, searchable connection whose embedding input is derived only 
     "fact_revision": 1,
     "source_node_id": "node_sweltering_hot_01",
     "target_node_id": "node_scorching_heat_01",
-    "relation_type": "higher_degree",
+    "relation_type": "higher_degree_than",
     "applicable_sense_ids": ["sense_sweltering_hot_01"],
-    "conditions": ["temperature describes weather or an environment"],
+    "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
     "restrictions": {
       "dimension": "temperature_intensity",
       "register": "general"
@@ -226,11 +226,11 @@ An edge is a typed, searchable connection whose embedding input is derived only 
 
 Supported families cover lexical naming and translation equivalence; taxonomy and part-whole structure; synonymy, antonymy, contrast, and named intensity dimensions; valency, grammar, collocation, and fixed expressions; morphology; suitability by register, dialect, region, period, scene, and domain; cultural extension; and domain mechanism, causation, dependency, implementation, application, measurement, standardization, and terminology. Exploratory associations remain a separate family. A versioned relation-type registry defines direction, inverse, symmetry, transitivity, and causality; neither the UI nor the LLM infers those properties from wording. Payload indexes cover both endpoints, relation type and version, assessment eligibility, publication and verification state, release, applicable sense, language, dialect, region, period, domain, and evidence ID. Qdrant stores no judgment or aggregate value.
 
-The current Transnet registry freezes only mappings whose exact direction is already normative here: internal `Hypernym` stores broader to narrower and publishes as `has_subtype`; internal `Hyponym` stores narrower to broader and publishes as `is_a`; `LowerDegree` and `HigherDegree` publish as `lower_degree_than` and `higher_degree_than`. Existing graph identities for synonymy, antonymy, translation equivalence, morphology, construction, etymology, and weak association retain their internal direction and inverse rules, but their Qdrant wire names, transitivity, and causality remain unresolved contract gaps. Publication fails closed rather than deriving names from Rust variants or English labels.
+The v1 wire registry freezes these names and inverses: `synonym`, `near_synonym`, `translation_equivalent`, `antonym`, `confusable_with`, `associated_with`, and `derivationally_related_to` are symmetric and self-inverse; `has_subtype` / `is_a`, `has_part` / `part_of`, `inflection_of` / `has_inflection`, `etymologically_derived_from` / `etymological_source_of`, `member_of_construction` / `has_construction_member`, `scale_contains` / `member_of_scale`, and `lower_degree_than` / `higher_degree_than` are directed inverse pairs. Only `is_a` and `has_subtype` declare taxonomy transitivity. All other listed relations declare transitivity not applicable. None of these v1 relations is causal; only a separately registered explicit causation relation may declare causality, and every non-causation relation declares causality not applicable. Publication fails closed for a name, inverse, endpoint family, or property not present in the pinned registry rather than deriving semantics from Rust variants or labels.
 
-Before projection, the implemented Transnet admission boundary requires the declared wire relation and inverse to equal the registry, validates the permitted endpoint kinds, and canonicalizes symmetric endpoints for identity without emitting a second inverse edge. One stable edge identity contains the immutable release, publisher-assigned relationship ID and revision, canonical endpoints, internal relation type, and admitted scope; runtime rank, insertion order, request IDs, timestamps, and Qdrant-generated IDs never participate. Duplicate typed assertions are rejected separately by release, canonicalized endpoints, relation type, and scope even if a publisher supplied different relationship IDs. Evidence revision membership in edge identity remains unresolved and is therefore not guessed.
+Before projection, the implemented Transnet admission boundary requires the declared wire relation and inverse to equal the registry, validates the permitted endpoint kinds, and canonicalizes symmetric endpoints for identity without emitting a second inverse edge. One stable edge identity contains the immutable release, publisher-assigned relationship ID and relationship revision, canonical endpoints, internal relation type, and admitted scope; runtime rank, insertion order, request IDs, timestamps, Qdrant-generated IDs, and evidence revisions never participate. Evidence revisions are instead bound through the immutable relationship revision, exact release membership, verified evidence content hashes, and projection/content hashes. Duplicate typed assertions are rejected separately by release, canonicalized endpoints, relation type, and scope even if a publisher supplied different relationship IDs.
 
-Admission resolves every evidence ID through the existing canonical evidence lineage. The exact ID set must match, every fragment must belong to the relationship release, both source and fragment permissions must allow storage and embedding, the fragment must be active, and generated evidence must have completed reviewed promotion. Evidence confidence uses the existing closed `High`, `Medium`, and `Low` domain values, so an absent or out-of-range numeric value cannot enter this domain boundary. The current `GraphScope` can safely carry a typed dialect and a bounded nonblank register. Free-text conditions and string domain scope are rejected from M3 projection until canonical condition and domain-ID semantics are frozen.
+Admission resolves every evidence ID through the existing canonical evidence lineage. The exact ID set must match, every fragment must belong to the relationship release, both source and fragment permissions must allow storage and embedding, the fragment must be active, and generated evidence must have completed reviewed promotion. Evidence confidence uses the existing closed `High`, `Medium`, and `Low` domain values, so an absent or out-of-range numeric value cannot enter this domain boundary. Domain scope uses sorted, unique canonical `DomainId` values from the same release; labels and free-form strings are never domain identity. Each condition is a structured registry-owned object with `condition_id`, `condition_type`, and sorted `parameter_ids`; all three are canonical identifiers resolved in the same release, and prose belongs only in hydrated display data. The transitional `GraphScope.domain` and `GraphScope.note` strings therefore remain inadmissible to publication.
 
 `is_a` points from a narrower sense to a broader category and `has_subtype` is its inverse. `lower_degree_than` and `higher_degree_than` compare members only within a named compatible dimension. No degree edge implies taxonomy, synonymy, or interchangeability.
 
@@ -254,7 +254,7 @@ A first-class semantic scale is stored as a node projection so one retrieval can
     "dimension": "environmental_heat_intensity",
     "direction": "increasing",
     "domain_ids": ["domain_weather"],
-    "conditions": ["describes weather or an environment"],
+    "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
     "members": [
       {"node_id": "node_warm_temperature_01", "position": 10},
       {"node_id": "node_hot_temperature_01", "position": 20},
@@ -406,7 +406,7 @@ Response:
         "score": 0.91,
         "source_node_id": "node_sweltering_hot_01",
         "target_node_id": "node_scorching_heat_01",
-        "relation_type": "higher_degree",
+        "relation_type": "higher_degree_than",
         "relation_registry_version": 1,
         "fact_id": "fact_sweltering_degree_scorching_01",
         "fact_revision": 2,
@@ -453,7 +453,7 @@ Response:
           "edge_id": "edge_sweltering_scorching_01",
           "source_node_id": "node_sweltering_hot_01",
           "target_node_id": "node_scorching_heat_01",
-          "relation_type": "higher_degree",
+          "relation_type": "higher_degree_than",
           "verification_state": "verified"
         },
         "node": {

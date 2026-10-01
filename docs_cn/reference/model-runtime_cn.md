@@ -18,7 +18,7 @@ Prompt 与隐藏 reasoning 都不是响应数据。服务可以返回精简结�
 
 ## Embedding 操作
 
-Embedding port 有两类有界用途。离线发布把已审核规范节点与关系说明嵌入不可变发布投影。在线请求可以在内存中嵌入 query 或经明确许可的实时检索片段，以提名候选。在线向量随请求丢弃，绝不进入日志、trace、指标、cache、规范存储或后续发布。
+Transnet embedding port 只有一类有界用途：在线请求可以在内存中嵌入 query 或经明确许可的实时检索片段，以提名候选。在线向量随请求丢弃，绝不进入日志、trace、指标、cache、规范存储或后续发布。离线发布改为向 island-port 发送冻结的规范输入；island-port 执行 dense embedding 与 lexical encoding，并在 publication receipt 中证明精确 revision 与 dimension。Edge input 只包含结构化 endpoint、typed relation、scope 与 verified evidence metadata，绝不包含新生成的 relationship prose。
 
 向量相似度仅是排序信号。它不能建立翻译等价、同义、分类、因果、机制、文化含义、证据或真值。
 

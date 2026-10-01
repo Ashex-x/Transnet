@@ -6,7 +6,7 @@ Port 模块定义 application service 从模型和数据依赖所需的窄操作
 
 ## 模型操作
 
-生成 port 通过同一已配置 VLM 的 `fast` 或 `reasoning` profile 提供有界翻译、视觉读取与结构化生成。Application 代码选择操作，编排器应用闭合升级策略；两者都不选择 provider 品牌。Embedding port 分别暴露发布期规范 embedding 与请求级候选提名。Provider URL、凭据、HTTP envelope、prompt、reasoning 控制、图片编码、JSON Schema 机制、重试 header 与模型专属 payload 属于 adapter。
+生成 port 通过同一已配置 VLM 的 `fast` 或 `reasoning` profile 提供有界翻译、视觉读取与结构化生成。Application 代码选择操作，编排器应用闭合升级策略；两者都不选择 provider 品牌。Embedding port 只暴露请求级候选提名。发布流程把冻结的规范 dense 与 lexical 输入发送给 island-port；只有 island-port 执行并证明发布 embedding 与 lexical encoding。Provider URL、凭据、HTTP envelope、prompt、reasoning 控制、图片编码、JSON Schema 机制、重试 header 与模型专属 payload 属于 adapter。
 
 模型输出绝不是规范证据。调用方必须在使用前校验结构与引用，并在请求结束时丢弃请求内容和生成材料。
 

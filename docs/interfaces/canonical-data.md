@@ -85,6 +85,8 @@ A fact uses `canonical_entity` with `entity_type = 'fact'`. Its immutable `canon
 
 A `canonical_relationship_revision` is a validated binary traversal projection of one exact assertion revision. It maps one stable public edge ID and positive relation version to source and target endpoints, the pinned relation-registry version, direction, restrictions, and assessment eligibility. Endpoint and relation fields remain indexed columns; explanations and bounded scope/support lists use the versioned payload. This projection supports efficient knowledge views without becoming a second source of truth. Relationship judgments and aggregates remain in the separately authorized island-port product schema defined by the [target MySQL implementation](tables/mysql.sql); Transnet cannot access the private rows.
 
+Every domain reference is a canonical `DomainId` resolved in the same release; a label or free-form field name is never identity. Relationship and scale conditions use registry-owned objects containing `condition_id`, `condition_type`, and sorted `parameter_ids`, all resolved in that release. Display prose may be hydrated from those records, but free-text conditions cannot enter canonical scope or projection identity.
+
 A semantic scale uses `canonical_entity` with `entity_type = 'semantic_scale'`. Its immutable revision payload stores the named dimension, increasing or decreasing direction, applicable domains and conditions, ordered sense-qualified node members, and evidence references. Member positions define order only. Publication rejects duplicate positions, missing members, mixed incompatible senses, absent evidence, and any attempt to encode a scale as `is_a` taxonomy. Basic cards, facts, profiles, and scales all join a release through `release_member`.
 
 ## Common operation envelope
@@ -440,7 +442,7 @@ Response:
         "object_node_id": "node_sweltering_hot_01",
         "domain_ids": ["domain_weather"],
         "applicable_sense_ids": ["sense_sweltering_hot_01"],
-        "conditions": ["describes weather or an environment"],
+        "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
         "evidence_ids": ["evidence_dictionary_1042"],
         "provenance": ["source_dictionary_2026_01"],
         "verification_state": "verified"
@@ -482,7 +484,7 @@ Response:
         "dimension": "environmental_heat_intensity",
         "direction": "increasing",
         "domain_ids": ["domain_weather"],
-        "conditions": ["describes weather or an environment"],
+        "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
         "members": [
           {"node_id": "node_warm_temperature_01", "position": 10},
           {"node_id": "node_hot_temperature_01", "position": 20},
