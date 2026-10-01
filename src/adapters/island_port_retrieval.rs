@@ -16,7 +16,8 @@ use crate::{
       NeighborSearchResult, NodeCandidate, NodeCandidatePayload, NodeSearchRequest,
       NodeSearchResult, RetrievalDataScore, RetrievalDataValidationError, RetrievalFilters,
       RetrievalNodeType, RetrievalPublicationState, RetrievalRelation, RetrievalVerificationState,
-      ScaleCandidate, ScaleSearchRequest, ScaleSearchResult, RETRIEVAL_DATA_SCHEMA_VERSION,
+      ScaleCandidate, ScaleSearchRequest, ScaleSearchResult, RELATION_REGISTRY_VERSION,
+      RETRIEVAL_DATA_SCHEMA_VERSION,
     },
   },
   ports::retrieval_data::{RetrievalDataError, RetrievalDataPort},
@@ -656,23 +657,31 @@ impl<T> ResponseDto<T> {
       return Err(RetrievalDataError::InconsistentData);
     }
     let release_id = parse_id(self.release_id)?;
-    match (self.outcome, self.value, self.error) {
-      (OutcomeDto::Ok, Some(value), None) => Ok((release_id, value)),
-      (OutcomeDto::Missing, None, Some(error)) if error.code == "not_found" => {
-        Err(RetrievalDataError::NotFound)
-      }
-      (OutcomeDto::VersionMismatch, None, Some(error)) if error.code == "schema_incompatible" => {
-        Err(RetrievalDataError::SchemaIncompatible)
-      }
-      (OutcomeDto::VersionMismatch, None, Some(error))
-        if error.code == "content_release_unavailable" =>
-      {
+    if matches!(self.outcome, OutcomeDto::Ok) {
+      return match (self.value, self.error) {
+        (Some(value), None) => Ok((release_id, value)),
+        _ => Err(RetrievalDataError::InconsistentData),
+      };
+    }
+    if self.value.is_some() {
+      return Err(RetrievalDataError::InconsistentData);
+    }
+    let code = self
+      .error
+      .and_then(|error| RetrievalErrorCode::parse(&error.code))
+      .ok_or(RetrievalDataError::InconsistentData)?;
+    if !self.outcome.accepts(code) {
+      return Err(RetrievalDataError::InconsistentData);
+    }
+    match code {
+      RetrievalErrorCode::NotFound => Err(RetrievalDataError::NotFound),
+      RetrievalErrorCode::InvalidPayload => Err(RetrievalDataError::InvalidRequest),
+      RetrievalErrorCode::SchemaIncompatible => Err(RetrievalDataError::SchemaIncompatible),
+      RetrievalErrorCode::ContentReleaseUnavailable => {
         Err(RetrievalDataError::ContentReleaseUnavailable)
       }
-      (OutcomeDto::InvalidPayload, None, Some(_)) => Err(RetrievalDataError::InvalidRequest),
-      (OutcomeDto::Unavailable, None, Some(_)) => Err(RetrievalDataError::Unavailable),
-      (OutcomeDto::Timeout, None, Some(_)) => Err(RetrievalDataError::Timeout),
-      _ => Err(RetrievalDataError::InconsistentData),
+      RetrievalErrorCode::DependencyUnavailable => Err(RetrievalDataError::Unavailable),
+      RetrievalErrorCode::Timeout => Err(RetrievalDataError::Timeout),
     }
   }
 }
@@ -686,6 +695,46 @@ enum OutcomeDto {
   VersionMismatch,
   Unavailable,
   Timeout,
+}
+
+impl OutcomeDto {
+  fn accepts(&self, code: RetrievalErrorCode) -> bool {
+    match self {
+      Self::Missing => code == RetrievalErrorCode::NotFound,
+      Self::InvalidPayload => code == RetrievalErrorCode::InvalidPayload,
+      Self::VersionMismatch => matches!(
+        code,
+        RetrievalErrorCode::SchemaIncompatible | RetrievalErrorCode::ContentReleaseUnavailable
+      ),
+      Self::Unavailable => code == RetrievalErrorCode::DependencyUnavailable,
+      Self::Timeout => code == RetrievalErrorCode::Timeout,
+      Self::Ok => false,
+    }
+  }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum RetrievalErrorCode {
+  NotFound,
+  InvalidPayload,
+  SchemaIncompatible,
+  ContentReleaseUnavailable,
+  DependencyUnavailable,
+  Timeout,
+}
+
+impl RetrievalErrorCode {
+  fn parse(value: &str) -> Option<Self> {
+    match value {
+      "not_found" => Some(Self::NotFound),
+      "invalid_payload" => Some(Self::InvalidPayload),
+      "schema_incompatible" => Some(Self::SchemaIncompatible),
+      "content_release_unavailable" => Some(Self::ContentReleaseUnavailable),
+      "dependency_unavailable" => Some(Self::DependencyUnavailable),
+      "timeout" => Some(Self::Timeout),
+      _ => None,
+    }
+  }
 }
 
 #[derive(Deserialize)]
@@ -812,7 +861,7 @@ struct EdgeCandidateDto {
 
 impl EdgeCandidateDto {
   fn into_domain(self) -> Result<EdgeCandidate, RetrievalDataError> {
-    if self.relation_registry_version == 0 || self.fact_revision == 0 {
+    if self.relation_registry_version != RELATION_REGISTRY_VERSION || self.fact_revision == 0 {
       return Err(RetrievalDataError::InconsistentData);
     }
     Ok(EdgeCandidate {
@@ -938,7 +987,7 @@ mod tests {
   use crate::domain::{
     canonical::LanguageTag,
     request_context::RequestId,
-    retrieval_data::{DenseQueryVector, SparseQueryVector},
+    retrieval_data::{DenseQueryVector, SparseQueryVector, DENSE_QUERY_VECTOR_DIMENSIONS},
   };
 
   struct FakeTransport {
@@ -985,7 +1034,7 @@ mod tests {
 
   fn vectors() -> (DenseQueryVector, SparseQueryVector) {
     (
-      DenseQueryVector::new(vec![0.25, 0.5]).unwrap(),
+      DenseQueryVector::new(vec![0.25; DENSE_QUERY_VECTOR_DIMENSIONS]).unwrap(),
       SparseQueryVector::new(vec![1, 4], vec![1.0, 0.5]).unwrap(),
     )
   }
@@ -1117,6 +1166,115 @@ mod tests {
       )
       .await;
     assert_eq!(result, Err(RetrievalDataError::InconsistentData));
+  }
+
+  #[tokio::test]
+  async fn rejects_unknown_node_families_and_non_v1_relation_registry_responses() {
+    let unknown_family = transport(
+      r#"{"request_id":"request-1","schema_version":"retrieval-data-v1","outcome":"ok","value":{"candidates":[{"node_id":"node-1","score":0.9,"matched_by":["dense"],"payload":{"node_type":"custom_concept","sense_id":null,"canonical_label":"unsafe","verification_state":"verified"}}]},"error":null,"release_id":"knowledge-2026-09"}"#,
+    );
+    let client = IslandPortRetrievalClient::new(unknown_family);
+    let (dense_vector, sparse_vector) = vectors();
+    let result = client
+      .search_nodes(
+        &context(),
+        NodeSearchRequest {
+          dense_vector,
+          sparse_vector,
+          filters: filters("knowledge-2026-09"),
+          limit: 20,
+        },
+      )
+      .await;
+    assert_eq!(result, Err(RetrievalDataError::InconsistentData));
+
+    let wrong_registry = transport(
+      r#"{"request_id":"request-1","schema_version":"retrieval-data-v1","outcome":"ok","value":{"candidates":[{"edge_id":"edge-1","score":0.9,"source_node_id":"node-1","target_node_id":"node-2","relation_type":"higher_degree_than","relation_registry_version":2,"fact_id":"fact-1","fact_revision":1,"verification_state":"verified"}]},"error":null,"release_id":"knowledge-2026-09"}"#,
+    );
+    let client = IslandPortRetrievalClient::new(wrong_registry);
+    let (dense_vector, sparse_vector) = vectors();
+    let result = client
+      .search_edges(
+        &context(),
+        EdgeSearchRequest {
+          dense_vector,
+          sparse_vector,
+          filters: filters("knowledge-2026-09"),
+          relation_types: vec![RetrievalRelation::from_wire_name("higher_degree_than").unwrap()],
+          applicable_sense_ids: vec![],
+          limit: 20,
+        },
+      )
+      .await;
+    assert_eq!(result, Err(RetrievalDataError::InconsistentData));
+  }
+
+  #[tokio::test]
+  async fn enforces_exact_outcome_error_code_topology() {
+    let cases = [
+      ("missing", "not_found", RetrievalDataError::NotFound),
+      (
+        "invalid_payload",
+        "invalid_payload",
+        RetrievalDataError::InvalidRequest,
+      ),
+      (
+        "version_mismatch",
+        "schema_incompatible",
+        RetrievalDataError::SchemaIncompatible,
+      ),
+      (
+        "version_mismatch",
+        "content_release_unavailable",
+        RetrievalDataError::ContentReleaseUnavailable,
+      ),
+      (
+        "unavailable",
+        "dependency_unavailable",
+        RetrievalDataError::Unavailable,
+      ),
+      ("timeout", "timeout", RetrievalDataError::Timeout),
+    ];
+    for (outcome, code, expected) in cases {
+      let response = format!(
+        r#"{{"request_id":"request-1","schema_version":"retrieval-data-v1","outcome":"{outcome}","value":null,"error":{{"code":"{code}","message":"ignored"}},"release_id":"knowledge-2026-09"}}"#,
+      );
+      let client = IslandPortRetrievalClient::new(transport(&response));
+      let result = client
+        .search_scales(
+          &context(),
+          ScaleSearchRequest {
+            member_node_id: CanonicalId::new("node-1").unwrap(),
+            filters: filters("knowledge-2026-09"),
+            limit: 5,
+          },
+        )
+        .await;
+      assert_eq!(result, Err(expected));
+    }
+
+    for (outcome, code) in [
+      ("missing", "timeout"),
+      ("unavailable", "not_found"),
+      ("invalid_payload", "dependency_unavailable"),
+      ("timeout", "unknown_timeout"),
+    ] {
+      let response = format!(
+        r#"{{"request_id":"request-1","schema_version":"retrieval-data-v1","outcome":"{outcome}","value":null,"error":{{"code":"{code}","message":"must not classify"}},"release_id":"knowledge-2026-09"}}"#,
+      );
+      let client = IslandPortRetrievalClient::new(transport(&response));
+      let result = client
+        .search_scales(
+          &context(),
+          ScaleSearchRequest {
+            member_node_id: CanonicalId::new("node-1").unwrap(),
+            filters: filters("knowledge-2026-09"),
+            limit: 5,
+          },
+        )
+        .await;
+      assert_eq!(result, Err(RetrievalDataError::InconsistentData));
+    }
   }
 
   #[test]

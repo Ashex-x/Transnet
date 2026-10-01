@@ -32,7 +32,11 @@ Island-port 默认监听 `/run/island-port/island-port.sock`，并遵循[共享 
 
 每个精确请求 body 的结构为 `{"context": RequestContext, "input": EndpointInput}`。`RequestContext` 包含 `request_id`、`deadline_at`、值为 `retrieval-data-v1` 的 `schema_version`，并在适用时包含固定的 `content_release`。下方 endpoint 示例仅展示 `EndpointInput`。闭合 outcome 为 `ok`、`missing`、`invalid_payload`、`version_mismatch`、`unavailable` 和 `timeout`；发布还可返回 `conflict`。
 
-仓库内 client 要求全部四类 read 都固定一个 release，并要求每个重复的 `filters.release_id`、input 顶层 `release_id` 与 response `release_id` 等于该 context pin。Limit 范围为 1 到 50。Dense vector 包含 1 到 4,096 个有限值；sparse vector 包含 1 到 4,096 个有限值，index 与 value 等长且 index 严格递增。Filter list 最多 50 项，cursor 最多 512 个 ASCII-graphic byte，request 与 response body 各限 1 MiB。Relation filter 只使用冻结 registry 的精确 wire name；alias 与 Rust enum 拼写会闭合失败。
+仓库内 client 要求全部四类 read 都固定一个 release，并要求每个重复的 `filters.release_id`、input 顶层 `release_id` 与 response `release_id` 等于该 context pin。Limit 范围为 1 到 50。Dense vector 恰好包含 1,024 个有限值；sparse vector 包含 1 到 4,096 个有限值，index 与 value 等长且 index 严格递增。Filter list 最多 50 项，cursor 最多 512 个 ASCII-graphic byte，request 与 response body 各限 1 MiB。Relation filter 只使用冻结 registry 的精确 wire name；alias 与 Rust enum 拼写会闭合失败。Edge candidate 必须精确回显 relationship-registry version `1`。
+
+闭合 node-family catalog 为 `lexical_sense`、`phrase`、`multilingual_term`、`concept`、`entity`、`phenomenon`、`mechanism`、`process`、`equation`、`quantity`、`material`、`instrument`、`method`、`technology`、`application`、`standard`、`organization`、`person`、`place`、`idiom`、`metaphor`、`grammar_pattern`、`collocation`、`misconception`、`domain` 与 `semantic_scale`。Unknown family 用作 filter 时会在 transport 前失败，由 island-port 返回时会闭合失败。
+
+非成功 envelope 使用精确闭合 outcome/code topology：`missing` -> `not_found`；`invalid_payload` -> `invalid_payload`；`version_mismatch` -> `schema_incompatible | content_release_unavailable`；`unavailable` -> `dependency_unavailable`；`timeout` -> `timeout`。成功响应有 value 且无 error；失败响应有 error 且无 value。Unknown code、pair 不匹配或 value/error presence 矛盾均属于 inconsistent data；绝不根据 human message 分类失败。
 
 ## 存储边界
 

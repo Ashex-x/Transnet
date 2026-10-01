@@ -14,8 +14,10 @@ use super::{
 pub const RETRIEVAL_DATA_SCHEMA_VERSION: &str = "retrieval-data-v1";
 /// Largest result limit accepted by any retrieval-data search.
 pub const MAX_RETRIEVAL_DATA_RESULTS: usize = 50;
-/// Largest dense query vector accepted at the storage-neutral boundary.
-pub const MAX_DENSE_VECTOR_DIMENSIONS: usize = 4_096;
+/// Exact dense query-vector dimension frozen by retrieval-data-v1.
+pub const DENSE_QUERY_VECTOR_DIMENSIONS: usize = 1_024;
+/// Exact relationship-registry version accepted by retrieval-data-v1.
+pub const RELATION_REGISTRY_VERSION: u32 = 1;
 /// Largest sparse query vector accepted at the storage-neutral boundary.
 pub const MAX_SPARSE_VECTOR_TERMS: usize = 4_096;
 /// Largest opaque pagination cursor accepted from island-port.
@@ -74,27 +76,132 @@ pub enum NeighborDirection {
   Both,
 }
 
-/// Named node families understood by the retrieval projection.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RetrievalNodeType(String);
+/// Closed canonical node-family catalog understood by retrieval-data-v1.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum RetrievalNodeType {
+  /// One independently selectable lexical sense.
+  LexicalSense,
+  /// One established multi-token lexical phrase.
+  Phrase,
+  /// One explicitly aligned multilingual term.
+  MultilingualTerm,
+  /// One non-lexical canonical concept.
+  Concept,
+  /// One named entity.
+  Entity,
+  /// One observable phenomenon.
+  Phenomenon,
+  /// One explanatory mechanism.
+  Mechanism,
+  /// One ordered process.
+  Process,
+  /// One canonical equation.
+  Equation,
+  /// One measurable quantity.
+  Quantity,
+  /// One material.
+  Material,
+  /// One instrument.
+  Instrument,
+  /// One method.
+  Method,
+  /// One technology.
+  Technology,
+  /// One application of a method or technology.
+  Application,
+  /// One canonical standard.
+  Standard,
+  /// One organization.
+  Organization,
+  /// One person.
+  Person,
+  /// One place.
+  Place,
+  /// One idiom.
+  Idiom,
+  /// One metaphor.
+  Metaphor,
+  /// One structured grammar pattern.
+  GrammarPattern,
+  /// One structured collocation.
+  Collocation,
+  /// One reviewed misconception.
+  Misconception,
+  /// One canonical domain.
+  Domain,
+  /// One complete evidence-backed semantic scale.
+  SemanticScale,
+}
 
 impl RetrievalNodeType {
-  /// Validates a bounded snake-case node-family name.
+  /// Parses one exact node-family wire name from the closed v1 catalog.
   ///
   /// # Errors
   ///
-  /// Returns an error when the value is blank, oversized, or not snake-case ASCII.
+  /// Returns an error rather than accepting an unknown or derived family name.
   pub fn new(value: impl Into<String>) -> Result<Self, RetrievalDataValidationError> {
     let value = value.into();
-    if !valid_name(&value, 64) {
-      return Err(RetrievalDataValidationError::InvalidFilters);
+    match value.as_str() {
+      "lexical_sense" => Ok(Self::LexicalSense),
+      "phrase" => Ok(Self::Phrase),
+      "multilingual_term" => Ok(Self::MultilingualTerm),
+      "concept" => Ok(Self::Concept),
+      "entity" => Ok(Self::Entity),
+      "phenomenon" => Ok(Self::Phenomenon),
+      "mechanism" => Ok(Self::Mechanism),
+      "process" => Ok(Self::Process),
+      "equation" => Ok(Self::Equation),
+      "quantity" => Ok(Self::Quantity),
+      "material" => Ok(Self::Material),
+      "instrument" => Ok(Self::Instrument),
+      "method" => Ok(Self::Method),
+      "technology" => Ok(Self::Technology),
+      "application" => Ok(Self::Application),
+      "standard" => Ok(Self::Standard),
+      "organization" => Ok(Self::Organization),
+      "person" => Ok(Self::Person),
+      "place" => Ok(Self::Place),
+      "idiom" => Ok(Self::Idiom),
+      "metaphor" => Ok(Self::Metaphor),
+      "grammar_pattern" => Ok(Self::GrammarPattern),
+      "collocation" => Ok(Self::Collocation),
+      "misconception" => Ok(Self::Misconception),
+      "domain" => Ok(Self::Domain),
+      "semantic_scale" => Ok(Self::SemanticScale),
+      _ => Err(RetrievalDataValidationError::InvalidFilters),
     }
-    Ok(Self(value))
   }
 
-  /// Returns the validated wire value.
-  pub fn as_str(&self) -> &str {
-    &self.0
+  /// Returns the exact v1 wire name.
+  pub const fn as_str(self) -> &'static str {
+    match self {
+      Self::LexicalSense => "lexical_sense",
+      Self::Phrase => "phrase",
+      Self::MultilingualTerm => "multilingual_term",
+      Self::Concept => "concept",
+      Self::Entity => "entity",
+      Self::Phenomenon => "phenomenon",
+      Self::Mechanism => "mechanism",
+      Self::Process => "process",
+      Self::Equation => "equation",
+      Self::Quantity => "quantity",
+      Self::Material => "material",
+      Self::Instrument => "instrument",
+      Self::Method => "method",
+      Self::Technology => "technology",
+      Self::Application => "application",
+      Self::Standard => "standard",
+      Self::Organization => "organization",
+      Self::Person => "person",
+      Self::Place => "place",
+      Self::Idiom => "idiom",
+      Self::Metaphor => "metaphor",
+      Self::GrammarPattern => "grammar_pattern",
+      Self::Collocation => "collocation",
+      Self::Misconception => "misconception",
+      Self::Domain => "domain",
+      Self::SemanticScale => "semantic_scale",
+    }
   }
 }
 
@@ -163,8 +270,7 @@ impl DenseQueryVector {
   ///
   /// Returns an error for empty, oversized, or non-finite input.
   pub fn new(values: Vec<f32>) -> Result<Self, RetrievalDataValidationError> {
-    if values.is_empty()
-      || values.len() > MAX_DENSE_VECTOR_DIMENSIONS
+    if values.len() != DENSE_QUERY_VECTOR_DIMENSIONS
       || values.iter().any(|value| !value.is_finite())
     {
       return Err(RetrievalDataValidationError::InvalidVector);
@@ -567,9 +673,14 @@ mod tests {
   #[test]
   fn vectors_reject_unbounded_or_non_finite_values() {
     assert_eq!(
-      DenseQueryVector::new(vec![f32::NAN]),
+      DenseQueryVector::new(vec![f32::NAN; DENSE_QUERY_VECTOR_DIMENSIONS]),
       Err(RetrievalDataValidationError::InvalidVector)
     );
+    assert_eq!(
+      DenseQueryVector::new(vec![0.0; DENSE_QUERY_VECTOR_DIMENSIONS - 1]),
+      Err(RetrievalDataValidationError::InvalidVector)
+    );
+    assert!(DenseQueryVector::new(vec![0.0; DENSE_QUERY_VECTOR_DIMENSIONS]).is_ok());
     assert_eq!(
       SparseQueryVector::new(vec![2, 2], vec![1.0, 0.5]),
       Err(RetrievalDataValidationError::InvalidVector)
@@ -578,9 +689,25 @@ mod tests {
 
   #[test]
   fn vector_debug_output_is_content_free() {
-    let dense = DenseQueryVector::new(vec![0.1234]).unwrap();
+    let dense = DenseQueryVector::new(vec![0.1234; DENSE_QUERY_VECTOR_DIMENSIONS]).unwrap();
     let sparse = SparseQueryVector::new(vec![42], vec![0.9876]).unwrap();
     assert_eq!(format!("{dense:?}"), "DenseQueryVector(REDACTED)");
     assert_eq!(format!("{sparse:?}"), "SparseQueryVector(REDACTED)");
+  }
+
+  #[test]
+  fn node_family_catalog_rejects_plausible_unknown_values() {
+    assert_eq!(
+      RetrievalNodeType::new("lexical_senses"),
+      Err(RetrievalDataValidationError::InvalidFilters)
+    );
+    assert_eq!(
+      RetrievalNodeType::new("custom_concept"),
+      Err(RetrievalDataValidationError::InvalidFilters)
+    );
+    assert_eq!(
+      RetrievalNodeType::new("semantic_scale").unwrap().as_str(),
+      "semantic_scale"
+    );
   }
 }
