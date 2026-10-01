@@ -73,6 +73,8 @@ The translation application derives the model operation. Sufficient canonical ma
 
 The adapter creates the provider-specific HTTP request, applies resilience policy, bounds and decodes the result, and returns a closed outcome. Application logic checks coverage, order, terminology consistency, and output validity before adding the translation to the superset result.
 
+If and only if request freshness is `allowed` or `required` and canonical content is insufficient, the orchestrator may spend one bounded live-retrieval round. Search and public-page fetches share the original deadline, reject private-network destinations and unsafe redirects, and supply untrusted excerpts to the same application operation. Live-dependent output carries `live_external` citations. Retrieval failure remains an explicit unavailable/degraded outcome; it never silently triggers more searches or reasoning calls.
+
 ## Lexical-knowledge branch
 
 The knowledge application derives lookup forms and requests canonical candidates through data ports. Exact and alias matches outrank weaker retrieval signals. When domain expansion is useful, it resolves against the published domain inventory.
@@ -107,7 +109,7 @@ Transport serializes the validated application outcome using the interface envel
 
 ## Request-lifetime data
 
-Request text, history, normalized forms derived from private input, chunk plans, terminology ledgers, provider input and output, intermediate candidates, inferred explanations, and proposed domains live only for the bounded request. They are dropped on success, failure, timeout, or cancellation and never enter durable caches, queues, MySQL, Qdrant, logs, metrics, or traces.
+Request text, segments, images, history, guidance, normalized forms derived from private input, chunk plans, terminology ledgers, provider input and output, live-search queries and pages, intermediate candidates, inferred explanations, citations, and proposed domains live only for the bounded request. They are dropped on success, failure, timeout, or cancellation and never enter durable caches, queues, MySQL, Qdrant, logs, metrics, or traces.
 
 Published canonical IDs, release identifiers, reviewed facts, and aggregate operational counters are not request-content persistence. Cacheable data must be canonical, release-pinned, and independent of private request influence.
 

@@ -170,6 +170,58 @@ CREATE TABLE canonical_entity_revision (
   CONSTRAINT ck_entity_revision_payload_json CHECK (JSON_VALID(payload))
 ) ENGINE = InnoDB;
 
+-- Versioned relation semantics. A release pins the exact registry revision used
+-- to validate direction, inverse projection, symmetry, transitivity, causality,
+-- endpoint roles, and type compatibility. allowed_roles is a closed schema-owned
+-- array and never contains request-derived labels.
+CREATE TABLE relation_type_revision (
+  relation_type VARCHAR(128) CHARACTER SET ascii NOT NULL,
+  registry_version INT UNSIGNED NOT NULL,
+  lifecycle_state ENUM('draft', 'approved', 'withdrawn') NOT NULL,
+  directionality ENUM('directed', 'symmetric') NOT NULL,
+  inverse_relation_type VARCHAR(128) CHARACTER SET ascii NULL,
+  transitivity ENUM('none', 'declared', 'safe_projection') NOT NULL,
+  causal BOOLEAN NOT NULL DEFAULT FALSE,
+  allowed_roles JSON NOT NULL,
+  payload_schema_version VARCHAR(64) CHARACTER SET ascii NOT NULL,
+  content_hash BINARY(32) NOT NULL,
+  PRIMARY KEY (relation_type, registry_version),
+  CONSTRAINT ck_relation_registry_version CHECK (registry_version > 0),
+  CONSTRAINT ck_relation_allowed_roles_json CHECK (JSON_VALID(allowed_roles)),
+  CONSTRAINT ck_relation_symmetric_inverse CHECK (
+    directionality <> 'symmetric' OR inverse_relation_type IS NULL
+  )
+) ENGINE = InnoDB;
+
+-- N-ary participants for fact entities. Exactly one of participant_entity_id or
+-- literal_payload is present. Binary traversal edges below are validated
+-- projections of these authoritative assertion participants.
+CREATE TABLE canonical_assertion_participant (
+  fact_entity_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
+  fact_revision INT UNSIGNED NOT NULL,
+  participant_role VARCHAR(128) CHARACTER SET ascii NOT NULL,
+  participant_ordinal SMALLINT UNSIGNED NOT NULL,
+  participant_entity_id VARCHAR(128) CHARACTER SET ascii NULL,
+  literal_payload JSON NULL,
+  PRIMARY KEY (
+    fact_entity_id, fact_revision, participant_role, participant_ordinal
+  ),
+  KEY ix_assertion_participant_entity (
+    participant_entity_id, participant_role, fact_entity_id, fact_revision
+  ),
+  CONSTRAINT fk_assertion_participant_fact FOREIGN KEY (fact_entity_id, fact_revision)
+    REFERENCES canonical_entity_revision (entity_id, revision),
+  CONSTRAINT fk_assertion_participant_entity FOREIGN KEY (participant_entity_id)
+    REFERENCES canonical_entity (entity_id),
+  CONSTRAINT ck_assertion_participant_value CHECK (
+    (participant_entity_id IS NOT NULL AND literal_payload IS NULL) OR
+    (participant_entity_id IS NULL AND literal_payload IS NOT NULL)
+  ),
+  CONSTRAINT ck_assertion_literal_json CHECK (
+    literal_payload IS NULL OR JSON_VALID(literal_payload)
+  )
+) ENGINE = InnoDB;
+
 -- Stable stored-edge identity. fact_entity_id must name a canonical_entity whose
 -- type is fact; the publication validator enforces that cross-row type constraint.
 CREATE TABLE canonical_relationship (
@@ -192,6 +244,7 @@ CREATE TABLE canonical_relationship_revision (
   source_entity_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
   target_entity_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
   relation_type VARCHAR(128) CHARACTER SET ascii NOT NULL,
+  relation_registry_version INT UNSIGNED NOT NULL,
   direction ENUM('directed', 'symmetric') NOT NULL,
   publication_state ENUM('draft', 'approved', 'withdrawn') NOT NULL,
   verification_state ENUM('verified', 'withdrawn') NOT NULL,
@@ -211,19 +264,22 @@ CREATE TABLE canonical_relationship_revision (
     REFERENCES canonical_entity (entity_id),
   CONSTRAINT fk_relationship_revision_target FOREIGN KEY (target_entity_id)
     REFERENCES canonical_entity (entity_id),
+  CONSTRAINT fk_relationship_relation_type FOREIGN KEY (
+    relation_type, relation_registry_version
+  ) REFERENCES relation_type_revision (relation_type, registry_version),
   CONSTRAINT ck_relationship_version CHECK (relation_version > 0),
   CONSTRAINT ck_relationship_fact_revision CHECK (fact_revision > 0),
   CONSTRAINT ck_relationship_distinct_endpoints CHECK (source_entity_id <> target_entity_id),
   CONSTRAINT ck_relationship_payload_json CHECK (JSON_VALID(payload))
 ) ENGINE = InnoDB;
 
--- One generic membership table pins both entity revisions and relationship
--- versions. MySQL cannot express a polymorphic foreign key; the publication
+-- One generic membership table pins entity, relation-type, and relationship
+-- revisions. MySQL cannot express a polymorphic foreign key; the publication
 -- transaction validates member_kind against the corresponding revision table
 -- before a release can enter validated or active state.
 CREATE TABLE release_member (
   release_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
-  member_kind ENUM('entity', 'relationship') NOT NULL,
+  member_kind ENUM('entity', 'relationship', 'relation_type') NOT NULL,
   member_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
   member_revision INT UNSIGNED NOT NULL,
   member_type VARCHAR(64) CHARACTER SET ascii NOT NULL,

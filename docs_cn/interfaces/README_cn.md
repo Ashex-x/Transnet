@@ -6,7 +6,7 @@ English: [Interface catalog](../../docs/interfaces/README.md)
 
 | 文档 | 边界 | 适用内容 |
 | --- | --- | --- |
-| [Transnet 服务接口](transnet_cn.md) | island-port → Transnet | 面向服务的翻译操作、请求级历史、响应级别、结果 envelope、关系评估元数据与后续规范读取。 |
+| [Transnet 服务接口](transnet_cn.md) | island-port → Transnet | 文本、segment 与图片翻译；专业 guidance；显式实时检索；capability；以及引导式知识视图与路径。 |
 | [规范数据 endpoint 接口](canonical-data_cn.md) | Transnet / publisher → island-port | 不暴露 SQL 的固定发布规范翻译、卡片、领域、事实、语义尺度、暂存与激活。 |
 | [检索数据 endpoint 接口](retrieval-data_cn.md) | Transnet / publisher → island-port | 不暴露向量厂商的候选节点、关系和尺度检索，以及不可变投影发布。 |
 | [目标存储目录](tables/README_cn.md) | island-port 持久化 | 优化混合 MySQL schema、不可变 Qdrant collection、私有判断及匿名距离投影。 |

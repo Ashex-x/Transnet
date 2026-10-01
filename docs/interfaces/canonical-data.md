@@ -15,7 +15,7 @@ The checked-in M3 publication foundation models Qdrant build lifecycle, idempote
   - [Endpoint reference](#endpoint-reference)
   - [Storage boundary](#storage-boundary)
   - [Curated translation storage](#curated-translation-storage)
-  - [Domain facts and semantic scales](#domain-facts-and-semantic-scales)
+  - [Domain assertions and semantic scales](#domain-assertions-and-semantic-scales)
   - [Common operation envelope](#common-operation-envelope)
   - [POST /api/v1/translations/resolve](#post-apiv1translationsresolve)
   - [POST /api/v1/translations/stage](#post-apiv1translationsstage)
@@ -72,13 +72,15 @@ Importance is an editorial decision with an auditable reason such as approved te
 
 User saves are a separate concern. When an end user stars or saves a translation, island-port stores that private record in its product-owned database and may retain the rendered result under its own consent and retention policy. It must not send the user ID, save state, or private source text to these canonical publication endpoints.
 
-## Domain facts and semantic scales
+## Domain assertions and semantic scales
 
-MySQL also owns canonical domain knowledge profiles, atomic basic facts, and semantic scales. A domain revision stores multilingual labels and aliases, definition, inclusion and exclusion scope, broader domain IDs, and a knowledge profile containing available fact families, languages, verified fact count, and coverage state (`seed`, `partial`, or `curated`). Coverage describes the active release and never asserts completeness.
+Canonical data also owns domain knowledge profiles, atomic assertions, and semantic scales. A domain revision stores multilingual labels and aliases, definition, inclusion and exclusion scope, broader domain IDs, and a knowledge profile containing available fact families, languages, verified fact count, and coverage state (`seed`, `partial`, or `curated`). Coverage describes the active release and never asserts completeness.
 
-A fact uses `canonical_entity` with `entity_type = 'fact'`. Its immutable `canonical_entity_revision` payload stores the subject, typed predicate, object node or typed literal, statement, applicable senses and domains, conditions, evidence references, provenance, and verification data. Facts remain independently reviewable and release-addressable. Qdrant edges and fact-search points reference the authoritative entity revision rather than becoming a second source of truth.
+A fact uses `canonical_entity` with `entity_type = 'fact'`. Its immutable `canonical_entity_revision` stores the typed predicate, statement, qualifiers, applicability, evidence references, provenance, and verification data. `canonical_assertion_participant` assigns ordered schema-defined roles to canonical entities or typed literals, allowing binary and n-ary assertions without hiding queryable participants inside one JSON blob. Assertions remain independently reviewable and release-addressable.
 
-A `canonical_relationship_revision` maps one stable public edge ID and positive relation version to the exact fact revision, endpoints, relation type, direction, restrictions, and assessment eligibility published in a release. Endpoint and relation fields remain indexed columns; explanations and bounded scope/support lists use the versioned payload. This mapping lets island-port validate a WebUI assessment target without treating the judgment as canonical content. Relationship judgments and aggregates remain in the separately authorized island-port product schema defined by the [target MySQL implementation](tables/mysql.sql); Transnet cannot access the private rows.
+`relation_type_revision` is the versioned relation registry. It defines directionality, inverse behavior, symmetric and transitive policy, causality, allowed participant roles, endpoint-type compatibility, and validation schema. A release pins the exact registry revision; neither the UI nor the model infers these properties from a label.
+
+A `canonical_relationship_revision` is a validated binary traversal projection of one exact assertion revision. It maps one stable public edge ID and positive relation version to source and target endpoints, the pinned relation-registry version, direction, restrictions, and assessment eligibility. Endpoint and relation fields remain indexed columns; explanations and bounded scope/support lists use the versioned payload. This projection supports efficient knowledge views without becoming a second source of truth. Relationship judgments and aggregates remain in the separately authorized island-port product schema defined by the [target MySQL implementation](tables/mysql.sql); Transnet cannot access the private rows.
 
 A semantic scale uses `canonical_entity` with `entity_type = 'semantic_scale'`. Its immutable revision payload stores the named dimension, increasing or decreasing direction, applicable domains and conditions, ordered sense-qualified node members, and evidence references. Member positions define order only. Publication rejects duplicate positions, missing members, mixed incompatible senses, absent evidence, and any attempt to encode a scale as `is_a` taxonomy. Basic cards, facts, profiles, and scales all join a release through `release_member`.
 

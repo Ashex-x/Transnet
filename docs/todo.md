@@ -42,6 +42,9 @@ Repository-side admission, request/result Debug redaction, closed telemetry, and
 - [ ] Keep ordinary and chunked translation on the fast profile, permit at most one closed-policy reasoning escalation per request, and prove hidden reasoning is never returned or logged.
 - [ ] Implement shared success and error envelopes, strict unknown-field rejection, language-tag validation, request metadata, and safe status mapping.
 - [ ] Implement the simple text, source-language, target-language, response-level, and optional minimal-history request plus the discriminated word, phrase, and passage `TranslationResult` response.
+- [ ] Extend the same entry point with bounded professional segment and image-region inputs; keep file parsing, OCR policy, and durable document ownership in island-port.
+- [ ] Add request-local purpose, audience, register, protected-range, terminology, annotation, alternative-count, and freshness guidance without creating a profile or translation memory.
+- [ ] Publish a cacheable capabilities response so island-port can discover supported input kinds, limits, retrieval policy, and fast/reasoning availability without trial requests.
 - [ ] Implement a versioned request-local normalizer with Unicode normalization, language-aware case folding, whitespace and punctuation handling, meaningful-symbol preservation, and bounded derived forms.
 - [ ] Behind one translation entry point, route a confident word, term, idiom, phrasal verb, or established phrase to lexical composition and route clauses, sentences, passages, and ambiguous short fragments to connected-text translation.
 - [ ] Align `POST /api/v1/translations` with the target response while preserving meaning, tone, terminology, register, paragraph structure, protected spans, and formatting.
@@ -85,6 +88,7 @@ Exit criteria: the projection rebuilds reproducibly from one canonical release; 
 - [ ] Keep arbitrary-depth traversal, unrestricted neighbor dumps, shortest-path inference, and mutable graph transactions outside the service contract.
 - [ ] Separate verified canonical edges from request-local inferred synthesis and exploratory vector or model proposals in storage, response shapes, ranking, and presentation.
 - [ ] Return an explicit MySQL-only degraded card when Qdrant is unavailable, with no invented replacement relationships.
+- [ ] Replace raw public graph filters with bounded `knowledge/views` lenses and evidence-backed `knowledge/paths` so one assertion graph can support tree-like learning, terminology, mechanism, and comparison views.
 
 Exit criteria: retrieval is bounded, release-pinned, filter-safe, and useful for one selected root; adversarial tests prove that similarity never establishes translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
 
@@ -99,6 +103,8 @@ Exit criteria: retrieval is bounded, release-pinned, filter-safe, and useful for
 - [ ] Version the router, resolver, domain assessor, ranker, composer, prompts, schemas, and repair policy; validate structure, scope, evidence labels, concision, and uncertainty deterministically.
 - [ ] Allow request-local generated examples and inferred explanations only when labeled; never persist them or present them as verified facts.
 - [ ] Send structured missing-relationship proposals only to an offline review workflow; live lookup must not publish or display them as canonical edges.
+- [ ] Publish a versioned relation registry and n-ary assertion participants in canonical data, while deriving only explicitly declared binary traversal projections for retrieval.
+- [ ] Permit at most one explicitly requested live-search round with bounded result and fetch counts, SSRF-safe fetches, citations, and no automatic publication or persistence.
 
 Exit criteria: general vocabulary, compounds, ambiguous technical senses, and multilingual domain concepts produce concise pages whose groups and paths are relevant, correctly scoped, evidence-aware, and reproducible.
 

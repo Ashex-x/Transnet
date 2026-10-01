@@ -15,7 +15,7 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
   - [endpoint 参考](#endpoint-参考)
   - [存储边界](#存储边界)
   - [精选翻译存储](#精选翻译存储)
-  - [领域事实与语义尺度](#领域事实与语义尺度)
+  - [领域 assertion 与语义尺度](#领域-assertion-与语义尺度)
   - [通用操作 envelope](#通用操作-envelope)
   - [POST /api/v1/translations/resolve](#post-apiv1translationsresolve)
   - [POST /api/v1/translations/stage](#post-apiv1translationsstage)
@@ -72,13 +72,15 @@ erDiagram
 
 用户保存是另一项职责。终端用户加星或保存翻译时，island-port 在其产品数据库中存储该私有记录，并依其同意与保留政策决定是否保留展示结果。它不得把用户 ID、保存状态或私有源文发送到这些规范发布 endpoint。
 
-## 领域事实与语义尺度
+## 领域 assertion 与语义尺度
 
-MySQL 还拥有规范领域知识 profile、原子基本事实和语义尺度。领域修订存储多语言名称与别名、定义、包含/排除范围、上层领域 ID，以及包含可用事实族、语言、已验证事实数和覆盖状态（`seed`、`partial` 或 `curated`）的知识 profile。覆盖描述活动发布，绝不声称完整。
+规范数据还拥有领域知识 profile、原子 assertion 和语义尺度。领域修订存储多语言名称与别名、定义、包含/排除范围、上层领域 ID，以及包含可用事实族、语言、已验证事实数和覆盖状态（`seed`、`partial` 或 `curated`）的知识 profile。覆盖描述活动发布，绝不声称完整。
 
-事实使用 `entity_type = 'fact'` 的 `canonical_entity`。其不可变 `canonical_entity_revision` payload 存储主体、有类型谓词、客体节点或有类型字面值、陈述、适用词义与领域、条件、证据引用、来源及验证数据。事实仍可独立审核并按发布寻址。Qdrant 边与事实检索 point 引用权威实体修订，不成为第二权威来源。
+事实使用 `entity_type = 'fact'` 的 `canonical_entity`。其不可变 `canonical_entity_revision` 存储有类型谓词、陈述、qualifier、适用范围、证据引用、来源及验证数据。`canonical_assertion_participant` 把有序 schema-defined role 分配给规范实体或有类型字面值，从而支持二元与 n-ary assertion，而不把可查询 participant 隐藏在单个 JSON blob 中。Assertion 仍可独立审核并按发布寻址。
 
-`canonical_relationship_revision` 将稳定公开边 ID 和正关系版本映射到发布中的准确事实修订、endpoint、关系类型、方向、限制及评估资格。Endpoint 和关系字段保留为索引列；解释及有界范围/支持列表使用带版本 payload。Island-port 因此可以校验 WebUI 评估目标，而不会把判断视为规范内容。关系判断与聚合保留在[目标 MySQL 实现](../../docs/interfaces/tables/mysql.sql)定义的独立授权 island-port 产品 schema 中；Transnet 无法访问私有行。
+`relation_type_revision` 是版本化关系 registry。它定义方向、inverse 行为、对称与传递策略、因果性、允许的 participant role、endpoint 类型兼容性与校验 schema。发布固定精确 registry 修订；UI 与模型都不得从 label 推断这些属性。
+
+`canonical_relationship_revision` 是一个精确 assertion 修订的已校验二元 traversal 投影。它把稳定公开 edge ID 和正关系版本映射到 source/target endpoint、固定 relation-registry 版本、方向、限制与评估资格。Endpoint 和关系字段保留为索引列；解释及有界范围/支持列表使用带版本 payload。该投影支持高效知识视图，但不成为第二权威来源。关系判断与聚合保留在[目标 MySQL 实现](../../docs/interfaces/tables/mysql.sql)定义的独立授权 island-port 产品 schema 中；Transnet 无法访问私有行。
 
 语义尺度使用 `entity_type = 'semantic_scale'` 的 `canonical_entity`。其不可变修订 payload 存储命名维度、递增或递减方向、适用领域与条件、有序词义限定节点成员及证据引用。成员位置只定义顺序。发布拒绝重复位置、缺失成员、混合不兼容词义、缺失证据，以及把尺度编码成 `is_a` 分类的行为。基础卡、事实、profile 与尺度均通过 `release_member` 加入发布。
 

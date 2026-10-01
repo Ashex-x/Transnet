@@ -40,7 +40,7 @@ flowchart LR
 
 目标 MySQL schema 通过共享稳定的 `canonical_entity` 身份和不可变 `canonical_entity_revision` 行表示 lexeme、词义、基础卡、翻译、领域、事实和语义尺度。高频过滤键保留为列；每个内容族使用闭合且带版本的 JSON payload schema 保存其有界字段。Publisher 拒绝声明实体类型、引用或 schema 版本不一致的 payload，然后通过 `release_member` 固定已批准的实体与关系修订。不得仅因增加一个有界内容字段就新建表。
 
-在构建向量投影前创建领域知识 profile 与原子事实。每个事实只有一个主体、有类型谓词、客体或字面值、陈述、范围、条件、证据、来源、验证状态和不可变修订。每个 profile 列出可用事实族及诚实的 `seed`、`partial` 或 `curated` 覆盖；缺失事实族保持显式缺失。
+在构建向量投影前创建领域知识 profile 与原子断言。二元事实包含主体、有类型谓词、客体或字面值、陈述、范围、条件、证据、来源、验证状态和不可变修订。天然需要更多角色的关系——例如在特定条件下使用某方法测量某物理量——使用有序且具名角色的断言参与者，而不是有损的成对事实。每个 profile 列出可用事实族及诚实的 `seed`、`partial` 或 `curated` 覆盖；缺失事实族保持显式缺失。
 
 语义尺度独立于分类创建。尺度命名其维度、方向、条件、领域、证据及有序词义限定成员。位置表示顺序，不表示相等距离。校验器拒绝分类环、逆关系不一致、重复尺度位置、不兼容成员词义、缺失证据，以及 `is_a` 与程度关系间的任何转换。
 
@@ -52,7 +52,7 @@ flowchart LR
 
 ## 构建与校验边
 
-节点先于边构建。每条边指定两端、类型、方向、适用词义与领域、条件、语言、方言、地区、时代、证据状态、置信度、来源、验证状态和发布。不存在新的权威关系解释 prose：带版本的 edge input 由冻结 endpoint lexical input、typed wire relation、已接纳 structured scope 与 verified evidence metadata 确定性组装。版本化关系注册表定义逆关系、对称性、传递性和因果性，不从标签猜测。校验拒绝孤立端点、跨发布引用、无效方向、重复边、缺失证据与不兼容词义。强度不得冒充分类，探索邻居与已验证边分开。
+节点先于边构建。每条规范断言指定关系注册表版本、角色参与者、陈述、适用词义与领域、条件、语言、方言、地区、时代、证据状态、置信度、来源、验证状态和发布。Registry 定义元数、角色约束、逆关系、对称性、传递性、因果性及允许的二元遍历投影，不从标签猜测。不存在新的权威关系解释 prose：每个 Qdrant edge 都是一个已声明二元投影，其带版本 input 由冻结 endpoint lexical input、typed wire relation、已接纳 structured scope 与 verified evidence metadata 确定性组装，并保留来源断言身份。
 
 已实现的 admission foundation 还要求精确且已冻结的 Qdrant wire 映射、精确 inverse 声明、规范端点 kind 与发布所有权、verified lifecycle，以及 evidence ID 到具有 storage/embedding permission 的 active、source-qualified lineage 的一对一解析。对称输入只为 identity 进行规范化；publisher 不合成 inverse record。重复 typed assertion 不受输入顺序或替代 edge ID 影响，均被确定性拒绝。在 canonical domain ID 和 condition schema 冻结前，字符串 domain scope 与自由文本 condition 闭合失败，不进入投影 payload。
 
@@ -65,6 +65,8 @@ Execution baseline 为 `semantic` vector 使用 1,024 维的 `Qwen/Qwen3-Embeddi
 仓库内 publication foundation 会校验 node-first lifecycle、稳定 build/batch identity、冲突 retry、execution receipt、dictionary proof 以及 input/projection/persisted/manifest hash hierarchy。其出站 publication port 与严格 island-port client 通过共享 UDS transport 承载 begin、有界 node/edge batch、freeze receipt、reconciliation、status 与 abort。`KnowledgePublicationService` 从不可变 projection 工件驱动该合同，始终以 island-port 权威 status 恢复，不保留本地 publication progress，并且只在 reconciliation 成功后返回 typed activation candidate。Failed 或 abandoned build 不能成为 candidate，reconciliation 也不会激活 release。Production 仍受阻于已部署的不可变 Qwen revision 与 attestation、真实 dense/lexical execution、island-port build/status 与 reconciliation persistence、Qdrant node/edge collection 创建和 mutation、production collection verification 与 persisted hash、真实 MySQL/Qdrant reconciliation，以及 release-trio E2E 验收。
 
 Publisher 必须先完成并验证确定性节点投影，再冻结节点 manifest，并针对该精确节点哈希构建边。对账比较规范根、规范 schema、强类型物理 collection ID、payload schema、嵌入修订与维度、节点/边哈希和数量以及完整端点覆盖。成员缺失、活动 alias、跨发布引用、未解析的关系 wire 映射或未验证 collection 均阻止激活。
+
+实时检索响应绝不作为发布输入。如果编辑者独立将某个引文来源推进离线工作流，仍必须通过正常的许可、证据、schema 与审核门禁，且不得自动复制请求文本、查询、抓取页面或生成答案。
 
 ## 对账与评估
 

@@ -199,6 +199,7 @@ Payload 索引覆盖发布、发布状态、验证状态、节点类型、词义
   "payload": {
     "edge_id": "edge_sweltering_scorching_01",
     "relation_version": 3,
+    "relation_registry_version": 1,
     "fact_id": "fact_sweltering_degree_scorching_01",
     "fact_revision": 1,
     "source_node_id": "node_sweltering_hot_01",
@@ -406,6 +407,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
         "source_node_id": "node_sweltering_hot_01",
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree",
+        "relation_registry_version": 1,
         "fact_id": "fact_sweltering_degree_scorching_01",
         "fact_revision": 2,
         "verification_state": "verified"

@@ -2,29 +2,41 @@
 
 中文：[Transnet 服务行为](../../docs_cn/product/service-behavior_cn.md)
 
-This guide describes consumer-visible behavior of the stateless Transnet service. Product applications own their user experience and state. They may send current text and selected prior translation turns, but never user identity or product-owned state.
+This guide describes consumer-visible behavior of the stateless target service. Product applications own users, file ingestion, saves, document state, and presentation. Current runtime coverage remains narrower than this target and is identified by the [service interface](../interfaces/transnet.md).
 
 ## Translation
 
-`POST /api/v1/translations` is the only new-turn entry point. Besides the text, the user chooses only source language, target language, and `brief`, `standard`, or `full` response level. Island-port may append a chronological list of minimal prior source/translation pairs; there is no separate history-count limit within the common body bound. Transnet automatically selects lexical lookup, domain expansion, or passage translation and derives all other options.
+`POST /api/v1/translations` is the only new-turn entry point. The simple path asks for text, source language, target language, and `brief`, `standard`, or `full`. Professional callers may instead provide ordered document/localization segments or bounded image regions plus optional purpose, audience, register, terminology, alternatives, annotations, and freshness guidance. Every advanced value is request-scoped and creates no profile or translation memory.
 
-The response contains an ordered translation list. A word or phrase returns several meaning-specific translations when materially different senses remain plausible; history influences their ranking. A sentence or passage keeps natural translated text primary and preserves meaning, tone, terminology, and paragraph structure. Response level selects fields from one canonical superset: brief keeps essential translations and meaning labels, standard adds concise supporting detail, and full adds bounded lexical, domain, relationship, evidence, taxonomy, and intensity detail.
+Transnet automatically selects lexical, connected-text, structured-segment, or visual-region processing. A canonical exact result may need no generation. Ordinary work uses the fast profile of the one Gemma4-27B VLM; long content uses bounded chunks on the same model. Reasoning may escalate once only under the closed ambiguity, constraint, verified-path, or invalid-structure policy.
+
+Text results return ordered meaning-specific translations. Segment and image results preserve request IDs, order, protected content, and formatting constraints. Typed annotations explain only material ambiguity, terminology, register, culture, formatting risk, or review need. Response level changes supporting breadth, not the selected translation, evidence state, constraints, or review outcome.
+
+## Vision and documents
+
+Island-port uploads files, validates them, renders PDFs, selects pages, and reconstructs output documents. Transnet receives only bounded inline PNG, JPEG, or WebP images with normalized regions, or already extracted structured segments. It never downloads a caller URL or stores file bytes, OCR-like output, or layout state.
+
+Protected ranges must round-trip unchanged. Contradictory required terminology, protected content, or format rules fail explicitly rather than being silently ignored. Oversized documents are divided by island-port into bounded synchronous requests; request-local terminology guidance provides continuity without creating a durable job.
+
+## Current information
+
+Internet retrieval is disabled by default. `allowed` and `required` freshness are explicit opt-in because a derived query may disclose request material to an external search provider. Retrieval is one bounded search/fetch operation with strict public-network, redirect, media-type, byte, and deadline controls.
+
+Live pages are untrusted and cannot change instructions or become canonical facts. Current claims cite response-local `live_external` sources and are discarded after the request. A live result never enters publication automatically.
 
 ## Lexical and concept detail
 
-The service automatically resolves words, established lexical phrases, and specialist terms to canonical senses or concepts. Homographs, parts of speech, phrase-level meanings, and field-specific senses remain separate. Direct sense and graph reads support follow-up navigation from returned canonical IDs; they are not choices the WebUI asks a user to make for the initial translation.
+Words, established phrases, and specialist terms resolve to canonical senses or concepts. Homographs, parts of speech, phrase-level meanings, and field-specific senses remain separate. The initial result advertises relevant knowledge lenses rather than exposing graph controls.
 
-## Relationship and domain exploration
+`knowledge/views` presents a guided root-specific tree projection for meaning, contrast, usage, form, origin, domain, mechanism, or application. `knowledge/paths` returns only short, independently verified paths between canonical roots. Callers do not choose raw relation filters, depth, node limits, vector selectors, or arbitrary traversal.
 
-Canonical cards anchor bounded Qdrant relationship reads. The page exposes purpose-ranked groups of typed relationships, explanations, conditions, provenance, evidence state, and release metadata. For general vocabulary, the neighborhood can include taxonomy, intensity, contrasts, syntax, collocation, register, morphology, and cultural extension. For a domain-specific concept, it can additionally include multilingual terminology, fields and subfields, mechanisms, prerequisites, phenomena, equations, technologies, applications, measurements, standards, and professional usage conventions.
+The canonical source is an assertion graph, not a strict tree. A stable node may appear under several lenses, but every item retains one identity, an explicit path to the root, a relevance reason, applicability conditions, evidence, provenance, and release. Verified, inferred, exploratory, and live-external material remain visibly distinct.
 
-Transnet retrieves existing domain names, scope, and RAG coverage before assessment. The LLM may select only supplied domain IDs; if none fits, it may return a request-local new-domain proposal without calling a create endpoint. Catalog failure yields uncertainty, not a new domain. For selected domains, Qdrant retrieves candidate basic facts and MySQL hydrates their exact evidence and provenance before composition.
+## Content and degradation
 
-Verified relationships, evidence-grounded request-local inferences, and exploratory vector or model associations remain visibly separate. Taxonomy parents and children are distinct from named intensity scales such as `warm → hot → sweltering → scorching`. Selecting a root can expand one shallow neighborhood or a short path of named relations; Transnet does not present a similarity chain as a factual path.
+Canonical-data reads are authoritative for facts, evidence, translations, and releases. Retrieval-data reads nominate nodes and relationships through the embedding projection. Similarity never establishes translation, synonymy, taxonomy, causality, mechanism, cultural meaning, or truth.
 
-## Content and safety
-
-All answers are pinned to a canonical content release where relevant. MySQL supplies concise canonical cards and Qdrant supplies relationships; unavailable graph retrieval degrades explicitly to the basic card. The service never stores live request text, context, a caller identity, or user-related state. Only reviewed, rights-cleared translations selected by the content-publication workflow enter the canonical MySQL release. User-saved translations remain product-owned data in island-port.
+Unavailable retrieval may degrade to an explicit canonical basic card. Missing authoritative content, an incompatible release, or a failed required live retrieval never masquerades as an empty result. Live requests do not write aliases, cards, facts, domains, assertions, vectors, or releases.
 
 ## Related documents
 
@@ -32,3 +44,4 @@ All answers are pinned to a canonical content release where relevant. MySQL supp
 - [Transnet service interface](../interfaces/transnet.md)
 - [Canonical-data interface](../interfaces/canonical-data.md)
 - [Retrieval-data interface](../interfaces/retrieval-data.md)
+- [Model runtime](../reference/model-runtime.md)
