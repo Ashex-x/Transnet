@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate documentation contracts
+        run: python3 tools/validate_docs.py
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
