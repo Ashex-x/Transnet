@@ -28,7 +28,10 @@ async fn lookup_job_routes_are_permanently_absent() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method}");
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     let body = to_bytes(response.into_body(), 8_192).await.unwrap();
-    assert!(body.is_empty(), "retired routes use the ordinary absent-route response");
+    assert!(
+      body.is_empty(),
+      "retired routes use the ordinary absent-route response"
+    );
   }
 }
 
