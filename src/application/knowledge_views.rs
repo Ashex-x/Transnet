@@ -12,10 +12,10 @@ use crate::{
   domain::{
     assertion::{CanonicalNodeFamily, CanonicalNodeId},
     canonical::EvidenceUse,
-    knowledge_hydration::{CanonicalAssertionProjectionRef, HydratedAssertionProjection},
+    knowledge_hydration::CanonicalAssertionProjectionRef,
     knowledge_view::{
-      KnowledgeEvidenceState, KnowledgeViewItem, KnowledgeViewRequest, KnowledgeViewSuperset,
-      UsefulRootPath, VerifiedKnowledgeStep,
+      KnowledgeEvidenceState, KnowledgeViewBranch, KnowledgeViewItem, KnowledgeViewRequest,
+      KnowledgeViewSuperset, UsefulRootPath, VerifiedKnowledgeStep,
     },
     request_context::RequestContext,
     retrieval_data::{
@@ -47,6 +47,9 @@ pub enum KnowledgeViewServiceError {
   /// The shared request deadline was exhausted.
   #[error("knowledge view deadline exceeded")]
   DeadlineExceeded,
+  /// The selected closed lens has no sound relation policy in this release.
+  #[error("knowledge view lens is unavailable")]
+  LensUnavailable,
 }
 
 /// Guided-view service that retains no query-derived or request-derived state.
@@ -84,11 +87,16 @@ impl KnowledgeViewService {
     if context.content_release() != Some(&request.release.release_id)
       || request.release != self.execution.content
       || self.execution.validate().is_err()
-      || context.remaining_budget().is_zero()
     {
       return Err(KnowledgeViewServiceError::InconsistentData);
     }
-    let policy = policy_for(request.lens);
+    ensure_deadline(context)?;
+    // The public token is an authenticated k1 cursor, never a retrieval-data continuation token.
+    // This service materializes its bounded superset, so it accepts only the initial page.
+    if request.cursor.is_some() {
+      return Err(KnowledgeViewServiceError::InconsistentData);
+    }
+    let policy = policy_for(request.lens).ok_or(KnowledgeViewServiceError::LensUnavailable)?;
     let relations = policy
       .relations
       .iter()
@@ -100,85 +108,88 @@ impl KnowledgeViewService {
     let mut frontier = vec![(request.root.node.clone(), Vec::new())];
     let mut visited = BTreeSet::from([request.root.node.clone()]);
     let mut gathered = Vec::new();
-    let mut next_cursor = None;
 
-    for depth in 0..policy.max_depth {
-      let mut next = Vec::new();
+    for _depth in 0..policy.max_depth {
+      let mut layer = Vec::new();
       for (current, root_path) in frontier {
-        let result = self
-          .retrieval
-          .search_neighbors(
-            context,
-            NeighborSearchRequest {
-              node_id: current.id().clone(),
-              direction: NeighborDirection::Both,
-              relation_types: relations.clone(),
-              verification_states: vec![RetrievalVerificationState::Verified],
-              languages: vec![request.target_language.clone()],
-              domain_ids: Vec::new(),
-              release_id: request.release.release_id.clone(),
-              execution: self.execution.clone(),
-              limit: policy.max_items.min(50),
-              cursor: if depth == 0 {
-                request.cursor.clone()
-              } else {
-                None
+        let mut dependency_cursor = None;
+        for page in 0..8 {
+          ensure_deadline(context)?;
+          let result = self
+            .retrieval
+            .search_neighbors(
+              context,
+              NeighborSearchRequest {
+                node_id: current.id().clone(),
+                // A useful path is item -> ... -> root, so only edges directed into the current
+                // endpoint can extend it without inventing an inverse traversal.
+                direction: NeighborDirection::Incoming,
+                relation_types: relations.clone(),
+                verification_states: vec![RetrievalVerificationState::Verified],
+                languages: vec![request.target_language.clone()],
+                domain_ids: Vec::new(),
+                release_id: request.release.release_id.clone(),
+                execution: self.execution.clone(),
+                limit: policy.max_items.min(50),
+                cursor: dependency_cursor,
               },
-            },
-          )
-          .await
-          .map_err(map_retrieval_error)?;
-        if result.release_id != request.release.release_id
-          || result.root_node_id != *current.id()
-          || result.execution.validate_against(&self.execution).is_err()
-          || result.neighbors.len() > policy.max_items.min(50)
-        {
-          return Err(KnowledgeViewServiceError::InconsistentData);
-        }
-        if depth == 0 {
-          next_cursor = result.next_cursor.clone();
-        }
-        for candidate in result.neighbors {
-          if candidate.edge.verification_state != RetrievalVerificationState::Verified
-            || !policy
-              .relations
-              .contains(&candidate.edge.relation_type.relation_type())
-            || candidate.edge.relation_registry_version
-              != self.execution.relationship_registry_version
-            || candidate.node.node_id == *current.id()
+            )
+            .await
+            .map_err(map_retrieval_error)?;
+          ensure_deadline(context)?;
+          if result.release_id != request.release.release_id
+            || result.root_node_id != *current.id()
+            || result.execution.validate_against(&self.execution).is_err()
+            || result.neighbors.len() > policy.max_items.min(50)
           {
             return Err(KnowledgeViewServiceError::InconsistentData);
           }
-          let opposite = if candidate.edge.source_node_id == *current.id() {
-            &candidate.edge.target_node_id
-          } else if candidate.edge.target_node_id == *current.id() {
-            &candidate.edge.source_node_id
-          } else {
-            return Err(KnowledgeViewServiceError::InconsistentData);
-          };
-          if opposite != &candidate.node.node_id {
-            return Err(KnowledgeViewServiceError::InconsistentData);
+          for candidate in result.neighbors {
+            if candidate.edge.verification_state != RetrievalVerificationState::Verified
+              || !policy
+                .relations
+                .contains(&candidate.edge.relation_type.relation_type())
+              || candidate.edge.relation_registry_version
+                != self.execution.relationship_registry_version
+              || candidate.edge.target_node_id != *current.id()
+              || candidate.edge.source_node_id != candidate.node.node_id
+            {
+              return Err(KnowledgeViewServiceError::InconsistentData);
+            }
+            let family: CanonicalNodeFamily = candidate.node.node_type.into();
+            if !policy.node_families.contains(&family) {
+              continue;
+            }
+            let node = CanonicalNodeId::publisher_assigned(family, candidate.node.node_id.clone());
+            let mut path = vec![candidate.edge.assertion_projection()];
+            path.extend(root_path.clone());
+            layer.push((node, candidate.edge.relation_type.relation_type(), path));
           }
-          let family: CanonicalNodeFamily = candidate.node.node_type.into();
-          if !policy.node_families.contains(&family) {
-            continue;
-          }
-          let node = CanonicalNodeId::publisher_assigned(family, candidate.node.node_id.clone());
-          if !visited.insert(node.clone()) {
-            continue;
-          }
-          let mut path = root_path.clone();
-          path.push(candidate.edge.assertion_projection());
-          gathered.push((
-            node.clone(),
-            candidate.edge.relation_type.relation_type(),
-            path.clone(),
-          ));
-          if gathered.len() >= policy.max_items.saturating_sub(1) {
+          dependency_cursor = result.next_cursor;
+          if dependency_cursor.is_none() {
             break;
           }
-          next.push((node, path));
+          if page == 7 {
+            return Err(KnowledgeViewServiceError::InconsistentData);
+          }
         }
+      }
+      layer.sort_by_key(|(node, relation, path)| {
+        (
+          deterministic_order_key(&policy, *relation, node.family(), node.id()),
+          path
+            .iter()
+            .map(|step| step.edge_id.to_string())
+            .collect::<Vec<_>>(),
+        )
+      });
+      let mut next = Vec::new();
+      for (node, relation, path) in layer {
+        if !visited.insert(node.clone()) {
+          continue;
+        }
+        gathered.push((node.clone(), relation, path.clone()));
+        next.push((node, path));
         if gathered.len() >= policy.max_items.saturating_sub(1) {
           break;
         }
@@ -192,9 +203,7 @@ impl KnowledgeViewService {
     gathered.sort_by_key(|(node, relation, _)| {
       deterministic_order_key(&policy, *relation, node.family(), node.id())
     });
-    self
-      .hydrate_and_compose(context, request, gathered, next_cursor)
-      .await
+    self.hydrate_and_compose(context, request, gathered).await
   }
 
   async fn hydrate_and_compose(
@@ -206,7 +215,6 @@ impl KnowledgeViewService {
       crate::domain::graph::GraphRelationType,
       Vec<CanonicalAssertionProjectionRef>,
     )>,
-    next_cursor: Option<String>,
   ) -> Result<KnowledgeViewSuperset, KnowledgeViewServiceError> {
     let mut seen_edges = BTreeSet::new();
     let mut projections = Vec::new();
@@ -225,6 +233,7 @@ impl KnowledgeViewService {
     let hydrated = if projections.is_empty() {
       Vec::new()
     } else {
+      ensure_deadline(context)?;
       self
         .canonical
         .canonical_assertions(
@@ -240,20 +249,22 @@ impl KnowledgeViewService {
         .await
         .map_err(map_canonical_error)?
     };
+    ensure_deadline(context)?;
     if hydrated.len() != projections.len() {
       return Err(KnowledgeViewServiceError::PartialPublication);
     }
     let proofs = hydrated
-      .iter()
+      .into_iter()
       .map(|value| (value.traversal().edge_id.clone(), value))
       .collect::<BTreeMap<_, _>>();
-    if proofs.len() != hydrated.len() {
+    if proofs.len() != projections.len() {
       return Err(KnowledgeViewServiceError::InconsistentData);
     }
 
     let node_ids = std::iter::once(request.root.node.id().clone())
       .chain(gathered.iter().map(|item| item.0.id().clone()))
       .collect::<Vec<_>>();
+    ensure_deadline(context)?;
     let nodes = self
       .canonical
       .knowledge_nodes(
@@ -267,6 +278,7 @@ impl KnowledgeViewService {
       )
       .await
       .map_err(map_canonical_error)?;
+    ensure_deadline(context)?;
     if nodes.len() != node_ids.len() {
       return Err(KnowledgeViewServiceError::PartialPublication);
     }
@@ -300,6 +312,7 @@ impl KnowledgeViewService {
       .map(|item| item.0.id().clone())
       .collect::<Vec<_>>();
     if !scale_ids.is_empty() {
+      ensure_deadline(context)?;
       let scales = self
         .canonical
         .semantic_scales(
@@ -314,13 +327,29 @@ impl KnowledgeViewService {
         )
         .await
         .map_err(map_canonical_error)?;
+      ensure_deadline(context)?;
       if scales.len() != scale_ids.len() {
         return Err(KnowledgeViewServiceError::PartialPublication);
+      }
+      let expected_scale_ids = scale_ids.iter().collect::<BTreeSet<_>>();
+      let returned_scale_ids = scales
+        .iter()
+        .map(|scale| &scale.scale_id)
+        .collect::<BTreeSet<_>>();
+      if returned_scale_ids != expected_scale_ids {
+        return Err(KnowledgeViewServiceError::InconsistentData);
       }
       for scale in scales {
         scale
           .validate()
           .map_err(|_| KnowledgeViewServiceError::InconsistentData)?;
+        if !scale
+          .members
+          .iter()
+          .any(|member| member.node_id == *request.root.node.id())
+        {
+          return Err(KnowledgeViewServiceError::InconsistentData);
+        }
       }
     }
 
@@ -334,22 +363,15 @@ impl KnowledgeViewService {
     }];
     for (index, (node, _, path)) in gathered.into_iter().enumerate() {
       let mut steps = Vec::with_capacity(path.len());
-      for projection in path.into_iter().rev() {
-        let proof: &&HydratedAssertionProjection = proofs
+      for projection in path {
+        let proof = proofs
           .get(&projection.edge_id)
+          .cloned()
           .ok_or(KnowledgeViewServiceError::PartialPublication)?;
-        let traversal = proof.traversal();
-        steps.push(VerifiedKnowledgeStep {
-          edge_id: traversal.edge_id.clone(),
-          relationship_revision: traversal.relationship_revision,
-          assertion_id: traversal.assertion_id.clone(),
-          assertion_revision: traversal.assertion_revision,
-          traversal_id: traversal.traversal_id.clone(),
-          relation_registry_revision: traversal.relation_registry_revision,
-          source: traversal.source.clone(),
-          target: traversal.target.clone(),
-          evidence_ids: proof.assertion().evidence_ids.clone(),
-        });
+        steps.push(
+          VerifiedKnowledgeStep::from_hydrated(proof, request.release.clone())
+            .map_err(|_| KnowledgeViewServiceError::InconsistentData)?,
+        );
       }
       items.push(KnowledgeViewItem {
         node: node.clone(),
@@ -363,15 +385,40 @@ impl KnowledgeViewService {
         }),
       });
     }
+    let item_ids = items
+      .iter()
+      .skip(1)
+      .map(|item| item.node.clone())
+      .collect::<Vec<_>>();
+    let branches = if item_ids.is_empty() {
+      Vec::new()
+    } else {
+      vec![KnowledgeViewBranch {
+        order: 1,
+        reason: branch,
+        item_ids,
+      }]
+    };
     let result = KnowledgeViewSuperset {
       request,
       items,
-      next_cursor,
+      branches,
+      truncated: false,
+      next_cursor: None,
     };
     result
       .validate()
       .map_err(|_| KnowledgeViewServiceError::InconsistentData)?;
+    ensure_deadline(context)?;
     Ok(result)
+  }
+}
+
+fn ensure_deadline(context: &RequestContext) -> Result<(), KnowledgeViewServiceError> {
+  if context.remaining_budget().is_zero() {
+    Err(KnowledgeViewServiceError::DeadlineExceeded)
+  } else {
+    Ok(())
   }
 }
 
@@ -395,6 +442,8 @@ fn map_canonical_error(error: CanonicalReadError) -> KnowledgeViewServiceError {
 
 #[cfg(test)]
 mod tests {
+  use std::sync::Mutex;
+
   use async_trait::async_trait;
   use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
@@ -406,8 +455,9 @@ mod tests {
       knowledge_view::{KnowledgeLens, KnowledgeRoot},
       request_context::RequestId,
       retrieval_data::{
-        EdgeSearchRequest, EdgeSearchResult, NeighborSearchResult, NodeSearchRequest,
-        NodeSearchResult, ScaleSearchRequest, ScaleSearchResult, RELATION_REGISTRY_VERSION,
+        EdgeSearchRequest, EdgeSearchResult, NeighborProjectionExecutionProof,
+        NeighborSearchResult, NodeSearchRequest, NodeSearchResult, ScaleSearchRequest,
+        ScaleSearchResult, RELATION_REGISTRY_VERSION,
       },
       translation_turn::ResponseLevel,
     },
@@ -447,6 +497,55 @@ mod tests {
       _: NeighborSearchRequest,
     ) -> Result<NeighborSearchResult, RetrievalDataError> {
       Err(RetrievalDataError::Unavailable)
+    }
+  }
+
+  struct PagingRetrieval {
+    execution: NeighborProjectionExecutionProof,
+    calls: Mutex<Vec<(NeighborDirection, Option<String>)>>,
+  }
+
+  #[async_trait]
+  impl RetrievalDataPort for PagingRetrieval {
+    async fn search_nodes(
+      &self,
+      _: &RequestContext,
+      _: NodeSearchRequest,
+    ) -> Result<NodeSearchResult, RetrievalDataError> {
+      Err(RetrievalDataError::Unavailable)
+    }
+    async fn search_scales(
+      &self,
+      _: &RequestContext,
+      _: ScaleSearchRequest,
+    ) -> Result<ScaleSearchResult, RetrievalDataError> {
+      Err(RetrievalDataError::Unavailable)
+    }
+    async fn search_edges(
+      &self,
+      _: &RequestContext,
+      _: EdgeSearchRequest,
+    ) -> Result<EdgeSearchResult, RetrievalDataError> {
+      Err(RetrievalDataError::Unavailable)
+    }
+    async fn search_neighbors(
+      &self,
+      _: &RequestContext,
+      request: NeighborSearchRequest,
+    ) -> Result<NeighborSearchResult, RetrievalDataError> {
+      let mut calls = self.calls.lock().unwrap();
+      calls.push((request.direction, request.cursor.clone()));
+      if calls.len() == 1 {
+        Ok(NeighborSearchResult {
+          release_id: request.release_id,
+          execution: self.execution.clone(),
+          root_node_id: request.node_id,
+          neighbors: Vec::new(),
+          next_cursor: Some("dependency-page-2".into()),
+        })
+      } else {
+        Err(RetrievalDataError::Unavailable)
+      }
     }
   }
 
@@ -518,6 +617,21 @@ mod tests {
     }
   }
 
+  fn execution_proof(
+    expected: &NeighborProjectionExecutionExpectation,
+  ) -> NeighborProjectionExecutionProof {
+    NeighborProjectionExecutionProof {
+      content: expected.content.clone(),
+      node_collection_id: expected.node_collection_id.clone(),
+      node_collection_content_hash: expected.node_collection_content_hash.clone(),
+      edge_collection_id: expected.edge_collection_id.clone(),
+      edge_collection_content_hash: expected.edge_collection_content_hash.clone(),
+      relationship_registry_version: expected.relationship_registry_version,
+      edge_dense_input_version: expected.edge_dense_input_version.clone(),
+      edge_lexical_input_version: expected.edge_lexical_input_version.clone(),
+    }
+  }
+
   fn context(pin: &CanonicalReleasePin) -> RequestContext {
     RequestContext::new(
       RequestId::new("request-1").unwrap(),
@@ -567,6 +681,64 @@ mod tests {
     assert_eq!(
       service.build(&context(&release), request(other)).await,
       Err(KnowledgeViewServiceError::InconsistentData)
+    );
+  }
+
+  #[tokio::test]
+  async fn public_cursor_is_never_forwarded_as_a_dependency_cursor() {
+    let release = pin("release-1");
+    let service = KnowledgeViewService::new(
+      Arc::new(UnavailableRetrieval),
+      Arc::new(UnavailableCanonical),
+      execution(release.clone()),
+    );
+    let mut input = request(release.clone());
+    input.cursor = Some("k1.secret-public-token".into());
+    assert_eq!(
+      service.build(&context(&release), input).await,
+      Err(KnowledgeViewServiceError::InconsistentData)
+    );
+  }
+
+  #[tokio::test]
+  async fn lens_without_a_sound_registry_policy_fails_closed() {
+    let release = pin("release-1");
+    let service = KnowledgeViewService::new(
+      Arc::new(UnavailableRetrieval),
+      Arc::new(UnavailableCanonical),
+      execution(release.clone()),
+    );
+    let mut input = request(release.clone());
+    input.lens = KnowledgeLens::Mechanism;
+    assert_eq!(
+      service.build(&context(&release), input).await,
+      Err(KnowledgeViewServiceError::LensUnavailable)
+    );
+  }
+
+  #[tokio::test]
+  async fn child_pagination_is_exhausted_with_incoming_traversal_only() {
+    let release = pin("release-1");
+    let expected = execution(release.clone());
+    let retrieval = Arc::new(PagingRetrieval {
+      execution: execution_proof(&expected),
+      calls: Mutex::new(Vec::new()),
+    });
+    let service =
+      KnowledgeViewService::new(retrieval.clone(), Arc::new(UnavailableCanonical), expected);
+    assert_eq!(
+      service.build(&context(&release), request(release)).await,
+      Err(KnowledgeViewServiceError::DependencyUnavailable)
+    );
+    assert_eq!(
+      *retrieval.calls.lock().unwrap(),
+      vec![
+        (NeighborDirection::Incoming, None),
+        (
+          NeighborDirection::Incoming,
+          Some("dependency-page-2".into())
+        ),
+      ]
     );
   }
 }
