@@ -4,7 +4,7 @@ English: [Knowledge application](../../../docs/reference/application/knowledge.m
 
 本模块负责单词与固定短语请求的词义解析、领域评估、发布固定检索、关系排序、页面组织与确定性投影。
 
-状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。有界领域评估基础与严格出站 inventory client 已实现，但尚未由默认在线 composition 暴露。新的有界 root-retrieval application boundary 已组合注入式 canonical root resolver、共享 canonical-data knowledge-node hydration client、ephemeral embedding、query lexical encoding 与严格 retrieval-data port。Root resolver 当前仍只有 fake 实现，且该流程尚未暴露公开 route。下文完整页面组织仍属于目标行为。
+状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。有界领域评估基础与严格出站 inventory client 已实现，但尚未由默认在线 composition 暴露。新的有界 root-retrieval application boundary 已组合注入式 canonical root resolver、共享 canonical-data knowledge-node hydration client、ephemeral embedding、query lexical encoding 与严格 retrieval-data port。Root resolver 当前仍只有 fake 实现，且该流程尚未暴露公开 route。闭合 knowledge-lens catalog、server-owned traversal 与 item budget、已校验 view superset 及有界 verified-path result 已实现为 domain 与 application policy；检索 orchestration、transport handler 与完整页面组织仍属于目标行为。
 
 canonical-only 服务从权威端选择一次发布 pin，再通过读取 port 组合已审核翻译候选、确定性排序的词汇候选和无歧义的词义详情。它使用带 canonical-only content pin 的现有 lookup-card 类型，不伪造向量集合，也不把有意的纯词法读取误称为向量故障降级。可执行文件只在显式配置时构造并保存该依赖，用 active-release 只读探针检查就绪，并通过冻结的 BasicCard lookup 与固定发布 sense 路由提供该能力。外部 island-port server 仍需实现匹配的内部合同。请求局部查询形式有界且去重：基线规范化形式最强，谨慎的空白或外围标点变体只是较低优先级的拼写候选。已发布别名、形态、转写和语义归属由权威端确定，不从查询字符串猜测。
 
@@ -32,7 +32,7 @@ Root retrieval 始终先完成 canonical resolution。Not-found 与同优先级�
 
 模型可组织所提供事实并生成精简解释，但不能虚构 endpoint 或修改事实元数据。确定性校验检查每个引用。空或支持较弱的分区被省略。
 
-规范知识是断言图，而不是存储树。版本化关系注册表定义参与者角色，以及哪些 n 元断言允许生成二元遍历投影。Application 将该图变成有界引导视图：学习、术语、机理、对比与应用 lens 选择已审核根、分区顺序、深度/项目预算与证据策略。因此，树状展示无需复制事实，仍可解释，也不会假装所有关系都是层级。只有每条断言独立满足请求范围时，`knowledge/paths` 才返回短的具名路径。
+规范知识是断言图，而不是存储树。版本化关系注册表定义参与者角色，以及哪些 n 元断言允许生成二元遍历投影。Meaning、contrast、usage、form、origin、domain、mechanism 与 application 的闭合 policy 会推导准确 relation family、可补全 endpoint family、深度、item budget 与 display-evidence 资格，不接受调用方提供 graph control。每个非 root 引导视图 item 都必须保留一条回到 verified root、由独立证据支持 assertion projection 组成的一至三跳无环路径。请求局部且有依据的解释可保持 `inferred`；仅基于相似度的 `exploratory` 材料不能进入事实视图或充当 path step。`knowledge/paths` 最多接纳三条互异有序路径，每条最多三跳；`no_verified_path` 表示成功的有界搜索结果，而不是对全局不存在关系的声明。
 
 `brief`、`standard` 与 `full` 是同一个已校验超集的投影。响应级别只改变广度，不改变事实选择或真实性状态。
 

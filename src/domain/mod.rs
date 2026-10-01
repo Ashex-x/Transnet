@@ -28,6 +28,8 @@ pub mod knowledge_projection;
 pub mod knowledge_publication;
 /// Immutable canonical, node-collection, and edge-collection release-trio invariants.
 pub mod knowledge_release;
+/// Validated guided knowledge views and bounded evidence-backed paths.
+pub mod knowledge_view;
 /// Bounded canonical lookup-card presentation values with assertion-level provenance.
 pub mod lookup_card;
 /// Provider-neutral model runtime values and request-local call policy.

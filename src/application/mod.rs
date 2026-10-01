@@ -20,6 +20,8 @@ pub mod graph_topology_cache;
 pub mod knowledge_projection;
 /// Resumable node-first knowledge publication orchestration without activation.
 pub mod knowledge_publication;
+/// Exhaustive server-owned policy for guided knowledge lenses.
+pub mod knowledge_view_policy;
 /// Structured lookup orchestration.
 pub mod lookup;
 /// Bounded response-neutral delivery of closed metric events.
