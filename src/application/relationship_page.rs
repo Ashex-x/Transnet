@@ -7,11 +7,11 @@ use thiserror::Error;
 use crate::domain::{
   knowledge_view::{KnowledgeEvidenceState, KnowledgeLens, KnowledgeViewSuperset},
   relationship_page::{
-    LabeledAlternative, PageDomainContext, PageFact, PageGeneratedExample,
-    PageInferredExplanation, PageNamedPath, PageRelationship, PageRelationshipGroup,
-    PageSemanticScale, ProjectedRelationshipPage, RelationshipGroupKind,
-    RelationshipPageRequest, RelationshipPageSummaryRef, RelationshipPageSuperset,
-    RelationshipPageValidationError, RelationshipPageVersionMetadata,
+    LabeledAlternative, PageDomainContext, PageFact, PageGeneratedExample, PageInferredExplanation,
+    PageNamedPath, PageRelationship, PageRelationshipGroup, PageSemanticScale,
+    ProjectedRelationshipPage, RelationshipGroupKind, RelationshipPageRequest,
+    RelationshipPageSummaryRef, RelationshipPageSuperset, RelationshipPageValidationError,
+    RelationshipPageVersionMetadata,
   },
   translation_turn::{ProjectedTranslationResult, TranslationResultKind},
 };
@@ -89,8 +89,23 @@ impl RelationshipPageComposer {
     request: RelationshipPageRequest,
     material: RelationshipPageMaterial,
   ) -> Result<LexicalRelationshipResult, RelationshipPageCompositionError> {
-    if !matches!(translation.translation.kind(), TranslationResultKind::Word | TranslationResultKind::Phrase) {
+    if !matches!(
+      translation.translation.kind(),
+      TranslationResultKind::Word | TranslationResultKind::Phrase
+    ) {
       return Err(RelationshipPageCompositionError::NonLexicalResult);
+    }
+    let translations = translation.translation.translations();
+    if translations.len() != request.translation_choices.len()
+      || translations
+        .iter()
+        .zip(&request.translation_choices)
+        .any(|(translation, choice)| {
+          translation.translation_id != choice.translation_id
+            || usize::from(choice.order) != translation.order
+        })
+    {
+      return Err(RelationshipPageCompositionError::InconsistentMaterial);
     }
     let mut groups = Vec::new();
     let mut admitted_assertions = BTreeSet::new();
@@ -98,16 +113,25 @@ impl RelationshipPageComposer {
       if view.request.root.node != request.root || view.request.release != request.release {
         return Err(RelationshipPageCompositionError::InconsistentMaterial);
       }
-      view.validate().map_err(|_| RelationshipPageCompositionError::InconsistentMaterial)?;
+      view
+        .validate()
+        .map_err(|_| RelationshipPageCompositionError::InconsistentMaterial)?;
       let mut relationships = Vec::new();
       for item in view.items.into_iter().skip(1) {
         if item.evidence_state != KnowledgeEvidenceState::Verified {
           continue;
         }
-        let path = item.path_to_root.ok_or(RelationshipPageCompositionError::InconsistentMaterial)?;
-        let assertion_id = path.steps.first()
+        let path = item
+          .path_to_root
+          .ok_or(RelationshipPageCompositionError::InconsistentMaterial)?;
+        let assertion_id = path
+          .steps
+          .first()
           .ok_or(RelationshipPageCompositionError::InconsistentMaterial)?
-          .projection().assertion().assertion_id.clone();
+          .projection()
+          .assertion()
+          .assertion_id
+          .clone();
         if admitted_assertions.insert(assertion_id.clone()) {
           relationships.push(PageRelationship {
             node: item.node,
@@ -118,7 +142,10 @@ impl RelationshipPageComposer {
         }
       }
       if !relationships.is_empty() {
-        groups.push(PageRelationshipGroup { kind: group_kind(view.request.lens), relationships });
+        groups.push(PageRelationshipGroup {
+          kind: group_kind(view.request.lens),
+          relationships,
+        });
       }
     }
     groups.sort_by_key(|group| group.kind.rank());
@@ -181,8 +208,11 @@ mod tests {
   };
 
   fn pin() -> CanonicalReleasePin {
-    CanonicalReleasePin::new(CanonicalId::new("release-1").unwrap(), "canonical-v1".into())
-      .unwrap()
+    CanonicalReleasePin::new(
+      CanonicalId::new("release-1").unwrap(),
+      "canonical-v1".into(),
+    )
+    .unwrap()
   }
 
   fn translation(unit: TranslationTurnResult) -> ProjectedTranslationResult {
@@ -214,6 +244,10 @@ mod tests {
       response_level: ResponseLevel::Standard,
       release: pin(),
       max_alternatives: 0,
+      translation_choices: vec![crate::domain::relationship_page::PageTranslationChoice {
+        translation_id: "translation_0".into(),
+        order: 0,
+      }],
     }
   }
 
@@ -221,6 +255,7 @@ mod tests {
     RelationshipPageMaterial {
       summary: RelationshipPageSummaryRef::BasicCard {
         sense_id: CanonicalId::new("sense-1").unwrap(),
+        release: pin(),
       },
       domain: PageDomainContext {
         assessment: DomainAssessment::General {
@@ -242,12 +277,19 @@ mod tests {
   fn canonical_summary_is_an_explicit_degraded_outcome() {
     let lexical = TranslationTurnResult::Word {
       detected_source_language: TurnLanguage::parse("en").unwrap(),
-      translations: Vec::new(),
+      translations: vec![crate::domain::translation_turn::TurnTranslation {
+        translation_id: "translation_0".into(),
+        order: 0,
+        text: "你好".into(),
+        language: TurnLanguage::Chinese,
+        meaning: Some("a greeting".into()),
+        details: None,
+      }],
       annotations: Vec::new(),
       review: TranslationReview::clean(),
     };
-    let result = RelationshipPageComposer::compose(translation(lexical), request(), material())
-      .unwrap();
+    let result =
+      RelationshipPageComposer::compose(translation(lexical), request(), material()).unwrap();
     assert!(matches!(
       result.relationship_page,
       RelationshipPageOutcome::CanonicalOnly(_)
