@@ -28,6 +28,7 @@ use crate::{
     graph_topology_cache::GraphTopologySnapshotCacheService,
     lookup::LookupService,
     observability::ClosedMetricsDispatcher,
+    relationship_page::RelationshipPageRuntime,
     translation::TranslationOrchestrator,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
@@ -161,6 +162,7 @@ pub enum GraphCursorProtectionKeyError {
 pub struct AppState {
   service: Arc<TranslationService>,
   translation_orchestrator: Option<Arc<TranslationOrchestrator>>,
+  relationship_page_runtime: Option<Arc<RelationshipPageRuntime>>,
   lookup: Option<Arc<LookupService>>,
   canonical_lookup: Option<Arc<CanonicalLookupService>>,
   canonical_read: Option<Arc<CanonicalReadService>>,
@@ -185,6 +187,7 @@ impl AppState {
     Self {
       service: Arc::new(service),
       translation_orchestrator: None,
+      relationship_page_runtime: None,
       lookup: None,
       canonical_lookup: None,
       canonical_read: None,
@@ -224,6 +227,13 @@ impl AppState {
     self.capabilities = self
       .capabilities
       .with_live_retrieval(live_retrieval_available);
+    self
+  }
+
+  /// Enables embedded lexical relationship pages from one complete request-local authority.
+  pub fn with_relationship_page_runtime(mut self, runtime: Arc<RelationshipPageRuntime>) -> Self {
+    self.relationship_page_runtime = Some(runtime);
+    self.capabilities = self.capabilities.with_relationship_pages(true);
     self
   }
 
@@ -384,6 +394,9 @@ impl AppState {
         .as_ref()
         .is_some_and(|orchestrator| orchestrator.live_retrieval_available()),
     );
+    self.capabilities = self
+      .capabilities
+      .with_relationship_pages(self.relationship_page_runtime.is_some());
     self
   }
 
@@ -404,6 +417,10 @@ impl AppState {
 
   pub(crate) fn translation_orchestrator(&self) -> Option<&Arc<TranslationOrchestrator>> {
     self.translation_orchestrator.as_ref()
+  }
+
+  pub(crate) fn relationship_page_runtime(&self) -> Option<&Arc<RelationshipPageRuntime>> {
+    self.relationship_page_runtime.as_ref()
   }
 
   pub(crate) fn canonical_sense_details_service(

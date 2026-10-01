@@ -2,6 +2,7 @@
 
 use std::{fmt, str::FromStr};
 
+use serde::Serialize;
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
 
@@ -22,7 +23,8 @@ pub enum CanonicalValidationError {
 }
 
 /// Opaque stable identifier for a canonical entity.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(transparent)]
 pub struct CanonicalId(String);
 
 impl CanonicalId {
@@ -81,7 +83,8 @@ pub type SenseId = CanonicalId;
 pub type VectorCollectionId = CanonicalId;
 
 /// A normalized, validated BCP-47 language tag.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(transparent)]
 pub struct LanguageTag(String);
 
 impl LanguageTag {
@@ -189,7 +192,7 @@ pub struct ActiveContentVersion {
 /// Immutable canonical-only release selected once for an application request.
 ///
 /// Neither a vector collection nor a local ranking policy belongs to this authority-owned pin.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CanonicalReleasePin {
   /// Authoritative immutable canonical content release.
   pub release_id: ReleaseId,

@@ -989,6 +989,8 @@ fn project_outcome(
       content_release: None,
     },
     external_sources: Vec::new(),
+    relationship_page: None,
+    relationship_page_canonical_only: false,
   }
   .project(response_level)
 }

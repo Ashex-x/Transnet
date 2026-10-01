@@ -57,7 +57,8 @@ pub enum CanonicalTranslationError {
 macro_rules! canonical_family_id {
   ($name:ident, $prefix:literal, $doc:literal) => {
     #[doc = $doc]
-    #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+    #[serde(transparent)]
     pub struct $name(CanonicalId);
 
     impl $name {

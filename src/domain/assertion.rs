@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::Serialize;
 use thiserror::Error;
 
 use super::{
@@ -29,7 +30,8 @@ pub const MAX_ASSERTION_STATEMENT_CHARS: usize = 4_096;
 pub const MAX_ASSERTION_REFERENCES: usize = 32;
 
 /// Closed canonical entity families that may participate in the assertion graph.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CanonicalNodeFamily {
   /// One language-specific lexical form and part of speech.
   Lexeme,
@@ -122,7 +124,7 @@ impl From<super::retrieval_data::RetrievalNodeType> for CanonicalNodeFamily {
 }
 
 /// Publisher-assigned, family-qualified canonical node identity.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub struct CanonicalNodeId {
   family: CanonicalNodeFamily,
   id: CanonicalId,

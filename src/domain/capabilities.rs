@@ -137,6 +137,19 @@ impl ServiceCapabilities {
     }
     self
   }
+
+  /// Advertises the embedded page schema only with its complete material authority.
+  pub fn with_relationship_pages(mut self, available: bool) -> Self {
+    self
+      .schema_versions
+      .retain(|value| *value != SchemaVersionCapability::RelationshipPageV1);
+    if available {
+      self
+        .schema_versions
+        .push(SchemaVersionCapability::RelationshipPageV1);
+    }
+    self
+  }
   /// Rebinds the configured HTTP body limit without changing activated capabilities.
   pub fn with_max_request_body_bytes(mut self, max_request_body_bytes: usize) -> Self {
     self.limits.max_request_body_bytes = max_request_body_bytes;
@@ -371,4 +384,7 @@ pub enum SchemaVersionCapability {
   /// Unified translation result schema.
   #[serde(rename = "translation-result-v1")]
   TranslationResultV1,
+  /// Embedded relationship-page result schema.
+  #[serde(rename = "relationship-page-v1")]
+  RelationshipPageV1,
 }
