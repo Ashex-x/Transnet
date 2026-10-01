@@ -86,6 +86,8 @@ pub struct RollbackSelection {
   pub reason_code: RollbackReasonCode,
   /// Caller key making the selection safely replayable.
   pub idempotency_key: PublicationIdempotencyKey,
+  /// Last audit position authoritatively observed before this transition.
+  pub prior_audit_sequence: AuditSequence,
   /// Expected append-only audit position for this transition.
   pub audit_sequence: AuditSequence,
 }

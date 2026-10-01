@@ -19,7 +19,7 @@ use crate::{
     knowledge_publication::{
       BuildExecutionReceipt, DenseExecutionReceipt, LexicalExecutionReceipt,
       PersistedCollectionHash, PublicationBuildId, PublicationBuildState,
-      PublicationCollectionFamily, PublicationRequestFingerprint,
+      PublicationCollectionFamily, PublicationManifestHash, PublicationRequestFingerprint,
     },
     knowledge_release::{
       DenseEmbeddingVersion, EdgeCollectionId, EdgeCollectionManifest, KnowledgeReleaseFailure,
@@ -330,6 +330,8 @@ fn validate_compatibility(
 
 fn validate_begin(request: &BeginPublication) -> Result<(), KnowledgeReleaseFailure> {
   validate_compatibility(&request.compatibility)?;
+  PublicationManifestHash::parse(request.canonical_content_hash.clone())
+    .map_err(KnowledgeReleaseFailure::from)?;
   if request.expected_node_count == 0
     || request.expected_edge_count == 0
     || request.expected_endpoint_count != request.expected_edge_count.saturating_mul(2)
@@ -345,6 +347,7 @@ fn validate_begin(request: &BeginPublication) -> Result<(), KnowledgeReleaseFail
       request.build_id.as_str(),
       request.canonical.release_id.as_str(),
       &request.canonical.canonical_schema_version,
+      &request.canonical_content_hash,
       &request.projection_schema_version,
       &request.node_projection_hash,
       &request.edge_projection_hash,
@@ -476,6 +479,7 @@ impl PublicationContextDto {
 struct BeginInputDto<'a> {
   build_id: &'a str,
   canonical_schema_version: &'a str,
+  canonical_content_hash: &'a str,
   projection_schema_version: &'a str,
   node_projection_hash: &'a str,
   edge_projection_hash: &'a str,
@@ -492,6 +496,7 @@ impl<'a> BeginInputDto<'a> {
     Self {
       build_id: value.build_id.as_str(),
       canonical_schema_version: &value.canonical.canonical_schema_version,
+      canonical_content_hash: &value.canonical_content_hash,
       projection_schema_version: &value.projection_schema_version,
       node_projection_hash: &value.node_projection_hash,
       edge_projection_hash: &value.edge_projection_hash,
@@ -1547,6 +1552,7 @@ mod tests {
     let build_id = PublicationBuildId::parse(hash('a')).unwrap();
     let node_projection_hash = hash('b');
     let edge_projection_hash = hash('c');
+    let canonical_content_hash = hash('9');
     let node_count = "2";
     let edge_count = "1";
     let endpoint_count = "2";
@@ -1556,6 +1562,7 @@ mod tests {
         build_id.as_str(),
         canonical.release_id.as_str(),
         &canonical.canonical_schema_version,
+        &canonical_content_hash,
         "knowledge-projection-v1",
         &node_projection_hash,
         &edge_projection_hash,
@@ -1581,6 +1588,7 @@ mod tests {
     BeginPublication {
       build_id,
       canonical,
+      canonical_content_hash,
       projection_schema_version: "knowledge-projection-v1".into(),
       node_projection_hash,
       edge_projection_hash,
@@ -2126,8 +2134,11 @@ mod tests {
     let manifest_hash = PublicationManifestHash::parse(hash('f')).unwrap();
     let reconcile_id = crate::domain::knowledge_publication::PublicationReconcileIdentity::derive(
       &build_id,
+      &hash('9'),
       &nodes.persisted_hash,
+      &nodes.manifest.collection_id,
       &edges.persisted_hash,
+      &edges.manifest.collection_id,
     )
     .unwrap();
     let request = ReconcilePublication {

@@ -15,7 +15,7 @@ use super::{
     EdgeProjectionBuild, EmbeddingCompatibilityEntry, NodeProjectionBuild, DENSE_VECTOR_NAME,
     SPARSE_VECTOR_NAME,
   },
-  knowledge_release::KnowledgeReleaseFailure,
+  knowledge_release::{EdgeCollectionId, KnowledgeReleaseFailure, NodeCollectionId},
 };
 
 const MAX_ID_LENGTH: usize = 128;
@@ -115,15 +115,18 @@ impl PublicationBuildId {
   pub fn derive(
     release: &ReleaseId,
     projection_schema: &str,
+    canonical_content_hash: &str,
     node_projection_hash: &str,
     registry_entry_id: &str,
   ) -> Result<Self, PublicationValidationError> {
     validate_id(projection_schema)?;
+    validate_hash(canonical_content_hash)?;
     validate_hash(node_projection_hash)?;
     validate_id(registry_entry_id)?;
     let mut bytes = CanonicalBytes::new("transnet-publication-build-v1");
     bytes.field(release.as_str());
     bytes.field(projection_schema);
+    bytes.field(canonical_content_hash);
     bytes.field(node_projection_hash);
     bytes.field(registry_entry_id);
     Ok(Self(hash(bytes.finish())))
@@ -306,16 +309,23 @@ impl PublicationReconcileIdentity {
   /// Derives reconciliation identity from one build and its ordered node/edge proofs.
   pub fn derive(
     build: &PublicationBuildId,
+    canonical_content_hash: &str,
     nodes: &PersistedCollectionHash,
+    node_collection_id: &NodeCollectionId,
     edges: &PersistedCollectionHash,
+    edge_collection_id: &EdgeCollectionId,
   ) -> Result<Self, PublicationValidationError> {
+    validate_hash(canonical_content_hash)?;
     if nodes == edges {
       return Err(PublicationValidationError::InvalidCollectionProof);
     }
     let mut bytes = CanonicalBytes::new("transnet-publication-reconcile-v1");
     bytes.field(build.as_str());
+    bytes.field(canonical_content_hash);
     bytes.field(nodes.as_str());
+    bytes.field(node_collection_id.as_str());
     bytes.field(edges.as_str());
+    bytes.field(edge_collection_id.as_str());
     Ok(Self(hash(bytes.finish())))
   }
 
@@ -511,18 +521,25 @@ impl PublicationManifestHash {
   pub fn derive(
     release: &ReleaseId,
     canonical_schema: &str,
+    canonical_content_hash: &str,
     nodes: &PersistedCollectionHash,
+    node_collection_id: &NodeCollectionId,
     edges: &PersistedCollectionHash,
+    edge_collection_id: &EdgeCollectionId,
   ) -> Result<Self, PublicationValidationError> {
     validate_id(canonical_schema)?;
+    validate_hash(canonical_content_hash)?;
     if nodes == edges {
       return Err(PublicationValidationError::InvalidCollectionProof);
     }
     let mut bytes = CanonicalBytes::new("transnet-publication-manifest-v1");
     bytes.field(release.as_str());
     bytes.field(canonical_schema);
+    bytes.field(canonical_content_hash);
     bytes.field(nodes.as_str());
+    bytes.field(node_collection_id.as_str());
     bytes.field(edges.as_str());
+    bytes.field(edge_collection_id.as_str());
     Ok(Self(hash(bytes.finish())))
   }
 
@@ -762,6 +779,14 @@ mod tests {
     ReleaseId::new(value).unwrap()
   }
 
+  fn node_collection() -> NodeCollectionId {
+    NodeCollectionId::parse("nodes-r1").unwrap()
+  }
+
+  fn edge_collection() -> EdgeCollectionId {
+    EdgeCollectionId::parse("edges-r1").unwrap()
+  }
+
   fn fingerprint(value: &str) -> PublicationRequestFingerprint {
     PublicationRequestFingerprint::derive("append_nodes", &[value]).unwrap()
   }
@@ -796,6 +821,7 @@ mod tests {
     PublicationBuildId::derive(
       &release("release-r1"),
       "knowledge-graph-v1",
+      &hash(b"canonical".to_vec()),
       &hash(b"nodes".to_vec()),
       "registry-test-r1",
     )
@@ -863,6 +889,7 @@ mod tests {
     let build = PublicationBuildId::derive(
       &release("release-r1"),
       "knowledge-graph-v1",
+      &hash(b"canonical".to_vec()),
       &hash(b"nodes".to_vec()),
       "registry-r1",
     )
@@ -896,7 +923,15 @@ mod tests {
     let edges = PersistedCollectionHash(hash(b"edges".to_vec()));
     let finalize =
       PublicationFinalizeIdentity::derive(&build_id(), PublicationCollectionFamily::Nodes, &nodes);
-    let reconcile = PublicationReconcileIdentity::derive(&build_id(), &nodes, &edges).unwrap();
+    let reconcile = PublicationReconcileIdentity::derive(
+      &build_id(),
+      &hash(b"canonical".to_vec()),
+      &nodes,
+      &node_collection(),
+      &edges,
+      &edge_collection(),
+    )
+    .unwrap();
     assert_ne!(finalize.as_str(), reconcile.as_str());
   }
 
@@ -920,12 +955,25 @@ mod tests {
     let arguments = (
       &release("release-r1"),
       "knowledge-graph-v1",
+      hash(b"canonical".to_vec()),
       hash(b"nodes".to_vec()),
       "registry-r1",
     );
     assert_eq!(
-      PublicationBuildId::derive(arguments.0, arguments.1, &arguments.2, arguments.3),
-      PublicationBuildId::derive(arguments.0, arguments.1, &arguments.2, arguments.3)
+      PublicationBuildId::derive(
+        arguments.0,
+        arguments.1,
+        &arguments.2,
+        &arguments.3,
+        arguments.4
+      ),
+      PublicationBuildId::derive(
+        arguments.0,
+        arguments.1,
+        &arguments.2,
+        &arguments.3,
+        arguments.4
+      )
     );
   }
 
@@ -973,6 +1021,7 @@ mod tests {
     let other_build = PublicationBuildId::derive(
       &release("release-r2"),
       "knowledge-graph-v1",
+      &hash(b"canonical".to_vec()),
       &hash(b"nodes".to_vec()),
       "registry-test-r1",
     )
@@ -997,11 +1046,112 @@ mod tests {
   fn manifest_hash_separates_node_and_edge_collection_domains() {
     let node = PersistedCollectionHash(hash(b"node-proof".to_vec()));
     let edge = PersistedCollectionHash(hash(b"edge-proof".to_vec()));
-    let manifest =
-      PublicationManifestHash::derive(&release("release-r1"), "canonical-v1", &node, &edge)
-        .unwrap();
+    let manifest = PublicationManifestHash::derive(
+      &release("release-r1"),
+      "canonical-v1",
+      &hash(b"canonical".to_vec()),
+      &node,
+      &node_collection(),
+      &edge,
+      &edge_collection(),
+    )
+    .unwrap();
     assert_ne!(node, edge);
     assert_ne!(manifest.as_str(), node.as_str());
     assert_ne!(manifest.as_str(), edge.as_str());
+  }
+
+  #[test]
+  fn every_frozen_proof_member_changes_stable_identities() {
+    let release = release("release-r1");
+    let canonical = hash(b"canonical-a".to_vec());
+    let canonical_changed = hash(b"canonical-b".to_vec());
+    let nodes = PersistedCollectionHash(hash(b"node-proof".to_vec()));
+    let edges = PersistedCollectionHash(hash(b"edge-proof".to_vec()));
+    let node_id = node_collection();
+    let edge_id = edge_collection();
+    let changed_node_id = NodeCollectionId::parse("nodes-r2").unwrap();
+
+    let build = PublicationBuildId::derive(
+      &release,
+      "knowledge-graph-v1",
+      &canonical,
+      &hash(b"nodes".to_vec()),
+      "registry-r1",
+    )
+    .unwrap();
+    let changed_build = PublicationBuildId::derive(
+      &release,
+      "knowledge-graph-v1",
+      &canonical_changed,
+      &hash(b"nodes".to_vec()),
+      "registry-r1",
+    )
+    .unwrap();
+    assert_ne!(build, changed_build);
+
+    let reconcile =
+      PublicationReconcileIdentity::derive(&build, &canonical, &nodes, &node_id, &edges, &edge_id)
+        .unwrap();
+    assert_ne!(
+      reconcile,
+      PublicationReconcileIdentity::derive(
+        &build,
+        &canonical_changed,
+        &nodes,
+        &node_id,
+        &edges,
+        &edge_id,
+      )
+      .unwrap()
+    );
+    assert_ne!(
+      reconcile,
+      PublicationReconcileIdentity::derive(
+        &build,
+        &canonical,
+        &nodes,
+        &changed_node_id,
+        &edges,
+        &edge_id,
+      )
+      .unwrap()
+    );
+    let manifest = PublicationManifestHash::derive(
+      &release,
+      "canonical-v1",
+      &canonical,
+      &nodes,
+      &node_id,
+      &edges,
+      &edge_id,
+    )
+    .unwrap();
+    assert_ne!(
+      manifest,
+      PublicationManifestHash::derive(
+        &release,
+        "canonical-v1",
+        &canonical_changed,
+        &nodes,
+        &node_id,
+        &edges,
+        &edge_id,
+      )
+      .unwrap()
+    );
+    assert_ne!(
+      manifest,
+      PublicationManifestHash::derive(
+        &release,
+        "canonical-v1",
+        &canonical,
+        &nodes,
+        &changed_node_id,
+        &edges,
+        &edge_id,
+      )
+      .unwrap()
+    );
   }
 }

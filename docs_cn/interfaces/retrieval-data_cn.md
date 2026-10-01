@@ -495,7 +495,7 @@ Node freeze 先于 edge admission。Freeze response 提供由 island-port 分配
 
 Reconcile 绑定两个不可变 collection ID、projection/persisted hash、edge-to-node projection binding、point/endpoint count、已验证 receipt 与 publication manifest hash。只有完整 endpoint coverage 和精确 cross-artifact agreement 才产生闭合 `activation_candidate` 状态；该 operation 不修改 active release。Status 只读；abort 遵守 domain state machine，不能离开或中止 activation candidate。
 
-返回的 candidate 还绑定稳定 build/reconciliation identity 与存储无关 canonical-content hash。独立离线 `release-control-v1` client 可显式提交该完整 proof；reconciliation 本身绝不调用 release control。Rollback selection 命名一个此前已验证且保留的 manifest，而不是重建或修改任一 collection。
+返回的 candidate 还绑定稳定 build/reconciliation identity 与存储无关 canonical-content hash。Build identity 提交该 canonical hash；reconciliation 与 publication-manifest identity 还提交两个 typed physical collection ID 及其 persisted hash。任一冻结 proof member 改变都会改变相应 identity。独立离线 `release-control-v1` client 可显式提交该完整 proof；reconciliation 本身绝不调用 release control。Rollback selection 命名一个此前已验证且保留的 manifest，而不是重建或修改任一 collection。
 
 ```json
 {

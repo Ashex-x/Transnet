@@ -87,6 +87,10 @@ impl ReleaseControlPort for IslandPortReleaseControlClient {
     request: &SubmitActivationCandidate<'_>,
   ) -> Result<ReleaseSelectionReceipt, ReleaseControlError> {
     let candidate = request.candidate;
+    request
+      .prior_audit_sequence
+      .require_next(request.audit_sequence)
+      .map_err(|_| ReleaseControlError::InvalidRequest)?;
     validate_canonical_content_hash(&candidate.canonical_content_hash)
       .map_err(|_| ReleaseControlError::InvalidRequest)?;
     let trio = &candidate.trio;
@@ -121,6 +125,7 @@ impl ReleaseControlPort for IslandPortReleaseControlClient {
           dense_artifact_revision: &trio.dense_embedding().artifact_revision,
           sparse_encoder_revision: &trio.sparse_embedding().encoder_revision,
           idempotency_key: request.idempotency_key.as_str(),
+          prior_audit_sequence: request.prior_audit_sequence.get(),
           audit_sequence: request.audit_sequence.get(),
         },
       )
@@ -140,6 +145,10 @@ impl ReleaseControlPort for IslandPortReleaseControlClient {
   ) -> Result<ReleaseSelectionReceipt, ReleaseControlError> {
     validate_canonical_content_hash(&request.target_canonical_content_hash)
       .map_err(|_| ReleaseControlError::InvalidRequest)?;
+    request
+      .prior_audit_sequence
+      .require_next(request.audit_sequence)
+      .map_err(|_| ReleaseControlError::InvalidRequest)?;
     if request.expected_active_release == request.target_release {
       return Err(ReleaseControlError::InvalidRequest);
     }
@@ -155,6 +164,7 @@ impl ReleaseControlPort for IslandPortReleaseControlClient {
           target_publication_manifest_hash: request.target_manifest_hash.as_str(),
           reason_code: request.reason_code.as_str(),
           idempotency_key: request.idempotency_key.as_str(),
+          prior_audit_sequence: request.prior_audit_sequence.get(),
           audit_sequence: request.audit_sequence.get(),
         },
       )
@@ -245,6 +255,7 @@ struct ActivationInputDto<'a> {
   dense_artifact_revision: &'a str,
   sparse_encoder_revision: &'a str,
   idempotency_key: &'a str,
+  prior_audit_sequence: u64,
   audit_sequence: u64,
 }
 
@@ -256,6 +267,7 @@ struct RollbackInputDto<'a> {
   target_publication_manifest_hash: &'a str,
   reason_code: &'a str,
   idempotency_key: &'a str,
+  prior_audit_sequence: u64,
   audit_sequence: u64,
 }
 
@@ -520,8 +532,15 @@ mod tests {
     let nodes_hash = PersistedCollectionHash::parse(hash('d')).unwrap();
     let edges_hash = PersistedCollectionHash::parse(hash('e')).unwrap();
     PublicationActivationCandidate {
-      reconcile_id: PublicationReconcileIdentity::derive(&build_id, &nodes_hash, &edges_hash)
-        .unwrap(),
+      reconcile_id: PublicationReconcileIdentity::derive(
+        &build_id,
+        &hash('9'),
+        &nodes_hash,
+        &trio.nodes().collection_id,
+        &edges_hash,
+        &trio.edges().collection_id,
+      )
+      .unwrap(),
       build_id,
       trio,
       canonical_content_hash: hash('9'),
@@ -561,6 +580,7 @@ mod tests {
       candidate: &candidate,
       expected_active_release: release("release-r1"),
       idempotency_key: PublicationIdempotencyKey::parse("activate-r2").unwrap(),
+      prior_audit_sequence: AuditSequence::new(40).unwrap(),
       audit_sequence: AuditSequence::new(41).unwrap(),
     };
 
@@ -601,6 +621,7 @@ mod tests {
       target_canonical_content_hash: hash('8'),
       reason_code: RollbackReasonCode::VerificationFailure,
       idempotency_key: PublicationIdempotencyKey::parse("rollback-r1").unwrap(),
+      prior_audit_sequence: AuditSequence::new(41).unwrap(),
       audit_sequence: AuditSequence::new(42).unwrap(),
     };
 
@@ -626,6 +647,64 @@ mod tests {
       candidate: &candidate,
       expected_active_release: release("release-r1"),
       idempotency_key: PublicationIdempotencyKey::parse("activate-r2").unwrap(),
+      prior_audit_sequence: AuditSequence::new(40).unwrap(),
+      audit_sequence: AuditSequence::new(41).unwrap(),
+    };
+
+    assert_eq!(
+      client
+        .submit_activation_candidate(&context(), &request)
+        .await,
+      Err(ReleaseControlError::InconsistentData)
+    );
+  }
+
+  #[tokio::test]
+  async fn audit_gap_is_rejected_before_transport() {
+    let candidate = candidate();
+    let transport = Arc::new(FakeTransport::default());
+    let client = IslandPortReleaseControlClient::new(transport.clone());
+    let request = SubmitActivationCandidate {
+      candidate: &candidate,
+      expected_active_release: release("release-r1"),
+      idempotency_key: PublicationIdempotencyKey::parse("activate-r2").unwrap(),
+      prior_audit_sequence: AuditSequence::new(39).unwrap(),
+      audit_sequence: AuditSequence::new(41).unwrap(),
+    };
+
+    assert_eq!(
+      client
+        .submit_activation_candidate(&context(), &request)
+        .await,
+      Err(ReleaseControlError::InvalidRequest)
+    );
+    assert!(transport.calls.lock().unwrap().is_empty());
+  }
+
+  #[tokio::test]
+  async fn contradictory_outcome_topology_fails_closed() {
+    let candidate = candidate();
+    let response = json!({
+      "request_id": "req-release-control",
+      "schema_version": RELEASE_CONTROL_SCHEMA_VERSION,
+      "content_release": "release-r2",
+      "outcome": "conflict",
+      "value": {
+        "active_release": "release-r2",
+        "previous_release": "release-r1",
+        "selected_at": "2026-10-01T00:00:00Z",
+        "audit_sequence": 41,
+        "publication_manifest_hash": candidate.manifest_hash.as_str()
+      },
+      "error": {"code": "activation_conflict", "message": "ignored"}
+    });
+    let client =
+      IslandPortReleaseControlClient::new(Arc::new(FakeTransport::with_responses(vec![response])));
+    let request = SubmitActivationCandidate {
+      candidate: &candidate,
+      expected_active_release: release("release-r1"),
+      idempotency_key: PublicationIdempotencyKey::parse("activate-r2").unwrap(),
+      prior_audit_sequence: AuditSequence::new(40).unwrap(),
       audit_sequence: AuditSequence::new(41).unwrap(),
     };
 

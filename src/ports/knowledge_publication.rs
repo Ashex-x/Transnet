@@ -73,6 +73,8 @@ pub struct BeginPublication {
   pub build_id: PublicationBuildId,
   /// Canonical release and schema pin.
   pub canonical: CanonicalReleasePin,
+  /// Storage-neutral hash of every canonical row admitted to this build.
+  pub canonical_content_hash: String,
   /// Projection payload schema shared by node and edge artifacts.
   pub projection_schema_version: String,
   /// Complete deterministic node projection hash.

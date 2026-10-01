@@ -133,6 +133,7 @@ impl KnowledgePublicationService {
     let build_id = PublicationBuildId::derive(
       &plan.canonical.release_id,
       plan.nodes.embedding.payload_schema_version(),
+      &plan.canonical_content_hash,
       &plan.nodes.content_hash,
       &plan.compatibility.entry_id,
     )
@@ -246,12 +247,22 @@ impl KnowledgePublicationService {
     let manifest_hash = PublicationManifestHash::derive(
       &plan.canonical.release_id,
       &plan.canonical.canonical_schema_version,
+      &plan.canonical_content_hash,
       &node_hash,
+      &frozen_nodes.manifest.collection_id,
       &edge_hash,
+      &frozen_edges.manifest.collection_id,
     )
     .map_err(KnowledgeReleaseFailure::from)?;
-    let reconcile_id = PublicationReconcileIdentity::derive(&build_id, &node_hash, &edge_hash)
-      .map_err(KnowledgeReleaseFailure::from)?;
+    let reconcile_id = PublicationReconcileIdentity::derive(
+      &build_id,
+      &plan.canonical_content_hash,
+      &node_hash,
+      &frozen_nodes.manifest.collection_id,
+      &edge_hash,
+      &frozen_edges.manifest.collection_id,
+    )
+    .map_err(KnowledgeReleaseFailure::from)?;
     self
       .publication
       .reconcile(
@@ -398,6 +409,7 @@ fn begin_request(
       build_id.as_str(),
       plan.canonical.release_id.as_str(),
       &plan.canonical.canonical_schema_version,
+      &plan.canonical_content_hash,
       plan.nodes.embedding.payload_schema_version(),
       &plan.nodes.content_hash,
       &plan.edges.content_hash,
@@ -423,6 +435,7 @@ fn begin_request(
   Ok(BeginPublication {
     build_id,
     canonical: plan.canonical.clone(),
+    canonical_content_hash: plan.canonical_content_hash.clone(),
     projection_schema_version: plan.nodes.embedding.payload_schema_version().to_string(),
     node_projection_hash: plan.nodes.content_hash.clone(),
     edge_projection_hash: plan.edges.content_hash.clone(),
@@ -1683,6 +1696,7 @@ mod tests {
     let build_id = PublicationBuildId::derive(
       &plan.canonical.release_id,
       plan.nodes.embedding.payload_schema_version(),
+      &plan.canonical_content_hash,
       &plan.nodes.content_hash,
       &plan.compatibility.entry_id,
     )
@@ -1714,6 +1728,7 @@ mod tests {
     let build_id = PublicationBuildId::derive(
       &plan.canonical.release_id,
       plan.nodes.embedding.payload_schema_version(),
+      &plan.canonical_content_hash,
       &plan.nodes.content_hash,
       &plan.compatibility.entry_id,
     )

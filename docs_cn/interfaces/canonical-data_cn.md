@@ -596,6 +596,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
   "dense_artifact_revision": "deployment-supplied-immutable-revision",
   "sparse_encoder_revision": "v1",
   "idempotency_key": "activate-knowledge-2026-10",
+  "prior_audit_sequence": 183,
   "audit_sequence": 184
 }
 ```
@@ -635,13 +636,14 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
   "target_publication_manifest_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
   "reason_code": "verification_failure",
   "idempotency_key": "rollback-knowledge-2026-09",
+  "prior_audit_sequence": 184,
   "audit_sequence": 185
 }
 ```
 
 响应使用 activation receipt shape，其中 `active_release` 为 `knowledge-2026-09`、`previous_release` 为 `knowledge-2026-10`，并精确回显 target manifest 与 audit sequence。
 
-两个 release-control operation 都使用共享 context envelope。封闭 outcome 是 `ok`、`invalid_payload`、`version_mismatch`、`conflict`、`missing`、`unavailable` 与 `timeout`；client 校验 outcome/code 配对而不解析 message。以同一 idempotency key 提交不同 proof、过期的 expected-active release、不连续的 audit sequence、未知字段、不匹配 echo、格式错误 timestamp 或矛盾 receipt 都闭合失败。
+两个 release-control operation 都使用共享 context envelope。`prior_audit_sequence` 是离线 caller 最后观察到的 authority receipt，`audit_sequence` 必须恰好是其 checked successor；client 在 transport 前拒绝 gap，island-port 再原子检查该 precondition。封闭 outcome 是 `ok`、`invalid_payload`、`version_mismatch`、`conflict`、`missing`、`unavailable` 与 `timeout`；client 校验 outcome/code 配对而不解析 message。以同一 idempotency key 提交不同 proof、过期的 expected-active release、不连续的 audit sequence、未知字段、不匹配 echo、格式错误 timestamp 或矛盾 receipt 都闭合失败。
 
 ## 相关文档
 

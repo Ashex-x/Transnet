@@ -604,6 +604,7 @@ Request:
   "dense_artifact_revision": "deployment-supplied-immutable-revision",
   "sparse_encoder_revision": "v1",
   "idempotency_key": "activate-knowledge-2026-10",
+  "prior_audit_sequence": 183,
   "audit_sequence": 184
 }
 ```
@@ -643,13 +644,14 @@ Request `input`:
   "target_publication_manifest_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
   "reason_code": "verification_failure",
   "idempotency_key": "rollback-knowledge-2026-09",
+  "prior_audit_sequence": 184,
   "audit_sequence": 185
 }
 ```
 
 Response uses the activation receipt shape with `active_release` set to `knowledge-2026-09`, `previous_release` set to `knowledge-2026-10`, and the exact target manifest and audit sequence echoed.
 
-Both release-control operations use the shared context envelope. Closed outcomes are `ok`, `invalid_payload`, `version_mismatch`, `conflict`, `missing`, `unavailable`, and `timeout`; the client validates outcome/code pairs instead of parsing messages. A different proof under the same idempotency key, stale expected-active release, nonconsecutive audit sequence, unknown field, mismatched echo, malformed timestamp, or contradictory receipt fails closed.
+Both release-control operations use the shared context envelope. `prior_audit_sequence` is the last authority receipt observed by the offline caller and `audit_sequence` must be exactly its checked successor; the client rejects a gap before transport and island-port rechecks the precondition atomically. Closed outcomes are `ok`, `invalid_payload`, `version_mismatch`, `conflict`, `missing`, `unavailable`, and `timeout`; the client validates outcome/code pairs instead of parsing messages. A different proof under the same idempotency key, stale expected-active release, nonconsecutive audit sequence, unknown field, mismatched echo, malformed timestamp, or contradictory receipt fails closed.
 
 ## Related documents
 
