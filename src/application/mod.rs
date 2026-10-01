@@ -36,6 +36,8 @@ pub mod observability;
 pub mod offline_publication;
 /// Canonical hybrid retrieval and lexical-only fallback.
 pub mod retrieval;
+/// Relationship-centered lexical-page assembly from already verified application outputs.
+pub mod relationship_page;
 /// Canonical-root-first bounded hybrid nomination and authoritative hydration.
 pub mod root_retrieval;
 /// Unified request-local translation orchestration and automatic intent routing.
