@@ -341,6 +341,8 @@ Returns one guided tree-lens projection for a canonical root.
 
 The response contains the root, lens, ordered branches, stable nodes, explicit paths, relevance reasons, assertion and evidence references, evidence states, truncation, and an opaque next cursor. Cursors bind the root, lens, language, response level, release, projection version, and ordering version and contain no request text.
 
+The implemented target cursor foundation uses the opaque `k1.<nonce>.<ciphertext>` format protected with XChaCha20-Poly1305 and distinct authenticated context from the transitional graph cursor. Its encrypted payload binds the typed root family and ID, lens, language, response level, complete canonical release/schema pin, immutable node and edge collection IDs and SHA-256 hashes, assertion/registry/projection/lens-policy/ordering versions, stable ordering key, and at most eight bounded dependency continuation tokens. Decoding requires an exact current-request binding match and rejects unknown versions, excessive length, malformed base64, tampering, another key, or changed release/projection data. The payload contains no query text, generated prose, evidence excerpts, credentials, user identity, or durable history. This foundation does not itself expose a route or add application state.
+
 ## POST /api/v1/knowledge/paths
 
 Returns up to three independently verified paths of at most three hops between two canonical roots. The server chooses and enforces relation eligibility and does not perform arbitrary-depth or shortest-path inference.

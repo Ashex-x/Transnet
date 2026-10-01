@@ -333,6 +333,8 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 
 响应包含 root、lens、有序 branch、稳定 node、显式 path、relevance reason、assertion 与证据引用、evidence state、截断状态及不透明 next cursor。Cursor 绑定 root、lens、语言、response level、release、projection version 与 ordering version，且不含请求文本。
 
+已实现的 target cursor foundation 使用不透明 `k1.<nonce>.<ciphertext>` 格式，以 XChaCha20-Poly1305 保护，并采用与过渡期 graph cursor 不同的 authenticated context。其加密 payload 绑定有类型 root family/ID、lens、语言、response level、完整 canonical release/schema pin、不可变 node/edge collection ID 与 SHA-256 hash、assertion/registry/projection/lens-policy/ordering version、稳定 ordering key，以及最多八个有界 dependency continuation token。解码要求与当前请求 binding 精确一致，并拒绝未知版本、超长值、畸形 base64、篡改、不同密钥或变化后的 release/projection 数据。Payload 不包含 query text、生成 prose、evidence excerpt、credential、user identity 或 durable history。该 foundation 本身不公开 route，也不加入 application state。
+
 ## POST /api/v1/knowledge/paths
 
 在两个规范 root 之间返回最多三条、每条最多三跳且独立验证的路径。Server 选择并强制关系资格，不执行任意深度或 shortest-path inference。
