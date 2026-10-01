@@ -105,3 +105,16 @@ fn safe_expected_code(value: &str) -> bool {
           .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
     })
 }
+
+#[test]
+fn challenge_identifiers_reject_empty_separator_and_duplicate_shapes() {
+  for invalid in ["", "---", "-case-001", "case--001", "case-"] {
+    assert!(!safe_case_id(invalid));
+  }
+  assert!(!safe_case_id(&format!("case-{}", "1".repeat(65))));
+  for invalid in ["", "_", "__code", "code_", "two__parts", "Upper"] {
+    assert!(!safe_expected_code(invalid));
+  }
+  assert!(safe_case_id("routing-word-001"));
+  assert!(safe_expected_code("preserve_lexical_ambiguity"));
+}
