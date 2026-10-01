@@ -349,7 +349,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 }
 ```
 
-请求绑定精确 query-side dense artifact 与冻结 dense/lexical input contract。响应必须标识不可变物理 node collection、提供其精确 SHA-256 content hash，并精确回显所有 execution member；proof 缺失、hash 格式错误或版本漂移会使整个响应闭合失败。分数只可在该已证明模型、collection 与发布内比较。向量相似度仅是候选信号，不能证明翻译、同义、层级、因果、共同机制或文化意义。
+请求绑定精确 query-side dense artifact 与冻结 dense/lexical input contract。响应必须标识不可变物理 node collection、提供其精确 SHA-256 content hash，并精确回显所有 execution member；proof 缺失、hash 格式错误或版本漂移会使整个响应闭合失败。`matched_by` 仅接受 `dense`、`sparse`、`canonical_label`、`alias`、`translation`、`transliteration`、`abbreviation`、`formula` 与 `domain_term`；重复 mechanism 闭合失败，绝不会抬高 rank。分数只可在该已证明模型、collection 与发布内比较。向量相似度仅是候选信号，不能证明翻译、同义、层级、因果、共同机制或文化意义。
 
 ## POST /api/v1/scales/search
 

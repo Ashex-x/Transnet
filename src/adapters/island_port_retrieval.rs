@@ -13,7 +13,7 @@ use crate::{
     retrieval_data::{
       validate_cursor, validate_limit, EdgeCandidate, EdgeSearchRequest, EdgeSearchResult,
       NeighborCandidate, NeighborDirection, NeighborEdge, NeighborNode, NeighborSearchRequest,
-      NeighborSearchResult, NodeCandidate, NodeCandidatePayload,
+      NeighborSearchResult, NodeCandidate, NodeCandidatePayload, NodeMatchMechanism,
       NodeProjectionExecutionExpectation, NodeProjectionExecutionProof, NodeSearchRequest,
       NodeSearchResult, RetrievalDataScore, RetrievalDataValidationError, RetrievalFilters,
       RetrievalNodeType, RetrievalPublicationState, RetrievalRelation, RetrievalVerificationState,
@@ -827,31 +827,22 @@ struct NodeCandidateDto {
 
 impl NodeCandidateDto {
   fn into_domain(self) -> Result<NodeCandidate, RetrievalDataError> {
-    const MATCH_TYPES: &[&str] = &[
-      "dense",
-      "sparse",
-      "canonical_label",
-      "alias",
-      "translation",
-      "transliteration",
-      "abbreviation",
-      "formula",
-      "domain_term",
-    ];
-    if self.matched_by.is_empty()
-      || self.matched_by.len() > MATCH_TYPES.len()
-      || self
-        .matched_by
-        .iter()
-        .any(|value| !MATCH_TYPES.contains(&value.as_str()))
-      || self.matched_by.iter().collect::<BTreeSet<_>>().len() != self.matched_by.len()
+    let matched_by = self
+      .matched_by
+      .iter()
+      .map(|value| NodeMatchMechanism::from_wire_name(value))
+      .collect::<Result<Vec<_>, _>>()
+      .map_err(|_| RetrievalDataError::InconsistentData)?;
+    if matched_by.is_empty()
+      || matched_by.len() > 9
+      || matched_by.iter().collect::<BTreeSet<_>>().len() != matched_by.len()
     {
       return Err(RetrievalDataError::InconsistentData);
     }
     Ok(NodeCandidate {
       node_id: parse_id(self.node_id)?,
       score: parse_score(self.score)?,
-      matched_by: self.matched_by,
+      matched_by,
       payload: self.payload.into_domain()?,
     })
   }

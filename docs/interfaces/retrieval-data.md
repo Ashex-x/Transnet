@@ -349,7 +349,7 @@ Response:
 }
 ```
 
-The request binds the exact query-side dense artifact and frozen dense/lexical input contracts. The response must identify the immutable physical node collection, provide its exact SHA-256 content hash, and echo every execution member exactly; missing proof, malformed hash, or version drift fails the whole response closed. Scores are comparable only within that proven model, collection, and release. Vector similarity is a candidate signal, never proof of translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
+The request binds the exact query-side dense artifact and frozen dense/lexical input contracts. The response must identify the immutable physical node collection, provide its exact SHA-256 content hash, and echo every execution member exactly; missing proof, malformed hash, or version drift fails the whole response closed. `matched_by` accepts only `dense`, `sparse`, `canonical_label`, `alias`, `translation`, `transliteration`, `abbreviation`, `formula`, and `domain_term`; duplicate mechanisms fail closed and never inflate rank. Scores are comparable only within that proven model, collection, and release. Vector similarity is a candidate signal, never proof of translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
 
 ## POST /api/v1/scales/search
 

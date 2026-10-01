@@ -4,7 +4,7 @@ English: [Knowledge application](../../../docs/reference/application/knowledge.m
 
 本模块负责单词与固定短语请求的词义解析、领域评估、发布固定检索、关系排序、页面组织与确定性投影。
 
-状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。有界领域评估基础与严格出站 inventory client 已实现，但尚未由默认在线 composition 暴露。新的有界 root-retrieval application boundary 已组合注入式 canonical root/hydration、ephemeral embedding、query lexical encoding 与严格 retrieval-data port；其窄 root/hydration seam 当前只有 fake 实现，仍等待 canonical-data adapter，且尚未暴露公开 route。下文完整页面组织仍属于目标行为。
+状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。有界领域评估基础与严格出站 inventory client 已实现，但尚未由默认在线 composition 暴露。新的有界 root-retrieval application boundary 已组合注入式 canonical root resolver、共享 canonical-data knowledge-node hydration client、ephemeral embedding、query lexical encoding 与严格 retrieval-data port。Root resolver 当前仍只有 fake 实现，且该流程尚未暴露公开 route。下文完整页面组织仍属于目标行为。
 
 canonical-only 服务从权威端选择一次发布 pin，再通过读取 port 组合已审核翻译候选、确定性排序的词汇候选和无歧义的词义详情。它使用带 canonical-only content pin 的现有 lookup-card 类型，不伪造向量集合，也不把有意的纯词法读取误称为向量故障降级。可执行文件只在显式配置时构造并保存该依赖，用 active-release 只读探针检查就绪，并通过冻结的 BasicCard lookup 与固定发布 sense 路由提供该能力。外部 island-port server 仍需实现匹配的内部合同。请求局部查询形式有界且去重：基线规范化形式最强，谨慎的空白或外围标点变体只是较低优先级的拼写候选。已发布别名、形态、转写和语义归属由权威端确定，不从查询字符串猜测。
 
@@ -26,9 +26,9 @@ canonical-only 服务从权威端选择一次发布 pin，再通过读取 port �
 
 向量相似度只提名候选，绝不建立事实。每个展示的规范节点、边、证据项与修订都必须在请求发布固定值下由权威结构化数据补全。排序按词义、领域、语言、地区、时期、条件与证据策略过滤，但不改变身份、方向、来源或验证状态。
 
-Root retrieval 始终先完成 canonical resolution。Not-found 与同优先级歧义会在 embedding、lexical encoding 或访问 retrieval-data 前停止。单一已解析 root 为所有后续 operation 冻结 release；调用方 pin、projection echo 或 hydrated record 若来自其他 release，则闭合失败。Transnet 临时生成 1,024 维 dense signal 与 `query-lexical-input-v1` sparse signal；retrieval-data 只接收 vector 与结构化 filter，不接收 query text。
+Root retrieval 始终先完成 canonical resolution。Not-found 与同优先级歧义会在 embedding、lexical encoding 或访问 retrieval-data 前停止。歧义候选必须是在同一调用方与 execution release pin 下、身份互异且 label 合法有界的 lexical-sense root。单一已解析 root 为所有后续 operation 冻结 release；调用方 pin、projection echo 或 hydrated record 若来自其他 release，则闭合失败。Transnet 临时生成 1,024 维 dense signal 与 `query-lexical-input-v1` sparse signal；retrieval-data 只接收 vector 与结构化 filter，不接收 query text。排序前，精确 dense artifact/dimension 及 sparse release/encoder/input receipt 必须与配置的 release-pinned execution specification 一致。
 
-每个被提名的 projection pointer 必须先通过 canonical-data 批量补全，才能进入已校验超集。缺失补全会显式产生 partial-publication coverage；identity、label、sense 或 release 异常则闭合失败。确定性重排使用有界整数 score、闭合 nomination mechanism，并以 canonical node identity 作为最终 tie-breaker。Canonical root 标记为 `verified`；相似度提名即使成功补全 node identity 仍保持 `exploratory`，且该流程不会创建 `inferred` claim。Vector retrieval 不可用时，outcome 显式标记为 canonical/MySQL-only，不编造 relationship，也不隐瞒 vector 失败。
+每个被提名的 projection pointer 必须先通过 canonical-data 批量补全，才能进入已校验超集。缺失补全会显式产生 partial-publication coverage；family、identity、sense、有界 label 或 release 不匹配则闭合失败。确定性重排使用有界整数 score、精确 retrieval-data mechanism catalog，并以 canonical node identity 作为最终 tie-breaker。重复 mechanism 在计分前失败，不能抬高 rank。Canonical root 标记为 `verified`；相似度提名即使成功补全 node identity 仍保持 `exploratory`，且该流程不会创建 `inferred` claim。Vector retrieval 不可用时，outcome 显式标记为 canonical/MySQL-only，不编造 relationship，也不隐瞒 vector 失败。
 
 模型可组织所提供事实并生成精简解释，但不能虚构 endpoint 或修改事实元数据。确定性校验检查每个引用。空或支持较弱的分区被省略。
 

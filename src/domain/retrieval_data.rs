@@ -138,6 +138,62 @@ pub enum RetrievalNodeType {
   SemanticScale,
 }
 
+/// Closed node-nomination mechanisms returned by retrieval-data-v1.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum NodeMatchMechanism {
+  /// Dense semantic-vector nomination.
+  Dense,
+  /// Sparse lexical-vector nomination.
+  Sparse,
+  /// Exact canonical-label match.
+  CanonicalLabel,
+  /// Published alias match.
+  Alias,
+  /// Reviewed translation match.
+  Translation,
+  /// Published transliteration match.
+  Transliteration,
+  /// Published abbreviation match.
+  Abbreviation,
+  /// Canonical formula match.
+  Formula,
+  /// Canonical domain-term match.
+  DomainTerm,
+}
+
+impl NodeMatchMechanism {
+  /// Parses one exact retrieval-data-v1 wire value.
+  pub fn from_wire_name(value: &str) -> Result<Self, RetrievalDataValidationError> {
+    match value {
+      "dense" => Ok(Self::Dense),
+      "sparse" => Ok(Self::Sparse),
+      "canonical_label" => Ok(Self::CanonicalLabel),
+      "alias" => Ok(Self::Alias),
+      "translation" => Ok(Self::Translation),
+      "transliteration" => Ok(Self::Transliteration),
+      "abbreviation" => Ok(Self::Abbreviation),
+      "formula" => Ok(Self::Formula),
+      "domain_term" => Ok(Self::DomainTerm),
+      _ => Err(RetrievalDataValidationError::IneligibleCandidate),
+    }
+  }
+
+  /// Returns the exact retrieval-data-v1 wire value.
+  pub const fn as_str(self) -> &'static str {
+    match self {
+      Self::Dense => "dense",
+      Self::Sparse => "sparse",
+      Self::CanonicalLabel => "canonical_label",
+      Self::Alias => "alias",
+      Self::Translation => "translation",
+      Self::Transliteration => "transliteration",
+      Self::Abbreviation => "abbreviation",
+      Self::Formula => "formula",
+      Self::DomainTerm => "domain_term",
+    }
+  }
+}
+
 impl RetrievalNodeType {
   /// Parses one exact node-family wire name from the closed v1 catalog.
   ///
@@ -607,7 +663,7 @@ pub struct NodeCandidate {
   /// Release-local nomination score.
   pub score: RetrievalDataScore,
   /// Closed retrieval mechanisms that nominated this candidate.
-  pub matched_by: Vec<String>,
+  pub matched_by: Vec<NodeMatchMechanism>,
   /// Minimal index payload requiring authoritative hydration before factual use.
   pub payload: NodeCandidatePayload,
 }

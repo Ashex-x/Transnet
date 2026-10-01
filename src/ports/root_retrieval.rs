@@ -1,8 +1,7 @@
 //! Request-local canonical root and lexical query-encoding ports.
 //!
-//! These narrow application-facing capabilities currently have fake implementations only. A
-//! production canonical-data adapter must implement root-to-node mapping and batch node hydration
-//! before the service is composed into the online runtime.
+//! The root resolver remains an application-facing seam. Authoritative node hydration uses the
+//! shared [`crate::ports::canonical_read::CanonicalReadPort`] contract.
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -11,8 +10,17 @@ use crate::domain::{
   canonical::{LanguageTag, ReleaseId},
   request_context::RequestContext,
   retrieval_data::SparseQueryVector,
-  root_retrieval::{CanonicalRootResolution, HydratedRootNode, RootQuery},
+  root_retrieval::{CanonicalRootResolution, RootQuery, SparseQueryExecutionReceipt},
 };
+
+/// Sparse vector paired with release-pinned encoder execution metadata.
+#[derive(Clone, Debug, PartialEq)]
+pub struct QueryLexicalEncoding {
+  /// Ephemeral sparse vector sent to retrieval-data.
+  pub vector: SparseQueryVector,
+  /// Exact release, encoder, revision, and input contract used.
+  pub receipt: SparseQueryExecutionReceipt,
+}
 
 /// Content-free failures from canonical root resolution and hydration.
 #[derive(Clone, Copy, Debug, Error, Eq, PartialEq)]
@@ -45,14 +53,6 @@ pub trait CanonicalRootPort: Send + Sync {
     source_language: &LanguageTag,
     explanation_language: &LanguageTag,
   ) -> Result<CanonicalRootResolution, CanonicalRootError>;
-
-  /// Hydrates an ordered bounded set of projection pointers under one immutable release.
-  async fn hydrate_nodes(
-    &self,
-    context: &RequestContext,
-    release_id: &ReleaseId,
-    node_ids: &[crate::domain::canonical::CanonicalId],
-  ) -> Result<Vec<HydratedRootNode>, CanonicalRootError>;
 }
 
 /// Closed lexical encoder failures without query content.
@@ -78,5 +78,5 @@ pub trait QueryLexicalEncoderPort: Send + Sync {
     context: &RequestContext,
     release_id: &ReleaseId,
     query: &RootQuery,
-  ) -> Result<SparseQueryVector, QueryLexicalEncoderError>;
+  ) -> Result<QueryLexicalEncoding, QueryLexicalEncoderError>;
 }
