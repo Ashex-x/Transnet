@@ -152,7 +152,7 @@ HTTP boundary 已在过渡期与目标 path 上实现请求上下文基础。若
 
 迁移期间，当前 runtime 同时接受 tagged text shape 与 legacy 顶层 `text` 字段；调用方必须且只能发送其中一种。校验后，请求 domain 仅在本次请求内保留完整 tagged input、guidance 与 history，使后续 orchestration 无需重新解析 wire body 即可保留调用方 ID、顺序、protected range 与 inline image data。不含依赖执行的 guidance 的 tagged text 正常处理。Segment 与 image-region 请求会在返回不含内容的 `501 translation_capability_unavailable` problem 前完成有界的结构、media header、尺寸、region 与顺序校验，且这些输入不会调用 model。完整图片解码属于后续 image-region 执行 slice。
 
-`history` 可选并按时间排序。每项只包含先前源文本、译文与语言 tag，不含 turn ID、时间、用户 ID、反馈、模型 metadata 或保存状态。公共 body 上限约束 history，不另设项目数上限。
+`history` 可选并按时间排序。每项只包含先前源文本、译文与语言 tag，不含 turn ID、时间、用户 ID、反馈、模型 metadata 或保存状态。不另设项目数上限，但 history 与 guidance 的 JSON 编码合计最多 8,192 byte，从而保证每个已接受的文本请求都符合 65,536-byte generation-input 合同。超限 aggregate 会在任何 model call 前返回 `422 invalid_translation_request`，并只带不含内容的 `generation_context` field。
 
 ## 专业 guidance
 
@@ -258,9 +258,9 @@ Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cac
     "purposes": [],
     "annotation_families": [],
     "knowledge_lenses": [],
-    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
+    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_generation_context_bytes": 8192, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
     "live_retrieval": {"available": false, "default": "offline"},
-    "generation_profiles": ["fast"],
+    "generation_profiles": ["fast", "reasoning"],
     "schema_versions": ["translation-result-v1"]
   },
   "meta": {"request_id": "req_example"}

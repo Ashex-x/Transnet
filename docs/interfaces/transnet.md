@@ -152,7 +152,7 @@ Text is limited to 131,072 Unicode scalars. Segmented input accepts at most 256 
 
 The current runtime accepts both the tagged text shape and the legacy top-level `text` field during migration; callers must send exactly one. After validation, the request domain retains the complete tagged input, guidance, and history only for that request so later orchestration can preserve caller IDs, order, protected ranges, and inline image data without reparsing the wire body. Tagged text without execution-dependent guidance is processed normally. Segment and image-region requests receive bounded structural, media-header, dimension, region, and ordering validation before returning the content-free `501 translation_capability_unavailable` problem, and no model is called for those inputs. Full image decoding remains part of the image-region execution slice.
 
-`history` is optional and chronological. Each item contains only previous source text, translated text, and language tags. It has no turn ID, time, user ID, feedback, model metadata, or save state. The common body limit bounds history; there is no separate item-count limit.
+`history` is optional and chronological. Each item contains only previous source text, translated text, and language tags. It has no turn ID, time, user ID, feedback, model metadata, or save state. There is no separate item-count limit, but the JSON encoding of history plus guidance is limited to 8,192 bytes so every accepted text request fits the 65,536-byte generation-input contract. An oversized aggregate returns `422 invalid_translation_request` with the content-free field `generation_context` before any model call.
 
 ## Professional guidance
 
@@ -258,9 +258,9 @@ Request: `{}`
     "purposes": [],
     "annotation_families": [],
     "knowledge_lenses": [],
-    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
+    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_generation_context_bytes": 8192, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
     "live_retrieval": {"available": false, "default": "offline"},
-    "generation_profiles": ["fast"],
+    "generation_profiles": ["fast", "reasoning"],
     "schema_versions": ["translation-result-v1"]
   },
   "meta": {"request_id": "req_example"}

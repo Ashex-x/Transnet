@@ -61,14 +61,8 @@ pub(crate) async fn translate(
     }
     TranslationInputKind::Text => {}
   }
-  if matches!(
-    turn.guidance().freshness,
-    Some(
-      crate::domain::translation_turn::FreshnessPolicy::Allowed
-        | crate::domain::translation_turn::FreshnessPolicy::Required
-    )
-  ) {
-    return unsupported_capability("guidance.freshness", &request_id);
+  if turn.requires_guidance_execution() {
+    return unsupported_capability("guidance", &request_id);
   }
   let Some(orchestrator) = state.translation_orchestrator() else {
     return translation_model_unavailable(&request_id);
@@ -178,6 +172,7 @@ fn invalid_translation_field(field: &'static str, request_id: &RequestId) -> Res
     "guidance.max_alternatives" => {
       "must be between zero and two; only zero is currently available."
     }
+    "generation_context" => "must fit the bounded request-local model context after JSON encoding.",
     _ => "is invalid.",
   };
   problem::response(

@@ -1,10 +1,6 @@
 //! Unified request-local translation orchestration independent of transport and providers.
 
-use std::{
-  collections::{BTreeMap, BTreeSet},
-  ops::Range,
-  sync::Arc,
-};
+use std::{collections::BTreeMap, ops::Range, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -121,6 +117,9 @@ impl TranslationOrchestrator {
       cancellation: &cancellation,
     }
     .ensure_active()?;
+    if turn.requires_guidance_execution() {
+      return Err(TranslationOrchestrationError::UnsupportedInput);
+    }
     let text = turn
       .text()
       .ok_or(TranslationOrchestrationError::UnsupportedInput)?;
@@ -429,12 +428,16 @@ fn project_outcome(
   versions: impl IntoIterator<Item = OperationVersion>,
   reasoning_escalated: bool,
 ) -> ProjectedTranslationResult {
-  let mut model_versions = BTreeSet::new();
-  let mut prompt_versions = BTreeSet::new();
+  let mut model_versions = Vec::new();
+  let mut prompt_versions = Vec::new();
   let mut inference_profiles = Vec::new();
   for version in versions {
-    model_versions.insert(version.model_version);
-    prompt_versions.insert(version.prompt_version);
+    if !model_versions.contains(&version.model_version) {
+      model_versions.push(version.model_version);
+    }
+    if !prompt_versions.contains(&version.prompt_version) {
+      prompt_versions.push(version.prompt_version);
+    }
     if !inference_profiles.contains(&version.profile) {
       inference_profiles.push(version.profile);
     }
@@ -446,8 +449,8 @@ fn project_outcome(
       normalizer_version: NORMALIZER_VERSION,
       projection_version: PROJECTION_VERSION,
       response_level,
-      model_versions: model_versions.into_iter().collect(),
-      prompt_versions: prompt_versions.into_iter().collect(),
+      model_versions,
+      prompt_versions,
       inference_profiles,
       reasoning_escalated,
       retrieval_version: None,
@@ -690,4 +693,69 @@ fn is_term_candidate(candidate: &str) -> bool {
         .chars()
         .filter(|character| character.is_alphabetic())
         .all(char::is_uppercase))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::domain::{
+    model_runtime::MAX_GENERATION_INPUT_BYTES,
+    translation_turn::{ResponseLevel, TranslationHistory, TranslationTurnRequest, TurnLanguage},
+  };
+
+  #[test]
+  fn participating_versions_preserve_first_seen_order() {
+    let result = project_outcome(
+      TranslationTurnResult::passage(
+        "translated".to_string(),
+        TurnLanguage::English,
+        TurnLanguage::Chinese,
+      ),
+      ResponseLevel::Brief,
+      [
+        OperationVersion {
+          model_version: "z-model".to_string(),
+          prompt_version: "z-prompt".to_string(),
+          profile: GenerationProfile::Fast,
+        },
+        OperationVersion {
+          model_version: "a-model".to_string(),
+          prompt_version: "a-prompt".to_string(),
+          profile: GenerationProfile::Reasoning,
+        },
+        OperationVersion {
+          model_version: "z-model".to_string(),
+          prompt_version: "z-prompt".to_string(),
+          profile: GenerationProfile::Fast,
+        },
+      ],
+      true,
+    );
+
+    assert_eq!(result.metadata.model_versions, ["z-model", "a-model"]);
+    assert_eq!(result.metadata.prompt_versions, ["z-prompt", "a-prompt"]);
+  }
+
+  #[test]
+  fn admitted_context_and_escaped_chunk_fit_generation_input() {
+    let hostile_text = format!("a{}", "\u{0001}".repeat(MAX_CONNECTED_CHUNK_CHARS - 1));
+    let turn = TranslationTurn::new(TranslationTurnRequest {
+      text: Some(hostile_text.clone()),
+      input: None,
+      source_language: "en".to_string(),
+      target_language: "zh-CN".to_string(),
+      response_level: "brief".to_string(),
+      history: vec![TranslationHistory {
+        source_text: "h".repeat(3_500),
+        translated_text: "t".repeat(3_500),
+        source_language: "en".to_string(),
+        target_language: "zh-CN".to_string(),
+      }],
+      guidance: None,
+    })
+    .unwrap();
+
+    let prompt = connected_prompt(&turn, &hostile_text, TurnLanguage::English, &[], 0).unwrap();
+    assert!(prompt.as_str().len() <= MAX_GENERATION_INPUT_BYTES);
+  }
 }

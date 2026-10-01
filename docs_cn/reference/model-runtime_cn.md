@@ -40,4 +40,4 @@ VLM 只接受来自 Transnet 请求合同、经过校验的 inline PNG、JPEG �
 
 测试零调用规范答案、fast 路径选择、闭合升级触发条件、单次升级限制、长输入 chunk 覆盖与顺序、术语一致性、图片边界、结构化输出修复、deadline 记账、取消、并发、脱敏，以及文本、图片、reasoning 输出和在线向量的丢弃。
 
-当前覆盖验证有界 value、脱敏 Debug 输出、固定有限 embedding dimension、严格 embedding envelope、闭合 error、单次 reasoning budget claim、确定性 lexical-versus-connected routing、有界并行 chunk 调用、有序重组、术语台账丢弃、deadline 与 cancellation 传播，以及针对无效或歧义输出的一次确定性 repair。结构化 segment、image-region、retrieval 与规范零调用组合仍属于后续切片。
+当前覆盖验证有界 value、脱敏 Debug 输出、固定有限 embedding dimension、严格 embedding envelope、闭合 error、单次 reasoning budget claim、确定性 lexical-versus-connected routing、有界并行 chunk 调用、有序重组、术语台账丢弃、deadline 与 cancellation 传播、按首次参与顺序报告 version，以及针对无效或歧义输出的一次确定性 repair。Runtime 尚不能强制执行的有效 guidance 会在生成前显式失败。结构化 segment、image-region、guidance 执行、retrieval 与规范零调用组合仍属于后续切片。

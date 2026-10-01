@@ -197,24 +197,21 @@ async fn routing_uses_one_fast_profile_and_no_provider_selector() {
 }
 
 #[tokio::test]
-async fn validated_guidance_is_present_in_the_request_local_prompt() {
+async fn execution_dependent_guidance_is_rejected_before_generation() {
   let fake = Arc::new(FakeGeneration::new([Ok(lexical("扭矩"))]));
   let orchestrator = TranslationOrchestrator::new(fake.clone());
-  orchestrator
-    .translate(
-      &context(30),
-      Arc::new(CancellationSignal::default()),
-      &guided_turn("torque"),
-    )
-    .await
-    .unwrap();
-
-  let prompt: serde_json::Value = serde_json::from_str(&fake.calls()[0].input).unwrap();
-  assert_eq!(prompt["guidance"]["purpose"], "technical");
-  assert_eq!(prompt["guidance"]["audience"], "specialist");
-  assert_eq!(prompt["guidance"]["register"], "formal");
-  assert_eq!(prompt["guidance"]["terminology"][0]["target"], "扭矩");
-  assert_eq!(prompt["guidance"]["terminology"][0]["policy"], "required");
+  assert_eq!(
+    orchestrator
+      .translate(
+        &context(30),
+        Arc::new(CancellationSignal::default()),
+        &guided_turn("torque"),
+      )
+      .await
+      .unwrap_err(),
+    TranslationOrchestrationError::UnsupportedInput
+  );
+  assert!(fake.calls().is_empty());
 }
 
 #[tokio::test]

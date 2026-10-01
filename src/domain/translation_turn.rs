@@ -37,6 +37,8 @@ pub const MAX_IMAGE_REGIONS: usize = 16;
 pub const MAX_TERMINOLOGY: usize = 128;
 /// Maximum Unicode scalar count in one terminology side.
 pub const MAX_TERM_SCALARS: usize = 256;
+/// Maximum JSON bytes retained for history and guidance passed to one generation prompt.
+pub const MAX_GENERATION_CONTEXT_BYTES: usize = 8_192;
 
 /// One prior linguistic turn, without identity, timestamps, or persistence instructions.
 #[derive(Clone, Deserialize, Serialize)]
@@ -489,6 +491,12 @@ impl TranslationTurn {
     };
     let guidance = request.guidance.unwrap_or_default();
     validate_guidance(&guidance)?;
+    let generation_context_bytes = serde_json::to_vec(&(&request.history, &guidance))
+      .map_err(|_| TurnValidationError::Field("generation_context"))?
+      .len();
+    if generation_context_bytes > MAX_GENERATION_CONTEXT_BYTES {
+      return Err(TurnValidationError::Field("generation_context"));
+    }
     validate_input(&input, &guidance)?;
     if encoded_bytes > MAX_TURN_BYTES {
       return Err(TurnValidationError::TooLarge);
@@ -1443,13 +1451,26 @@ mod tests {
   }
 
   #[test]
-  fn history_has_no_item_cap_inside_the_common_body_bound() {
+  fn history_has_no_item_cap_inside_the_generation_context_bound() {
     let mut input = request();
-    input.history = (0..2_048)
+    input.history = (0..32)
       .map(|index| history(format!("turn-{index}")))
       .collect();
     let turn = TranslationTurn::new(input).unwrap();
-    assert_eq!(turn.history().len(), 2_048);
+    assert_eq!(turn.history().len(), 32);
+  }
+
+  #[test]
+  fn oversized_generation_context_fails_with_a_content_free_field() {
+    let secret = "private-history-context-991";
+    let mut input = request();
+    input.history = vec![history(format!(
+      "{secret}{}",
+      "x".repeat(MAX_GENERATION_CONTEXT_BYTES)
+    ))];
+    let error = TranslationTurn::new(input).unwrap_err();
+    assert_eq!(error, TurnValidationError::Field("generation_context"));
+    assert!(!format!("{error:?} {error}").contains(secret));
   }
 
   #[test]

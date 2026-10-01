@@ -242,7 +242,7 @@ async fn malformed_unknown_and_semantically_invalid_requests_use_safe_problems()
 }
 
 #[tokio::test]
-async fn target_text_guidance_is_applied_by_orchestration() {
+async fn target_text_guidance_returns_explicit_unavailable_problem() {
   let response = app(Ok(connected_output()), Ok(lexical_output()))
     .oneshot(request(json!({
       "input": {"type": "text", "text": "hot"},
@@ -252,8 +252,11 @@ async fn target_text_guidance_is_applied_by_orchestration() {
     })))
     .await
     .unwrap();
-  assert_eq!(response.status(), StatusCode::OK);
-  assert_eq!(body(response).await["data"]["translation"]["unit"], "word");
+  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  assert_eq!(
+    body(response).await["code"],
+    "translation_capability_unavailable"
+  );
 }
 
 #[tokio::test]
@@ -271,6 +274,25 @@ async fn live_freshness_remains_explicitly_unavailable() {
     body(response).await["code"],
     "translation_capability_unavailable"
   );
+}
+
+#[tokio::test]
+async fn oversized_generation_context_is_rejected_before_model_execution() {
+  let secret = "private-generation-context-772";
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "text":"hot", "source_language":"en", "target_language":"zh-CN",
+      "response_level":"brief", "history":[{
+        "source_text":format!("{secret}{}", "x".repeat(8_192)),
+        "translated_text":"历史", "source_language":"en", "target_language":"zh-CN"
+      }]
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+  let problem = body(response).await;
+  assert_eq!(problem["errors"][0]["field"], "generation_context");
+  assert!(!problem.to_string().contains(secret));
 }
 
 #[tokio::test]
