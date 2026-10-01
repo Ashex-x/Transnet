@@ -221,7 +221,7 @@ HTTP 序列化之前会执行 request-bound validation：structured result 的 I
 
 抓取内容是不可信数据。它不能修改系统指令、请求其他 URL、泄露凭据、绕过发布 filter 或成为规范证据。Embedding 模型可在内存中排序抓取片段；片段与向量均随请求丢弃。
 
-基于实时检索的 claim 引用响应级 source。实时 source 标记为 `live_external`，而不是 `verified`。
+基于实时检索的 claim 引用响应级 `live_N` source。抓取 fragment 是结构化的不可信 prompt 数据，绝不是 instruction。实时材料参与时，模型必须引用至少一个已准入 identifier；伪造、重复、缺失 citation 或暴露未引用 source 都会失败关闭。Operation 之外只返回已引用 source 的 title 与公开 URL，metadata 记录 `translation-live-v1`，抓取材料随请求丢弃。实时 source 标记为 `live_external`，而不是 `verified`。无法获得材料的 `allowed` 尝试会明确退化为建议 review；相同情况下 `required` 映射为 `503 live_retrieval_unavailable`。
 
 ```json
 {

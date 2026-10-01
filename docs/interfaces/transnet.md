@@ -221,7 +221,7 @@ Live retrieval is an orchestrated search/fetch port, not unrestricted model brow
 
 Fetched content is untrusted data. It cannot modify system instructions, request another URL, expose credentials, bypass release filters, or become canonical evidence. The embedding model may rank fetched fragments in memory; both fragments and vectors are discarded with the request.
 
-Claims based on live retrieval reference response-local sources. Live sources are labeled `live_external`, not `verified`.
+Claims based on live retrieval reference response-local `live_N` sources. Retrieved fragments are structured untrusted prompt data and never instructions. The model must cite at least one admitted identifier when live material participates; fabricated, duplicate, missing, and uncited exposed sources fail closed. Only cited source titles and public URLs leave the operation, metadata records `translation-live-v1`, and fetched material is discarded with the request. Live sources are labeled `live_external`, not `verified`. An `allowed` attempt that cannot obtain material is an explicit review-recommended degradation; `required` maps the same condition to `503 live_retrieval_unavailable`.
 
 ```json
 {

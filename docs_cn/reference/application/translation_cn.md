@@ -16,7 +16,9 @@ Application 接受一种带判别标签的输入形式。文本是低延迟默�
 
 结构化 segment 使用有界并行 fast call，同时在组装结果中保持确定性请求顺序。每个 prompt 绑定 segment role、format、source/target language、protected scalar range、请求 guidance 与 prompt contract；调用方 ID 不会发送给 model。Required 与 forbidden terminology 使用适合文字体系的匹配进行检查，包括嵌在未分词 CJK 文本中的术语；结果记录完整且有序的 terminology decision 列表。整个请求共享一次 reasoning-repair budget。确定性 postcondition 会拒绝缺失、重排或重复的 protected value，以及改变的段落换行、Markdown 结构 delimiter 或 HTML tag。成功结果在返回前针对请求完成校验，并使用调用方 segment ID、零起始 segment order、`translation_0` 及可选闭合 format annotation；完成后不保留任何 segment 内容。
 
-Gemma4-27B 默认通过 fast profile 处理文本。闭合升级策略对 invalid、ambiguous 或违反 guidance 的输出最多允许一次 reasoning profile 调用；隐藏 reasoning 既不返回也不观测。`offline` 永不执行检索。由于尚未配置 production search authority，`allowed` 当前会退化为普通翻译且不会声称实时支持，`required` 则在生成前显式失败。配置 search authority 后，现有有界 live-retrieval service 仍是唯一允许的检索路径，并且每个依赖实时材料的声明都必须携带 response-local citation。
+Gemma4-27B 默认通过 fast profile 处理文本。闭合升级策略对 invalid、ambiguous、违反 guidance 或 citation 无效的输出最多允许一次 reasoning profile 调用；隐藏 reasoning 既不返回也不观测。`offline` 不发起 search 或 fetch。`allowed` 仅在确定性判断输入对时效敏感且 canonical material 不足时消耗唯一一轮；若被许可的轮次不可用，响应保留翻译并以 `review_recommended` 与 `live_source_incomplete` 明确标记，而不会静默声称时效性。`required` 始终尝试检索；没有安全可用 source 时在生成前显式失败。
+
+实时材料只作为结构化 `live_material` 数组进入 generation；固定 application instruction 将其中 fragment 标记为不可信数据。材料参与时，模型输出必须引用一个或多个已准入的 `live_N` identifier；材料未参与时不得引用。伪造、重复或缺失的 live citation 都不满足有界输出契约。Application 仅暴露已引用的 title/URL descriptor，附加 response-local citation reference，把 `translation-live-v1` 记录为 retrieval version，并随请求丢弃 query、抓取 fragment 与 vector。只有 search、安全 fetch 和本 translation orchestrator 作为一个 runtime unit 完整组合时，capability discovery 才报告 live retrieval；默认 executable 仍没有 production search authority，因此继续报告不可用。
 
 段落提示与明确标注的备选仍计划在后续 milestone 实现。在 application 结果模型、确定性 usefulness evaluator 与编排真正生成这些能力之前，HTTP handler 不会伪造它们。当前 offline 路径的空 external-source collection 会被省略。
 

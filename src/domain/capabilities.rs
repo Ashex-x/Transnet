@@ -125,6 +125,11 @@ impl ServiceCapabilities {
     self
   }
 
+  /// Advertises live retrieval only for a completely composed translation retrieval operation.
+  pub fn with_live_retrieval(mut self, available: bool) -> Self {
+    self.live_retrieval.available = available;
+    self
+  }
   /// Rebinds the configured HTTP body limit without changing activated capabilities.
   pub fn with_max_request_body_bytes(mut self, max_request_body_bytes: usize) -> Self {
     self.limits.max_request_body_bytes = max_request_body_bytes;
@@ -287,6 +292,13 @@ mod tests {
       enabled.with_translation_orchestrator(false).input_types,
       vec![InputTypeCapability::Text]
     );
+  }
+
+  #[test]
+  fn live_retrieval_activates_only_through_explicit_composition() {
+    let disabled = ServiceCapabilities::current(1_024);
+    assert!(!disabled.live_retrieval.available);
+    assert!(disabled.with_live_retrieval(true).live_retrieval.available);
   }
 }
 

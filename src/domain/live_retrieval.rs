@@ -104,6 +104,10 @@ impl LiveSearchResult {
   pub fn url(&self) -> &Url {
     &self.url
   }
+  /// Borrows the bounded display title for response-local attribution.
+  pub fn title(&self) -> &str {
+    &self.title
+  }
 }
 
 impl fmt::Debug for LiveSearchResult {

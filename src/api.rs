@@ -203,8 +203,12 @@ impl AppState {
     mut self,
     orchestrator: Arc<TranslationOrchestrator>,
   ) -> Self {
+    let live_retrieval_available = orchestrator.live_retrieval_available();
     self.translation_orchestrator = Some(orchestrator);
     self.capabilities = self.capabilities.with_translation_orchestrator(true);
+    self.capabilities = self
+      .capabilities
+      .with_live_retrieval(live_retrieval_available);
     self
   }
 
@@ -359,6 +363,12 @@ impl AppState {
   pub fn with_capabilities(mut self, capabilities: ServiceCapabilities) -> Self {
     self.capabilities =
       capabilities.with_translation_orchestrator(self.translation_orchestrator.is_some());
+    self.capabilities = self.capabilities.with_live_retrieval(
+      self
+        .translation_orchestrator
+        .as_ref()
+        .is_some_and(|orchestrator| orchestrator.live_retrieval_available()),
+    );
     self
   }
 

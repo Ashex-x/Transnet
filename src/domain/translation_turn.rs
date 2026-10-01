@@ -1193,6 +1193,8 @@ pub enum TranslationAnnotationCode {
   FormatPreserved,
   /// A closed review issue requires caller attention.
   ReviewRequired,
+  /// A generated claim used one or more request-local live sources.
+  LiveSourceUsed,
 }
 
 /// Human-review state derived from validated issues rather than model confidence prose.
@@ -1700,6 +1702,77 @@ pub struct TurnDetails {
 }
 
 impl TranslationTurnResult {
+  /// Attaches validated request-local live citations to every generated result unit.
+  pub(crate) fn attach_live_citations(&mut self, citations: Vec<CitationReference>) {
+    let annotation = TranslationAnnotation {
+      family: AnnotationFamily::Review,
+      code: TranslationAnnotationCode::LiveSourceUsed,
+      message: "Translation used request-local live sources.".into(),
+      minimum_level: ResponseLevel::Brief,
+      citations,
+    };
+    match self {
+      Self::Word { annotations, .. }
+      | Self::Phrase { annotations, .. }
+      | Self::Passage { annotations, .. } => annotations.push(annotation),
+      Self::Segment { segments, .. } => {
+        for segment in segments {
+          segment.annotations.push(annotation.clone());
+        }
+      }
+      Self::ImageRegion { regions, .. } => {
+        for region in regions {
+          region.annotations.push(annotation.clone());
+        }
+      }
+    }
+  }
+  /// Marks an explicitly permitted live-retrieval attempt that safely degraded without sources.
+  pub(crate) fn mark_live_retrieval_degraded(&mut self) {
+    let annotation = TranslationAnnotation {
+      family: AnnotationFamily::Review,
+      code: TranslationAnnotationCode::ReviewRequired,
+      message: "Live retrieval was unavailable; review freshness-sensitive claims.".into(),
+      minimum_level: ResponseLevel::Brief,
+      citations: Vec::new(),
+    };
+    let review = TranslationReview {
+      state: TranslationReviewState::ReviewRecommended,
+      issues: vec![TranslationReviewIssue::LiveSourceIncomplete],
+    };
+    match self {
+      Self::Word {
+        annotations,
+        review: result_review,
+        ..
+      }
+      | Self::Phrase {
+        annotations,
+        review: result_review,
+        ..
+      }
+      | Self::Passage {
+        annotations,
+        review: result_review,
+        ..
+      } => {
+        annotations.push(annotation);
+        *result_review = review;
+      }
+      Self::Segment { segments, .. } => {
+        for segment in segments {
+          segment.annotations.push(annotation.clone());
+          segment.review = review.clone();
+        }
+      }
+      Self::ImageRegion { regions, .. } => {
+        for region in regions {
+          region.annotations.push(annotation.clone());
+          region.review = review.clone();
+        }
+      }
+    }
+  }
   /// Validates identities, order, primary translations, annotations, terminology, and review state.
   pub fn validate(&self) -> Result<(), TranslationResultValidationError> {
     match self {
@@ -2038,6 +2111,7 @@ const fn annotation_family(code: TranslationAnnotationCode) -> AnnotationFamily 
     TranslationAnnotationCode::RegisterApplied => AnnotationFamily::Register,
     TranslationAnnotationCode::CulturalContext => AnnotationFamily::Culture,
     TranslationAnnotationCode::ReviewRequired => AnnotationFamily::Review,
+    TranslationAnnotationCode::LiveSourceUsed => AnnotationFamily::Review,
   }
 }
 
