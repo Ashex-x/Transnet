@@ -18,6 +18,8 @@ pub mod domain_assessment;
 pub mod embedding_input;
 /// Typed, evidence-backed graph topology and traversal limits.
 pub mod graph;
+/// Authoritative facts, semantic scales, and node values hydrated after retrieval.
+pub mod knowledge_hydration;
 /// Deterministic pre-publication node and edge projection artifacts.
 pub mod knowledge_projection;
 /// Publication lifecycle, idempotency, manifest hashes, and execution receipts.

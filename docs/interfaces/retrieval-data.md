@@ -472,6 +472,9 @@ Response:
           "source_node_id": "node_sweltering_hot_01",
           "target_node_id": "node_scorching_heat_01",
           "relation_type": "higher_degree_than",
+          "relation_registry_version": 1,
+          "fact_id": "fact_sweltering_degree_scorching_01",
+          "fact_revision": 2,
           "verification_state": "verified"
         },
         "node": {
@@ -487,7 +490,7 @@ Response:
 }
 ```
 
-Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
+Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. Every neighbor edge carries an exact `fact_id`, positive `fact_revision`, and relationship registry version `1`; Transnet must hydrate that exact fact revision before treating the edge as a verified path step. A missing fact, substituted revision, unknown relation, or registry mismatch invalidates the candidate rather than degrading it into a fact. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
 
 ## Internal publication operations
 

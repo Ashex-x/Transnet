@@ -10,7 +10,11 @@ use crate::domain::{
   canonical_content::CanonicalSenseDetails,
   canonical_translation::{CanonicalTranslationRevision, DomainId, SourceFingerprint},
   domain_assessment::DomainInventory,
+  knowledge_hydration::{
+    CanonicalFactRef, HydratedKnowledgeNode, HydratedSemanticScale, KnowledgeFact,
+  },
   retrieval::{LexicalMatchKind, RepositoryMatch},
+  retrieval_data::RetrievalVerificationState,
 };
 
 /// Request-scoped correlation and deadline carried through one canonical read flow.
@@ -122,6 +126,38 @@ pub struct CanonicalDomainQuery {
   pub limit: usize,
 }
 
+/// Exact authoritative fact revisions selected by retrieval.
+pub struct CanonicalFactQuery {
+  /// Ordered exact fact revisions; omitted facts preserve the relative request order.
+  pub facts: Vec<CanonicalFactRef>,
+  /// Eligible authority verification states.
+  pub verification_states: Vec<RetrievalVerificationState>,
+  /// Maximum facts returned.
+  pub limit: usize,
+}
+
+/// Complete semantic scales selected by retrieval.
+pub struct CanonicalScaleQuery {
+  /// Ordered stable scale identities.
+  pub scale_ids: Vec<crate::domain::canonical::CanonicalId>,
+  /// Canonical member for which scope and conditions must be eligible.
+  pub for_node_id: crate::domain::canonical::CanonicalId,
+  /// Eligible authority verification states.
+  pub verification_states: Vec<RetrievalVerificationState>,
+  /// Maximum complete scales returned.
+  pub limit: usize,
+}
+
+/// Authoritative display-safe values for nominated knowledge nodes.
+pub struct CanonicalKnowledgeNodeQuery {
+  /// Ordered stable node identities.
+  pub node_ids: Vec<crate::domain::canonical::CanonicalId>,
+  /// Required source permission operation.
+  pub evidence_use: EvidenceUse,
+  /// Maximum nodes returned.
+  pub limit: usize,
+}
+
 /// Read-only authority capability; every downstream call accepts the same explicit pin.
 #[async_trait]
 pub trait CanonicalReadPort: Send + Sync {
@@ -165,6 +201,36 @@ pub trait CanonicalReadPort: Send + Sync {
     _pin: &CanonicalReleasePin,
     _query: CanonicalDomainQuery,
   ) -> Result<DomainInventory, CanonicalReadError> {
+    Err(CanonicalReadError::SchemaIncompatible)
+  }
+
+  /// Hydrates ordered exact fact revisions without trusting retrieval payload prose.
+  async fn knowledge_facts(
+    &self,
+    _context: &CanonicalReadContext,
+    _pin: &CanonicalReleasePin,
+    _query: CanonicalFactQuery,
+  ) -> Result<Vec<KnowledgeFact>, CanonicalReadError> {
+    Err(CanonicalReadError::SchemaIncompatible)
+  }
+
+  /// Hydrates complete semantic scales and never reconstructs them from pairwise edges.
+  async fn semantic_scales(
+    &self,
+    _context: &CanonicalReadContext,
+    _pin: &CanonicalReleasePin,
+    _query: CanonicalScaleQuery,
+  ) -> Result<Vec<HydratedSemanticScale>, CanonicalReadError> {
+    Err(CanonicalReadError::SchemaIncompatible)
+  }
+
+  /// Hydrates authoritative display-safe values for nominated canonical nodes.
+  async fn knowledge_nodes(
+    &self,
+    _context: &CanonicalReadContext,
+    _pin: &CanonicalReleasePin,
+    _query: CanonicalKnowledgeNodeQuery,
+  ) -> Result<Vec<HydratedKnowledgeNode>, CanonicalReadError> {
     Err(CanonicalReadError::SchemaIncompatible)
   }
 }

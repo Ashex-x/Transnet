@@ -910,17 +910,26 @@ struct NeighborEdgeDto {
   source_node_id: String,
   target_node_id: String,
   relation_type: String,
+  relation_registry_version: u32,
+  fact_id: String,
+  fact_revision: u32,
   verification_state: String,
 }
 
 impl NeighborEdgeDto {
   fn into_domain(self) -> Result<NeighborEdge, RetrievalDataError> {
+    if self.relation_registry_version != RELATION_REGISTRY_VERSION || self.fact_revision == 0 {
+      return Err(RetrievalDataError::InconsistentData);
+    }
     Ok(NeighborEdge {
       edge_id: parse_id(self.edge_id)?,
       source_node_id: parse_id(self.source_node_id)?,
       target_node_id: parse_id(self.target_node_id)?,
       relation_type: RetrievalRelation::from_wire_name(&self.relation_type)
         .map_err(|_| RetrievalDataError::InconsistentData)?,
+      relation_registry_version: self.relation_registry_version,
+      fact_id: parse_id(self.fact_id)?,
+      fact_revision: self.fact_revision,
       verification_state: parse_verification(&self.verification_state)?,
     })
   }
@@ -1146,7 +1155,7 @@ mod tests {
     assert_eq!(result, Err(RetrievalDataError::InconsistentData));
 
     let neighbor = transport(
-      r#"{"request_id":"request-1","schema_version":"retrieval-data-v1","outcome":"ok","value":{"root_node_id":"node-1","neighbors":[{"edge":{"edge_id":"edge-1","source_node_id":"node-2","target_node_id":"node-3","relation_type":"higher_degree_than","verification_state":"verified"},"node":{"node_id":"node-3","node_type":"lexical_sense","canonical_label":"scorching"}}],"next_cursor":null},"error":null,"release_id":"knowledge-2026-09"}"#,
+      r#"{"request_id":"request-1","schema_version":"retrieval-data-v1","outcome":"ok","value":{"root_node_id":"node-1","neighbors":[{"edge":{"edge_id":"edge-1","source_node_id":"node-2","target_node_id":"node-3","relation_type":"higher_degree_than","relation_registry_version":1,"fact_id":"fact-1","fact_revision":2,"verification_state":"verified"},"node":{"node_id":"node-3","node_type":"lexical_sense","canonical_label":"scorching"}}],"next_cursor":null},"error":null,"release_id":"knowledge-2026-09"}"#,
     );
     let client = IslandPortRetrievalClient::new(neighbor);
     let result = client
@@ -1207,6 +1216,33 @@ mod tests {
       )
       .await;
     assert_eq!(result, Err(RetrievalDataError::InconsistentData));
+  }
+
+  #[tokio::test]
+  async fn neighbors_require_exact_fact_revision_and_registry_version() {
+    for (registry, revision) in [(2, 1), (1, 0)] {
+      let response = format!(
+        r#"{{"request_id":"request-1","schema_version":"retrieval-data-v1","outcome":"ok","value":{{"root_node_id":"node-1","neighbors":[{{"edge":{{"edge_id":"edge-1","source_node_id":"node-1","target_node_id":"node-2","relation_type":"higher_degree_than","relation_registry_version":{registry},"fact_id":"fact-1","fact_revision":{revision},"verification_state":"verified"}},"node":{{"node_id":"node-2","node_type":"lexical_sense","canonical_label":"scorching"}}}}],"next_cursor":null}},"error":null,"release_id":"knowledge-2026-09"}}"#,
+      );
+      let client = IslandPortRetrievalClient::new(transport(&response));
+      let result = client
+        .search_neighbors(
+          &context(),
+          NeighborSearchRequest {
+            node_id: CanonicalId::new("node-1").unwrap(),
+            direction: NeighborDirection::Both,
+            relation_types: vec![RetrievalRelation::from_wire_name("higher_degree_than").unwrap()],
+            verification_states: vec![RetrievalVerificationState::Verified],
+            languages: vec![LanguageTag::parse("en").unwrap()],
+            domain_ids: vec![],
+            release_id: CanonicalId::new("knowledge-2026-09").unwrap(),
+            limit: 20,
+            cursor: None,
+          },
+        )
+        .await;
+      assert_eq!(result, Err(RetrievalDataError::InconsistentData));
+    }
   }
 
   #[tokio::test]

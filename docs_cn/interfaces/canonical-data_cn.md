@@ -4,7 +4,7 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
 
 本合同定义 island-port 提供的存储无关 HTTP endpoint，涵盖共享规范翻译、单词、短语、词义、领域、证据元数据和不可变内容发布。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。MySQL 是计划中的 island-port 实现，不属于本线上合同。
 
-状态：目标 island-port 服务端合同，Transnet 读取 client 已实现。可执行文件可选地组合严格出站 `canonical-data-v1` client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。已实现 client 按本文通用 envelope 与严格 response echo 校验覆盖 active-release、translation candidate、basic-card candidate、sense-detail 和有界 domain-inventory 读取。Domain-assessment application 基础尚未作为在线 route 暴露。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留、fact/scale 读取及真实端到端验收仍需在本仓库之外完成。
+状态：目标 island-port 服务端合同，Transnet 读取 client 已实现。可执行文件可选地组合严格出站 `canonical-data-v1` client 与 active-release 就绪探针；`POST /api/v1/basic-cards/lookup` 和固定发布的 `POST /api/v1/senses/get` 使用该依赖。已实现 client 按本文通用 envelope 与严格 response echo 校验覆盖 active-release、translation candidate、basic-card candidate、sense-detail、有界 domain-inventory、精确 fact revision、完整 semantic scale 与权威 knowledge-node 读取。Domain-assessment 与 knowledge-view application 基础尚未作为在线 route 暴露。外部 island-port server 尚未按本合同完成验证；生产 MySQL migration、publisher/write 操作、旧发布保留及真实端到端验收仍需在本仓库之外完成。
 
 仓库内 M3 publication foundation 建模 Qdrant build lifecycle、idempotency、compatibility receipt 与 reconciliation hash。其出站 publication port 与严格 island-port client 承载有界 build contract；`KnowledgePublicationService` 基于权威 status 恢复，驱动 node/edge publication 直至 reconciliation，且不保存本地 progress。Reconciliation 成功后只返回强类型 activation candidate。仅离线的 `OfflinePublicationService` 与严格 `release-control-v1` client 显式向 island-port 提交该 candidate，或选择已保留的 rollback target；它们不进入在线 `AppState`，也不自行修改 active pointer。仓库没有新增 island-port publication server、MySQL build/reconciliation persistence、active-pointer transaction 或 rollback implementation；这些 authority-owned operation 仍是外部要求。
 
@@ -24,6 +24,7 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
   - [POST /api/v1/domains/resolve](#post-apiv1domainsresolve)
   - [POST /api/v1/knowledge-facts/get](#post-apiv1knowledge-factsget)
   - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
+  - [POST /api/v1/knowledge-nodes/get](#post-apiv1knowledge-nodesget)
   - [领域提案处理](#领域提案处理)
   - [POST /api/v1/cards/revisions/stage](#post-apiv1cardsrevisionsstage)
   - [POST /api/v1/releases/activation-candidates/submit](#post-apiv1releasesactivation-candidatessubmit)
@@ -424,13 +425,13 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 ## POST /api/v1/knowledge-facts/get
 
-在向量检索后按顺序、有界地补全精确事实修订。Qdrant 可以提名 `fact_id`，但绝不能提供权威陈述、证据、权利或验证状态。调用方提供发布版本与合格事实 ID；适配器会排除该发布中不存在或不符合资格的 ID。该读取可安全重试。
+在向量检索后按顺序、有界地补全精确事实修订。Qdrant 可以提名 `fact_id` 与正 `revision`，但绝不能提供权威陈述、证据、权利或验证状态。调用方提供发布版本与精确合格事实修订；适配器会排除该发布中不存在或不符合资格的引用，绝不替换为其他修订。该读取可安全重试。
 
 请求 `input`：
 
 ```json
 {
-  "fact_ids": ["fact_sweltering_degree_scorching_01"],
+  "facts": [{"fact_id": "fact_sweltering_degree_scorching_01", "revision": 2}],
   "content_release": "knowledge-2026-09",
   "verification_states": ["verified"],
   "limit": 20
@@ -441,6 +442,8 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "canonical-data-v1",
   "outcome": "ok",
   "value": {
     "facts": [
@@ -450,6 +453,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
         "statement": "For environmental heat, scorching usually indicates greater intensity than sweltering.",
         "subject_node_id": "node_scorching_heat_01",
         "predicate": "higher_degree_than",
+        "relation_registry_version": 1,
         "object_node_id": "node_sweltering_hot_01",
         "domain_ids": ["domain_weather"],
         "applicable_sense_ids": ["sense_sweltering_hot_01"],
@@ -464,7 +468,7 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 }
 ```
 
-返回顺序遵循请求顺序，并移除被排除的 ID。事实是原子项：响应投影可以摘要它们，但在 `full` 级别呈现事实性断言时必须保留精确事实 ID 与证据状态。
+返回顺序是移除被排除引用后的请求子序列。响应必须回显精确请求修订，使用关系 registry 版本 `1`，包含已知 registry predicate，并携带非空、排序且唯一的 evidence 与 provenance ID。事实是原子项：响应投影可以摘要它们，但在 `full` 级别呈现事实性断言时必须保留精确事实 ID 与证据状态。请求和响应最多包含 50 个事实；statement 最多 4,096 个 scalar，condition 列表最多 16 项，每个 domain、sense、evidence、provenance 或 parameter 列表最多 32 项。
 
 ## POST /api/v1/semantic-scales/get
 
@@ -486,6 +490,8 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "canonical-data-v1",
   "outcome": "ok",
   "value": {
     "scales": [
@@ -512,6 +518,50 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 ```
 
 `position` 只建立序数顺序，绝不表示数值强度间隔。调用方从返回的尺度推导相邻程度展示；分类仍是独立类型的 `is_a` / `has_subtype` 关系。
+
+响应顺序是所请求 scale ID 的子序列。每个返回尺度必须包含 `for_node_id`、携带正修订、包含两至 32 个唯一 member 且 position 为严格递增的正数，并提供一至 32 个排序唯一 evidence ID。请求和响应最多包含 50 个尺度；`limit` 不得超过 50。
+
+## POST /api/v1/knowledge-nodes/get
+
+为检索提名的 node 补全适合展示的权威值。当知识视图会显示 node label、language、domain membership 或 evidence reference 时，建议使用本操作；最小 Qdrant candidate payload 只是提名数据，不是权威。
+
+请求 `input`：
+
+```json
+{
+  "node_ids": ["node_sweltering_hot_01"],
+  "content_release": "knowledge-2026-09",
+  "evidence_use": "api_redistribution",
+  "limit": 20
+}
+```
+
+响应：
+
+```json
+{
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "canonical-data-v1",
+  "outcome": "ok",
+  "value": {
+    "nodes": [
+      {
+        "node_id": "node_sweltering_hot_01",
+        "revision": 4,
+        "node_type": "lexical_sense",
+        "canonical_label": "sweltering",
+        "language": "en",
+        "domain_ids": ["domain_weather"],
+        "evidence_ids": ["evidence_dictionary_1042"],
+        "verification_state": "verified"
+      }
+    ]
+  },
+  "content_release": "knowledge-2026-09"
+}
+```
+
+响应顺序是移除不合格值后的请求 node ID 子序列。每个 node 都有正不可变修订、闭合 node family、可选规范 BCP 47 language、最多 512 个 scalar 的已审核 label、排序唯一 domain ID，以及一至 32 个排序唯一 evidence ID。请求和响应最多包含 50 个 node。缺失或不合格值会被省略；未请求、重复、跨发布、未验证或格式错误的 node 会使整个响应闭合失败。
 
 ## 领域提案处理
 

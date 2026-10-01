@@ -472,6 +472,9 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
           "source_node_id": "node_sweltering_hot_01",
           "target_node_id": "node_scorching_heat_01",
           "relation_type": "higher_degree_than",
+          "relation_registry_version": 1,
+          "fact_id": "fact_sweltering_degree_scorching_01",
+          "fact_revision": 2,
           "verification_state": "verified"
         },
         "node": {
@@ -487,7 +490,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 }
 ```
 
-扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
+扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。每个 neighbor edge 都携带精确 `fact_id`、正 `fact_revision` 与关系 registry 版本 `1`；Transnet 必须先补全该精确事实修订，才能把 edge 作为已验证 path step。事实缺失、修订被替换、未知 relation 或 registry 不匹配都会使 candidate 无效，而不会降级成事实。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
 
 ## Internal publication operations
 

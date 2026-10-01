@@ -575,6 +575,12 @@ pub struct NeighborEdge {
   pub target_node_id: CanonicalId,
   /// Exact frozen registry relation.
   pub relation_type: RetrievalRelation,
+  /// Exact frozen relationship-registry version.
+  pub relation_registry_version: u32,
+  /// Canonical fact identity that must be hydrated before factual use.
+  pub fact_id: CanonicalId,
+  /// Positive immutable fact revision that must be hydrated exactly.
+  pub fact_revision: u32,
   /// Verification class echoed by the projection.
   pub verification_state: RetrievalVerificationState,
 }

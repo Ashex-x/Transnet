@@ -354,7 +354,7 @@ Returns up to three independently verified paths of at most three hops between t
 }
 ```
 
-Normal outcomes are `connected` and `no_verified_path`. Every path step names one hydrated assertion, direction, conditions, relevance, evidence references, and release. Similarity-only candidates may be returned in a separate exploratory section but never as a path step.
+Normal outcomes are `connected` and `no_verified_path`. `no_verified_path` means the bounded search found no path whose every edge had an exact eligible fact revision successfully hydrated in the pinned release; it does not prove that no relationship exists outside the searched bounds, in another release, or in unpublished knowledge. Every path step names one hydrated assertion, direction, conditions, relevance, evidence references, and release. Similarity-only candidates may be returned in a separate exploratory section but never as a path step.
 
 The former target drafts `POST /api/v1/graph/get` and `POST /api/v1/graph/neighbors` are removed from the revised target contract. Transitional `GET /v1/graph...` handlers in the current executable remain implementation compatibility behavior until migrated or removed; their existence does not make them target v1 routes.
 

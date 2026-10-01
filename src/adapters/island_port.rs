@@ -41,11 +41,17 @@ use crate::domain::{
     CanonicalDomain, DomainCoverageState, DomainInventory, DomainKnowledgeProfile,
     LocalizedDomainDefinition, LocalizedDomainTerm, MAX_DOMAIN_INVENTORY, MAX_DOMAIN_TERM_CHARS,
   },
+  knowledge_hydration::{
+    CanonicalFactRef, HydratedKnowledgeNode, HydratedScaleMember, HydratedSemanticScale,
+    KnowledgeCondition, KnowledgeFact, SemanticScaleDirection, MAX_KNOWLEDGE_HYDRATION_ITEMS,
+  },
   retrieval::{CanonicalCandidate, LexicalMatchKind, RepositoryMatch, RetrievalScore},
+  retrieval_data::{RetrievalNodeType, RetrievalRelation, RetrievalVerificationState},
 };
 use crate::ports::canonical_read::{
-  CanonicalCandidateQuery, CanonicalDomainQuery, CanonicalReadContext, CanonicalReadError,
-  CanonicalReadPort, CanonicalSenseQuery, CanonicalTranslationQuery,
+  CanonicalCandidateQuery, CanonicalDomainQuery, CanonicalFactQuery, CanonicalKnowledgeNodeQuery,
+  CanonicalReadContext, CanonicalReadError, CanonicalReadPort, CanonicalScaleQuery,
+  CanonicalSenseQuery, CanonicalTranslationQuery,
 };
 
 /// Canonical-data wire schema implemented by this client.
@@ -436,6 +442,101 @@ impl IslandPortCanonicalClient {
     .map_err(inconsistent)
   }
 
+  /// Hydrates exact immutable fact revisions in request order after omitted ineligible values.
+  pub async fn get_knowledge_facts(
+    &self,
+    context: &IslandPortCallContext,
+    release_id: &crate::domain::canonical::ReleaseId,
+    input: KnowledgeFactsGetInput,
+  ) -> Result<Vec<KnowledgeFact>, IslandPortClientError> {
+    validate_exact_fact_input(&input)?;
+    let requested = input.facts.clone();
+    let limit = input.limit;
+    let input = KnowledgeFactsGetInputDto::new(input, release_id);
+    let envelope = RequestEnvelope {
+      context: context_dto(context, release_id),
+      input,
+    };
+    let response: KnowledgeFactsGetResponseDto = self
+      .call("/api/v1/knowledge-facts/get", context, &envelope)
+      .await?;
+    validate_response_context(&response.common, context, release_id)?;
+    let facts = response.common.value()?.facts;
+    if facts.len() > limit {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let facts = facts
+      .into_iter()
+      .map(KnowledgeFactDto::into_domain)
+      .collect::<Result<Vec<_>, _>>()?;
+    validate_fact_subsequence(&requested, &facts)?;
+    Ok(facts)
+  }
+
+  /// Hydrates complete authoritative semantic scales for one explicit member.
+  pub async fn get_semantic_scales(
+    &self,
+    context: &IslandPortCallContext,
+    release_id: &crate::domain::canonical::ReleaseId,
+    input: SemanticScalesGetInput,
+  ) -> Result<Vec<HydratedSemanticScale>, IslandPortClientError> {
+    validate_id_input(&input.scale_ids, input.limit)?;
+    validate_verified(&input.verification_states)?;
+    let requested = input.scale_ids.clone();
+    let for_node_id = input.for_node_id.clone();
+    let limit = input.limit;
+    let input = SemanticScalesGetInputDto::new(input, release_id);
+    let envelope = RequestEnvelope {
+      context: context_dto(context, release_id),
+      input,
+    };
+    let response: SemanticScalesGetResponseDto = self
+      .call("/api/v1/semantic-scales/get", context, &envelope)
+      .await?;
+    validate_response_context(&response.common, context, release_id)?;
+    let scales = response.common.value()?.scales;
+    if scales.len() > limit {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let scales = scales
+      .into_iter()
+      .map(|scale| scale.into_domain(&for_node_id))
+      .collect::<Result<Vec<_>, _>>()?;
+    validate_id_subsequence(&requested, scales.iter().map(|scale| &scale.scale_id))?;
+    Ok(scales)
+  }
+
+  /// Hydrates authoritative display-safe values for nominated canonical nodes.
+  pub async fn get_knowledge_nodes(
+    &self,
+    context: &IslandPortCallContext,
+    release_id: &crate::domain::canonical::ReleaseId,
+    input: KnowledgeNodesGetInput,
+  ) -> Result<Vec<HydratedKnowledgeNode>, IslandPortClientError> {
+    validate_id_input(&input.node_ids, input.limit)?;
+    let requested = input.node_ids.clone();
+    let limit = input.limit;
+    let input = KnowledgeNodesGetInputDto::new(input, release_id);
+    let envelope = RequestEnvelope {
+      context: context_dto(context, release_id),
+      input,
+    };
+    let response: KnowledgeNodesGetResponseDto = self
+      .call("/api/v1/knowledge-nodes/get", context, &envelope)
+      .await?;
+    validate_response_context(&response.common, context, release_id)?;
+    let nodes = response.common.value()?.nodes;
+    if nodes.len() > limit {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let nodes = nodes
+      .into_iter()
+      .map(KnowledgeNodeDto::into_domain)
+      .collect::<Result<Vec<_>, _>>()?;
+    validate_id_subsequence(&requested, nodes.iter().map(|node| &node.node_id))?;
+    Ok(nodes)
+  }
+
   async fn call<T: Serialize, R: DeserializeOwned>(
     &self,
     path: &'static str,
@@ -521,6 +622,38 @@ pub struct DomainResolveInput {
   /// Languages useful for labels and coverage.
   pub languages: Vec<LanguageTag>,
   /// Candidate limit.
+  pub limit: usize,
+}
+
+/// Exact fact revisions accepted by the authoritative hydration operation.
+pub struct KnowledgeFactsGetInput {
+  /// Ordered exact fact revisions.
+  pub facts: Vec<CanonicalFactRef>,
+  /// Eligible verification states; canonical hydration currently accepts only `verified`.
+  pub verification_states: Vec<RetrievalVerificationState>,
+  /// Response bound.
+  pub limit: usize,
+}
+
+/// Complete semantic-scale selectors accepted by the authoritative hydration operation.
+pub struct SemanticScalesGetInput {
+  /// Ordered stable scale identities.
+  pub scale_ids: Vec<CanonicalId>,
+  /// Required explicit member for scope and condition eligibility.
+  pub for_node_id: CanonicalId,
+  /// Eligible verification states; canonical hydration currently accepts only `verified`.
+  pub verification_states: Vec<RetrievalVerificationState>,
+  /// Response bound.
+  pub limit: usize,
+}
+
+/// Display-safe canonical node selectors accepted by the hydration operation.
+pub struct KnowledgeNodesGetInput {
+  /// Ordered stable node identities.
+  pub node_ids: Vec<CanonicalId>,
+  /// Required evidence permission enforced by island-port.
+  pub evidence_use: crate::domain::canonical::EvidenceUse,
+  /// Response bound.
   pub limit: usize,
 }
 
@@ -649,6 +782,67 @@ impl CanonicalReadPort for IslandPortCanonicalClient {
           normalized_labels: query.normalized_labels,
           scope_key: query.scope_key,
           languages: query.languages,
+          limit: query.limit,
+        },
+      )
+      .await
+      .map_err(Into::into)
+  }
+
+  async fn knowledge_facts(
+    &self,
+    context: &CanonicalReadContext,
+    pin: &CanonicalReleasePin,
+    query: CanonicalFactQuery,
+  ) -> Result<Vec<KnowledgeFact>, CanonicalReadError> {
+    self
+      .get_knowledge_facts(
+        &call_context(context)?,
+        &pin.release_id,
+        KnowledgeFactsGetInput {
+          facts: query.facts,
+          verification_states: query.verification_states,
+          limit: query.limit,
+        },
+      )
+      .await
+      .map_err(Into::into)
+  }
+
+  async fn semantic_scales(
+    &self,
+    context: &CanonicalReadContext,
+    pin: &CanonicalReleasePin,
+    query: CanonicalScaleQuery,
+  ) -> Result<Vec<HydratedSemanticScale>, CanonicalReadError> {
+    self
+      .get_semantic_scales(
+        &call_context(context)?,
+        &pin.release_id,
+        SemanticScalesGetInput {
+          scale_ids: query.scale_ids,
+          for_node_id: query.for_node_id,
+          verification_states: query.verification_states,
+          limit: query.limit,
+        },
+      )
+      .await
+      .map_err(Into::into)
+  }
+
+  async fn knowledge_nodes(
+    &self,
+    context: &CanonicalReadContext,
+    pin: &CanonicalReleasePin,
+    query: CanonicalKnowledgeNodeQuery,
+  ) -> Result<Vec<HydratedKnowledgeNode>, CanonicalReadError> {
+    self
+      .get_knowledge_nodes(
+        &call_context(context)?,
+        &pin.release_id,
+        KnowledgeNodesGetInput {
+          node_ids: query.node_ids,
+          evidence_use: query.evidence_use,
           limit: query.limit,
         },
       )
@@ -2221,6 +2415,420 @@ impl CollocationTermDto {
 struct PeriodDto {
   first_year: Option<i32>,
   last_year: Option<i32>,
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeFactsGetInputDto {
+  facts: Vec<CanonicalFactRefDto>,
+  content_release: String,
+  verification_states: Vec<&'static str>,
+  limit: usize,
+}
+
+impl KnowledgeFactsGetInputDto {
+  fn new(value: KnowledgeFactsGetInput, release_id: &CanonicalId) -> Self {
+    Self {
+      facts: value
+        .facts
+        .into_iter()
+        .map(|fact| CanonicalFactRefDto {
+          fact_id: fact.fact_id.to_string(),
+          revision: fact.revision,
+        })
+        .collect(),
+      content_release: release_id.to_string(),
+      verification_states: value
+        .verification_states
+        .into_iter()
+        .map(verification_state_name)
+        .collect(),
+      limit: value.limit,
+    }
+  }
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalFactRefDto {
+  fact_id: String,
+  revision: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct KnowledgeFactsGetResponseDto {
+  common: CommonResponseDto<KnowledgeFactsValueDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeFactsValueDto {
+  facts: Vec<KnowledgeFactDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeFactDto {
+  fact_id: String,
+  revision: u32,
+  statement: String,
+  subject_node_id: String,
+  predicate: String,
+  relation_registry_version: u32,
+  object_node_id: String,
+  domain_ids: Vec<String>,
+  applicable_sense_ids: Vec<String>,
+  conditions: Vec<KnowledgeConditionDto>,
+  evidence_ids: Vec<String>,
+  provenance: Vec<String>,
+  verification_state: String,
+}
+
+impl KnowledgeFactDto {
+  fn into_domain(self) -> Result<KnowledgeFact, IslandPortClientError> {
+    if self.verification_state != "verified" {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let fact = KnowledgeFact {
+      fact_id: canonical_id(self.fact_id)?,
+      revision: self.revision,
+      statement: self.statement,
+      subject_node_id: canonical_id(self.subject_node_id)?,
+      predicate: RetrievalRelation::from_wire_name(&self.predicate).map_err(inconsistent)?,
+      relation_registry_version: self.relation_registry_version,
+      object_node_id: canonical_id(self.object_node_id)?,
+      domain_ids: self
+        .domain_ids
+        .into_iter()
+        .map(DomainId::new)
+        .collect::<Result<_, _>>()
+        .map_err(inconsistent)?,
+      applicable_sense_ids: self
+        .applicable_sense_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+      conditions: self
+        .conditions
+        .into_iter()
+        .map(KnowledgeConditionDto::into_domain)
+        .collect::<Result<_, _>>()?,
+      evidence_ids: self
+        .evidence_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+      provenance: self
+        .provenance
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+    };
+    fact.validate().map_err(inconsistent)?;
+    Ok(fact)
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeConditionDto {
+  condition_id: String,
+  condition_type: String,
+  parameter_ids: Vec<String>,
+}
+
+impl KnowledgeConditionDto {
+  fn into_domain(self) -> Result<KnowledgeCondition, IslandPortClientError> {
+    let condition = KnowledgeCondition {
+      condition_id: canonical_id(self.condition_id)?,
+      condition_type: self.condition_type,
+      parameter_ids: self
+        .parameter_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+    };
+    condition.validate().map_err(inconsistent)?;
+    Ok(condition)
+  }
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct SemanticScalesGetInputDto {
+  scale_ids: Vec<String>,
+  for_node_id: String,
+  content_release: String,
+  verification_states: Vec<&'static str>,
+  limit: usize,
+}
+
+impl SemanticScalesGetInputDto {
+  fn new(value: SemanticScalesGetInput, release_id: &CanonicalId) -> Self {
+    Self {
+      scale_ids: value
+        .scale_ids
+        .into_iter()
+        .map(|id| id.to_string())
+        .collect(),
+      for_node_id: value.for_node_id.to_string(),
+      content_release: release_id.to_string(),
+      verification_states: value
+        .verification_states
+        .into_iter()
+        .map(verification_state_name)
+        .collect(),
+      limit: value.limit,
+    }
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct SemanticScalesGetResponseDto {
+  common: CommonResponseDto<SemanticScalesValueDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SemanticScalesValueDto {
+  scales: Vec<SemanticScaleDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SemanticScaleDto {
+  scale_id: String,
+  revision: u32,
+  dimension: String,
+  direction: String,
+  domain_ids: Vec<String>,
+  conditions: Vec<KnowledgeConditionDto>,
+  members: Vec<ScaleMemberDto>,
+  evidence_ids: Vec<String>,
+  verification_state: String,
+}
+
+impl SemanticScaleDto {
+  fn into_domain(
+    self,
+    for_node_id: &CanonicalId,
+  ) -> Result<HydratedSemanticScale, IslandPortClientError> {
+    if self.verification_state != "verified" {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let direction = match self.direction.as_str() {
+      "increasing" => SemanticScaleDirection::Increasing,
+      "decreasing" => SemanticScaleDirection::Decreasing,
+      _ => return Err(IslandPortClientError::InconsistentData),
+    };
+    let scale = HydratedSemanticScale {
+      scale_id: canonical_id(self.scale_id)?,
+      revision: self.revision,
+      dimension: self.dimension,
+      direction,
+      domain_ids: self
+        .domain_ids
+        .into_iter()
+        .map(DomainId::new)
+        .collect::<Result<_, _>>()
+        .map_err(inconsistent)?,
+      conditions: self
+        .conditions
+        .into_iter()
+        .map(KnowledgeConditionDto::into_domain)
+        .collect::<Result<_, _>>()?,
+      members: self
+        .members
+        .into_iter()
+        .map(ScaleMemberDto::into_domain)
+        .collect::<Result<_, _>>()?,
+      evidence_ids: self
+        .evidence_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+    };
+    scale.validate().map_err(inconsistent)?;
+    if !scale
+      .members
+      .iter()
+      .any(|member| member.node_id == *for_node_id)
+    {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    Ok(scale)
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScaleMemberDto {
+  node_id: String,
+  position: u32,
+}
+
+impl ScaleMemberDto {
+  fn into_domain(self) -> Result<HydratedScaleMember, IslandPortClientError> {
+    Ok(HydratedScaleMember {
+      node_id: canonical_id(self.node_id)?,
+      position: self.position,
+    })
+  }
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeNodesGetInputDto {
+  node_ids: Vec<String>,
+  content_release: String,
+  evidence_use: EvidenceUseDto,
+  limit: usize,
+}
+
+impl KnowledgeNodesGetInputDto {
+  fn new(value: KnowledgeNodesGetInput, release_id: &CanonicalId) -> Self {
+    Self {
+      node_ids: value
+        .node_ids
+        .into_iter()
+        .map(|id| id.to_string())
+        .collect(),
+      content_release: release_id.to_string(),
+      evidence_use: EvidenceUseDto::from(value.evidence_use),
+      limit: value.limit,
+    }
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct KnowledgeNodesGetResponseDto {
+  common: CommonResponseDto<KnowledgeNodesValueDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeNodesValueDto {
+  nodes: Vec<KnowledgeNodeDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeNodeDto {
+  node_id: String,
+  revision: u32,
+  node_type: String,
+  canonical_label: String,
+  language: Option<String>,
+  domain_ids: Vec<String>,
+  evidence_ids: Vec<String>,
+  verification_state: String,
+}
+
+impl KnowledgeNodeDto {
+  fn into_domain(self) -> Result<HydratedKnowledgeNode, IslandPortClientError> {
+    if self.verification_state != "verified" {
+      return Err(IslandPortClientError::InconsistentData);
+    }
+    let node = HydratedKnowledgeNode {
+      node_id: canonical_id(self.node_id)?,
+      revision: self.revision,
+      node_type: RetrievalNodeType::new(self.node_type).map_err(inconsistent)?,
+      canonical_label: self.canonical_label,
+      language: self.language.as_deref().map(language).transpose()?,
+      domain_ids: self
+        .domain_ids
+        .into_iter()
+        .map(DomainId::new)
+        .collect::<Result<_, _>>()
+        .map_err(inconsistent)?,
+      evidence_ids: self
+        .evidence_ids
+        .into_iter()
+        .map(canonical_id)
+        .collect::<Result<_, _>>()?,
+    };
+    node.validate().map_err(inconsistent)?;
+    Ok(node)
+  }
+}
+
+fn validate_exact_fact_input(input: &KnowledgeFactsGetInput) -> Result<(), IslandPortClientError> {
+  if input.facts.is_empty()
+    || input.facts.len() > MAX_KNOWLEDGE_HYDRATION_ITEMS
+    || input.limit == 0
+    || input.limit > MAX_KNOWLEDGE_HYDRATION_ITEMS
+    || input.facts.iter().any(|fact| fact.revision == 0)
+    || input
+      .facts
+      .iter()
+      .map(|fact| &fact.fact_id)
+      .collect::<BTreeSet<_>>()
+      .len()
+      != input.facts.len()
+  {
+    return Err(IslandPortClientError::InvalidRequest);
+  }
+  validate_verified(&input.verification_states)
+}
+
+fn validate_id_input(ids: &[CanonicalId], limit: usize) -> Result<(), IslandPortClientError> {
+  if ids.is_empty()
+    || ids.len() > MAX_KNOWLEDGE_HYDRATION_ITEMS
+    || limit == 0
+    || limit > MAX_KNOWLEDGE_HYDRATION_ITEMS
+    || ids.iter().collect::<BTreeSet<_>>().len() != ids.len()
+  {
+    return Err(IslandPortClientError::InvalidRequest);
+  }
+  Ok(())
+}
+
+fn validate_verified(states: &[RetrievalVerificationState]) -> Result<(), IslandPortClientError> {
+  if states != [RetrievalVerificationState::Verified] {
+    return Err(IslandPortClientError::InvalidRequest);
+  }
+  Ok(())
+}
+
+fn validate_fact_subsequence(
+  requested: &[CanonicalFactRef],
+  returned: &[KnowledgeFact],
+) -> Result<(), IslandPortClientError> {
+  let mut position = 0;
+  for fact in returned {
+    let Some(offset) = requested[position..]
+      .iter()
+      .position(|item| item.fact_id == fact.fact_id && item.revision == fact.revision)
+    else {
+      return Err(IslandPortClientError::InconsistentData);
+    };
+    position += offset + 1;
+  }
+  Ok(())
+}
+
+fn validate_id_subsequence<'a>(
+  requested: &[CanonicalId],
+  returned: impl Iterator<Item = &'a CanonicalId>,
+) -> Result<(), IslandPortClientError> {
+  let mut position = 0;
+  for id in returned {
+    let Some(offset) = requested[position..].iter().position(|item| item == id) else {
+      return Err(IslandPortClientError::InconsistentData);
+    };
+    position += offset + 1;
+  }
+  Ok(())
+}
+
+const fn verification_state_name(state: RetrievalVerificationState) -> &'static str {
+  match state {
+    RetrievalVerificationState::Verified => "verified",
+    RetrievalVerificationState::Exploratory => "exploratory",
+  }
 }
 impl PeriodDto {
   fn into_domain(self) -> Result<HistoricalRange, IslandPortClientError> {

@@ -4,7 +4,7 @@
 
 This contract defines island-port's storage-neutral HTTP endpoints for shared canonical translations, words, phrases, senses, domains, evidence metadata, and immutable content releases. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. MySQL is the planned island-port implementation, not part of this wire contract.
 
-Status: target island-port server contract with implemented Transnet read client. The executable can optionally compose the strict outbound `canonical-data-v1` client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The implemented client covers active-release, translation-candidate, basic-card-candidate, sense-detail, and bounded domain-inventory reads with the common envelope and strict response-echo validation described here. The domain-assessment application foundation is not yet exposed as an online route. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, fact/scale reads, and real end-to-end acceptance remain unimplemented outside this repository.
+Status: target island-port server contract with implemented Transnet read client. The executable can optionally compose the strict outbound `canonical-data-v1` client and active-release readiness probe; `POST /api/v1/basic-cards/lookup` and release-pinned `POST /api/v1/senses/get` consume that dependency. The implemented client covers active-release, translation-candidate, basic-card-candidate, sense-detail, bounded domain-inventory, exact fact-revision, complete semantic-scale, and authoritative knowledge-node reads with the common envelope and strict response-echo validation described here. The domain-assessment and knowledge-view application foundations are not yet exposed as online routes. The external island-port server has not been verified against this contract, and production MySQL migrations, publisher/write operations, old-release retention, and real end-to-end acceptance remain unimplemented outside this repository.
 
 The checked-in M3 publication foundation models Qdrant build lifecycle, idempotency, compatibility receipts, and reconciliation hashes. Its outbound publication port and strict island-port client carry the bounded build contract, while `KnowledgePublicationService` drives authoritative status-based resume through node and edge publication and reconciliation without keeping local progress. Successful reconciliation returns only a typed activation candidate. The offline-only `OfflinePublicationService` and strict `release-control-v1` client explicitly submit that candidate or select a retained rollback target through island-port; they are absent from online `AppState` and never mutate the active pointer themselves. The repository does not add an island-port publication server, MySQL build/reconciliation persistence, active-pointer transaction, or rollback implementation; those authority-owned operations remain external requirements.
 
@@ -24,6 +24,7 @@ The checked-in M3 publication foundation models Qdrant build lifecycle, idempote
   - [POST /api/v1/domains/resolve](#post-apiv1domainsresolve)
   - [POST /api/v1/knowledge-facts/get](#post-apiv1knowledge-factsget)
   - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
+  - [POST /api/v1/knowledge-nodes/get](#post-apiv1knowledge-nodesget)
   - [Domain proposal handling](#domain-proposal-handling)
   - [POST /api/v1/cards/revisions/stage](#post-apiv1cardsrevisionsstage)
   - [POST /api/v1/releases/activation-candidates/submit](#post-apiv1releasesactivation-candidatessubmit)
@@ -432,13 +433,13 @@ The request and response are bounded to 32 candidates, 8 labels, 16 aliases, 8 d
 
 ## POST /api/v1/knowledge-facts/get
 
-Hydrates an ordered, bounded set of exact fact revisions after vector retrieval. Qdrant may nominate `fact_id` values, but it is never allowed to supply the authoritative statement, evidence, rights, or verification state. The caller supplies the release and the eligible fact IDs; the adapter silently excludes IDs that are absent from that release or fail eligibility. This read is safe to retry.
+Hydrates an ordered, bounded set of exact fact revisions after vector retrieval. Qdrant may nominate a `fact_id` plus positive `revision`, but it is never allowed to supply the authoritative statement, evidence, rights, or verification state. The caller supplies the release and exact eligible fact revisions; the adapter silently excludes references that are absent from that release or fail eligibility. It never substitutes another revision. This read is safe to retry.
 
 Request `input`:
 
 ```json
 {
-  "fact_ids": ["fact_sweltering_degree_scorching_01"],
+  "facts": [{"fact_id": "fact_sweltering_degree_scorching_01", "revision": 2}],
   "content_release": "knowledge-2026-09",
   "verification_states": ["verified"],
   "limit": 20
@@ -449,6 +450,8 @@ Response:
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "canonical-data-v1",
   "outcome": "ok",
   "value": {
     "facts": [
@@ -458,6 +461,7 @@ Response:
         "statement": "For environmental heat, scorching usually indicates greater intensity than sweltering.",
         "subject_node_id": "node_scorching_heat_01",
         "predicate": "higher_degree_than",
+        "relation_registry_version": 1,
         "object_node_id": "node_sweltering_hot_01",
         "domain_ids": ["domain_weather"],
         "applicable_sense_ids": ["sense_sweltering_hot_01"],
@@ -472,7 +476,7 @@ Response:
 }
 ```
 
-The returned order follows the request after omitted IDs are removed. Facts are atomic: a response projector may summarize them, but must retain the exact fact ID and evidence state whenever it presents a factual claim at `full` level.
+The returned order is a subsequence of the request after omitted references are removed. The response must echo the exact requested revision, use relationship registry version `1`, contain a known registry predicate, and carry non-empty, sorted, unique evidence and provenance IDs. Facts are atomic: a response projector may summarize them, but must retain the exact fact ID and evidence state whenever it presents a factual claim at `full` level. Requests and responses are limited to 50 facts; statements are limited to 4,096 scalar values, condition lists to 16, and each domain, sense, evidence, provenance, or parameter list to 32.
 
 ## POST /api/v1/semantic-scales/get
 
@@ -494,6 +498,8 @@ Response:
 
 ```json
 {
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "canonical-data-v1",
   "outcome": "ok",
   "value": {
     "scales": [
@@ -520,6 +526,50 @@ Response:
 ```
 
 `position` establishes ordinal order only; it never represents a numeric intensity interval. The caller derives adjacent degree presentation from this returned scale, while taxonomy remains a separately typed `is_a` / `has_subtype` relation.
+
+The response order is a subsequence of the requested scale IDs. Each returned scale must contain `for_node_id`, carry a positive revision, contain two to 32 unique members in strictly increasing positive position order, and provide one to 32 sorted unique evidence IDs. Requests and responses are limited to 50 scales; `limit` may not exceed 50.
+
+## POST /api/v1/knowledge-nodes/get
+
+Hydrates display-safe authoritative values for retrieval-nominated nodes. This operation is recommended whenever a node label, language, domain membership, or evidence reference will appear in a knowledge view; the minimal Qdrant candidate payload is nomination data and is not authority.
+
+Request `input`:
+
+```json
+{
+  "node_ids": ["node_sweltering_hot_01"],
+  "content_release": "knowledge-2026-09",
+  "evidence_use": "api_redistribution",
+  "limit": 20
+}
+```
+
+Response:
+
+```json
+{
+  "request_id": "01K6G7R1S8Z3Q4P5T6V7W8X9Y0",
+  "schema_version": "canonical-data-v1",
+  "outcome": "ok",
+  "value": {
+    "nodes": [
+      {
+        "node_id": "node_sweltering_hot_01",
+        "revision": 4,
+        "node_type": "lexical_sense",
+        "canonical_label": "sweltering",
+        "language": "en",
+        "domain_ids": ["domain_weather"],
+        "evidence_ids": ["evidence_dictionary_1042"],
+        "verification_state": "verified"
+      }
+    ]
+  },
+  "content_release": "knowledge-2026-09"
+}
+```
+
+The response order is a subsequence of the requested node IDs after omitted ineligible values are removed. Every node has a positive immutable revision, a closed node family, an optional canonical BCP 47 language, a reviewed label of at most 512 scalar values, sorted unique domain IDs, and one to 32 sorted unique evidence IDs. Requests and responses are limited to 50 nodes. Missing or ineligible values are omitted; an unrequested, duplicated, cross-release, unverified, or malformed node fails the whole response closed.
 
 ## Domain proposal handling
 

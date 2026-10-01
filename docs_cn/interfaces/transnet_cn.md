@@ -346,7 +346,7 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 }
 ```
 
-正常 outcome 为 `connected` 与 `no_verified_path`。每个 path step 命名一个已补全 assertion、方向、条件、relevance、证据引用与 release。只基于相似度的候选可以在独立 exploratory 分区返回，但绝不成为 path step。
+正常 outcome 为 `connected` 与 `no_verified_path`。`no_verified_path` 表示有界搜索没有找到每条 edge 都能在固定发布中成功补全精确合格事实修订的路径；它不证明搜索边界之外、其他发布或未发布知识中不存在关系。每个 path step 命名一个已补全 assertion、方向、条件、relevance、证据引用与 release。只基于相似度的候选可以在独立 exploratory 分区返回，但绝不成为 path step。
 
 旧目标草案 `POST /api/v1/graph/get` 与 `POST /api/v1/graph/neighbors` 已从修订目标合同移除。当前可执行文件中的过渡期 `GET /v1/graph...` handler 在迁移或移除前仍是实现兼容行为；它们的存在不使其成为目标 v1 路由。
 

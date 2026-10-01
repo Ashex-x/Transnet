@@ -10,19 +10,141 @@ use serde_json::{json, Value};
 use transnet::{
   adapters::island_port::{
     BasicCardResolveInput, DomainResolveInput, IslandPortCallContext, IslandPortCanonicalClient,
-    IslandPortClientError, IslandPortTransport, LookupFormInput, SenseGetInput,
-    TranslationResolveInput,
+    IslandPortClientError, IslandPortTransport, KnowledgeFactsGetInput, KnowledgeNodesGetInput,
+    LookupFormInput, SemanticScalesGetInput, SenseGetInput, TranslationResolveInput,
   },
   domain::{
     canonical::{CanonicalId, EvidenceUse, LanguageTag},
     canonical_translation::{SourceFingerprint, SOURCE_FINGERPRINT_VERSION},
+    knowledge_hydration::CanonicalFactRef,
     retrieval::LexicalMatchKind,
+    retrieval_data::RetrievalVerificationState,
   },
 };
 
 struct FakeTransport {
   response: Vec<u8>,
   request: Mutex<Option<(&'static str, Value, Duration)>>,
+}
+
+#[tokio::test]
+async fn exact_fact_hydration_validates_wire_echo_revision_and_support() {
+  let transport = Arc::new(FakeTransport::new(json!({
+    "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+    "content_release":"knowledge-2026-09", "value":{"facts":[{
+      "fact_id":"fact-1", "revision":2, "statement":"Scorching is hotter than sweltering.",
+      "subject_node_id":"node-scorching", "predicate":"higher_degree_than",
+      "relation_registry_version":1, "object_node_id":"node-sweltering",
+      "domain_ids":["domain_weather"], "applicable_sense_ids":["sense-hot"],
+      "conditions":[{"condition_id":"condition-weather","condition_type":"usage_context","parameter_ids":["context-weather"]}],
+      "evidence_ids":["evidence-1"], "provenance":["source-1"],
+      "verification_state":"verified"
+    }]}
+  })));
+  let facts = IslandPortCanonicalClient::new(transport.clone())
+    .get_knowledge_facts(
+      &context(),
+      &id("knowledge-2026-09"),
+      KnowledgeFactsGetInput {
+        facts: vec![CanonicalFactRef {
+          fact_id: id("fact-1"),
+          revision: 2,
+        }],
+        verification_states: vec![RetrievalVerificationState::Verified],
+        limit: 20,
+      },
+    )
+    .await
+    .unwrap();
+  assert_eq!(facts[0].revision, 2);
+  let request = transport.request.lock().unwrap();
+  let (path, body, _) = request.as_ref().unwrap();
+  assert_eq!(*path, "/api/v1/knowledge-facts/get");
+  assert_eq!(body["input"]["content_release"], "knowledge-2026-09");
+  assert_eq!(body["input"]["facts"][0]["revision"], 2);
+}
+
+#[tokio::test]
+async fn fact_hydration_rejects_wrong_revision_and_registry() {
+  for (revision, registry) in [(3, 1), (2, 2)] {
+    let response = json!({
+      "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+      "content_release":"knowledge-2026-09", "value":{"facts":[{
+        "fact_id":"fact-1", "revision":revision, "statement":"Reviewed statement.",
+        "subject_node_id":"node-a", "predicate":"associated_with",
+        "relation_registry_version":registry, "object_node_id":"node-b",
+        "domain_ids":[], "applicable_sense_ids":[], "conditions":[],
+        "evidence_ids":["evidence-1"], "provenance":["source-1"],
+        "verification_state":"verified"
+      }]}
+    });
+    let result = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))
+      .get_knowledge_facts(
+        &context(),
+        &id("knowledge-2026-09"),
+        KnowledgeFactsGetInput {
+          facts: vec![CanonicalFactRef {
+            fact_id: id("fact-1"),
+            revision: 2,
+          }],
+          verification_states: vec![RetrievalVerificationState::Verified],
+          limit: 20,
+        },
+      )
+      .await;
+    assert_eq!(result, Err(IslandPortClientError::InconsistentData));
+  }
+}
+
+#[tokio::test]
+async fn scale_and_node_hydration_validate_membership_order_and_evidence() {
+  let scale_transport = Arc::new(FakeTransport::new(json!({
+    "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+    "content_release":"knowledge-2026-09", "value":{"scales":[{
+      "scale_id":"scale-heat", "revision":1, "dimension":"heat_intensity",
+      "direction":"increasing", "domain_ids":["domain_weather"], "conditions":[],
+      "members":[{"node_id":"node-warm","position":10},{"node_id":"node-hot","position":20}],
+      "evidence_ids":["evidence-1"], "verification_state":"verified"
+    }]}
+  })));
+  let scales = IslandPortCanonicalClient::new(scale_transport)
+    .get_semantic_scales(
+      &context(),
+      &id("knowledge-2026-09"),
+      SemanticScalesGetInput {
+        scale_ids: vec![id("scale-heat")],
+        for_node_id: id("node-hot"),
+        verification_states: vec![RetrievalVerificationState::Verified],
+        limit: 5,
+      },
+    )
+    .await
+    .unwrap();
+  assert_eq!(scales[0].members.len(), 2);
+
+  let node_transport = Arc::new(FakeTransport::new(json!({
+    "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
+    "content_release":"knowledge-2026-09", "value":{"nodes":[{
+      "node_id":"node-hot", "revision":4, "node_type":"concept",
+      "canonical_label":"heat", "language":"en", "domain_ids":["domain_weather"],
+      "evidence_ids":["evidence-1"], "verification_state":"verified"
+    }]}
+  })));
+  let nodes = IslandPortCanonicalClient::new(node_transport.clone())
+    .get_knowledge_nodes(
+      &context(),
+      &id("knowledge-2026-09"),
+      KnowledgeNodesGetInput {
+        node_ids: vec![id("node-hot")],
+        evidence_use: EvidenceUse::ApiRedistribution,
+        limit: 10,
+      },
+    )
+    .await
+    .unwrap();
+  assert_eq!(nodes[0].canonical_label, "heat");
+  let request = node_transport.request.lock().unwrap();
+  assert_eq!(request.as_ref().unwrap().0, "/api/v1/knowledge-nodes/get");
 }
 
 #[tokio::test]
