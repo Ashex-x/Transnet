@@ -14,7 +14,7 @@ Transnet 仅通过必填的绝对 `socket_path` 服务 HTTP/1.1，并在关闭�
 
 `[gemma4]` 配置单一 OpenAI-compatible Gemma4-27B 的 `base_url`、`model` 与 `api_key`。真实凭据不得提交 Git；解析后的凭据会从 Rust `Debug` 诊断中脱敏，仅用于出站请求。
 
-这些配置表描述当前过渡期运行时行为。目标配置用一个生成 endpoint 和一个 embedding endpoint 替代它们。生成设置命名一个 Gemma4-27B 模型及 provider 专属 fast/reasoning 控制；application 策略选择 profile，而不是选择第二个 endpoint。独立有界设置覆盖 fast 推理、reasoning 升级、embedding 调用与可选实时检索。在匹配 Rust 类型与组合存在前，仓库配置不会采用这些目标 key。
+这些配置表描述保留的 provider-adapter 兼容设置。公共 application boundary 已暴露具有闭合 fast/reasoning profile 的单一 generation abstraction；在 adapter constructor 合并完成前，provider 专属配置仍保持内部。请求级 embedding 与 live-retrieval 设置在完整 authority 可组合并得到 attestation 前仍不进入生产配置。
 
 Provider client 直接连接所配置的 endpoint，不继承操作系统或环境代理设置。这样可避免回环与私有模型流量（包括 Bearer 凭据）进入无关代理进程。
 

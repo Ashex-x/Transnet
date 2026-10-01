@@ -14,7 +14,7 @@ Transnet serves HTTP/1.1 only on the required absolute `socket_path` and drains 
 
 `[gemma4]` configures the single OpenAI-compatible Gemma4-27B `base_url`, `model`, and `api_key`. Real credentials must be provisioned without committing them to Git; parsed credentials are redacted from Rust `Debug` diagnostics and are used only for outbound provider requests.
 
-These tables describe current transitional runtime behavior. The target configuration replaces them with one generation endpoint and one embedding endpoint. The generation settings name one Gemma4-27B model and provider-specific fast/reasoning controls; application policy, not a second endpoint, selects the profile. Separate bounded settings cover fast inference, reasoning escalation, embedding calls, and optional live retrieval. The checked-in configuration does not adopt those target keys until the matching Rust types and composition exist.
+These tables describe the retained provider-adapter compatibility settings. The public application boundary already exposes one generation abstraction with closed fast/reasoning profiles; provider-specific configuration remains internal until the adapter constructor is consolidated. Request-local embedding and live-retrieval settings stay absent from production configuration until complete authorities can be composed and attested.
 
 Provider clients connect directly to their configured endpoints and do not inherit operating-system or environment proxy settings. This keeps loopback and private model traffic, including bearer credentials, out of unrelated proxy processes.
 

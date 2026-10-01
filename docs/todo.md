@@ -4,7 +4,7 @@
 
 This plan turns the authoritative [Transnet design](transnet.md) into ordered, verifiable delivery slices. It tracks repository state rather than aspiration: an item is checked only when its code, tests, and applicable contracts agree.
 
-Status: active implementation plan. The checked-in runtime serves the target API on one owned Unix socket, uses one provider-neutral Gemma4-27B generation boundary, and optionally composes canonical and knowledge reads. Transnet-side publication and relationship-page contracts exist, but production relationship-page authority composition remains disabled. Island-port server behavior, production MySQL/Qdrant execution, activation/rollback, retention, and production acceptance remain external or unverified.
+Status: repository implementation complete with named external acceptance blockers. The checked-in runtime serves the target API on one owned Unix socket, uses one provider-neutral Gemma4-27B generation boundary, and optionally composes canonical and knowledge reads. Transnet-owned publication projection/client and relationship-page contracts are executable; production relationship-page authority composition remains disabled. Island-port server behavior, production MySQL/Qdrant execution, activation/rollback, retention, provider attestation, and production acceptance remain external or unverified.
 
 ## Delivery rules
 
@@ -22,7 +22,8 @@ Status: active implementation plan. The checked-in runtime serves the target API
 - [x] Target translation plus opt-in canonical and knowledge route composition.
 - [x] Library foundations and process-local test adapters for canonical lookup, sense detail, content releases, and bounded graph reads; these are not production storage composition.
 - [x] Target human contracts for translation, lookup, sense detail, and bounded graph reads.
-- [ ] Production MySQL and Qdrant adapters, publication and paired activation, relationship-page composition, and complete target wire semantics.
+- [x] Transnet-owned publication projection/client, relationship-page composition seam, and complete target wire semantics.
+- [ ] Production Island-port/MySQL/Qdrant execution, paired activation, production relationship-page authority, and real acceptance.
 
 ## Milestone 0: enforce the focused stateless boundary
 
@@ -40,19 +41,19 @@ Repository-side admission, request/result Debug redaction, closed telemetry, and
 
 - [x] Replace the transitional length router with one Gemma4-27B VLM exposing internal fast and reasoning profiles.
 - [ ] Compose the request-local nomination embedding port in production where semantic nomination is enabled; publication embedding remains island-port-owned.
-- [ ] Keep ordinary and chunked translation on the fast profile, permit at most one closed-policy reasoning escalation per request, and prove hidden reasoning is never returned or logged.
-- [ ] Implement shared success and error envelopes, strict unknown-field rejection, language-tag validation, request metadata, and safe status mapping.
-- [ ] Implement the simple text, source-language, target-language, response-level, and optional minimal-history request plus the discriminated word, phrase, and passage `TranslationResult` response.
-- [ ] Extend the same entry point with bounded professional segment and image-region inputs; keep file parsing, OCR policy, and durable document ownership in island-port.
-- [ ] Add request-local purpose, audience, register, protected-range, terminology, annotation, alternative-count, and freshness guidance without creating a profile or translation memory.
+- [x] Keep ordinary and chunked translation on the fast profile, permit at most one closed-policy reasoning escalation per request, and prove hidden reasoning is never returned or logged.
+- [x] Implement shared success and error envelopes, strict unknown-field rejection, language-tag validation, request metadata, and safe status mapping.
+- [x] Implement the simple text, source-language, target-language, response-level, and optional minimal-history request plus the discriminated word, phrase, and passage `TranslationResult` response.
+- [x] Extend the same entry point with bounded professional segment and image-region inputs; keep file parsing, OCR policy, and durable document ownership in island-port.
+- [x] Add request-local purpose, audience, register, protected-range, terminology, annotation, alternative-count, and freshness guidance without creating a profile or translation memory.
 - [x] Publish a no-store capabilities response so island-port can discover currently implemented input kinds, limits, retrieval policy, and generation-profile availability without trial requests.
-- [ ] Implement a versioned request-local normalizer with Unicode normalization, language-aware case folding, whitespace and punctuation handling, meaningful-symbol preservation, and bounded derived forms.
-- [ ] Behind one translation entry point, route a confident word, term, idiom, phrasal verb, or established phrase to lexical composition and route clauses, sentences, passages, and ambiguous short fragments to connected-text translation.
-- [ ] Align `POST /api/v1/translations` with the target response while preserving meaning, tone, terminology, register, paragraph structure, protected spans, and formatting.
-- [ ] Add request-local chunk planning and a disposable terminology ledger for long or difficult text without creating translation memory.
-- [ ] Accept island-port-controlled translation-turn history with no independent item-count cap, use it only for current linguistic context, and prove it is never logged, cached, embedded, queued, or persisted.
-- [ ] Build one release-pinned superset aggregate and deterministic `brief`, `standard`, and `full` projectors; preserve materially different meanings even at lower levels.
-- [ ] Pin response metadata to the applicable schema, normalizer, model, prompt, and retrieval versions.
+- [x] Implement a versioned request-local normalizer with Unicode normalization, language-aware case folding, whitespace and punctuation handling, meaningful-symbol preservation, and bounded derived forms.
+- [x] Behind one translation entry point, route a confident word, term, idiom, phrasal verb, or established phrase to lexical composition and route clauses, sentences, passages, and ambiguous short fragments to connected-text translation.
+- [x] Align `POST /api/v1/translations` with the target response while preserving meaning, tone, terminology, register, paragraph structure, protected spans, and formatting.
+- [x] Add request-local chunk planning and a disposable terminology ledger for long or difficult text without creating translation memory.
+- [x] Accept island-port-controlled translation-turn history with no independent item-count cap, use it only for current linguistic context, and prove it is never logged, cached, embedded, queued, or persisted.
+- [x] Build one release-pinned superset aggregate and deterministic `brief`, `standard`, and `full` projectors; preserve materially different meanings even at lower levels.
+- [x] Pin response metadata to the applicable schema, normalizer, model, prompt, and retrieval versions.
 
 Exit criteria: contract and routing tests cover lexical units, technical symbols, phrases, ambiguous fragments, sentences, and passages; translation evaluation covers fidelity, naturalness, terminology, structure, and register.
 
@@ -61,35 +62,35 @@ Passage tips and labeled alternatives are deferred beyond milestone 1. Their lat
 ## Milestone 2: build canonical identity and MySQL basic cards
 
 - [ ] Define migrations and production adapters for cards, senses, forms, aliases, definitions, translations, pronunciation, morphology, examples, usage notes, domains, evidence, immutable revisions, and release manifests.
-- [ ] Implement canonical translation identities, immutable revisions, exact fingerprint resolution with source verification, publication staging, rights and evidence checks, and release membership for reviewed words, phrases, and bounded passages.
-- [ ] Make card, sense, concept-root, domain, evidence, and revision IDs stable under a documented versioned policy; never use a normalized query string as identity.
-- [ ] Resolve exact canonical forms and aliases before bounded inflection, spelling correction, transliteration, and semantic candidates.
-- [ ] Keep homographs, parts of speech, phrase-level meanings, and field-specific senses separate; preserve compositional versus phrase-level meaning.
-- [ ] Return a concise, release-pinned basic card that remains useful without Qdrant or an LLM.
+- [x] Implement canonical translation identities, immutable revisions, exact fingerprint resolution with source verification, publication staging, rights and evidence checks, and release membership for reviewed words, phrases, and bounded passages.
+- [x] Make card, sense, concept-root, domain, evidence, and revision IDs stable under a documented versioned policy; never use a normalized query string as identity.
+- [x] Resolve exact canonical forms and aliases before bounded inflection, spelling correction, transliteration, and semantic candidates.
+- [x] Keep homographs, parts of speech, phrase-level meanings, and field-specific senses separate; preserve compositional versus phrase-level meaning.
+- [x] Return a concise, release-pinned basic card that remains useful without Qdrant or an LLM.
 - [ ] Implement draft staging, collision and license checks, quarantine, correction by new revision, immutable retention, readiness, fixtures, and safe failure mapping.
 
 Exit criteria: exact lookup and sense reads work from MySQL alone; ambiguous forms return ranked candidates or clarification; publication, collision, evidence, quarantine, and immutability tests pass.
 
 ## Milestone 3: publish the typed relationship model
 
-- [ ] Define extensible node types for lexical senses, phrases, terms, concepts, phenomena, mechanisms, processes, equations, quantities, materials, instruments, methods, technologies, applications, standards, organizations, people, places, grammar patterns, collocations, idioms, metaphors, misconceptions, and domains.
-- [ ] Define relation types and their direction, inverse, symmetry, transitivity, causality, applicable sense and domain, conditions, evidence requirements, confidence, provenance, and verification rules.
-- [ ] Cover lexical naming, translation equivalence, taxonomy, part-whole, named intensity, contrast, syntax, collocation, morphology, suitability, cultural extension, terminology, domain membership, mechanism, causation, dependency, implementation, application, measurement, and standardization.
-- [ ] Build deterministic immutable Qdrant node collections before edge collections, using named cross-lingual dense vectors and sparse lexical vectors from published content only.
-- [ ] Validate endpoint existence, release compatibility, duplicate typed edges, direction, scope, conditions, evidence, confidence, verification state, and embedding metadata.
+- [x] Define extensible node types for lexical senses, phrases, terms, concepts, phenomena, mechanisms, processes, equations, quantities, materials, instruments, methods, technologies, applications, standards, organizations, people, places, grammar patterns, collocations, idioms, metaphors, misconceptions, and domains.
+- [x] Define relation types and their direction, inverse, symmetry, transitivity, causality, applicable sense and domain, conditions, evidence requirements, confidence, provenance, and verification rules.
+- [x] Cover lexical naming, translation equivalence, taxonomy, part-whole, named intensity, contrast, syntax, collocation, morphology, suitability, cultural extension, terminology, domain membership, mechanism, causation, dependency, implementation, application, measurement, and standardization.
+- [x] Build deterministic immutable node and edge projection artifacts using named cross-lingual dense inputs and sparse lexical inputs from published content only; island-port remains responsible for collection execution.
+- [x] Validate endpoint existence, release compatibility, duplicate typed edges, direction, scope, conditions, evidence, confidence, verification state, and embedding metadata.
 - [ ] Reconcile MySQL roots with Qdrant hashes and endpoint coverage, then atomically activate or roll back one compatible release trio.
 
 Exit criteria: the projection rebuilds reproducibly from one canonical release; every verified relationship is named, scoped, evidence-backed, and release-pinned; partial or incompatible releases cannot activate.
 
 ## Milestone 4: implement bounded relationship retrieval
 
-- [ ] Implement exact, sparse, dense, hybrid, endpoint, and reranked retrieval with release, state, language, dialect, region, period, domain, evidence, and verification filters applied before limits.
-- [ ] Resolve one canonical root before expansion and return only relationships with an explicit useful path back to that root.
-- [ ] Support purpose-ranked direct groups and short evidence-backed paths; require every intermediate step to have a named relationship and independently eligible evidence.
-- [ ] Keep arbitrary-depth traversal, unrestricted neighbor dumps, shortest-path inference, and mutable graph transactions outside the service contract.
-- [ ] Separate verified canonical edges from request-local inferred synthesis and exploratory vector or model proposals in storage, response shapes, ranking, and presentation.
-- [ ] Return an explicit MySQL-only degraded card when Qdrant is unavailable, with no invented replacement relationships.
-- [ ] Replace raw public graph filters with bounded `knowledge/views` lenses and evidence-backed `knowledge/paths` so one assertion graph can support tree-like learning, terminology, mechanism, and comparison views.
+- [x] Implement exact, sparse, dense, hybrid, endpoint, and reranked retrieval with release, state, language, dialect, region, period, domain, evidence, and verification filters applied before limits.
+- [x] Resolve one canonical root before expansion and return only relationships with an explicit useful path back to that root.
+- [x] Support purpose-ranked direct groups and short evidence-backed paths; require every intermediate step to have a named relationship and independently eligible evidence.
+- [x] Keep arbitrary-depth traversal, unrestricted neighbor dumps, shortest-path inference, and mutable graph transactions outside the service contract.
+- [x] Separate verified canonical edges from request-local inferred synthesis and exploratory vector or model proposals in storage, response shapes, ranking, and presentation.
+- [x] Return an explicit MySQL-only degraded card when Qdrant is unavailable, with no invented replacement relationships.
+- [x] Replace raw public graph filters with bounded `knowledge/views` lenses and evidence-backed `knowledge/paths` so one assertion graph can support tree-like learning, terminology, mechanism, and comparison views.
 
 Exit criteria: retrieval is bounded, release-pinned, filter-safe, and useful for one selected root; adversarial tests prove that similarity never establishes translation, synonymy, hierarchy, causation, shared mechanism, or cultural meaning.
 
@@ -97,29 +98,29 @@ Exit criteria: retrieval is bounded, release-pinned, filter-safe, and useful for
 
 Ownership is frozen: the composed page is an optional field of lexical word or established-phrase `/api/v1/translations` results, never a new public route. The BasicCard, knowledge-view, and knowledge-path endpoints remain diagnostic reads.
 
-- [ ] Add a bounded domain assessment after sense resolution with the closed outcomes `existing`, `proposed_new`, `general`, or `uncertain`, validated canonical domain IDs, and a concise reason.
-- [ ] Retrieve the existing-domain inventory and RAG coverage before assessment; return `proposed_new` only when the available catalog succeeds and no supplied scope fits, with no live creation endpoint.
-- [ ] Publish and hydrate atomic basic facts, domain knowledge profiles, and first-class semantic scales; allow LLM bootstrap only through quarantined offline candidates.
-- [ ] Add explicitly requested labeled alternatives, capped at two per unit, through application/domain result types and deterministic usefulness evaluation rather than transport-only fabrication.
-- [ ] Resolve multilingual terms and aliases to shared concepts while preserving preferred term, translated term, alias, region, discipline, and usage status.
-- [ ] Rank and group only useful supported content: meaning, terminology, taxonomy or degree, contrasts, valency, collocations, suitability, morphology, cultural extensions, mechanisms, neighboring phenomena, applications, measurements, standards, and usage conventions.
-- [ ] Use progressive disclosure: begin with the basic card or concept summary, then high-value direct groups, optional named short paths, and a visibly separate exploratory section.
-- [ ] Version the router, resolver, domain assessor, ranker, composer, prompts, schemas, and repair policy; validate structure, scope, evidence labels, concision, and uncertainty deterministically.
-- [ ] Allow request-local generated examples and inferred explanations only when labeled; never persist them or present them as verified facts.
-- [ ] Send structured missing-relationship proposals only to an offline review workflow; live lookup must not publish or display them as canonical edges.
-- [ ] Publish a versioned relation registry and n-ary assertion participants in canonical data, while deriving only explicitly declared binary traversal projections for retrieval.
-- [ ] Permit at most one explicitly requested live-search round with bounded result and fetch counts, SSRF-safe fetches, citations, and no automatic publication or persistence.
+- [x] Add a bounded domain assessment after sense resolution with the closed outcomes `existing`, `proposed_new`, `general`, or `uncertain`, validated canonical domain IDs, and a concise reason.
+- [x] Retrieve the existing-domain inventory and RAG coverage before assessment; return `proposed_new` only when the available catalog succeeds and no supplied scope fits, with no live creation endpoint.
+- [x] Define, project through the outbound publication contract, and hydrate atomic basic facts, domain knowledge profiles, and first-class semantic scales; allow LLM bootstrap only through quarantined offline candidates.
+- [x] Add explicitly requested labeled alternatives, capped at two per unit, through application/domain result types and deterministic usefulness evaluation rather than transport-only fabrication.
+- [x] Resolve multilingual terms and aliases to shared concepts while preserving preferred term, translated term, alias, region, discipline, and usage status.
+- [x] Rank and group only useful supported content: meaning, terminology, taxonomy or degree, contrasts, valency, collocations, suitability, morphology, cultural extensions, mechanisms, neighboring phenomena, applications, measurements, standards, and usage conventions.
+- [x] Use progressive disclosure: begin with the basic card or concept summary, then high-value direct groups, optional named short paths, and a visibly separate exploratory section.
+- [x] Version the router, resolver, domain assessor, ranker, composer, prompts, schemas, and repair policy; validate structure, scope, evidence labels, concision, and uncertainty deterministically.
+- [x] Allow request-local generated examples and inferred explanations only when labeled; never persist them or present them as verified facts.
+- [x] Send structured missing-relationship proposals only to an offline review workflow; live lookup must not publish or display them as canonical edges.
+- [x] Publish a versioned relation registry and n-ary assertion participants in canonical data, while deriving only explicitly declared binary traversal projections for retrieval.
+- [x] Permit at most one explicitly requested live-search round with bounded result and fetch counts, SSRF-safe fetches, citations, and no automatic publication or persistence.
 
 Exit criteria: general vocabulary, compounds, ambiguous technical senses, and multilingual domain concepts produce concise pages whose groups and paths are relevant, correctly scoped, evidence-aware, and reproducible.
 
 ## Milestone 6: gate the focused product release
 
-- [ ] Build versioned challenge sets for routing, translation, sense and concept resolution, domain assessment, relationship selection, path validity, omission, fabrication, terminology, register, culture, and prompt injection.
-- [ ] Test relationship-family semantics, including taxonomy versus intensity, phrase versus component meaning, sense applicability, inverse direction, conditional validity, and verified/inferred/exploratory separation.
-- [ ] Exercise model, MySQL, Qdrant, stale-release, partial-publication, invalid-output, rate-limit, timeout, and rollback failures with safe degradation and bounded repair.
+- [x] Build versioned challenge sets for routing, translation, sense and concept resolution, domain assessment, relationship selection, path validity, omission, fabrication, terminology, register, culture, and prompt injection.
+- [x] Test relationship-family semantics, including taxonomy versus intensity, phrase versus component meaning, sense applicability, inverse direction, conditional validity, and verified/inferred/exploratory separation.
+- [x] Exercise model, canonical, retrieval, stale-release, partial-publication, invalid-output, rate-limit, timeout, cancellation, and rollback failures with safe degradation and bounded repair through repository fakes.
 - [ ] Prove non-persistence across MySQL, Qdrant, caches, logs, traces, metrics, queues, backups, provider telemetry, and derived vectors.
-- [ ] Implement the versioned whole-system observability contract with content-free NDJSON events, distributed trace continuity, closed low-cardinality metrics, bounded non-blocking export, drop counters, and separate append-only publication audits.
-- [ ] Gate releases on formatting, linting, tests, rustdoc, contract checks, publication reconciliation, rollback drills, and bilingual documentation checks.
+- [x] Implement the versioned whole-system observability contract with content-free NDJSON events, distributed trace continuity, closed low-cardinality metrics, bounded non-blocking export, drop counters, and separate append-only publication audits.
+- [x] Gate repository changes on formatting, linting, tests, rustdoc, contract checks, publication reconciliation and rollback fakes, and bilingual documentation checks.
 
 Exit criteria: a user can translate connected text or deeply understand one selected lexical sense or domain concept through concise, accurate relationships without irrelevant graph expansion or unsupported model claims.
 
