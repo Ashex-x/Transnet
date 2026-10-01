@@ -11,7 +11,8 @@ use crate::domain::{
   canonical_translation::{CanonicalTranslationRevision, DomainId, SourceFingerprint},
   domain_assessment::DomainInventory,
   knowledge_hydration::{
-    CanonicalFactRef, HydratedKnowledgeNode, HydratedSemanticScale, KnowledgeFact,
+    CanonicalAssertionProjectionRef, HydratedAssertionProjection, HydratedKnowledgeNode,
+    HydratedSemanticScale,
   },
   retrieval::{LexicalMatchKind, RepositoryMatch},
   retrieval_data::RetrievalVerificationState,
@@ -126,13 +127,15 @@ pub struct CanonicalDomainQuery {
   pub limit: usize,
 }
 
-/// Exact authoritative fact revisions selected by retrieval.
-pub struct CanonicalFactQuery {
-  /// Ordered exact fact revisions; omitted facts preserve the relative request order.
-  pub facts: Vec<CanonicalFactRef>,
+/// Exact authoritative assertion projections selected by retrieval.
+pub struct CanonicalAssertionQuery {
+  /// Ordered exact projections; omitted assertions preserve the relative request order.
+  pub projections: Vec<CanonicalAssertionProjectionRef>,
+  /// Evidence operation every returned assertion lineage must permit.
+  pub evidence_use: EvidenceUse,
   /// Eligible authority verification states.
   pub verification_states: Vec<RetrievalVerificationState>,
-  /// Maximum facts returned.
+  /// Maximum assertions returned.
   pub limit: usize,
 }
 
@@ -204,13 +207,13 @@ pub trait CanonicalReadPort: Send + Sync {
     Err(CanonicalReadError::SchemaIncompatible)
   }
 
-  /// Hydrates ordered exact fact revisions without trusting retrieval payload prose.
-  async fn knowledge_facts(
+  /// Hydrates ordered exact assertion revisions and validates the selected traversal proof.
+  async fn canonical_assertions(
     &self,
     _context: &CanonicalReadContext,
     _pin: &CanonicalReleasePin,
-    _query: CanonicalFactQuery,
-  ) -> Result<Vec<KnowledgeFact>, CanonicalReadError> {
+    _query: CanonicalAssertionQuery,
+  ) -> Result<Vec<HydratedAssertionProjection>, CanonicalReadError> {
     Err(CanonicalReadError::SchemaIncompatible)
   }
 

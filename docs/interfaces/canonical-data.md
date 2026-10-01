@@ -22,7 +22,7 @@ The checked-in M3 publication foundation models Qdrant build lifecycle, idempote
   - [POST /api/v1/basic-cards/resolve](#post-apiv1basic-cardsresolve)
   - [POST /api/v1/senses/get](#post-apiv1sensesget)
   - [POST /api/v1/domains/resolve](#post-apiv1domainsresolve)
-  - [POST /api/v1/knowledge-facts/get](#post-apiv1knowledge-factsget)
+  - [POST /api/v1/assertions/get](#post-apiv1assertionsget)
   - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
   - [POST /api/v1/knowledge-nodes/get](#post-apiv1knowledge-nodesget)
   - [Domain proposal handling](#domain-proposal-handling)
@@ -81,7 +81,7 @@ User saves are a separate concern. When an end user stars or saves a translation
 
 Canonical data also owns domain knowledge profiles, atomic assertions, and semantic scales. A domain revision stores multilingual labels and aliases, definition, inclusion and exclusion scope, broader domain IDs, and a knowledge profile containing available fact families, languages, verified fact count, and coverage state (`seed`, `partial`, or `curated`). Coverage describes the active release and never asserts completeness.
 
-A fact uses `canonical_entity` with `entity_type = 'fact'`. Its immutable `canonical_entity_revision` stores the relation type and registry version, statement, qualifiers, applicability, evidence references, provenance, and verification data. `canonical_assertion_participant` is authoritative for its ordered schema-defined entity or typed-literal roles, allowing binary and n-ary assertions without duplicating subject/object values inside one JSON blob. Assertions remain independently reviewable and release-addressable.
+A canonical assertion uses the publisher-owned assertion entity and immutable revision for its relation type, registry revision, reviewed statement, applicability, evidence lineage, provenance, and verification state. `canonical_assertion_participant` is authoritative for its ordered schema-defined entity or typed-literal roles, allowing binary and n-ary assertions without duplicating subject/object values inside one JSON blob. Assertions remain independently reviewable and release-addressable; a flattened subject/predicate/object fact is not a second authority.
 
 `relation_type_revision` is the versioned relation registry. It defines directionality, inverse behavior, symmetric and transitive policy, causality, allowed participant roles, endpoint-type compatibility, and validation schema. A release pins the exact registry revision; neither the UI nor the model infers these properties from a label.
 
@@ -431,18 +431,19 @@ The request and response are bounded to 32 candidates, 8 labels, 16 aliases, 8 d
 
 `catalog_complete` means island-port examined the complete eligible published catalog for this bounded query; it does not claim that human knowledge is complete. Transnet validates all selected IDs against exactly this returned allowlist. An unavailable, malformed, cross-release, or otherwise failed inventory produces the application outcome `uncertain`. A request-local `proposed_new` outcome is permitted only when `catalog_complete` is true, its optional broader IDs come from this allowlist, and its canonical language-plus-label pair does not exactly collide with any supplied label or alias. Neither operation writes a domain.
 
-## POST /api/v1/knowledge-facts/get
+## POST /api/v1/assertions/get
 
-Hydrates an ordered, bounded set of exact fact revisions after vector retrieval. Qdrant may nominate a `fact_id` plus positive `revision`, but it is never allowed to supply the authoritative statement, evidence, rights, or verification state. The caller supplies the release and exact eligible fact revisions; the adapter silently excludes references that are absent from that release or fail eligibility. It never substitutes another revision. This read is safe to retry.
+Hydrates an ordered, bounded set of exact canonical assertion revisions after vector retrieval. Qdrant supplies only a relationship projection proof: edge and relationship revisions, assertion and registry revisions, the selected traversal, endpoints, and typed relation. Island-port returns the authoritative assertion, full evidence lineage, and the exact resolved registry entry. Transnet validates all three together; no flattened fact record is a competing authority. The frozen sub-contract is `canonical-assertions-v1` inside the `canonical-data-v1` envelope.
 
 Request `input`:
 
 ```json
 {
-  "facts": [{"fact_id": "fact_sweltering_degree_scorching_01", "revision": 2}],
+  "projections": [{"edge_id":"edge_heat_01","relationship_revision":3,"assertion_id":"assertion_heat_01","assertion_revision":2,"traversal_id":"traversal_degree","source_node_id":"node_scorching_heat_01","target_node_id":"node_sweltering_hot_01","relation_type":"higher_degree_than","relation_registry_revision":1}],
+  "assertion_contract_version": "canonical-assertions-v1",
   "content_release": "knowledge-2026-09",
   "canonical_schema_version": "canonical-v1",
-  "verification_states": ["verified"],
+  "evidence_use": "display",
   "limit": 20
 }
 ```
@@ -455,30 +456,12 @@ Response:
   "schema_version": "canonical-data-v1",
   "canonical_schema_version": "canonical-v1",
   "outcome": "ok",
-  "value": {
-    "facts": [
-      {
-        "fact_id": "fact_sweltering_degree_scorching_01",
-        "revision": 2,
-        "statement": "For environmental heat, scorching usually indicates greater intensity than sweltering.",
-        "subject_node_id": "node_scorching_heat_01",
-        "predicate": "higher_degree_than",
-        "relation_registry_version": 1,
-        "object_node_id": "node_sweltering_hot_01",
-        "domain_ids": ["domain_weather"],
-        "applicable_sense_ids": ["sense_sweltering_hot_01"],
-        "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
-        "evidence_ids": ["evidence_dictionary_1042"],
-        "provenance": ["source_dictionary_2026_01"],
-        "verification_state": "verified"
-      }
-    ]
-  },
+  "value": {"assertion_contract_version":"canonical-assertions-v1","assertions":[]},
   "content_release": "knowledge-2026-09"
 }
 ```
 
-The returned order is a subsequence of the request after omitted references are removed. The response must echo the exact requested revision, use relationship registry version `1`, contain a known registry predicate, and carry non-empty, sorted, unique evidence and provenance IDs. Facts are atomic: a response projector may summarize them, but must retain the exact fact ID and evidence state whenever it presents a factual claim at `full` level. Requests and responses are limited to 50 facts; statements are limited to 4,096 scalar values, condition lists to 16, and each domain, sense, evidence, provenance, or parameter list to 32.
+The returned order is a subsequence of the request after omitted references are removed. Each non-omitted item contains `projection`, `assertion`, and `registry`. The assertion carries ordered role participants, structured domains and conditions, applicable senses, evidence IDs plus complete lineage, provenance IDs, and verification state. The registry carries role cardinalities/value rules, same-release resolved domain/condition records, and explicit binary traversals. Transnet rejects substituted revisions, unknown roles or traversals, endpoint/relation disagreement, unsupported or cross-release scope, and evidence that does not permit the requested use. Requests and responses are limited to 50 projections. Island-port server/schema implementation and rebuilding the Qdrant edge payload remain external work.
 
 ## POST /api/v1/semantic-scales/get
 

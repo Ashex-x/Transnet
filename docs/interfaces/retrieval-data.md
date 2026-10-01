@@ -440,8 +440,10 @@ Response:
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree_than",
         "relation_registry_version": 1,
-        "fact_id": "fact_sweltering_degree_scorching_01",
-        "fact_revision": 2,
+        "assertion_id": "assertion_sweltering_degree_scorching_01",
+        "assertion_revision": 2,
+        "relation_type_id": "relation_degree",
+        "traversal_id": "traversal_higher_degree",
         "verification_state": "verified"
       }
     ]
@@ -450,7 +452,7 @@ Response:
 }
 ```
 
-Each result is a candidate pointer. Before a factual explanation, evidence, or provenance is used in a response, Transnet hydrates the referenced fact revision through `POST /api/v1/knowledge-facts/get` for the same release.
+Each result is a candidate pointer. Before factual use, Transnet hydrates the exact assertion and validates its selected registry traversal through `POST /api/v1/assertions/get` for the same release. Similarity remains nomination only.
 
 ## POST /api/v1/neighbors/search
 
@@ -489,8 +491,10 @@ Response:
           "target_node_id": "node_scorching_heat_01",
           "relation_type": "higher_degree_than",
           "relation_registry_version": 1,
-          "fact_id": "fact_sweltering_degree_scorching_01",
-          "fact_revision": 2,
+          "assertion_id": "assertion_sweltering_degree_scorching_01",
+          "assertion_revision": 2,
+          "relation_type_id": "relation_degree",
+          "traversal_id": "traversal_higher_degree",
           "verification_state": "verified"
         },
         "node": {
@@ -506,7 +510,7 @@ Response:
 }
 ```
 
-Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. Every neighbor edge carries an exact `fact_id`, positive `fact_revision`, and relationship registry version `1`; Transnet must hydrate that exact fact revision before treating the edge as a verified path step. A missing fact, substituted revision, unknown relation, or registry mismatch invalidates the candidate rather than degrading it into a fact. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
+Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. Every neighbor edge carries exact assertion identity/revision, relation type identity, traversal identity, and registry version `1`; Transnet must hydrate and validate that exact assertion projection before treating the edge as a verified path step. A missing assertion, substituted revision, unknown traversal/relation, endpoint disagreement, or registry mismatch invalidates the candidate. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
 
 ## Internal publication operations
 

@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
 use super::{
-  canonical::{CanonicalId, EvidenceId, ReleaseId},
+  canonical::{CanonicalId, EvidenceId, EvidenceUse, ReleaseId},
   canonical_content::CanonicalEvidenceLineage,
   canonical_translation::DomainId,
   graph::{GraphNodeKey, PublishedRelationship, RelationshipVerificationState},
@@ -23,6 +23,10 @@ pub const MAX_ASSERTION_DOMAINS: usize = 16;
 pub const MAX_ASSERTION_CONDITIONS: usize = 16;
 /// Maximum parameters admitted for one structured condition.
 pub const MAX_CONDITION_PARAMETERS: usize = 16;
+/// Maximum scalar length of a reviewed assertion statement.
+pub const MAX_ASSERTION_STATEMENT_CHARS: usize = 4_096;
+/// Maximum applicable senses or provenance references on one assertion.
+pub const MAX_ASSERTION_REFERENCES: usize = 32;
 
 /// Closed canonical entity families that may participate in the assertion graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -280,16 +284,22 @@ pub struct CanonicalAssertion {
   pub relation_type_id: CanonicalId,
   /// Exact positive registry revision.
   pub relation_registry_revision: u32,
+  /// Reviewed canonical statement represented by this assertion revision.
+  pub statement: String,
   /// Ordered role participants.
   pub participants: Vec<AssertionParticipant>,
   /// Sorted unique canonical domain identities.
   pub domain_ids: Vec<DomainId>,
   /// Sorted unique structured applicability conditions.
   pub conditions: Vec<AssertionCondition>,
+  /// Sorted unique lexical senses to which the assertion applies.
+  pub applicable_sense_ids: Vec<CanonicalId>,
   /// Sorted unique evidence identities supporting this revision.
   pub evidence_ids: Vec<EvidenceId>,
   /// Resolved evidence lineage used for release and permission checks.
   pub evidence_lineage: Vec<CanonicalEvidenceLineage>,
+  /// Sorted unique publisher provenance identities beyond evidence-source lineage.
+  pub provenance_ids: Vec<CanonicalId>,
   /// Publication lifecycle state.
   pub verification_state: RelationshipVerificationState,
 }
@@ -458,8 +468,65 @@ impl CanonicalAssertion {
     }
     self.validate_participants(registry)?;
     self.validate_scope(registry)?;
-    self.validate_evidence(registry.requires_evidence)?;
+    self.validate_evidence(registry.requires_evidence, EvidenceUse::Embedding)?;
     Ok(())
+  }
+
+  /// Validates one canonical assertion for a concrete read-time evidence permission.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error for invalid registry, participants, scope, references, lifecycle, release,
+  /// or evidence lineage that does not permit `evidence_use`.
+  pub fn validate_for(
+    &self,
+    registry: &AssertionRegistryEntry,
+    evidence_use: EvidenceUse,
+  ) -> Result<(), AssertionValidationError> {
+    registry.validate()?;
+    if self.relation_type_id != registry.relation_type_id
+      || self.relation_registry_revision != registry.registry_revision
+    {
+      return Err(AssertionValidationError::UnknownRegistryEntry);
+    }
+    if self.assertion_revision == 0 {
+      return Err(AssertionValidationError::InvalidRevision);
+    }
+    if self.verification_state != RelationshipVerificationState::Verified {
+      return Err(AssertionValidationError::UnverifiedAssertion);
+    }
+    self.validate_participants(registry)?;
+    self.validate_scope(registry)?;
+    self.validate_evidence(registry.requires_evidence, evidence_use)
+  }
+
+  /// Resolves the two canonical entity endpoints and relation of one declared traversal.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when the traversal is absent or its roles are not singleton entities.
+  pub fn traversal_endpoints(
+    &self,
+    registry: &AssertionRegistryEntry,
+    traversal_id: &CanonicalId,
+  ) -> Result<
+    (
+      &CanonicalNodeId,
+      &CanonicalNodeId,
+      super::graph::GraphRelationType,
+    ),
+    AssertionValidationError,
+  > {
+    let traversal = registry
+      .binary_traversals
+      .iter()
+      .find(|candidate| &candidate.traversal_id == traversal_id)
+      .ok_or(AssertionValidationError::UnknownBinaryTraversal)?;
+    Ok((
+      self.single_entity(&traversal.source_role_id)?,
+      self.single_entity(&traversal.target_role_id)?,
+      traversal.relation_type,
+    ))
   }
 
   /// Validates that an existing binary relationship is a declared, lossless projection of this
@@ -550,10 +617,30 @@ impl CanonicalAssertion {
     &self,
     registry: &AssertionRegistryEntry,
   ) -> Result<(), AssertionValidationError> {
+    if self.statement.trim() != self.statement
+      || self.statement.is_empty()
+      || self.statement.chars().count() > MAX_ASSERTION_STATEMENT_CHARS
+    {
+      return Err(AssertionValidationError::InvalidLiteral);
+    }
     if self.domain_ids.len() > MAX_ASSERTION_DOMAINS
       || self.domain_ids.windows(2).any(|pair| pair[0] >= pair[1])
     {
       return Err(AssertionValidationError::InvalidDomainScope);
+    }
+    if self.applicable_sense_ids.len() > MAX_ASSERTION_REFERENCES
+      || self
+        .applicable_sense_ids
+        .windows(2)
+        .any(|pair| pair[0] >= pair[1])
+      || self.provenance_ids.is_empty()
+      || self.provenance_ids.len() > MAX_ASSERTION_REFERENCES
+      || self
+        .provenance_ids
+        .windows(2)
+        .any(|pair| pair[0] >= pair[1])
+    {
+      return Err(AssertionValidationError::InvalidEvidence);
     }
     if self.conditions.len() > MAX_ASSERTION_CONDITIONS
       || self.conditions.windows(2).any(|pair| pair[0] >= pair[1])
@@ -600,7 +687,11 @@ impl CanonicalAssertion {
     Ok(())
   }
 
-  fn validate_evidence(&self, required: bool) -> Result<(), AssertionValidationError> {
+  fn validate_evidence(
+    &self,
+    required: bool,
+    evidence_use: EvidenceUse,
+  ) -> Result<(), AssertionValidationError> {
     if (required && self.evidence_ids.is_empty())
       || self.evidence_ids.windows(2).any(|pair| pair[0] >= pair[1])
     {
@@ -618,7 +709,7 @@ impl CanonicalAssertion {
     }
     for lineage in &self.evidence_lineage {
       if lineage.fragment().release_id != self.release_id
-        || !lineage.permits(&self.release_id, super::canonical::EvidenceUse::Embedding)
+        || !lineage.permits(&self.release_id, evidence_use)
       {
         return Err(AssertionValidationError::IneligibleEvidence);
       }
@@ -832,6 +923,7 @@ mod tests {
       release_id: id("release-1"),
       relation_type_id: id("relation-taxonomy"),
       relation_registry_revision: 1,
+      statement: "A reviewed taxonomy assertion.".to_string(),
       participants: vec![
         participant("role-broader", CanonicalNodeFamily::LexicalSense, "sense-b"),
         participant(
@@ -846,8 +938,10 @@ mod tests {
         condition_type: id("usage-context"),
         parameter_ids: vec![id("context-weather")],
       }],
+      applicable_sense_ids: vec![id("sense-a")],
       evidence_ids: vec![id("evidence-1")],
       evidence_lineage: vec![lineage("release-1")],
+      provenance_ids: vec![id("source-1")],
       verification_state: RelationshipVerificationState::Verified,
     }
   }
@@ -950,6 +1044,7 @@ mod tests {
       release_id: id("release-1"),
       relation_type_id: id("relation-measurement"),
       relation_registry_revision: 3,
+      statement: "A reviewed measurement assertion.".to_string(),
       participants: vec![
         participant("role-quantity", CanonicalNodeFamily::Quantity, "quantity-1"),
         participant("role-method", CanonicalNodeFamily::Method, "method-1"),
@@ -961,8 +1056,10 @@ mod tests {
       ],
       domain_ids: Vec::new(),
       conditions: Vec::new(),
+      applicable_sense_ids: Vec::new(),
       evidence_ids: Vec::new(),
       evidence_lineage: Vec::new(),
+      provenance_ids: vec![id("source-1")],
       verification_state: RelationshipVerificationState::Verified,
     };
 

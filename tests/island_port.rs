@@ -1,5 +1,7 @@
 //! Contract tests for the outbound island-port canonical-read adapter.
 
+#![recursion_limit = "256"]
+
 use std::{
   sync::{Arc, Mutex},
   time::Duration,
@@ -9,14 +11,15 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use transnet::{
   adapters::island_port::{
-    BasicCardResolveInput, DomainResolveInput, IslandPortCallContext, IslandPortCanonicalClient,
-    IslandPortClientError, IslandPortTransport, KnowledgeFactsGetInput, KnowledgeNodesGetInput,
+    BasicCardResolveInput, CanonicalAssertionsGetInput, DomainResolveInput, IslandPortCallContext,
+    IslandPortCanonicalClient, IslandPortClientError, IslandPortTransport, KnowledgeNodesGetInput,
     LookupFormInput, SemanticScalesGetInput, SenseGetInput, TranslationResolveInput,
   },
   domain::{
     canonical::{CanonicalId, CanonicalReleasePin, EvidenceUse, LanguageTag},
     canonical_translation::{SourceFingerprint, SOURCE_FINGERPRINT_VERSION},
-    knowledge_hydration::CanonicalFactRef,
+    graph::GraphRelationType,
+    knowledge_hydration::CanonicalAssertionProjectionRef,
     retrieval::LexicalMatchKind,
     retrieval_data::RetrievalVerificationState,
   },
@@ -28,73 +31,41 @@ struct FakeTransport {
 }
 
 #[tokio::test]
-async fn exact_fact_hydration_validates_wire_echo_revision_and_support() {
+async fn exact_assertion_hydration_validates_traversal_registry_and_lineage() {
   let transport = Arc::new(FakeTransport::new(json!({
     "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
-    "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v1", "value":{"facts":[{
-      "fact_id":"fact-1", "revision":2, "statement":"Scorching is hotter than sweltering.",
-      "subject_node_id":"node-scorching", "predicate":"higher_degree_than",
-      "relation_registry_version":1, "object_node_id":"node-sweltering",
-      "domain_ids":["domain_weather"], "applicable_sense_ids":["sense-hot"],
-      "conditions":[{"condition_id":"condition-weather","condition_type":"usage_context","parameter_ids":["context-weather"]}],
-      "evidence_ids":["evidence-1"], "provenance":["source-1"],
-      "verification_state":"verified"
+    "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v1",
+    "value":{"assertion_contract_version":"canonical-assertions-v1","assertions":[{
+      "projection":{"edge_id":"edge-1","relationship_revision":3,"assertion_id":"assertion-1","assertion_revision":2,"traversal_id":"traversal-1","source_node_id":"sense-a","target_node_id":"sense-b","relation_type":"associated_with","relation_registry_revision":1},
+      "assertion":{"assertion_id":"assertion-1","assertion_revision":2,"release_id":"knowledge-2026-09","relation_type_id":"relation-associated","relation_registry_revision":1,"statement":"A is associated with B.",
+        "participants":[{"role_id":"role-source","ordinal":0,"value":{"kind":"entity","family":"lexical_sense","id":"sense-a"}},{"role_id":"role-target","ordinal":0,"value":{"kind":"entity","family":"lexical_sense","id":"sense-b"}}],
+        "domain_ids":[],"conditions":[],"applicable_sense_ids":["sense-a"],"evidence_ids":["evidence-1"],"provenance_ids":["source-1"],"verification_state":"verified",
+        "evidence_lineage":[{"source":{"id":"source-1","name":"Reviewed source","version":"1","license":"internal","attribution":null,"permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true}},"fragment":{"id":"evidence-1","source_id":"source-1","source_reference":"entry:1","language":"en","kind":"other","confidence":"high","text":"Reviewed support","content_hash":"sha256:evidence","permissions":{"storage":true,"display":true,"embedding":true,"model_processing":true,"api_redistribution":true},"status":"active"},"origin":{"kind":"licensed_source"}}]},
+      "registry":{"relation_type_id":"relation-associated","registry_revision":1,"participant_roles":[{"role_id":"role-source","minimum":1,"maximum":1,"value_rule":{"kind":"entity","families":["lexical_sense"]}},{"role_id":"role-target","minimum":1,"maximum":1,"value_rule":{"kind":"entity","families":["lexical_sense"]}}],"resolved_domains":[],"resolved_conditions":[],"binary_traversals":[{"traversal_id":"traversal-1","source_role_id":"role-source","target_role_id":"role-target","relation_type":"associated_with"}],"requires_evidence":true}
     }]}
   })));
-  let facts = IslandPortCanonicalClient::new(transport.clone())
-    .get_knowledge_facts(
+  let assertions = IslandPortCanonicalClient::new(transport.clone())
+    .get_canonical_assertions(
       &context(),
       &pin(),
-      KnowledgeFactsGetInput {
-        facts: vec![CanonicalFactRef {
-          fact_id: id("fact-1"),
-          revision: 2,
-        }],
-        verification_states: vec![RetrievalVerificationState::Verified],
+      CanonicalAssertionsGetInput {
+        projections: vec![assertion_ref()],
+        evidence_use: EvidenceUse::Embedding,
         limit: 20,
       },
     )
     .await
     .unwrap();
-  assert_eq!(facts[0].revision, 2);
+  assert_eq!(assertions[0].assertion().assertion_revision, 2);
   let request = transport.request.lock().unwrap();
   let (path, body, _) = request.as_ref().unwrap();
-  assert_eq!(*path, "/api/v1/knowledge-facts/get");
+  assert_eq!(*path, "/api/v1/assertions/get");
   assert_eq!(body["input"]["content_release"], "knowledge-2026-09");
   assert_eq!(body["input"]["canonical_schema_version"], "canonical-v1");
-  assert_eq!(body["input"]["facts"][0]["revision"], 2);
-}
-
-#[tokio::test]
-async fn fact_hydration_rejects_wrong_revision_and_registry() {
-  for (revision, registry) in [(3, 1), (2, 2)] {
-    let response = json!({
-      "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
-      "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v1", "value":{"facts":[{
-        "fact_id":"fact-1", "revision":revision, "statement":"Reviewed statement.",
-        "subject_node_id":"node-a", "predicate":"associated_with",
-        "relation_registry_version":registry, "object_node_id":"node-b",
-        "domain_ids":[], "applicable_sense_ids":[], "conditions":[],
-        "evidence_ids":["evidence-1"], "provenance":["source-1"],
-        "verification_state":"verified"
-      }]}
-    });
-    let result = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))
-      .get_knowledge_facts(
-        &context(),
-        &pin(),
-        KnowledgeFactsGetInput {
-          facts: vec![CanonicalFactRef {
-            fact_id: id("fact-1"),
-            revision: 2,
-          }],
-          verification_states: vec![RetrievalVerificationState::Verified],
-          limit: 20,
-        },
-      )
-      .await;
-    assert_eq!(result, Err(IslandPortClientError::InconsistentData));
-  }
+  assert_eq!(
+    body["input"]["projections"][0]["traversal_id"],
+    "traversal-1"
+  );
 }
 
 #[tokio::test]
@@ -102,23 +73,34 @@ async fn knowledge_hydration_rejects_canonical_schema_echo_mismatch() {
   let transport = Arc::new(FakeTransport::new(json!({
     "request_id":"req_stage_3", "schema_version":"canonical-data-v1", "outcome":"ok",
     "content_release":"knowledge-2026-09", "canonical_schema_version":"canonical-v2",
-    "value":{"facts":[]}
+    "value":{"assertion_contract_version":"canonical-assertions-v1","assertions":[]}
   })));
   let result = IslandPortCanonicalClient::new(transport)
-    .get_knowledge_facts(
+    .get_canonical_assertions(
       &context(),
       &pin(),
-      KnowledgeFactsGetInput {
-        facts: vec![CanonicalFactRef {
-          fact_id: id("fact-1"),
-          revision: 2,
-        }],
-        verification_states: vec![RetrievalVerificationState::Verified],
+      CanonicalAssertionsGetInput {
+        projections: vec![assertion_ref()],
+        evidence_use: EvidenceUse::Embedding,
         limit: 20,
       },
     )
     .await;
   assert_eq!(result, Err(IslandPortClientError::SchemaIncompatible));
+}
+
+fn assertion_ref() -> CanonicalAssertionProjectionRef {
+  CanonicalAssertionProjectionRef {
+    edge_id: id("edge-1"),
+    relationship_revision: 3,
+    assertion_id: id("assertion-1"),
+    assertion_revision: 2,
+    traversal_id: id("traversal-1"),
+    source_node_id: id("sense-a"),
+    target_node_id: id("sense-b"),
+    relation_type: GraphRelationType::AssociatedWith,
+    relation_registry_revision: 1,
+  }
 }
 
 #[tokio::test]

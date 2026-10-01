@@ -5,9 +5,11 @@ use std::collections::BTreeSet;
 use thiserror::Error;
 
 use super::{
-  canonical::{CanonicalId, LanguageTag},
+  assertion::{AssertionRegistryEntry, CanonicalAssertion, CanonicalNodeId},
+  canonical::{CanonicalId, EvidenceUse, LanguageTag, ReleaseId},
   canonical_translation::DomainId,
-  retrieval_data::{RetrievalNodeType, RetrievalRelation, RELATION_REGISTRY_VERSION},
+  graph::GraphRelationType,
+  retrieval_data::RetrievalNodeType,
 };
 
 /// Maximum exact records accepted by one canonical hydration operation.
@@ -39,13 +41,27 @@ pub enum KnowledgeHydrationValidationError {
   InvalidSupport,
 }
 
-/// Exact immutable fact revision requested after a retrieval nomination.
+/// Exact immutable assertion projection requested after a retrieval nomination.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CanonicalFactRef {
-  /// Publisher-owned stable fact identity.
-  pub fact_id: CanonicalId,
-  /// Positive immutable fact revision.
-  pub revision: u32,
+pub struct CanonicalAssertionProjectionRef {
+  /// Publisher-owned stable edge identity.
+  pub edge_id: CanonicalId,
+  /// Positive immutable relationship revision.
+  pub relationship_revision: u32,
+  /// Publisher-owned stable assertion identity.
+  pub assertion_id: CanonicalId,
+  /// Positive immutable assertion revision.
+  pub assertion_revision: u32,
+  /// Explicit registry traversal selected by the projection.
+  pub traversal_id: CanonicalId,
+  /// Canonical source node identity.
+  pub source_node_id: CanonicalId,
+  /// Canonical target node identity.
+  pub target_node_id: CanonicalId,
+  /// Exact typed relation selected by the traversal.
+  pub relation_type: GraphRelationType,
+  /// Exact positive registry revision.
+  pub relation_registry_revision: u32,
 }
 
 /// Structured applicability condition owned by canonical data.
@@ -73,67 +89,98 @@ impl KnowledgeCondition {
   }
 }
 
-/// One authoritative atomic fact and its exact evidence references.
+/// Independently returned binary traversal proof validated against one canonical assertion.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct KnowledgeFact {
-  /// Publisher-owned stable fact identity.
-  pub fact_id: CanonicalId,
-  /// Positive immutable fact revision.
-  pub revision: u32,
-  /// Canonical statement, never generated retrieval prose.
-  pub statement: String,
-  /// Canonical subject endpoint.
-  pub subject_node_id: CanonicalId,
-  /// Exact frozen relation.
-  pub predicate: RetrievalRelation,
-  /// Exact frozen relationship-registry version.
-  pub relation_registry_version: u32,
-  /// Canonical object endpoint.
-  pub object_node_id: CanonicalId,
-  /// Strictly ordered canonical domain scope.
-  pub domain_ids: Vec<DomainId>,
-  /// Strictly ordered applicable sense identities.
-  pub applicable_sense_ids: Vec<CanonicalId>,
-  /// Bounded structured applicability conditions.
-  pub conditions: Vec<KnowledgeCondition>,
-  /// Strictly ordered evidence identities eligible for this read.
-  pub evidence_ids: Vec<CanonicalId>,
-  /// Strictly ordered canonical source identities.
-  pub provenance: Vec<CanonicalId>,
+pub struct SelectedBinaryTraversal {
+  /// Publisher-owned stable edge identity.
+  pub edge_id: CanonicalId,
+  /// Positive immutable relationship revision.
+  pub relationship_revision: u32,
+  /// Assertion identity independently echoed by the projection record.
+  pub assertion_id: CanonicalId,
+  /// Assertion revision independently echoed by the projection record.
+  pub assertion_revision: u32,
+  /// Explicit registry traversal selected by the projection.
+  pub traversal_id: CanonicalId,
+  /// Typed source endpoint resolved from its participant role.
+  pub source: CanonicalNodeId,
+  /// Typed target endpoint resolved from its participant role.
+  pub target: CanonicalNodeId,
+  /// Exact relation declared by the selected traversal.
+  pub relation_type: GraphRelationType,
+  /// Exact registry revision echoed by the projection.
+  pub relation_registry_revision: u32,
 }
 
-impl KnowledgeFact {
-  /// Validates revision, topology, text, scopes, and evidence support.
-  pub fn validate(&self) -> Result<(), KnowledgeHydrationValidationError> {
-    if self.revision == 0 {
-      return Err(KnowledgeHydrationValidationError::InvalidRevision);
-    }
-    if self.subject_node_id == self.object_node_id
-      || self.relation_registry_version != RELATION_REGISTRY_VERSION
+/// Sole validated read projection used by future knowledge views and path steps.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HydratedAssertionProjection {
+  assertion: CanonicalAssertion,
+  registry: AssertionRegistryEntry,
+  traversal: SelectedBinaryTraversal,
+}
+
+impl HydratedAssertionProjection {
+  /// Constructs a read projection only when assertion, registry, traversal, and nomination agree.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error for invalid evidence permission, release, registry, role, endpoint, relation,
+  /// identity, revision, or independently echoed projection proof.
+  pub fn new(
+    release_id: &ReleaseId,
+    evidence_use: EvidenceUse,
+    requested: &CanonicalAssertionProjectionRef,
+    assertion: CanonicalAssertion,
+    registry: AssertionRegistryEntry,
+    traversal: SelectedBinaryTraversal,
+  ) -> Result<Self, KnowledgeHydrationValidationError> {
+    assertion
+      .validate_for(&registry, evidence_use)
+      .map_err(|_| KnowledgeHydrationValidationError::InvalidSupport)?;
+    let (source, target, relation_type) = assertion
+      .traversal_endpoints(&registry, &traversal.traversal_id)
+      .map_err(|_| KnowledgeHydrationValidationError::InvalidRelation)?;
+    if &assertion.release_id != release_id
+      || traversal.relationship_revision == 0
+      || traversal.assertion_id != assertion.assertion_id
+      || traversal.assertion_revision != assertion.assertion_revision
+      || traversal.relation_registry_revision != assertion.relation_registry_revision
+      || &traversal.source != source
+      || &traversal.target != target
+      || traversal.relation_type != relation_type
+      || requested.edge_id != traversal.edge_id
+      || requested.relationship_revision != traversal.relationship_revision
+      || requested.assertion_id != traversal.assertion_id
+      || requested.assertion_revision != traversal.assertion_revision
+      || requested.traversal_id != traversal.traversal_id
+      || requested.source_node_id != *traversal.source.id()
+      || requested.target_node_id != *traversal.target.id()
+      || requested.relation_type != traversal.relation_type
+      || requested.relation_registry_revision != traversal.relation_registry_revision
     {
       return Err(KnowledgeHydrationValidationError::InvalidRelation);
     }
-    if !valid_text(&self.statement, MAX_KNOWLEDGE_STATEMENT_CHARS) {
-      return Err(KnowledgeHydrationValidationError::InvalidText);
-    }
-    validate_optional_ids(&self.domain_ids)?;
-    validate_optional_ids(&self.applicable_sense_ids)?;
-    validate_required_ids(&self.evidence_ids)?;
-    validate_required_ids(&self.provenance)?;
-    if self.conditions.len() > MAX_KNOWLEDGE_CONDITIONS {
-      return Err(KnowledgeHydrationValidationError::InvalidCollection);
-    }
-    for condition in &self.conditions {
-      condition.validate()?;
-    }
-    if self
-      .conditions
-      .windows(2)
-      .any(|pair| pair[0].condition_id >= pair[1].condition_id)
-    {
-      return Err(KnowledgeHydrationValidationError::InvalidSupport);
-    }
-    Ok(())
+    Ok(Self {
+      assertion,
+      registry,
+      traversal,
+    })
+  }
+
+  /// Returns the authoritative assertion revision.
+  pub fn assertion(&self) -> &CanonicalAssertion {
+    &self.assertion
+  }
+
+  /// Returns the exact validated registry proof.
+  pub fn registry(&self) -> &AssertionRegistryEntry {
+    &self.registry
+  }
+
+  /// Returns the selected traversal projection for view and path composition.
+  pub fn traversal(&self) -> &SelectedBinaryTraversal {
+    &self.traversal
   }
 }
 
@@ -294,30 +341,6 @@ mod tests {
 
   fn id(value: &str) -> CanonicalId {
     CanonicalId::new(value).unwrap()
-  }
-
-  #[test]
-  fn fact_requires_exact_registry_positive_revision_and_ordered_support() {
-    let mut fact = KnowledgeFact {
-      fact_id: id("fact-1"),
-      revision: 1,
-      statement: "A is related to B.".into(),
-      subject_node_id: id("node-a"),
-      predicate: RetrievalRelation::from_wire_name("associated_with").unwrap(),
-      relation_registry_version: RELATION_REGISTRY_VERSION,
-      object_node_id: id("node-b"),
-      domain_ids: vec![],
-      applicable_sense_ids: vec![],
-      conditions: vec![],
-      evidence_ids: vec![id("evidence-1")],
-      provenance: vec![id("source-1")],
-    };
-    assert_eq!(fact.validate(), Ok(()));
-    fact.relation_registry_version += 1;
-    assert_eq!(
-      fact.validate(),
-      Err(KnowledgeHydrationValidationError::InvalidRelation)
-    );
   }
 
   #[test]

@@ -440,8 +440,10 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree_than",
         "relation_registry_version": 1,
-        "fact_id": "fact_sweltering_degree_scorching_01",
-        "fact_revision": 2,
+        "assertion_id": "assertion_sweltering_degree_scorching_01",
+        "assertion_revision": 2,
+        "relation_type_id": "relation_degree",
+        "traversal_id": "traversal_higher_degree",
         "verification_state": "verified"
       }
     ]
@@ -450,7 +452,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 }
 ```
 
-每项结果均为候选指针。在响应使用事实性解释、证据或来源前，Transnet 必须针对同一发布通过 `POST /api/v1/knowledge-facts/get` 补全引用的事实修订。
+每项结果均为候选指针。在事实性使用前，Transnet 必须针对同一发布通过 `POST /api/v1/assertions/get` 补全精确 assertion，并校验所选 registry traversal。相似度始终只用于提名。
 
 ## POST /api/v1/neighbors/search
 
@@ -489,8 +491,10 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
           "target_node_id": "node_scorching_heat_01",
           "relation_type": "higher_degree_than",
           "relation_registry_version": 1,
-          "fact_id": "fact_sweltering_degree_scorching_01",
-          "fact_revision": 2,
+          "assertion_id": "assertion_sweltering_degree_scorching_01",
+          "assertion_revision": 2,
+          "relation_type_id": "relation_degree",
+          "traversal_id": "traversal_higher_degree",
           "verification_state": "verified"
         },
         "node": {
@@ -506,7 +510,7 @@ Admission 通过现有 canonical evidence lineage 解析每个 evidence ID。精
 }
 ```
 
-扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。每个 neighbor edge 都携带精确 `fact_id`、正 `fact_revision` 与关系 registry 版本 `1`；Transnet 必须先补全该精确事实修订，才能把 edge 作为已验证 path step。事实缺失、修订被替换、未知 relation 或 registry 不匹配都会使 candidate 无效，而不会降级成事实。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
+扩展始终限制为一次跟随一个选定根，并只返回对该根与请求范围合格的关系。每个 neighbor edge 都携带精确 assertion identity/revision、relation type identity、traversal identity 与 registry 版本 `1`；Transnet 必须先补全并校验该精确 assertion projection，才能把 edge 作为 verified path step。Assertion 缺失、修订被替换、未知 traversal/relation、endpoint 不一致或 registry mismatch 都会使 candidate 无效。只有每一步都是具名且独立证据合格的边时，服务才可组织短路径。任意深度遍历、基于相似链的路径断言、中心性和可变图事务不属于本合同。
 
 ## Internal publication operations
 

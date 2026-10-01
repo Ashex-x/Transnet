@@ -22,7 +22,7 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
   - [POST /api/v1/basic-cards/resolve](#post-apiv1basic-cardsresolve)
   - [POST /api/v1/senses/get](#post-apiv1sensesget)
   - [POST /api/v1/domains/resolve](#post-apiv1domainsresolve)
-  - [POST /api/v1/knowledge-facts/get](#post-apiv1knowledge-factsget)
+  - [POST /api/v1/assertions/get](#post-apiv1assertionsget)
   - [POST /api/v1/semantic-scales/get](#post-apiv1semantic-scalesget)
   - [POST /api/v1/knowledge-nodes/get](#post-apiv1knowledge-nodesget)
   - [领域提案处理](#领域提案处理)
@@ -81,7 +81,7 @@ erDiagram
 
 规范数据还拥有领域知识 profile、原子 assertion 和语义尺度。领域修订存储多语言名称与别名、定义、包含/排除范围、上层领域 ID，以及包含可用事实族、语言、已验证事实数和覆盖状态（`seed`、`partial` 或 `curated`）的知识 profile。覆盖描述活动发布，绝不声称完整。
 
-事实使用 `entity_type = 'fact'` 的 `canonical_entity`。其不可变 `canonical_entity_revision` 存储关系类型与 registry 版本、陈述、qualifier、适用范围、证据引用、来源及验证数据。`canonical_assertion_participant` 是有序 schema-defined 实体或有类型字面值角色的权威来源，从而支持二元与 n-ary assertion，且不在单个 JSON blob 中重复 subject/object 值。Assertion 仍可独立审核并按发布寻址。
+Canonical assertion 使用 publisher 所有的 assertion entity 与不可变修订，保存 relation type、registry revision、已审核 statement、适用范围、完整 evidence lineage、provenance 与 verification state。`canonical_assertion_participant` 是有序 schema-defined 实体或有类型字面值角色的权威来源，从而支持二元与 n-ary assertion，且不在单个 JSON blob 中重复 subject/object 值。Assertion 仍可独立审核并按发布寻址；扁平 subject/predicate/object fact 不是第二权威。
 
 `relation_type_revision` 是版本化关系 registry。它定义方向、inverse 行为、对称与传递策略、因果性、允许的 participant role、endpoint 类型兼容性与校验 schema。发布固定精确 registry 修订；UI 与模型都不得从 label 推断这些属性。
 
@@ -423,18 +423,19 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 
 `catalog_complete` 表示 island-port 已检查本次有界查询下完整的合格已发布 catalog；它不声称人类知识完整。Transnet 仅依据这份精确返回的 allowlist 校验全部所选 ID。清单不可用、畸形、跨发布或以其他方式失败时，application 结果必须为 `uncertain`。只有 `catalog_complete` 为 true、可选 broader ID 来自该 allowlist，且规范 language-plus-label pair 不与所提供的任何 label 或 alias 精确冲突时，才允许请求级 `proposed_new`。两个操作均不写入领域。
 
-## POST /api/v1/knowledge-facts/get
+## POST /api/v1/assertions/get
 
-在向量检索后按顺序、有界地补全精确事实修订。Qdrant 可以提名 `fact_id` 与正 `revision`，但绝不能提供权威陈述、证据、权利或验证状态。调用方提供发布版本与精确合格事实修订；适配器会排除该发布中不存在或不符合资格的引用，绝不替换为其他修订。该读取可安全重试。
+在向量检索后按顺序、有界地补全精确 canonical assertion 修订。Qdrant 仅提供 relationship projection proof：edge/relationship 修订、assertion/registry 修订、所选 traversal、endpoint 与有类型 relation。Island-port 返回权威 assertion、完整 evidence lineage 及精确 resolved registry entry。Transnet 将三者一起校验；不存在另一个扁平 fact 权威。冻结的子合同为 `canonical-data-v1` envelope 中的 `canonical-assertions-v1`。
 
 请求 `input`：
 
 ```json
 {
-  "facts": [{"fact_id": "fact_sweltering_degree_scorching_01", "revision": 2}],
+  "projections": [{"edge_id":"edge_heat_01","relationship_revision":3,"assertion_id":"assertion_heat_01","assertion_revision":2,"traversal_id":"traversal_degree","source_node_id":"node_scorching_heat_01","target_node_id":"node_sweltering_hot_01","relation_type":"higher_degree_than","relation_registry_revision":1}],
+  "assertion_contract_version": "canonical-assertions-v1",
   "content_release": "knowledge-2026-09",
   "canonical_schema_version": "canonical-v1",
-  "verification_states": ["verified"],
+  "evidence_use": "display",
   "limit": 20
 }
 ```
@@ -447,30 +448,12 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
   "schema_version": "canonical-data-v1",
   "canonical_schema_version": "canonical-v1",
   "outcome": "ok",
-  "value": {
-    "facts": [
-      {
-        "fact_id": "fact_sweltering_degree_scorching_01",
-        "revision": 2,
-        "statement": "For environmental heat, scorching usually indicates greater intensity than sweltering.",
-        "subject_node_id": "node_scorching_heat_01",
-        "predicate": "higher_degree_than",
-        "relation_registry_version": 1,
-        "object_node_id": "node_sweltering_hot_01",
-        "domain_ids": ["domain_weather"],
-        "applicable_sense_ids": ["sense_sweltering_hot_01"],
-        "conditions": [{"condition_id": "condition_environmental_weather_01", "condition_type": "usage_context", "parameter_ids": ["context_environment", "context_weather"]}],
-        "evidence_ids": ["evidence_dictionary_1042"],
-        "provenance": ["source_dictionary_2026_01"],
-        "verification_state": "verified"
-      }
-    ]
-  },
+  "value": {"assertion_contract_version":"canonical-assertions-v1","assertions":[]},
   "content_release": "knowledge-2026-09"
 }
 ```
 
-返回顺序是移除被排除引用后的请求子序列。响应必须回显精确请求修订，使用关系 registry 版本 `1`，包含已知 registry predicate，并携带非空、排序且唯一的 evidence 与 provenance ID。事实是原子项：响应投影可以摘要它们，但在 `full` 级别呈现事实性断言时必须保留精确事实 ID 与证据状态。请求和响应最多包含 50 个事实；statement 最多 4,096 个 scalar，condition 列表最多 16 项，每个 domain、sense、evidence、provenance 或 parameter 列表最多 32 项。
+返回顺序是移除被排除引用后的请求子序列。每个未省略项包含 `projection`、`assertion` 与 `registry`。Assertion 携带有序 role participant、结构化 domain/condition、适用 sense、evidence ID 与完整 lineage、provenance ID 及 verification state。Registry 携带 role cardinality/value rule、同发布 resolved domain/condition record 与显式 binary traversal。Transnet 拒绝被替换的修订、未知 role/traversal、endpoint/relation 不一致、不支持或跨发布 scope，以及不允许所请求用途的 evidence。请求和响应最多包含 50 个 projection。Island-port server/schema 实现与 Qdrant edge payload 重建仍是外部工作。
 
 ## POST /api/v1/semantic-scales/get
 

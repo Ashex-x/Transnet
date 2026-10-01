@@ -683,7 +683,7 @@ pub struct ScaleCandidate {
   pub fact_ids: Vec<CanonicalId>,
 }
 
-/// One relationship pointer requiring canonical fact hydration.
+/// One relationship pointer requiring canonical assertion and traversal hydration.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EdgeCandidate {
   /// Publisher-owned stable edge identity.
@@ -696,12 +696,16 @@ pub struct EdgeCandidate {
   pub target_node_id: CanonicalId,
   /// Exact frozen registry relation.
   pub relation_type: RetrievalRelation,
+  /// Publisher-owned relation-registry identity.
+  pub relation_type_id: CanonicalId,
+  /// Explicit binary traversal declaration selected by this edge.
+  pub traversal_id: CanonicalId,
   /// Relationship-registry version used for the projection.
   pub relation_registry_version: u32,
-  /// Canonical fact identity to hydrate.
-  pub fact_id: CanonicalId,
-  /// Positive immutable fact revision.
-  pub fact_revision: u32,
+  /// Canonical assertion identity to hydrate.
+  pub assertion_id: CanonicalId,
+  /// Positive immutable assertion revision.
+  pub assertion_revision: u32,
   /// Verification class echoed by the projection.
   pub verification_state: RetrievalVerificationState,
 }
@@ -728,12 +732,16 @@ pub struct NeighborEdge {
   pub target_node_id: CanonicalId,
   /// Exact frozen registry relation.
   pub relation_type: RetrievalRelation,
+  /// Publisher-owned relation-registry identity.
+  pub relation_type_id: CanonicalId,
+  /// Explicit binary traversal declaration selected by this edge.
+  pub traversal_id: CanonicalId,
   /// Exact frozen relationship-registry version.
   pub relation_registry_version: u32,
-  /// Canonical fact identity that must be hydrated before factual use.
-  pub fact_id: CanonicalId,
-  /// Positive immutable fact revision that must be hydrated exactly.
-  pub fact_revision: u32,
+  /// Canonical assertion identity that must be hydrated before factual use.
+  pub assertion_id: CanonicalId,
+  /// Positive immutable assertion revision that must be hydrated exactly.
+  pub assertion_revision: u32,
   /// Verification class echoed by the projection.
   pub verification_state: RetrievalVerificationState,
 }
