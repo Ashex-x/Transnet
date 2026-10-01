@@ -9,6 +9,7 @@ use axum::{
   Router,
 };
 use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, Duration as TimeDuration, OffsetDateTime};
 use tower::ServiceExt;
 use transnet::{
   app_router, app_router_with_http_config, AppState, HttpConfig, HttpConfigError, ProviderConfig,
@@ -113,6 +114,54 @@ async fn request_ids_preserve_safe_values_and_replace_unsafe_values() {
   let generated = unsafe_response.headers()["x-request-id"].to_str().unwrap();
   assert_ne!(generated, "unsafe value");
   assert!(is_safe_request_id(generated));
+}
+
+#[tokio::test]
+async fn target_deadlines_are_bounded_before_handler_work() {
+  let expired = app()
+    .oneshot(
+      Request::get("/api/v1/not-implemented")
+        .header("x-request-id", "deadline-expired-1")
+        .header("x-deadline-at", "2020-01-01T00:00:00.000000Z")
+        .body(Body::empty())
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(expired.status(), StatusCode::GATEWAY_TIMEOUT);
+  assert_eq!(expired.headers()["x-request-id"], "deadline-expired-1");
+  assert_eq!(json(expired).await["code"], "deadline_exceeded");
+
+  let too_distant = (OffsetDateTime::now_utc() + TimeDuration::minutes(3))
+    .format(&Rfc3339)
+    .unwrap();
+  let invalid = app()
+    .oneshot(
+      Request::get("/api/v1/not-implemented")
+        .header("x-deadline-at", too_distant)
+        .body(Body::empty())
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+  assert_eq!(json(invalid).await["code"], "invalid_deadline");
+
+  let valid = (OffsetDateTime::now_utc() + TimeDuration::seconds(30))
+    .replace_nanosecond(0)
+    .unwrap()
+    .format(&Rfc3339)
+    .unwrap();
+  let admitted = app()
+    .oneshot(
+      Request::get("/api/v1/not-implemented")
+        .header("x-deadline-at", valid)
+        .body(Body::empty())
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+  assert_eq!(admitted.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

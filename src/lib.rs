@@ -26,7 +26,8 @@ pub mod types;
 pub use adapters::learning_model::OpenAiLearningModel;
 pub use api::{
   app_router, app_router_with_http_config, AlwaysReady, AppState, GraphCursorProtectionKey,
-  GraphCursorProtectionKeyError, Readiness, MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES,
+  GraphCursorProtectionKeyError, Readiness, SuccessEnvelope, SuccessMeta,
+  MIN_GRAPH_CURSOR_PROTECTION_KEY_BYTES,
 };
 pub use application::canonical_lookup::{CanonicalLookupError, CanonicalLookupService};
 pub use application::observability::{ClosedMetricsDispatcher, MAX_IN_FLIGHT_METRIC_RECORDS};
@@ -34,6 +35,7 @@ pub use config::{
   AppConfig, HttpConfig, HttpConfigError, ProviderApiKey, ProviderConfig, ProviderResilienceConfig,
   ProviderResilienceConfigs, TranslationConfig,
 };
+pub use domain::request_context::{RequestContext, RequestContextError, RequestId};
 pub use provider::{TranslationError, TranslationProviderMetrics, TranslationService};
 pub use resilience::{ProviderMetricsSnapshot, ProviderPolicy, ProviderPolicyError};
 pub use types::{TranslateRequest, TranslateResponse};

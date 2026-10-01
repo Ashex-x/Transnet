@@ -1,31 +1,16 @@
 //! Safe HTTP request correlation IDs.
 
+pub(crate) use crate::domain::request_context::RequestId;
 use axum::{
   extract::Request,
   http::{HeaderMap, HeaderValue},
   middleware::Next,
   response::Response,
 };
-use ulid::Ulid;
-
-/// Per-request correlation identifier stored in request extensions.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct RequestId(String);
-
-impl RequestId {
-  /// Returns the header-safe identifier value.
-  pub(crate) fn as_str(&self) -> &str {
-    &self.0
-  }
-
-  fn generated() -> Self {
-    Self(Ulid::new().to_string())
-  }
-}
 
 /// Adds a safe request ID to extensions and propagates it to the response.
 pub(crate) async fn propagate_request_id(mut request: Request, next: Next) -> Response {
-  let request_id = inbound_request_id(request.headers()).unwrap_or_else(RequestId::generated);
+  let request_id = inbound_request_id(request.headers()).unwrap_or_else(RequestId::generate);
   request.extensions_mut().insert(request_id.clone());
 
   let mut response = next.run(request).await;
@@ -41,14 +26,11 @@ fn inbound_request_id(headers: &HeaderMap) -> Option<RequestId> {
   if values.next().is_some() || !is_safe_request_id(value) {
     return None;
   }
-  Some(RequestId(value.to_string()))
+  RequestId::new(value.to_string()).ok()
 }
 
 fn is_safe_request_id(value: &str) -> bool {
-  (1..=128).contains(&value.len())
-    && value
-      .bytes()
-      .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+  RequestId::new(value.to_string()).is_ok()
 }
 
 #[cfg(test)]

@@ -22,6 +22,8 @@ pub mod knowledge_release;
 pub mod lookup_card;
 /// Closed, redacted metric names and categorical event dimensions.
 pub mod observability;
+/// Request-scoped correlation, deadline, schema, and release context.
+pub mod request_context;
 /// Deterministic hybrid-retrieval values and candidate fusion.
 pub mod retrieval;
 /// Structured multilingual-to-English translation.

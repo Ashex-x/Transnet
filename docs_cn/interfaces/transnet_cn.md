@@ -32,7 +32,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 Transnet 监听 `/run/transnet/transnet.sock`；Transnet 数据 adapter 调用 `/run/island-port/island-port.sock`。部署可以通过配置迁移 socket，但 endpoint 路径和 payload 不变。Socket owner 创建父目录，只在证明旧 socket 不活动后移除它，以 `0660` 模式绑定，并依赖文件系统 workload identity，而不是转发的用户 header。
 
-每个操作使用 HTTP/1.1、origin-form `/api/v1/...` 路径、`Host: localhost`、UTF-8 JSON 与 `POST`。空输入为 `{}`。Client 发送 `Content-Type: application/json`、`Accept: application/json`、有界 `Content-Length` 和可选 `X-Request-Id`。拒绝 query string、chunked request body、multipart body、upgrade 与响应 streaming。Server 拒绝未知 JSON 字段，并返回 `X-Request-Id` 与 `Cache-Control: no-store`。
+每个操作使用 HTTP/1.1、origin-form `/api/v1/...` 路径、`Host: localhost`、UTF-8 JSON 与 `POST`。空输入为 `{}`。Client 发送 `Content-Type: application/json`、`Accept: application/json`、有界 `Content-Length` 和可选 `X-Request-Id`、`X-Deadline-At`。拒绝 query string、chunked request body、multipart body、upgrade 与响应 streaming。Server 拒绝未知 JSON 字段，并返回 `X-Request-Id` 与 `Cache-Control: no-store`。
 
 默认 body 上限为 1 MiB。含 inline 图片的翻译请求可使用该路由专属 12 MiB 编码 body 上限。最多接受四张解码图片，每张不超过 2 MiB 或 4096 × 4096 像素；整个请求最多十六个 region。支持 `image/png`、`image/jpeg` 与 `image/webp`。
 
@@ -49,6 +49,8 @@ Transnet 不接受用户、学习者、账户、owner、session、cookie、beare
 ## Deadline 与调用预算
 
 一个调用方 deadline 覆盖完整操作。规范读取、embedding、生成与经许可实时检索获得受剩余时间限制的子 deadline，且不能延长请求。
+
+当前 HTTP boundary 已在过渡期与目标 path 上实现请求上下文基础。若存在 `X-Deadline-At`，它必须是准入时刻之后不超过 120 秒、微秒精度的 UTC RFC 3339 时间戳；省略该 header 时使用 30 秒 deadline。无效或过长 deadline 返回 `400 invalid_deadline`，已耗尽 deadline 返回 `504 deadline_exceeded`。Middleware 存储一个不可变 `RequestContext`，其中包含安全 request ID、绝对 deadline、`transnet-service-v1` schema、剩余预算计算以及供后续 application composition 使用的可选发布 pin。现有 handler 尚不会在预算耗尽时自动取消；下游采用将逐步完成。
 
 足够的规范命中使用零次生成调用。普通翻译、视觉读取、分类与 grounded composition 使用 Gemma4-27B `fast` profile。长输入在同一模型上使用有界语义 chunk、有界并行 fast 调用、一个请求级术语台账与确定性重组。
 

@@ -40,12 +40,15 @@ use crate::{
   types::{ErrorResponse, HealthResponse, TranslateRequest},
 };
 
+mod envelope;
 mod problem;
 mod readiness;
+mod request_context;
 mod request_id;
 mod stateless;
 mod v1;
 
+pub use envelope::{SuccessEnvelope, SuccessMeta};
 pub use readiness::{AlwaysReady, CanonicalDependencyReadiness, Readiness};
 
 use request_id::RequestId;
@@ -440,6 +443,7 @@ fn build_router(state: AppState, max_request_body_bytes: usize, cors: Option<Cor
         .on_failure(DefaultOnFailure::new().level(Level::WARN)),
     )
     .layer(middleware::from_fn(stateless::admit))
+    .layer(middleware::from_fn(request_context::establish))
     .layer(middleware::from_fn(request_id::propagate_request_id))
 }
 
@@ -462,6 +466,7 @@ fn cors_layer(config: &HttpConfig) -> Result<Option<CorsLayer>, HttpConfigError>
     .allow_headers([
       header::CONTENT_TYPE,
       HeaderName::from_static("x-request-id"),
+      HeaderName::from_static("x-deadline-at"),
     ])
     .expose_headers([HeaderName::from_static("x-request-id")]);
   Ok(Some(cors))

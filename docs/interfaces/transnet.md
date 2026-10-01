@@ -32,7 +32,7 @@ Status: revised target v1 contract. The checked-in executable still uses loopbac
 
 Transnet listens on `/run/transnet/transnet.sock`; Transnet data adapters call `/run/island-port/island-port.sock`. Deployments may relocate sockets through configuration, but endpoint paths and payloads do not change. Socket owners create the parent directory, prove a stale socket is inactive before removing it, bind with mode `0660`, and rely on filesystem workload identity rather than forwarded user headers.
 
-Every operation uses HTTP/1.1, an origin-form `/api/v1/...` path, `Host: localhost`, UTF-8 JSON, and `POST`. Empty input is `{}`. Clients send `Content-Type: application/json`, `Accept: application/json`, a bounded `Content-Length`, and optionally `X-Request-Id`. Query strings, chunked request bodies, multipart bodies, upgrades, and response streaming are rejected. Servers reject unknown JSON fields and return `X-Request-Id` plus `Cache-Control: no-store`.
+Every operation uses HTTP/1.1, an origin-form `/api/v1/...` path, `Host: localhost`, UTF-8 JSON, and `POST`. Empty input is `{}`. Clients send `Content-Type: application/json`, `Accept: application/json`, a bounded `Content-Length`, and optionally `X-Request-Id` and `X-Deadline-At`. Query strings, chunked request bodies, multipart bodies, upgrades, and response streaming are rejected. Servers reject unknown JSON fields and return `X-Request-Id` plus `Cache-Control: no-store`.
 
 The default body limit is 1 MiB. A translation request containing inline images may use the route-specific 12 MiB encoded-body limit. At most four decoded images are accepted, each no larger than 2 MiB or 4096 by 4096 pixels, with at most sixteen regions across the request. Supported image media types are `image/png`, `image/jpeg`, and `image/webp`.
 
@@ -49,6 +49,8 @@ Canonical content enters storage only through the authenticated offline publicat
 ## Deadlines and call budget
 
 One caller deadline covers the complete operation. Canonical reads, embeddings, generation, and permitted live retrieval receive sub-deadlines capped by the remaining time and cannot extend the request.
+
+The current HTTP boundary implements the request-context foundation on transitional and target paths. `X-Deadline-At`, when present, must contain a future UTC RFC 3339 timestamp at microsecond precision no more than 120 seconds from admission. An omitted header receives a 30-second deadline. Invalid or overlong deadlines return `400 invalid_deadline`; already exhausted deadlines return `504 deadline_exceeded`. Middleware stores one immutable `RequestContext` with the safe request ID, absolute deadline, `transnet-service-v1` schema, remaining-budget calculation, and an optional release pin for later application composition. Existing handlers are not yet cancelled automatically when their budget expires; downstream adoption remains incremental.
 
 A sufficient canonical match uses zero generation calls. Ordinary translation, visual reading, classification, and grounded composition use the Gemma4-27B `fast` profile. Long input uses bounded semantic chunks, bounded parallel fast calls, one request-local terminology ledger, and deterministic reassembly on the same model.
 
