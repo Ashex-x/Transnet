@@ -40,7 +40,8 @@ pub use application::observability::{
   ClosedMetricsDispatcher, TelemetryDropSnapshot, MAX_IN_FLIGHT_METRIC_RECORDS,
 };
 pub use config::{
-  AppConfig, HttpConfig, HttpConfigError, ProviderApiKey, ProviderConfig, ProviderResilienceConfig,
+  AppConfig, EnabledCanonicalRuntimeConfig, EnabledKnowledgeRuntimeConfig, HttpConfig,
+  HttpConfigError, ProviderApiKey, ProviderConfig, ProviderResilienceConfig,
   ProviderResilienceConfigs, TranslationConfig,
 };
 pub use domain::capabilities::{

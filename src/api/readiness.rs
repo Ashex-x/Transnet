@@ -52,6 +52,11 @@ pub struct ReadinessReport {
 }
 
 impl ReadinessReport {
+  /// Creates a content-free readiness result from an aggregate decision and closed components.
+  pub const fn new(ready: bool, components: KnowledgeReadinessComponents) -> Self {
+    Self { ready, components }
+  }
+
   fn without_knowledge(ready: bool) -> Self {
     Self {
       ready,
