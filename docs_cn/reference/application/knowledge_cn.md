@@ -42,7 +42,7 @@ path-search service 会先从 canonical data 补全并类型检查两个选定 r
 
 `brief`、`standard` 与 `full` 是同一个已校验超集的投影。响应级别只改变广度，不改变事实选择或真实性状态。
 
-relationship-page domain 基础在不增加 transport orchestration 的情况下拥有这个更大的 lexical superset。它把 BasicCard 或 concept-summary reference、domain assessment 与 profile、精确 hydrated fact、完整 semantic scale、确定性 relationship group 与 path、带标签的 request-local generated 或 inferred 材料、exploratory nomination、显式请求的 alternative，以及仅供 offline 使用的 gap proposal 绑定到同一个 root 与完整 release pin。其在线 projection 有意不包含 gap-proposal 字段。后续 application composer 只把该 projection 嵌入 word 或 established-phrase translation 结果；不存在独立 page route。
+relationship-page domain 基础在不增加 transport orchestration 的情况下拥有这个更大的 lexical superset。它把 BasicCard 或 concept-summary authority receipt、闭合 domain profile、精确 hydrated fact、完整 semantic scale、确定性 relationship group 与 path、带标签的 request-local generated 或 inferred 材料、exploratory nomination、显式请求的 alternative，以及仅供 offline 使用的 gap nomination 绑定到同一个 root 与完整 release pin。显示的 relationship 必须以它命名的精确 hydrated fact 为第一步，通过完整 pin 的 path 校验，并符合闭合 relation-to-group policy；不受支持的 mechanism 与 application group 会 fail closed。完整 scale 与其被接纳的 taxonomy group 原子化投影。Alternative 在确定性选择前绑定所属 stable translation ID 与 order。Gap nomination 是 opaque 且非权威的，在线 projection 有意不包含 gap 字段。后续 application composer 只把该 projection 嵌入 word 或 established-phrase translation 结果；不存在独立 page route。含内容的 debug output 会被脱敏。
 
 ## 验证
 

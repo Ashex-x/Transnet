@@ -1,6 +1,6 @@
 //! Validated relationship-page supersets and deterministic progressive disclosure.
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, fmt};
 
 use thiserror::Error;
 
@@ -9,6 +9,7 @@ use super::{
   canonical::{CanonicalId, CanonicalReleasePin, LanguageTag},
   canonical_translation::DomainId,
   domain_assessment::{DomainAssessment, DomainCoverageState},
+  graph::GraphRelationType,
   knowledge_hydration::{HydratedAssertionProjection, HydratedSemanticScale},
   knowledge_view::UsefulRootPath,
   translation_turn::ResponseLevel,
@@ -42,6 +43,17 @@ pub const MAX_GROUP_RELATIONSHIPS: usize = 16;
 pub const MAX_GENERATED_EXAMPLES: usize = 4;
 /// Maximum labeled alternatives requested for one lexical unit.
 pub const MAX_LABELED_ALTERNATIVES: usize = 2;
+/// Maximum exact canonical facts retained by one request-local page superset.
+pub const MAX_PAGE_FACTS: usize = 256;
+
+/// Stable reference to one owning translation choice.
+#[derive(Clone, Eq, PartialEq)]
+pub struct PageTranslationChoice {
+  /// Stable translation result identity.
+  pub translation_id: String,
+  /// Zero-based order in the owning lexical result.
+  pub order: u16,
+}
 
 /// Request for a relationship page embedded in one lexical translation result.
 #[derive(Clone, Eq, PartialEq)]
@@ -56,30 +68,57 @@ pub struct RelationshipPageRequest {
   pub release: CanonicalReleasePin,
   /// Explicit caller limit for useful labeled alternatives.
   pub max_alternatives: u8,
+  /// Exact ordered translation choices to which alternatives may attach.
+  pub translation_choices: Vec<PageTranslationChoice>,
 }
 
 /// Stable reference to the authoritative leading summary.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum RelationshipPageSummaryRef {
   /// Existing canonical BasicCard rooted at one lexical sense.
-  BasicCard { sense_id: CanonicalId },
+  BasicCard {
+    /// Hydrated sense identity.
+    sense_id: CanonicalId,
+    /// Full pin returned with the authoritative card.
+    release: CanonicalReleasePin,
+  },
   /// Existing canonical multilingual concept summary.
-  Concept { concept: CanonicalNodeId },
+  Concept {
+    /// Hydrated concept identity.
+    concept: CanonicalNodeId,
+    /// Full pin returned with the authoritative concept summary.
+    release: CanonicalReleasePin,
+  },
+}
+
+/// Closed authoritative fact families counted in a domain profile.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PageFactFamily {
+  /// Definitions and glosses.
+  Definition,
+  /// Typed canonical relationships.
+  Relationship,
+  /// Reviewed usage facts.
+  Usage,
+  /// Complete semantic scales.
+  SemanticScale,
 }
 
 /// One release-pinned domain profile selected for the page.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PageDomainProfile {
   /// Stable canonical domain identity.
   pub domain_id: DomainId,
   /// Closed fact families present in the release.
-  pub available_fact_families: Vec<String>,
+  pub available_fact_families: Vec<PageFactFamily>,
   /// Languages represented by eligible reviewed facts.
   pub languages: Vec<LanguageTag>,
   /// Count of verified facts in the release profile.
   pub verified_fact_count: u64,
   /// Coverage state that does not imply completeness.
   pub coverage: DomainCoverageState,
+  /// Full authority pin returned with this profile.
+  pub release: CanonicalReleasePin,
 }
 
 /// Request-local assessment and the exact profiles used by page composition.
@@ -101,12 +140,14 @@ pub struct PageFact {
 }
 
 /// One complete semantic scale preserved without pairwise reconstruction.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PageSemanticScale {
   /// Exact authoritative scale.
   pub scale: HydratedSemanticScale,
   /// Full release pin under which the scale was hydrated.
   pub release: CanonicalReleasePin,
+  /// Group that atomically owns this complete scale.
+  pub group: RelationshipGroupKind,
 }
 
 /// Closed relationship-page group catalog in deterministic usefulness order.
@@ -199,7 +240,7 @@ pub struct PageNamedPath {
 }
 
 /// One explicitly model-generated request-local example.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PageGeneratedExample {
   /// Source-language example.
   pub source_text: String,
@@ -210,7 +251,7 @@ pub struct PageGeneratedExample {
 }
 
 /// Evidence-grounded synthesis that remains distinct from a canonical fact.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PageInferredExplanation {
   /// Concise request-local explanation.
   pub text: String,
@@ -219,7 +260,7 @@ pub struct PageInferredExplanation {
 }
 
 /// Similarity or model nomination kept outside factual sections.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PageExploratoryItem {
   /// Nominated canonical node when one hydrated identity exists.
   pub node: CanonicalNodeId,
@@ -228,7 +269,7 @@ pub struct PageExploratoryItem {
 }
 
 /// Closed dimension changed by a labeled alternative.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum AlternativeDimension {
   /// Strength or degree.
   Degree,
@@ -249,14 +290,18 @@ pub enum AlternativeDimension {
 }
 
 /// One explicitly requested useful alternative, never a canonical alias claim.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct LabeledAlternative {
-  /// Zero-based lexical translation unit index.
-  pub unit_index: u16,
+  /// Stable owning translation choice identity.
+  pub translation_id: String,
+  /// Owning translation choice order.
+  pub translation_order: u16,
   /// Alternative target-language expression.
   pub text: String,
   /// Dimension changed relative to the primary translation.
   pub dimension: AlternativeDimension,
+  /// Deterministic bounded usefulness score; larger values rank first per translation choice.
+  pub usefulness: u16,
   /// Practical consequence of choosing this expression.
   pub consequence: String,
   /// Deterministic reason the alternative is materially useful.
@@ -264,18 +309,12 @@ pub struct LabeledAlternative {
 }
 
 /// Request-local missing-relationship nomination reserved for offline review.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct RelationshipGapProposal {
-  /// Proposed source endpoint.
-  pub source: CanonicalNodeId,
-  /// Proposed target endpoint.
-  pub target: CanonicalNodeId,
-  /// Existing registry relation identity; no edge identity is assigned.
-  pub relation_type_id: CanonicalId,
+  /// Opaque request-local nomination identity with no canonical authority.
+  pub nomination_id: String,
   /// Concise rationale for offline reviewers.
   pub rationale: String,
-  /// Strictly ordered candidate evidence identities.
-  pub candidate_evidence_ids: Vec<CanonicalId>,
 }
 
 /// Versions of every deterministic relationship-page contract.
@@ -399,22 +438,48 @@ impl RelationshipPageSuperset {
   /// Validates exact facts, scale preservation, grouping, labels, bounds, and ordering.
   pub fn validate(&self) -> Result<(), RelationshipPageValidationError> {
     if self.request.max_alternatives as usize > MAX_LABELED_ALTERNATIVES
+      || self.request.translation_choices.is_empty()
+      || self.request.translation_choices.len() > 16
+      || self
+        .request
+        .translation_choices
+        .iter()
+        .enumerate()
+        .any(|(order, choice)| {
+          choice.order as usize != order
+            || !valid_token(&choice.translation_id, 128)
+            || self.request.translation_choices[..order]
+              .iter()
+              .any(|prior| prior.translation_id == choice.translation_id)
+        })
       || self.groups.len() > MAX_PAGE_GROUPS
+      || self.facts.len() > MAX_PAGE_FACTS
       || self.generated_examples.len() > MAX_GENERATED_EXAMPLES
       || self.alternatives.len() > 16
     {
       return Err(RelationshipPageValidationError::InvalidValue);
     }
     validate_summary(&self.request, &self.summary)?;
-    validate_domain(&self.domain)?;
+    validate_domain(&self.request.release, &self.domain)?;
     let fact_ids = validate_facts(&self.request.release, &self.facts)?;
     validate_scales(&self.request, &self.scales)?;
-    validate_groups(&self.request.root, &self.groups, &fact_ids)?;
+    validate_groups(
+      &self.request.root,
+      &self.request.release,
+      &self.groups,
+      &self.facts,
+      &fact_ids,
+    )?;
+    validate_scale_groups(&self.scales, &self.groups)?;
     validate_paths(&self.request, &self.paths)?;
     validate_generated(&self.generated_examples)?;
     validate_inferred(&self.inferred_explanations, &fact_ids)?;
     validate_exploratory(&self.exploratory_items)?;
-    validate_alternatives(&self.alternatives, self.request.max_alternatives as usize)?;
+    validate_alternatives(
+      &self.alternatives,
+      &self.request.translation_choices,
+      self.request.max_alternatives as usize,
+    )?;
     validate_gaps(&self.gap_proposals)?;
     if self.versions != RelationshipPageVersionMetadata::default() {
       return Err(RelationshipPageValidationError::InvalidValue);
@@ -438,6 +503,11 @@ impl RelationshipPageSuperset {
           MAX_LABELED_ALTERNATIVES,
         ),
       };
+    let groups: Vec<_> = self.groups.iter().take(group_limit).cloned().collect();
+    let admitted_group_kinds = groups
+      .iter()
+      .map(|group| group.kind)
+      .collect::<BTreeSet<_>>();
     Ok(ProjectedRelationshipPage {
       summary: self.summary.clone(),
       domain: if self.request.response_level == ResponseLevel::Full
@@ -447,13 +517,14 @@ impl RelationshipPageSuperset {
       } else {
         None
       },
-      groups: self.groups.iter().take(group_limit).cloned().collect(),
+      groups,
       paths: self.paths.iter().take(path_limit).cloned().collect(),
-      scales: if self.request.response_level == ResponseLevel::Brief {
-        Vec::new()
-      } else {
-        self.scales.clone()
-      },
+      scales: self
+        .scales
+        .iter()
+        .filter(|scale| admitted_group_kinds.contains(&scale.group))
+        .cloned()
+        .collect(),
       generated_examples: self
         .generated_examples
         .iter()
@@ -484,14 +555,19 @@ fn validate_summary(
   summary: &RelationshipPageSummaryRef,
 ) -> Result<(), RelationshipPageValidationError> {
   match summary {
-    RelationshipPageSummaryRef::BasicCard { sense_id } => {
-      if request.root.family() != CanonicalNodeFamily::LexicalSense || request.root.id() != sense_id
+    RelationshipPageSummaryRef::BasicCard { sense_id, release } => {
+      if request.root.family() != CanonicalNodeFamily::LexicalSense
+        || request.root.id() != sense_id
+        || release != &request.release
       {
         return Err(RelationshipPageValidationError::InconsistentReference);
       }
     }
-    RelationshipPageSummaryRef::Concept { concept } => {
-      if concept.family() != CanonicalNodeFamily::Concept || &request.root != concept {
+    RelationshipPageSummaryRef::Concept { concept, release } => {
+      if concept.family() != CanonicalNodeFamily::Concept
+        || &request.root != concept
+        || release != &request.release
+      {
         return Err(RelationshipPageValidationError::InconsistentReference);
       }
     }
@@ -499,14 +575,22 @@ fn validate_summary(
   Ok(())
 }
 
-fn validate_domain(value: &PageDomainContext) -> Result<(), RelationshipPageValidationError> {
+fn validate_domain(
+  release: &CanonicalReleasePin,
+  value: &PageDomainContext,
+) -> Result<(), RelationshipPageValidationError> {
   let values = &value.profiles;
+  if values.iter().any(|profile| &profile.release != release) {
+    return Err(RelationshipPageValidationError::ReleaseMismatch);
+  }
   if values.len() > 32
     || values
       .windows(2)
       .any(|pair| pair[0].domain_id >= pair[1].domain_id)
     || values.iter().any(|profile| {
-      profile.available_fact_families.len() > 16
+      profile.verified_fact_count == 0
+        || profile.available_fact_families.is_empty()
+        || profile.available_fact_families.len() > 16
         || profile.languages.len() > 8
         || profile
           .available_fact_families
@@ -558,6 +642,9 @@ fn validate_scales(
     if value.release != request.release {
       return Err(RelationshipPageValidationError::ReleaseMismatch);
     }
+    if value.group != RelationshipGroupKind::TaxonomyOrDegree {
+      return Err(RelationshipPageValidationError::InconsistentReference);
+    }
     value
       .scale
       .validate()
@@ -575,9 +662,24 @@ fn validate_scales(
   Ok(())
 }
 
+fn validate_scale_groups(
+  scales: &[PageSemanticScale],
+  groups: &[PageRelationshipGroup],
+) -> Result<(), RelationshipPageValidationError> {
+  let has_degree_group = groups
+    .iter()
+    .any(|group| group.kind == RelationshipGroupKind::TaxonomyOrDegree);
+  if scales.is_empty() != !has_degree_group {
+    return Err(RelationshipPageValidationError::InconsistentReference);
+  }
+  Ok(())
+}
+
 fn validate_groups(
   root: &CanonicalNodeId,
+  release: &CanonicalReleasePin,
   values: &[PageRelationshipGroup],
+  fact_values: &[PageFact],
   facts: &BTreeSet<CanonicalId>,
 ) -> Result<(), RelationshipPageValidationError> {
   if values.windows(2).any(|pair| pair[0].kind >= pair[1].kind) {
@@ -589,11 +691,20 @@ fn validate_groups(
     }
     let mut nodes = BTreeSet::new();
     for (index, relationship) in group.relationships.iter().enumerate() {
+      let fact = fact_values
+        .iter()
+        .find(|fact| fact.projection.assertion().assertion_id == relationship.assertion_id);
       if !facts.contains(&relationship.assertion_id)
         || !nodes.insert(relationship.node.clone())
         || relationship.path_to_root.item != relationship.node
         || &relationship.path_to_root.root != root
-        || relationship.path_to_root.validate().is_err()
+        || relationship.path_to_root.validate_for(release).is_err()
+        || fact.is_none_or(|fact| {
+          !relationship
+            .path_to_root
+            .starts_with_projection(&fact.projection)
+            || !group_accepts_relation(group.kind, fact.projection.traversal().relation_type)
+        })
       {
         return Err(RelationshipPageValidationError::InconsistentReference);
       }
@@ -618,12 +729,62 @@ fn validate_paths(
     || values.iter().any(|value| {
       !valid_text(&value.label, 128)
         || value.path.root != request.root
-        || value.path.validate().is_err()
+        || value.path.validate_for(&request.release).is_err()
     })
   {
     return Err(RelationshipPageValidationError::InconsistentReference);
   }
   Ok(())
+}
+
+fn group_accepts_relation(kind: RelationshipGroupKind, relation: GraphRelationType) -> bool {
+  match kind {
+    RelationshipGroupKind::Meaning => matches!(
+      relation,
+      GraphRelationType::Synonym
+        | GraphRelationType::TranslationEquivalent
+        | GraphRelationType::Holonym
+        | GraphRelationType::Meronym
+    ),
+    RelationshipGroupKind::Contrast => matches!(
+      relation,
+      GraphRelationType::NearSynonym
+        | GraphRelationType::Antonym
+        | GraphRelationType::ConfusableWith
+    ),
+    RelationshipGroupKind::TaxonomyOrDegree => matches!(
+      relation,
+      GraphRelationType::Hypernym
+        | GraphRelationType::Hyponym
+        | GraphRelationType::ScaleContains
+        | GraphRelationType::MemberOfScale
+        | GraphRelationType::LowerDegree
+        | GraphRelationType::HigherDegree
+    ),
+    RelationshipGroupKind::Valency => matches!(
+      relation,
+      GraphRelationType::ConstructionMember | GraphRelationType::HasConstructionMember
+    ),
+    RelationshipGroupKind::Morphology => matches!(
+      relation,
+      GraphRelationType::InflectionOf
+        | GraphRelationType::HasInflection
+        | GraphRelationType::DerivationallyRelatedTo
+    ),
+    RelationshipGroupKind::CulturalExtension => matches!(
+      relation,
+      GraphRelationType::EtymologicallyDerivedFrom | GraphRelationType::EtymologicalSourceOf
+    ),
+    RelationshipGroupKind::Terminology
+    | RelationshipGroupKind::Collocation
+    | RelationshipGroupKind::Suitability
+    | RelationshipGroupKind::Mechanism
+    | RelationshipGroupKind::Phenomenon
+    | RelationshipGroupKind::Application
+    | RelationshipGroupKind::Measurement
+    | RelationshipGroupKind::Standard
+    | RelationshipGroupKind::UsageConvention => false,
+  }
 }
 
 fn validate_generated(
@@ -676,22 +837,37 @@ fn validate_exploratory(
 
 fn validate_alternatives(
   values: &[LabeledAlternative],
+  choices: &[PageTranslationChoice],
   per_unit_limit: usize,
 ) -> Result<(), RelationshipPageValidationError> {
   let mut units = BTreeSet::new();
   let mut counts = std::collections::BTreeMap::new();
-  if values.iter().any(|value| {
-    let count = counts.entry(value.unit_index).or_insert(0_usize);
+  if values.iter().enumerate().any(|(index, value)| {
+    let choice = choices.iter().find(|choice| {
+      choice.translation_id == value.translation_id && choice.order == value.translation_order
+    });
+    let count = counts.entry(value.translation_order).or_insert(0_usize);
     *count += 1;
-    !valid_text(&value.text, 512)
+    choice.is_none()
+      || !valid_text(&value.text, 512)
       || !valid_text(&value.consequence, 512)
       || !valid_text(&value.usefulness_reason, 512)
-      || !units.insert((value.unit_index, value.text.clone()))
+      || !units.insert((value.translation_id.clone(), value.text.clone()))
       || *count > per_unit_limit
+      || (index > 0 && !alternative_precedes(&values[index - 1], value))
   }) {
     return Err(RelationshipPageValidationError::InvalidValue);
   }
   Ok(())
+}
+
+fn alternative_precedes(left: &LabeledAlternative, right: &LabeledAlternative) -> bool {
+  left.translation_order < right.translation_order
+    || (left.translation_order == right.translation_order
+      && (left.usefulness > right.usefulness
+        || (left.usefulness == right.usefulness
+          && (left.dimension < right.dimension
+            || (left.dimension == right.dimension && left.text < right.text)))))
 }
 
 fn project_alternatives(
@@ -702,7 +878,7 @@ fn project_alternatives(
   values
     .iter()
     .filter(|value| {
-      let count = counts.entry(value.unit_index).or_insert(0_usize);
+      let count = counts.entry(value.translation_order).or_insert(0_usize);
       if *count == per_unit_limit {
         return false;
       }
@@ -717,15 +893,12 @@ fn validate_gaps(
   values: &[RelationshipGapProposal],
 ) -> Result<(), RelationshipPageValidationError> {
   if values.len() > 8
-    || values.iter().any(|value| {
-      value.source == value.target
-        || !valid_text(&value.rationale, 1_024)
-        || value.candidate_evidence_ids.is_empty()
-        || value
-          .candidate_evidence_ids
-          .windows(2)
-          .any(|pair| pair[0] >= pair[1])
-    })
+    || values
+      .iter()
+      .any(|value| !valid_token(&value.nomination_id, 128) || !valid_text(&value.rationale, 1_024))
+    || values
+      .windows(2)
+      .any(|pair| pair[0].nomination_id >= pair[1].nomination_id)
   {
     return Err(RelationshipPageValidationError::InvalidValue);
   }
@@ -735,6 +908,42 @@ fn validate_gaps(
 fn valid_text(value: &str, max_chars: usize) -> bool {
   value.trim() == value && !value.is_empty() && value.chars().count() <= max_chars
 }
+
+fn valid_token(value: &str, max_bytes: usize) -> bool {
+  !value.is_empty()
+    && value.len() <= max_bytes
+    && value
+      .bytes()
+      .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+macro_rules! redacted_debug {
+  ($($type:ty),+ $(,)?) => { $(impl fmt::Debug for $type {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+      formatter.write_str(concat!(stringify!($type), "(REDACTED)"))
+    }
+  })+ };
+}
+
+redacted_debug!(
+  RelationshipPageRequest,
+  PageTranslationChoice,
+  RelationshipPageSummaryRef,
+  PageDomainProfile,
+  PageDomainContext,
+  PageFact,
+  PageSemanticScale,
+  PageRelationship,
+  PageRelationshipGroup,
+  PageNamedPath,
+  PageGeneratedExample,
+  PageInferredExplanation,
+  PageExploratoryItem,
+  LabeledAlternative,
+  RelationshipGapProposal,
+  RelationshipPageSuperset,
+  ProjectedRelationshipPage,
+);
 
 #[cfg(test)]
 mod tests {
@@ -784,9 +993,14 @@ mod tests {
         response_level: level,
         release: release.clone(),
         max_alternatives: 2,
+        translation_choices: vec![PageTranslationChoice {
+          translation_id: "translation_0".into(),
+          order: 0,
+        }],
       },
       summary: RelationshipPageSummaryRef::Concept {
         concept: root.clone(),
+        release: release.clone(),
       },
       domain: PageDomainContext {
         assessment: DomainAssessment::Existing {
@@ -795,10 +1009,11 @@ mod tests {
         },
         profiles: vec![PageDomainProfile {
           domain_id: DomainId::new("domain_1").unwrap(),
-          available_fact_families: vec!["definition".into()],
+          available_fact_families: vec![PageFactFamily::Definition],
           languages: vec![LanguageTag::parse("en").unwrap()],
           verified_fact_count: 1,
           coverage: DomainCoverageState::Seed,
+          release: release.clone(),
         }],
       },
       facts: vec![PageFact {
@@ -826,9 +1041,10 @@ mod tests {
           evidence_ids: vec![id("evidence-1")],
         },
         release: release.clone(),
+        group: RelationshipGroupKind::TaxonomyOrDegree,
       }],
       groups: vec![PageRelationshipGroup {
-        kind: RelationshipGroupKind::Meaning,
+        kind: RelationshipGroupKind::TaxonomyOrDegree,
         relationships: vec![PageRelationship {
           node: related.clone(),
           assertion_id: id("assertion-1"),
@@ -855,26 +1071,27 @@ mod tests {
       }],
       alternatives: vec![
         LabeledAlternative {
-          unit_index: 0,
+          translation_id: "translation_0".into(),
+          translation_order: 0,
           text: "alternative one".into(),
-          dimension: AlternativeDimension::Register,
-          consequence: "More formal.".into(),
-          usefulness_reason: "The requested audience is professional.".into(),
-        },
-        LabeledAlternative {
-          unit_index: 0,
-          text: "alternative two".into(),
           dimension: AlternativeDimension::Degree,
+          usefulness: 100,
           consequence: "Stronger intensity.".into(),
           usefulness_reason: "The source is materially ambiguous in degree.".into(),
         },
+        LabeledAlternative {
+          translation_id: "translation_0".into(),
+          translation_order: 0,
+          text: "alternative two".into(),
+          dimension: AlternativeDimension::Register,
+          usefulness: 90,
+          consequence: "More formal.".into(),
+          usefulness_reason: "The requested audience is professional.".into(),
+        },
       ],
       gap_proposals: vec![RelationshipGapProposal {
-        source: root,
-        target: related,
-        relation_type_id: id("relation-1"),
+        nomination_id: "gap_1".into(),
         rationale: "Expected reviewed relationship is absent.".into(),
-        candidate_evidence_ids: vec![id("evidence-2")],
       }],
       versions: RelationshipPageVersionMetadata::default(),
     }
@@ -952,14 +1169,98 @@ mod tests {
 
     page.domain.profiles.push(PageDomainProfile {
       domain_id: DomainId::new("domain_1").unwrap(),
-      available_fact_families: Vec::new(),
+      available_fact_families: vec![PageFactFamily::Definition],
       languages: Vec::new(),
-      verified_fact_count: 0,
+      verified_fact_count: 1,
       coverage: DomainCoverageState::Seed,
+      release: page.request.release.clone(),
     });
     assert_eq!(
       page.validate(),
       Err(RelationshipPageValidationError::InconsistentReference)
+    );
+  }
+
+  #[test]
+  fn groups_require_exact_first_step_release_and_declared_relation_policy() {
+    let mut page = superset(ResponseLevel::Full);
+    page.groups[0].kind = RelationshipGroupKind::Mechanism;
+    assert_eq!(
+      page.validate(),
+      Err(RelationshipPageValidationError::InconsistentReference)
+    );
+
+    let mut page = superset(ResponseLevel::Full);
+    let wrong_schema = CanonicalReleasePin::new(
+      page.request.release.release_id.clone(),
+      "canonical-v2".into(),
+    )
+    .unwrap();
+    let step = crate::domain::knowledge_view::VerifiedKnowledgeStep::from_hydrated(
+      page.facts[0].projection.clone(),
+      wrong_schema,
+    )
+    .unwrap();
+    page.groups[0].relationships[0].path_to_root.steps = vec![step];
+    assert_eq!(
+      page.validate(),
+      Err(RelationshipPageValidationError::InconsistentReference)
+    );
+  }
+
+  #[test]
+  fn authority_receipts_and_complete_scales_are_bound_to_the_page_pin() {
+    let mut page = superset(ResponseLevel::Brief);
+    let projection = page.project().unwrap();
+    assert_eq!(projection.groups.len(), 1);
+    assert_eq!(projection.scales.len(), 1);
+
+    let wrong_pin = CanonicalReleasePin::new(id("release-2"), "canonical-v1".into()).unwrap();
+    page.summary = RelationshipPageSummaryRef::Concept {
+      concept: page.request.root.clone(),
+      release: wrong_pin,
+    };
+    assert_eq!(
+      page.validate(),
+      Err(RelationshipPageValidationError::InconsistentReference)
+    );
+
+    let mut page = superset(ResponseLevel::Full);
+    page.groups.clear();
+    assert_eq!(
+      page.validate(),
+      Err(RelationshipPageValidationError::InconsistentReference)
+    );
+  }
+
+  #[test]
+  fn alternatives_bind_stable_choices_and_content_debug_is_redacted() {
+    let mut page = superset(ResponseLevel::Full);
+    page.alternatives[0].translation_id = "missing".into();
+    assert_eq!(
+      page.validate(),
+      Err(RelationshipPageValidationError::InvalidValue)
+    );
+
+    let page = superset(ResponseLevel::Full);
+    assert_eq!(format!("{:?}", page), "RelationshipPageSuperset(REDACTED)");
+    assert_eq!(
+      format!("{:?}", page.generated_examples[0]),
+      "PageGeneratedExample(REDACTED)"
+    );
+    assert_eq!(
+      format!("{:?}", page.gap_proposals[0]),
+      "RelationshipGapProposal(REDACTED)"
+    );
+  }
+
+  #[test]
+  fn fact_collection_is_bounded_before_duplicate_orchestration_work() {
+    let mut page = superset(ResponseLevel::Full);
+    page.facts = vec![page.facts[0].clone(); MAX_PAGE_FACTS + 1];
+    assert_eq!(
+      page.validate(),
+      Err(RelationshipPageValidationError::InvalidValue)
     );
   }
 }
