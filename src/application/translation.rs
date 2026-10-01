@@ -10,11 +10,12 @@ use unicode_normalization::UnicodeNormalization;
 use crate::{
   domain::translation_turn::{
     AnnotationFamily, FreshnessPolicy, LexicalTurnDraft, ProjectedTranslationResult, ResponseLevel,
-    RoutingConfidence, SegmentFormat, SegmentTranslationResult, TranslationAnnotation,
-    TranslationAnnotationCode, TranslationInput, TranslationIntentClassifier, TerminologyPolicy,
-    TranslationNormalizer, TranslationReview, TranslationSegment, TranslationTurn,
-    TranslationTurnResult, TranslationUnit, TranslationVersionMetadata, TurnLanguage,
-    TurnTranslation, NORMALIZER_VERSION, PROJECTION_VERSION, TRANSLATION_RESULT_SCHEMA_VERSION,
+    RoutingConfidence, SegmentFormat, SegmentTranslationResult, TerminologyPolicy,
+    TranslationAnnotation, TranslationAnnotationCode, TranslationInput,
+    TranslationIntentClassifier, TranslationNormalizer, TranslationReview, TranslationSegment,
+    TranslationTurn, TranslationTurnResult, TranslationUnit, TranslationVersionMetadata,
+    TurnLanguage, TurnTranslation, NORMALIZER_VERSION, PROJECTION_VERSION,
+    TRANSLATION_RESULT_SCHEMA_VERSION,
   },
   domain::{
     model_runtime::{CancellationSignal, GenerationInput, GenerationProfile, ReasoningBudget},
