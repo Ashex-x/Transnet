@@ -32,7 +32,7 @@ Root retrieval 始终先完成 canonical resolution。Not-found 与同优先级�
 
 模型可组织所提供事实并生成精简解释，但不能虚构 endpoint 或修改事实元数据。确定性校验检查每个引用。空或支持较弱的分区被省略。
 
-规范知识是断言图，而不是存储树。版本化关系注册表定义参与者角色，以及哪些 n 元断言允许生成二元遍历投影。Meaning、contrast、usage、form、origin、domain、mechanism 与 application 的闭合 policy 会推导准确 relation family、可补全 endpoint family、深度、item budget 与 display-evidence 资格，不接受调用方提供 graph control。每个非 root 引导视图 item 都必须保留一条回到 verified root、由独立证据支持 assertion projection 组成的一至三跳无环路径。请求局部且有依据的解释可保持 `inferred`；仅基于相似度的 `exploratory` 材料不能进入事实视图或充当 path step。`knowledge/paths` 最多接纳三条互异有序路径，每条最多三跳；`no_verified_path` 表示成功的有界搜索结果，而不是对全局不存在关系的声明。
+规范知识是断言图，而不是存储树。版本化关系注册表定义参与者角色，以及哪些 n 元断言允许生成二元遍历投影。已实现的 meaning、contrast、usage、form、origin 与 domain 闭合 policy 会推导准确 relation family、可补全 endpoint family、深度、item budget 与 display-evidence 资格，不接受调用方提供 graph control。Mechanism 与 application 在 registry 提供显式技术关系之前保持不可用；弱主题关联绝不能证明这两个 lens。每个非 root 引导视图 item 都必须保留一条回到 verified root、由独立证据支持 assertion projection 组成的一至三跳无环路径。Step 只能从完整发布 pin 下的精确规范补全结果构建，并沿声明的 source-to-target traversal 前进；反向遍历必须存在单独声明的 inverse traversal。请求局部且有依据的解释可保持 `inferred`；仅基于相似度的 `exploratory` 材料不能进入事实视图或充当 path step。有序 branch 精确划分所有非 root item，truncation 必须与 cursor 是否存在一致，response projection 始终使用 request 绑定的 level。`knowledge/paths` 最多接纳三条互异有序路径，每条最多三跳；`no_verified_path` 表示成功的有界搜索结果，而不是对全局不存在关系的声明。
 
 `brief`、`standard` 与 `full` 是同一个已校验超集的投影。响应级别只改变广度，不改变事实选择或真实性状态。
 

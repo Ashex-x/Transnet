@@ -34,7 +34,7 @@ pub struct KnowledgeLensPolicy {
 }
 
 /// Returns the exhaustive immutable policy for one closed lens.
-pub const fn policy_for(lens: KnowledgeLens) -> KnowledgeLensPolicy {
+pub const fn policy_for(lens: KnowledgeLens) -> Option<KnowledgeLensPolicy> {
   use CanonicalNodeFamily as N;
   use GraphRelationType as R;
   let (branch, relations, families, depth, items): (_, &'static [_], &'static [_], _, _) =
@@ -105,35 +105,9 @@ pub const fn policy_for(lens: KnowledgeLens) -> KnowledgeLensPolicy {
         2,
         40,
       ),
-      KnowledgeLens::Mechanism => (
-        KnowledgeRelevanceReason::Mechanism,
-        &[R::Holonym, R::Meronym, R::AssociatedWith],
-        &[
-          N::Mechanism,
-          N::Process,
-          N::Phenomenon,
-          N::Method,
-          N::Quantity,
-          N::Material,
-        ],
-        2,
-        40,
-      ),
-      KnowledgeLens::Application => (
-        KnowledgeRelevanceReason::Application,
-        &[R::Holonym, R::Meronym, R::AssociatedWith],
-        &[
-          N::Application,
-          N::Technology,
-          N::Method,
-          N::Standard,
-          N::Instrument,
-        ],
-        2,
-        40,
-      ),
+      KnowledgeLens::Mechanism | KnowledgeLens::Application => return None,
     };
-  KnowledgeLensPolicy {
+  Some(KnowledgeLensPolicy {
     lens,
     branch,
     relations,
@@ -141,7 +115,7 @@ pub const fn policy_for(lens: KnowledgeLens) -> KnowledgeLensPolicy {
     max_depth: depth,
     max_items: items,
     evidence: LensEvidencePolicy::VerifiedDisplayEligible,
-  }
+  })
 }
 
 /// Returns the response-level item budget without changing policy eligibility or ranking.
@@ -183,7 +157,7 @@ mod tests {
   use super::*;
 
   #[test]
-  fn every_lens_has_nonempty_bounded_verified_policy() {
+  fn implemented_lenses_are_bounded_and_technical_lenses_fail_closed() {
     let lenses = [
       KnowledgeLens::Meaning,
       KnowledgeLens::Contrast,
@@ -195,7 +169,13 @@ mod tests {
       KnowledgeLens::Application,
     ];
     for lens in lenses {
-      let policy = policy_for(lens);
+      let Some(policy) = policy_for(lens) else {
+        assert!(matches!(
+          lens,
+          KnowledgeLens::Mechanism | KnowledgeLens::Application
+        ));
+        continue;
+      };
       assert_eq!(policy.branch, lens.relevance_reason());
       assert!(!policy.relations.is_empty());
       assert!(!policy.node_families.is_empty());

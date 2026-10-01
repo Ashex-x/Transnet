@@ -1,12 +1,16 @@
 //! Validated guided knowledge views and bounded evidence-backed paths.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+  collections::{BTreeMap, BTreeSet},
+  fmt,
+};
 
 use thiserror::Error;
 
 use super::{
   assertion::{CanonicalNodeFamily, CanonicalNodeId},
   canonical::{CanonicalId, CanonicalReleasePin, LanguageTag},
+  knowledge_hydration::HydratedAssertionProjection,
   translation_turn::ResponseLevel,
 };
 
@@ -93,7 +97,7 @@ pub struct KnowledgeRoot {
 }
 
 /// Request for one deterministic guided view.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct KnowledgeViewRequest {
   /// Selected canonical root.
   pub root: KnowledgeRoot,
@@ -107,6 +111,20 @@ pub struct KnowledgeViewRequest {
   pub release: CanonicalReleasePin,
   /// Opaque continuation token bound by the HTTP boundary.
   pub cursor: Option<String>,
+}
+
+impl fmt::Debug for KnowledgeViewRequest {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter
+      .debug_struct("KnowledgeViewRequest")
+      .field("root", &self.root)
+      .field("lens", &self.lens)
+      .field("target_language", &self.target_language)
+      .field("response_level", &self.response_level)
+      .field("release", &self.release)
+      .field("cursor", &self.cursor.as_ref().map(|_| "REDACTED"))
+      .finish()
+  }
 }
 
 /// Request for bounded verified paths between two canonical nodes.
@@ -155,45 +173,63 @@ pub enum KnowledgeRelevanceReason {
 }
 
 /// Exact immutable canonical assertion traversal used by a displayed connection.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct VerifiedKnowledgeStep {
-  /// Stable binary projection identity.
-  pub edge_id: CanonicalId,
-  /// Positive immutable relationship revision.
-  pub relationship_revision: u32,
-  /// Stable authoritative assertion identity.
-  pub assertion_id: CanonicalId,
-  /// Positive immutable assertion revision.
-  pub assertion_revision: u32,
-  /// Explicit traversal declaration selected from the relation registry.
-  pub traversal_id: CanonicalId,
-  /// Positive immutable relation-registry revision.
-  pub relation_registry_revision: u32,
-  /// Typed source endpoint.
-  pub source: CanonicalNodeId,
-  /// Typed target endpoint.
-  pub target: CanonicalNodeId,
-  /// Sorted unique eligible evidence identities.
-  pub evidence_ids: Vec<CanonicalId>,
+  projection: HydratedAssertionProjection,
+  release: CanonicalReleasePin,
+}
+
+impl fmt::Debug for VerifiedKnowledgeStep {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter.write_str("VerifiedKnowledgeStep(REDACTED)")
+  }
 }
 
 impl VerifiedKnowledgeStep {
-  /// Validates revisions, endpoints, and independently citable evidence.
-  pub fn validate(&self) -> Result<(), KnowledgeViewValidationError> {
-    if self.relationship_revision == 0
-      || self.assertion_revision == 0
-      || self.relation_registry_revision == 0
-    {
-      return Err(KnowledgeViewValidationError::InvalidRevision);
-    }
-    if self.source == self.target
-      || self.evidence_ids.is_empty()
-      || self.evidence_ids.len() > MAX_KNOWLEDGE_STEP_EVIDENCE
-      || !ordered(&self.evidence_ids)
+  /// Creates a step only from an exact canonical hydration result under its full content pin.
+  pub fn from_hydrated(
+    projection: HydratedAssertionProjection,
+    release: CanonicalReleasePin,
+  ) -> Result<Self, KnowledgeViewValidationError> {
+    let assertion = projection.assertion();
+    let traversal = projection.traversal();
+    if assertion.release_id != release.release_id
+      || assertion.evidence_ids.is_empty()
+      || assertion.evidence_ids.len() > MAX_KNOWLEDGE_STEP_EVIDENCE
+      || traversal.source == traversal.target
     {
       return Err(KnowledgeViewValidationError::InvalidProof);
     }
-    Ok(())
+    Ok(Self {
+      projection,
+      release,
+    })
+  }
+
+  /// Returns the exact canonical hydration proof retained by this step.
+  pub fn projection(&self) -> &HydratedAssertionProjection {
+    &self.projection
+  }
+
+  /// Returns the complete immutable content pin used for hydration.
+  pub fn release(&self) -> &CanonicalReleasePin {
+    &self.release
+  }
+
+  fn source(&self) -> &CanonicalNodeId {
+    &self.projection.traversal().source
+  }
+
+  fn target(&self) -> &CanonicalNodeId {
+    &self.projection.traversal().target
+  }
+
+  fn edge_id(&self) -> &CanonicalId {
+    &self.projection.traversal().edge_id
+  }
+
+  fn assertion_id(&self) -> &CanonicalId {
+    &self.projection.traversal().assertion_id
   }
 }
 
@@ -211,7 +247,14 @@ pub struct UsefulRootPath {
 impl UsefulRootPath {
   /// Validates a short, contiguous, cycle-free path ending at the declared root.
   pub fn validate(&self) -> Result<(), KnowledgeViewValidationError> {
-    validate_path(&self.item, &self.root, &self.steps)
+    validate_path(&self.item, &self.root, &self.steps, None)
+  }
+
+  fn validate_for(
+    &self,
+    release: &CanonicalReleasePin,
+  ) -> Result<(), KnowledgeViewValidationError> {
+    validate_path(&self.item, &self.root, &self.steps, Some(release))
   }
 }
 
@@ -230,6 +273,17 @@ pub struct KnowledgeViewItem {
   pub path_to_root: Option<UsefulRootPath>,
 }
 
+/// One deterministic response branch containing an ordered partition of non-root items.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KnowledgeViewBranch {
+  /// Stable one-based branch order.
+  pub order: u16,
+  /// Server-owned relevance group.
+  pub reason: KnowledgeRelevanceReason,
+  /// Ordered canonical identities assigned to this branch.
+  pub item_ids: Vec<CanonicalNodeId>,
+}
+
 /// One validated, release-pinned superset from which response levels are projected.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KnowledgeViewSuperset {
@@ -237,6 +291,10 @@ pub struct KnowledgeViewSuperset {
   pub request: KnowledgeViewRequest,
   /// Ordered items; the root is always first.
   pub items: Vec<KnowledgeViewItem>,
+  /// Ordered branches that partition every non-root item exactly once.
+  pub branches: Vec<KnowledgeViewBranch>,
+  /// Whether eligible items remain after this page.
+  pub truncated: bool,
   /// Opaque next-page state produced after deterministic ordering.
   pub next_cursor: Option<String>,
 }
@@ -274,19 +332,42 @@ impl KnowledgeViewSuperset {
           if path.item != item.node || &path.root != root {
             return Err(KnowledgeViewValidationError::OrphanItem);
           }
-          path.validate()?;
+          path.validate_for(&self.request.release)?;
         }
         KnowledgeEvidenceState::Exploratory => {
           return Err(KnowledgeViewValidationError::SimilarityAsProof);
         }
       }
     }
+    if self.truncated != self.next_cursor.is_some() {
+      return Err(KnowledgeViewValidationError::InvalidCursorState);
+    }
+    let mut branched = BTreeSet::new();
+    for (index, branch) in self.branches.iter().enumerate() {
+      if branch.order as usize != index + 1 || branch.item_ids.is_empty() {
+        return Err(KnowledgeViewValidationError::InvalidOrdering);
+      }
+      for id in &branch.item_ids {
+        let item = self
+          .items
+          .iter()
+          .skip(1)
+          .find(|item| &item.node == id)
+          .ok_or(KnowledgeViewValidationError::OrphanItem)?;
+        if item.branch != branch.reason || !branched.insert(id.clone()) {
+          return Err(KnowledgeViewValidationError::InvalidOrdering);
+        }
+      }
+    }
+    if branched.len() != self.items.len().saturating_sub(1) {
+      return Err(KnowledgeViewValidationError::OrphanItem);
+    }
     Ok(())
   }
 
   /// Deterministically projects breadth without changing included items' truth or order.
-  pub fn project(&self, level: ResponseLevel) -> Vec<&KnowledgeViewItem> {
-    let limit = match level {
+  pub fn project(&self) -> Vec<&KnowledgeViewItem> {
+    let limit = match self.request.response_level {
       ResponseLevel::Brief => 8,
       ResponseLevel::Standard => 24,
       ResponseLevel::Full => MAX_KNOWLEDGE_VIEW_ITEMS,
@@ -339,11 +420,16 @@ impl KnowledgePathResult {
       if path.order as usize != index + 1 {
         return Err(KnowledgeViewValidationError::InvalidOrdering);
       }
-      validate_path(&self.request.from.node, &self.request.to.node, &path.steps)?;
+      validate_path(
+        &self.request.from.node,
+        &self.request.to.node,
+        &path.steps,
+        Some(&self.request.release),
+      )?;
       let fingerprint = path
         .steps
         .iter()
-        .map(|step| step.edge_id.clone())
+        .map(|step| step.edge_id().clone())
         .collect::<Vec<_>>();
       if !fingerprints.insert(fingerprint) {
         return Err(KnowledgeViewValidationError::DuplicatePath);
@@ -380,12 +466,16 @@ pub enum KnowledgeViewValidationError {
   /// Similarity or request-local material was used as factual proof.
   #[error("similarity cannot prove a knowledge connection")]
   SimilarityAsProof,
+  /// Pagination metadata contradicted whether the result was truncated.
+  #[error("knowledge cursor state is inconsistent")]
+  InvalidCursorState,
 }
 
 fn validate_path(
   start: &CanonicalNodeId,
   end: &CanonicalNodeId,
   steps: &[VerifiedKnowledgeStep],
+  expected_release: Option<&CanonicalReleasePin>,
 ) -> Result<(), KnowledgeViewValidationError> {
   if steps.is_empty() || steps.len() > MAX_KNOWLEDGE_PATH_HOPS {
     return Err(KnowledgeViewValidationError::InvalidCount);
@@ -395,14 +485,15 @@ fn validate_path(
   let mut edges = BTreeSet::new();
   let mut assertions = BTreeSet::new();
   for step in steps {
-    step.validate()?;
-    if !edges.insert(step.edge_id.clone()) || !assertions.insert(step.assertion_id.clone()) {
+    if step.release().release_id != step.projection().assertion().release_id
+      || expected_release.is_some_and(|expected| step.release() != expected)
+      || !edges.insert(step.edge_id().clone())
+      || !assertions.insert(step.assertion_id().clone())
+    {
       return Err(KnowledgeViewValidationError::InvalidPath);
     }
-    current = if &step.source == current {
-      &step.target
-    } else if &step.target == current {
-      &step.source
+    current = if step.source() == current {
+      step.target()
     } else {
       return Err(KnowledgeViewValidationError::InvalidPath);
     };
@@ -414,10 +505,6 @@ fn validate_path(
     return Err(KnowledgeViewValidationError::InvalidPath);
   }
   Ok(())
-}
-
-fn ordered<T: Ord>(values: &[T]) -> bool {
-  values.windows(2).all(|pair| pair[0] < pair[1])
 }
 
 /// Groups validated items by branch without changing deterministic item order.
@@ -452,17 +539,15 @@ mod tests {
   }
 
   fn step(from: &str, to: &str, edge: &str) -> VerifiedKnowledgeStep {
-    VerifiedKnowledgeStep {
-      edge_id: id(edge),
-      relationship_revision: 1,
-      assertion_id: id(&format!("a-{edge}")),
-      assertion_revision: 1,
-      traversal_id: id("traversal"),
-      relation_registry_revision: 1,
-      source: node(from),
-      target: node(to),
-      evidence_ids: vec![id("evidence")],
-    }
+    let release = CanonicalReleasePin::new(id("release"), "canonical-v1".into()).unwrap();
+    let projection = HydratedAssertionProjection::topology_fixture(
+      node(from),
+      node(to),
+      id(edge),
+      id(&format!("a-{edge}")),
+      release.release_id.clone(),
+    );
+    VerifiedKnowledgeStep::from_hydrated(projection, release).unwrap()
   }
 
   #[test]
@@ -517,6 +602,12 @@ mod tests {
           }),
         },
       ],
+      branches: vec![KnowledgeViewBranch {
+        order: 1,
+        reason: KnowledgeRelevanceReason::Meaning,
+        item_ids: vec![item.clone()],
+      }],
+      truncated: false,
       next_cursor: None,
     };
     assert_eq!(valid.validate(), Ok(()));
@@ -562,11 +653,17 @@ mod tests {
           evidence_state: KnowledgeEvidenceState::Inferred,
           path_to_root: Some(UsefulRootPath {
             root,
-            item,
+            item: item.clone(),
             steps: vec![step("item", "root", "edge")],
           }),
         },
       ],
+      branches: vec![KnowledgeViewBranch {
+        order: 1,
+        reason: KnowledgeRelevanceReason::Mechanism,
+        item_ids: vec![item.clone()],
+      }],
+      truncated: false,
       next_cursor: None,
     };
     assert_eq!(inferred.validate(), Ok(()));
@@ -622,5 +719,48 @@ mod tests {
       cyclic.validate(),
       Err(KnowledgeViewValidationError::InvalidPath)
     );
+  }
+
+  #[test]
+  fn directed_steps_cannot_be_traversed_in_reverse() {
+    let result = KnowledgePathResult {
+      request: KnowledgePathRequest {
+        from: KnowledgeRoot {
+          node: node("target"),
+        },
+        to: KnowledgeRoot {
+          node: node("source"),
+        },
+        target_language: LanguageTag::parse("en").unwrap(),
+        release: CanonicalReleasePin::new(id("release"), "canonical-v1".into()).unwrap(),
+      },
+      outcome: KnowledgePathOutcome::Connected(vec![VerifiedKnowledgePath {
+        order: 1,
+        steps: vec![step("source", "target", "directed-edge")],
+      }]),
+    };
+    assert_eq!(
+      result.validate(),
+      Err(KnowledgeViewValidationError::InvalidPath)
+    );
+  }
+
+  #[test]
+  fn debug_output_redacts_hydrated_content_and_cursor_state() {
+    let step = step("source", "target", "edge");
+    let request = KnowledgeViewRequest {
+      root: KnowledgeRoot {
+        node: node("source"),
+      },
+      lens: KnowledgeLens::Meaning,
+      target_language: LanguageTag::parse("en").unwrap(),
+      response_level: ResponseLevel::Brief,
+      release: CanonicalReleasePin::new(id("release"), "canonical-v1".into()).unwrap(),
+      cursor: Some("private-cursor-value".into()),
+    };
+    assert_eq!(format!("{step:?}"), "VerifiedKnowledgeStep(REDACTED)");
+    let request_debug = format!("{request:?}");
+    assert!(request_debug.contains("REDACTED"));
+    assert!(!request_debug.contains("private-cursor-value"));
   }
 }

@@ -18,6 +18,7 @@ use thiserror::Error;
 use super::{
   canonical::{CanonicalId, CanonicalReleasePin, LanguageTag},
   knowledge_release::{EdgeCollectionId, NodeCollectionId},
+  knowledge_view::KnowledgeLens,
   retrieval_data::RetrievalNodeType,
   translation_turn::ResponseLevel,
 };
@@ -99,8 +100,8 @@ impl KnowledgeCursorRoot {
 pub struct KnowledgeCursorBinding {
   /// Typed canonical root.
   pub root: KnowledgeCursorRoot,
-  /// Closed lens wire name; validated as a bounded token until the lens enum is integrated.
-  pub lens: String,
+  /// Closed server-owned knowledge lens.
+  pub lens: KnowledgeLens,
   /// Canonical response language.
   pub language: LanguageTag,
   /// Deterministic response breadth.
@@ -135,12 +136,10 @@ impl KnowledgeCursorBinding {
   /// Returns an error when a field is blank, untrimmed, oversized, or a hash is not canonical
   /// lowercase SHA-256.
   pub fn validate(&self) -> Result<(), KnowledgeCursorError> {
-    if !valid_token(&self.lens)
-      || !valid_scalar(
-        &self.canonical_release.canonical_schema_version,
-        MAX_SCALAR_CHARS,
-      )
-      || !valid_hash(&self.node_collection_hash)
+    if !valid_scalar(
+      &self.canonical_release.canonical_schema_version,
+      MAX_SCALAR_CHARS,
+    ) || !valid_hash(&self.node_collection_hash)
       || !valid_hash(&self.edge_collection_hash)
       || [
         &self.assertion_version,
@@ -365,7 +364,7 @@ impl From<&KnowledgeCursor> for CursorPayload {
       version: CURSOR_VERSION,
       root_family: binding.root.family.clone(),
       root_id: binding.root.id.to_string(),
-      lens: binding.lens.clone(),
+      lens: binding.lens.as_str().to_string(),
       language: binding.language.as_str().to_string(),
       response_level: response_level_name(binding.response_level).to_string(),
       release_id: binding.canonical_release.release_id.to_string(),
@@ -392,7 +391,7 @@ impl CursorPayload {
     }
     let binding = KnowledgeCursorBinding {
       root: KnowledgeCursorRoot::new(self.root_family, parse_id(self.root_id)?)?,
-      lens: self.lens,
+      lens: KnowledgeLens::parse(&self.lens).ok_or(KnowledgeCursorError::Malformed)?,
       language: LanguageTag::parse(&self.language).map_err(|_| KnowledgeCursorError::Malformed)?,
       response_level: ResponseLevel::parse(&self.response_level)
         .ok_or(KnowledgeCursorError::Malformed)?,
@@ -437,13 +436,6 @@ fn valid_scalar(value: &str, max_chars: usize) -> bool {
     && !value.chars().any(char::is_control)
 }
 
-fn valid_token(value: &str) -> bool {
-  valid_scalar(value, 64)
-    && value
-      .bytes()
-      .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-}
-
 fn valid_hash(value: &str) -> bool {
   value.len() == 71
     && value.starts_with("sha256:")
@@ -463,7 +455,7 @@ mod tests {
   fn binding() -> KnowledgeCursorBinding {
     KnowledgeCursorBinding {
       root: KnowledgeCursorRoot::new("lexical_sense", id("sense-root")).unwrap(),
-      lens: "usage".into(),
+      lens: KnowledgeLens::Usage,
       language: LanguageTag::parse("zh-CN").unwrap(),
       response_level: ResponseLevel::Standard,
       canonical_release: CanonicalReleasePin::new(id("release-1"), "canonical-v1".into()).unwrap(),
@@ -530,7 +522,7 @@ mod tests {
       .unwrap();
     let mut changes = Vec::new();
     let mut changed = original.clone();
-    changed.lens = "taxonomy".into();
+    changed.lens = KnowledgeLens::Meaning;
     changes.push(changed);
     let mut changed = original.clone();
     changed.response_level = ResponseLevel::Full;

@@ -1,6 +1,6 @@
 //! Authoritative, release-pinned values hydrated after retrieval nomination.
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, fmt};
 
 use thiserror::Error;
 
@@ -113,11 +113,17 @@ pub struct SelectedBinaryTraversal {
 }
 
 /// Sole validated read projection used by future knowledge views and path steps.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct HydratedAssertionProjection {
   assertion: CanonicalAssertion,
   registry: AssertionRegistryEntry,
   traversal: SelectedBinaryTraversal,
+}
+
+impl fmt::Debug for HydratedAssertionProjection {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter.write_str("HydratedAssertionProjection(REDACTED)")
+  }
 }
 
 impl HydratedAssertionProjection {
@@ -181,6 +187,57 @@ impl HydratedAssertionProjection {
   /// Returns the selected traversal projection for view and path composition.
   pub fn traversal(&self) -> &SelectedBinaryTraversal {
     &self.traversal
+  }
+
+  #[cfg(test)]
+  pub(crate) fn topology_fixture(
+    source: CanonicalNodeId,
+    target: CanonicalNodeId,
+    edge_id: CanonicalId,
+    assertion_id: CanonicalId,
+    release_id: ReleaseId,
+  ) -> Self {
+    use super::graph::RelationshipVerificationState;
+
+    let evidence_id = CanonicalId::new("evidence-fixture").unwrap();
+    Self {
+      assertion: CanonicalAssertion {
+        assertion_id: assertion_id.clone(),
+        assertion_revision: 1,
+        release_id,
+        relation_type_id: CanonicalId::new("relation-fixture").unwrap(),
+        relation_registry_revision: 1,
+        statement: "Validated test fixture.".into(),
+        participants: Vec::new(),
+        domain_ids: Vec::new(),
+        conditions: Vec::new(),
+        applicable_sense_ids: Vec::new(),
+        evidence_ids: vec![evidence_id],
+        evidence_lineage: Vec::new(),
+        provenance_ids: Vec::new(),
+        verification_state: RelationshipVerificationState::Verified,
+      },
+      registry: AssertionRegistryEntry {
+        relation_type_id: CanonicalId::new("relation-fixture").unwrap(),
+        registry_revision: 1,
+        participant_roles: Vec::new(),
+        resolved_domains: Vec::new(),
+        resolved_conditions: Vec::new(),
+        binary_traversals: Vec::new(),
+        requires_evidence: true,
+      },
+      traversal: SelectedBinaryTraversal {
+        edge_id,
+        relationship_revision: 1,
+        assertion_id,
+        assertion_revision: 1,
+        traversal_id: CanonicalId::new("traversal-fixture").unwrap(),
+        source,
+        target,
+        relation_type: GraphRelationType::Hypernym,
+        relation_registry_revision: 1,
+      },
+    }
   }
 }
 
