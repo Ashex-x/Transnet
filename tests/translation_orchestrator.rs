@@ -118,22 +118,26 @@ fn turn(text: &str) -> TranslationTurn {
 
 fn turn_at_level(text: &str, response_level: &str) -> TranslationTurn {
   TranslationTurn::new(TranslationTurnRequest {
-    text: text.to_string(),
+    text: Some(text.to_string()),
+    input: None,
     source_language: "en".to_string(),
     target_language: "zh-CN".to_string(),
     response_level: response_level.to_string(),
     history: Vec::new(),
+    guidance: None,
   })
   .unwrap()
 }
 
 fn turn_with_history(text: &str, history: Vec<TranslationHistory>) -> TranslationTurn {
   TranslationTurn::new(TranslationTurnRequest {
-    text: text.to_string(),
+    text: Some(text.to_string()),
+    input: None,
     source_language: "en".to_string(),
     target_language: "zh-CN".to_string(),
     response_level: "full".to_string(),
     history,
+    guidance: None,
   })
   .unwrap()
 }
@@ -338,16 +342,22 @@ async fn unbreakable_oversized_text_fails_before_model_work() {
 }
 
 #[tokio::test]
-async fn excessive_natural_segments_fail_the_chunk_count_bound_before_model_work() {
+async fn excessive_natural_segments_fail_the_input_bound_before_model_work() {
   let segment = format!("{} ", "x".repeat(4_097));
   let source = segment.repeat(129);
-  let (service, calls) = chunking_orchestrator(None);
-
   assert_eq!(
-    service.translate(&turn(&source)).await.unwrap_err(),
-    TranslationOrchestrationError::ChunkPlanLimit
+    TranslationTurn::new(TranslationTurnRequest {
+      text: Some(source),
+      input: None,
+      source_language: "en".to_string(),
+      target_language: "zh-CN".to_string(),
+      response_level: "standard".to_string(),
+      history: Vec::new(),
+      guidance: None,
+    })
+    .unwrap_err(),
+    transnet::domain::translation_turn::TurnValidationError::Field("input.text")
   );
-  assert!(calls.lock().unwrap().connected.is_empty());
 }
 
 #[tokio::test]
@@ -392,11 +402,13 @@ async fn any_chunk_failure_fails_closed_without_a_partial_result() {
 async fn auto_detection_rejects_symbol_only_input_without_calling_a_model() {
   let (service, calls) = orchestrator(Ok("unused".to_string()), Ok(lexical_draft()));
   let turn = TranslationTurn::new(TranslationTurnRequest {
-    text: "+++".to_string(),
+    text: Some("+++".to_string()),
+    input: None,
     source_language: "auto".to_string(),
     target_language: "zh-CN".to_string(),
     response_level: "brief".to_string(),
     history: Vec::new(),
+    guidance: None,
   })
   .unwrap();
 

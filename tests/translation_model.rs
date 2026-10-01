@@ -78,11 +78,13 @@ fn settings(boundary: usize) -> TranslationConfig {
 
 fn turn(text: String) -> TranslationTurn {
   TranslationTurn::new(TranslationTurnRequest {
-    text,
+    text: Some(text),
+    input: None,
     source_language: "en".to_string(),
     target_language: "zh-CN".to_string(),
     response_level: "standard".to_string(),
     history: Vec::new(),
+    guidance: None,
   })
   .unwrap()
 }

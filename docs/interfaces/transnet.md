@@ -4,7 +4,7 @@
 
 This contract defines the target island-port-to-Transnet interface and the shared internal HTTP/1.1-over-UDS rules. Island-port owns internet transport, authentication, user state, file ingestion, document reconstruction, and final presentation. Transnet receives no end-user identity and persists no live request content.
 
-Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 through the target inbound UDS and implements target capability discovery and health, liveness, and dependency-readiness probes plus the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. Explicit configuration may retain the loopback listener during migration. Structured segments, image regions, live retrieval, guided knowledge views, and knowledge paths are not implemented until their handlers, composition, tests, and documentation land together.
+Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 through the target inbound UDS and implements target capability discovery and health, liveness, and dependency-readiness probes plus the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. The translation boundary now strictly validates tagged text, structured segments, image regions, history, and professional guidance; text reaches the current orchestrator, while valid segment and image requests return `501 translation_capability_unavailable` until their result composition lands. Explicit configuration may retain the loopback listener during migration. Live retrieval, guided knowledge views, and knowledge paths remain unimplemented.
 
 ## Contents
 
@@ -150,6 +150,8 @@ Vision input contains sanitized inline images and normalized rectangles. Coordin
 
 Text is limited to 131,072 Unicode scalars. Segmented input accepts at most 256 segments, 8,192 scalars per segment, and 131,072 aggregate scalars. Each segment accepts at most 128 protected ranges. These limits are subordinate to the encoded body limit.
 
+The current runtime accepts both the tagged text shape and the legacy top-level `text` field during migration; callers must send exactly one. Tagged text without execution-dependent guidance is processed normally. Segment and image-region requests receive bounded structural, media-header, dimension, region, and ordering validation before returning the content-free `501 translation_capability_unavailable` problem, and no model is called for those inputs. Full image decoding remains part of the image-region execution slice.
+
 `history` is optional and chronological. Each item contains only previous source text, translated text, and language tags. It has no turn ID, time, user ID, feedback, model metadata, or save state. The common body limit bounds history; there is no separate item-count limit.
 
 ## Professional guidance
@@ -173,6 +175,8 @@ Text is limited to 131,072 Unicode scalars. Segmented input accepts at most 256 
 `purpose` accepts `general`, `publication`, `technical`, `localization`, or `subtitles`. `audience` accepts `general`, `professional`, `specialist`, or `young_reader`. `register` accepts `preserve`, `neutral`, `formal`, or `informal`. Terminology policy accepts `required`, `preferred`, or `forbidden`; at most 128 entries are accepted, and source and target values are each limited to 256 scalars. `max_alternatives` is 0 through 2.
 
 Guidance constrains the current result but never creates a profile, translation memory, or canonical term. Contradictory required terms, protected ranges, or format rules return `422 constraint_conflict` rather than silently dropping a constraint.
+
+Until guidance-aware orchestration is composed, valid execution-dependent guidance returns `501 translation_capability_unavailable`; the runtime never silently ignores an accepted constraint. Explicit `offline` freshness by itself is accepted because it preserves the default no-network behavior.
 
 ## Translation output
 

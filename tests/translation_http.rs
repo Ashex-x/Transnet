@@ -271,6 +271,77 @@ async fn malformed_unknown_and_semantically_invalid_requests_use_safe_problems()
 }
 
 #[tokio::test]
+async fn target_text_guidance_is_never_silently_ignored() {
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input": {"type": "text", "text": "hot"},
+      "source_language": "en", "target_language": "zh-CN", "response_level": "brief",
+      "guidance": {"purpose": "technical", "audience": "specialist", "register": "preserve",
+        "terminology": [], "max_alternatives": 0, "annotations": ["terminology"], "freshness": "offline"}
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  assert_eq!(
+    body(response).await["code"],
+    "translation_capability_unavailable"
+  );
+}
+
+#[tokio::test]
+async fn unsupported_inline_image_media_type_returns_415() {
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input": {"type": "image_regions", "images": [{"image_id":"p1",
+        "media_type":"image/gif", "data":"R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
+        "regions":[{"region_id":"r1","x":0.0,"y":0.0,"width":1.0,"height":1.0}]}],
+        "reading_order":["p1:r1"]},
+      "source_language":"auto", "target_language":"en", "response_level":"brief"
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+  assert_eq!(body(response).await["code"], "unsupported_image_media_type");
+}
+
+#[tokio::test]
+async fn structured_inputs_validate_then_fail_with_safe_capability_problem() {
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input": {"type": "segments", "segments": [{"segment_id":"s1", "text":"Launch {name}",
+        "role":"title", "format":"plain", "protected_ranges":[{"start":7,"end":13}]}]},
+      "source_language":"en", "target_language":"zh-CN", "response_level":"standard"
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  assert_eq!(
+    body(response).await["code"],
+    "translation_capability_unavailable"
+  );
+}
+
+#[tokio::test]
+async fn contradictory_guidance_returns_redacted_constraint_problem() {
+  let secret = "private-source-term-193";
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input": {"type":"text", "text":"ordinary text"},
+      "source_language":"en", "target_language":"zh-CN", "response_level":"brief",
+      "guidance":{"terminology":[
+        {"source":secret,"target":"甲","policy":"required"},
+        {"source":secret,"target":"乙","policy":"required"}
+      ]}
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+  let problem = body(response).await;
+  assert_eq!(problem["code"], "constraint_conflict");
+  assert!(!problem.to_string().contains(secret));
+}
+
+#[tokio::test]
 async fn target_route_rejects_other_methods_and_unknown_paths_with_shared_problems() {
   let router = app(Ok(connected_output()), Ok(lexical_output()));
   let method = router

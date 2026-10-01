@@ -34,6 +34,23 @@ pub(crate) async fn translate(
     Ok(turn) => turn,
     Err(TurnValidationError::TooLarge) => return problem::payload_too_large(&request_id),
     Err(TurnValidationError::Field(field)) => return invalid_translation_field(field, &request_id),
+    Err(TurnValidationError::ConstraintConflict(field)) => {
+      return constraint_conflict(field, &request_id)
+    }
+    Err(TurnValidationError::Unsupported(capability)) => {
+      return unsupported_capability(capability, &request_id)
+    }
+    Err(TurnValidationError::UnsupportedImageMediaType) => {
+      return problem::response(
+        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        "unsupported_image_media_type",
+        "Unsupported image media type",
+        "The declared inline-image media type is not supported.",
+        &request_id,
+        false,
+        Vec::new(),
+      )
+    }
   };
   let Some(orchestrator) = state.translation_orchestrator() else {
     return translation_model_unavailable(&request_id);
@@ -108,6 +125,11 @@ fn invalid_translation_field(field: &'static str, request_id: &RequestId) -> Res
     "target_language" => "must be one of `en` or `zh-CN`.",
     "response_level" => "must be one of `brief`, `standard`, or `full`.",
     "history" => "must contain only valid chronological minimal translation turns.",
+    "input" => "must contain exactly one legacy text or tagged input value.",
+    "input.text" => "must be nonblank and contain at most 131072 Unicode scalars.",
+    "guidance.max_alternatives" => {
+      "must be between zero and two; only zero is currently available."
+    }
     _ => "is invalid.",
   };
   problem::response(
@@ -118,6 +140,36 @@ fn invalid_translation_field(field: &'static str, request_id: &RequestId) -> Res
     request_id,
     false,
     vec![FieldError::new(field, message)],
+  )
+}
+
+fn constraint_conflict(field: &'static str, request_id: &RequestId) -> Response {
+  problem::response(
+    StatusCode::UNPROCESSABLE_ENTITY,
+    "constraint_conflict",
+    "Translation constraints conflict",
+    "The request contains translation constraints that cannot all be satisfied.",
+    request_id,
+    false,
+    vec![FieldError::new(
+      field,
+      "contains contradictory constraints.",
+    )],
+  )
+}
+
+fn unsupported_capability(capability: &'static str, request_id: &RequestId) -> Response {
+  problem::response(
+    StatusCode::NOT_IMPLEMENTED,
+    "translation_capability_unavailable",
+    "Translation capability unavailable",
+    "The input is valid, but this translation capability is not available in the current runtime.",
+    request_id,
+    false,
+    vec![FieldError::new(
+      capability,
+      "is not implemented by the current runtime.",
+    )],
   )
 }
 
