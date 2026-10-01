@@ -13,21 +13,30 @@ use super::{problem, request_id::RequestId, AppState};
 pub(crate) mod basic_card;
 pub(crate) mod capabilities;
 pub(crate) mod graph;
+pub(crate) mod knowledge_paths;
+pub(crate) mod knowledge_views;
 pub(crate) mod lookup;
 pub(crate) mod probe;
 pub(crate) mod sense;
 pub(crate) mod translation;
 
 /// Builds the target `/api/v1` routes implemented by the current loopback runtime.
-pub(crate) fn target_router() -> Router<AppState> {
-  Router::new()
+pub(crate) fn target_router(
+  knowledge: Option<knowledge_views::KnowledgeRouteDependencies>,
+) -> Router<AppState> {
+  let router = Router::new()
     .route("/capabilities", post(capabilities::get))
     .route("/health", post(probe::health))
     .route("/livez", post(probe::livez))
     .route("/readyz", post(probe::readyz))
     .route("/translations", post(translation::translate))
     .route("/basic-cards/lookup", post(basic_card::lookup))
-    .route("/senses/get", post(basic_card::sense))
+    .route("/senses/get", post(basic_card::sense));
+  let router = match knowledge {
+    Some(dependencies) => router.merge(knowledge_views::routes(dependencies)),
+    None => router,
+  };
+  router
     .fallback(not_found)
     .method_not_allowed_fallback(method_not_allowed)
 }

@@ -7,11 +7,18 @@ use axum::{
 use serde_json::Value;
 use tower::ServiceExt;
 use transnet::{
-  app_router_with_http_config, AppState, HttpConfig, ProviderConfig, TranslationConfig,
-  TranslationService,
+  app_router_with_http_config, AppState, HttpConfig, KnowledgeCapabilityBundle, ProviderConfig,
+  ServiceCapabilities, TranslationConfig, TranslationService,
 };
 
 fn app(max_request_body_bytes: usize) -> axum::Router {
+  app_with_state(max_request_body_bytes, |state| state)
+}
+
+fn app_with_state(
+  max_request_body_bytes: usize,
+  configure: impl FnOnce(AppState) -> AppState,
+) -> axum::Router {
   let provider = ProviderConfig {
     base_url: "http://provider-secret.invalid/v1".to_string(),
     model: "private-model-name".to_string(),
@@ -29,7 +36,7 @@ fn app(max_request_body_bytes: usize) -> axum::Router {
   )
   .unwrap();
   app_router_with_http_config(
-    AppState::new(service),
+    configure(AppState::new(service)),
     &HttpConfig {
       max_request_body_bytes,
       allowed_origins: Vec::new(),
@@ -37,6 +44,20 @@ fn app(max_request_body_bytes: usize) -> axum::Router {
     },
   )
   .unwrap()
+}
+
+#[tokio::test]
+async fn refuses_manually_advertised_knowledge_without_the_atomic_route_bundle() {
+  let capabilities = ServiceCapabilities::current(1)
+    .with_knowledge_bundle(KnowledgeCapabilityBundle::FullyConfigured);
+  let response = app_with_state(8_192, |state| state.with_capabilities(capabilities))
+    .oneshot(post("{}"))
+    .await
+    .unwrap();
+  let (_, json) = body(response).await;
+
+  assert_eq!(json["data"]["knowledge_lenses"], serde_json::json!([]));
+  assert_eq!(json["data"]["limits"]["max_request_body_bytes"], 8_192);
 }
 
 async fn body(response: axum::response::Response) -> (String, Value) {

@@ -84,6 +84,11 @@ impl BoundedKnowledgePathService {
     }
   }
 
+  /// Returns the immutable retrieval execution served by this application instance.
+  pub fn execution(&self) -> &NeighborProjectionExecutionExpectation {
+    &self.execution
+  }
+
   /// Finds up to three deterministic directed paths of no more than three verified hops.
   ///
   /// Every traversed edge is hydrated as its exact canonical assertion and declared binary

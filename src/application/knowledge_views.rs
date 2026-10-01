@@ -5,10 +5,11 @@ use std::{
   sync::Arc,
 };
 
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
-  application::knowledge_view_policy::{deterministic_order_key, policy_for},
+  application::knowledge_view_policy::{deterministic_order_key, policy_for, response_item_budget},
   domain::{
     assertion::{CanonicalNodeFamily, CanonicalNodeId},
     canonical::EvidenceUse,
@@ -73,6 +74,11 @@ impl KnowledgeViewService {
     }
   }
 
+  /// Returns the immutable projection contract used to bind public continuation cursors.
+  pub fn execution(&self) -> &NeighborProjectionExecutionExpectation {
+    &self.execution
+  }
+
   /// Builds one deterministic factual view from exact hydrated assertion traversals.
   ///
   /// # Errors
@@ -84,6 +90,23 @@ impl KnowledgeViewService {
     context: &RequestContext,
     request: KnowledgeViewRequest,
   ) -> Result<KnowledgeViewSuperset, KnowledgeViewServiceError> {
+    self.build_after(context, request, None).await
+  }
+
+  /// Builds one page after an application-owned deterministic ordering key.
+  ///
+  /// The key must come from a successfully decoded knowledge cursor. It is never passed to a
+  /// dependency; retrieval pagination is exhausted independently before this page is selected.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed error for an unknown ordering key or the same failures as [`Self::build`].
+  pub async fn build_after(
+    &self,
+    context: &RequestContext,
+    request: KnowledgeViewRequest,
+    resume_after: Option<&str>,
+  ) -> Result<KnowledgeViewSuperset, KnowledgeViewServiceError> {
     if context.content_release() != Some(&request.release.release_id)
       || request.release != self.execution.content
       || self.execution.validate().is_err()
@@ -91,8 +114,7 @@ impl KnowledgeViewService {
       return Err(KnowledgeViewServiceError::InconsistentData);
     }
     ensure_deadline(context)?;
-    // The public token is an authenticated k1 cursor, never a retrieval-data continuation token.
-    // This service materializes its bounded superset, so it accepts only the initial page.
+    // The HTTP boundary decodes k1 into `resume_after`; raw wire cursors never reach this service.
     if request.cursor.is_some() {
       return Err(KnowledgeViewServiceError::InconsistentData);
     }
@@ -203,7 +225,34 @@ impl KnowledgeViewService {
     gathered.sort_by_key(|(node, relation, _)| {
       deterministic_order_key(&policy, *relation, node.family(), node.id())
     });
-    self.hydrate_and_compose(context, request, gathered).await
+    let page_size = response_item_budget(&policy, request.response_level).saturating_sub(1);
+    let start = match resume_after {
+      Some(key) => gathered
+        .iter()
+        .position(|(node, _, _)| knowledge_ordering_key(node) == key)
+        .map(|index| index + 1)
+        .ok_or(KnowledgeViewServiceError::InconsistentData)?,
+      None => 0,
+    };
+    let truncated = gathered.len().saturating_sub(start) > page_size;
+    let page = gathered
+      .into_iter()
+      .skip(start)
+      .take(page_size)
+      .collect::<Vec<_>>();
+    let next_cursor = if truncated {
+      Some(knowledge_ordering_key(
+        &page
+          .last()
+          .ok_or(KnowledgeViewServiceError::InconsistentData)?
+          .0,
+      ))
+    } else {
+      None
+    };
+    self
+      .hydrate_and_compose(context, request, page, next_cursor)
+      .await
   }
 
   async fn hydrate_and_compose(
@@ -215,6 +264,7 @@ impl KnowledgeViewService {
       crate::domain::graph::GraphRelationType,
       Vec<CanonicalAssertionProjectionRef>,
     )>,
+    next_cursor: Option<String>,
   ) -> Result<KnowledgeViewSuperset, KnowledgeViewServiceError> {
     let mut seen_edges = BTreeSet::new();
     let mut projections = Vec::new();
@@ -403,14 +453,57 @@ impl KnowledgeViewService {
       request,
       items,
       branches,
-      truncated: false,
-      next_cursor: None,
+      truncated: next_cursor.is_some(),
+      next_cursor,
     };
     result
       .validate()
       .map_err(|_| KnowledgeViewServiceError::InconsistentData)?;
     ensure_deadline(context)?;
     Ok(result)
+  }
+}
+
+/// Produces the bounded stable identity bound into a public knowledge cursor.
+pub fn knowledge_ordering_key(node: &CanonicalNodeId) -> String {
+  let mut hasher = Sha256::new();
+  hasher.update((knowledge_node_family_wire(node.family()).len() as u32).to_be_bytes());
+  hasher.update(knowledge_node_family_wire(node.family()).as_bytes());
+  hasher.update((node.id().as_str().len() as u32).to_be_bytes());
+  hasher.update(node.id().as_str().as_bytes());
+  format!("sha256:{:x}", hasher.finalize())
+}
+
+/// Returns the exact cursor and HTTP wire name for a canonical node family.
+pub const fn knowledge_node_family_wire(family: CanonicalNodeFamily) -> &'static str {
+  match family {
+    CanonicalNodeFamily::Lexeme => "lexeme",
+    CanonicalNodeFamily::LexicalSense => "lexical_sense",
+    CanonicalNodeFamily::Phrase => "phrase",
+    CanonicalNodeFamily::MultilingualTerm => "multilingual_term",
+    CanonicalNodeFamily::Concept => "concept",
+    CanonicalNodeFamily::Entity => "entity",
+    CanonicalNodeFamily::Phenomenon => "phenomenon",
+    CanonicalNodeFamily::Mechanism => "mechanism",
+    CanonicalNodeFamily::Process => "process",
+    CanonicalNodeFamily::Equation => "equation",
+    CanonicalNodeFamily::Quantity => "quantity",
+    CanonicalNodeFamily::Material => "material",
+    CanonicalNodeFamily::Instrument => "instrument",
+    CanonicalNodeFamily::Method => "method",
+    CanonicalNodeFamily::Technology => "technology",
+    CanonicalNodeFamily::Application => "application",
+    CanonicalNodeFamily::Standard => "standard",
+    CanonicalNodeFamily::Organization => "organization",
+    CanonicalNodeFamily::Person => "person",
+    CanonicalNodeFamily::Place => "place",
+    CanonicalNodeFamily::Idiom => "idiom",
+    CanonicalNodeFamily::Metaphor => "metaphor",
+    CanonicalNodeFamily::GrammarPattern => "grammar_pattern",
+    CanonicalNodeFamily::Collocation => "collocation",
+    CanonicalNodeFamily::Misconception => "misconception",
+    CanonicalNodeFamily::Domain => "domain",
+    CanonicalNodeFamily::SemanticScale => "semantic_scale",
   }
 }
 

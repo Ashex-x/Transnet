@@ -8,6 +8,8 @@ pub mod in_memory;
 pub mod in_memory_retrieval;
 /// Strict outbound island-port canonical-read client.
 pub mod island_port;
+/// Strict read-only Island-port client for the active knowledge release tuple.
+pub mod island_port_active_knowledge_release;
 /// Strict outbound island-port knowledge-publication client.
 pub mod island_port_publication;
 /// Strict outbound island-port release-control client for offline tooling.

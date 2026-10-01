@@ -2,6 +2,8 @@
 
 /// Narrow reader for the active immutable canonical-only release pin.
 pub mod active_content_reader;
+/// Atomic read-only authority for the active canonical and retrieval projection tuple.
+pub mod active_knowledge_release;
 /// Shared cache interface for rebuildable application results.
 pub mod cache;
 /// Request-scoped canonical-only release and read capability.

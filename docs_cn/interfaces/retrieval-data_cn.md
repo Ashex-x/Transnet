@@ -4,7 +4,7 @@ English: [Retrieval-data endpoint interface](../../docs/interfaces/retrieval-dat
 
 本合同定义 island-port 提供的存储无关候选检索与投影 HTTP endpoint，用于版本化规范节点与关系。每个操作均为 UDS 上的 JSON。各 endpoint 的请求示例表示置于通用请求 envelope 内的 `input` object；响应示例是完整 body。Point 示例描述目标 Qdrant 实现，但不使其成为线上合同的一部分。
 
-状态：目标 island-port 合同；仓库内已有严格的 Transnet read 与 publication client，但二者都未组合进 online executable。Read client 通过注入的 UDS transport 实现有界 `nodes`、`scales`、`edges` 与直接 `neighbors` operation，校验 request-context 与重复 release 相等性，并对 envelope、echo、relation registry、eligibility、topology 和 result bound 违规执行闭合失败。其 fake transport test 不实现 island-port server，也不证明 production Qdrant behavior。Transnet 还包含强类型发布三件套、关系 admission 基础以及确定性的预发布节点/边构建工件。准备步骤当前只投影权威且 active 的 `Lexeme` 与 `Sense` 记录，解析其具备 embedding 权限的词汇 evidence，冻结独立 dense/lexical 规范输入但不生成向量，并且仅在所有端点都能从同一精确节点工件解析后构建边。Construction、scale 与更广泛的目标目录在 publisher-owned 规范来源冻结前保持闭合。Island-port server、生产 build/status 与 reconciliation persistence、embedding 与 lexical encoder 执行、Qdrant collection mutation/verification、激活、回滚及生产验收仍是外部工作。
+状态：目标 island-port 合同；仓库内已有严格的 Transnet read 与 publication client，但二者都未组合进 online executable。Read client 通过注入的 UDS transport 实现有界 `nodes`、`scales`、`edges` 与直接 `neighbors` operation，校验 request-context 与重复 release 相等性，并对 envelope、echo、relation registry、eligibility、topology 和 result bound 违规执行闭合失败。另一个严格只读 canonical-data client 现在会选择原子 active canonical/node/edge tuple，并重建这些 retrieval operation 所需的精确 execution expectation；参见 canonical-data 合同中的 `POST /api/v1/knowledge-releases/active`。其 fake transport test 不实现 island-port server，也不证明 production Qdrant behavior。Transnet 还包含强类型发布三件套、关系 admission 基础以及确定性的预发布节点/边构建工件。准备步骤当前只投影权威且 active 的 `Lexeme` 与 `Sense` 记录，解析其具备 embedding 权限的词汇 evidence，冻结独立 dense/lexical 规范输入但不生成向量，并且仅在所有端点都能从同一精确节点工件解析后构建边。Construction、scale 与更广泛的目标目录在 publisher-owned 规范来源冻结前保持闭合。Island-port server、生产 build/status 与 reconciliation persistence、embedding 与 lexical encoder 执行、Qdrant collection mutation/verification、激活、回滚及生产验收仍是外部工作。
 
 ## 目录
 
@@ -81,6 +81,8 @@ Qdrant 不包含用户、学习者、账户、画像、偏好、查询、上下�
 ## 发布与集合合同
 
 每个逻辑知识发布包含一个不可变 `knowledge_nodes` 集合和一个不可变 `knowledge_edges` 集合。两者共同钉住发布 ID、嵌入模型、向量维度、稀疏配置、payload schema 与内容哈希，并作为一个单元激活和回滚。
+
+Online caller 只通过[active knowledge release read](canonical-data_cn.md#post-apiv1knowledge-releasesactive)获得 collection identity。成功值提供完整 canonical pin、不同的不可变 node/edge collection ID、精确 collection hash、relation-registry revision 与 edge input version。随后 search caller 要求 retrieval endpoint 独立观察到的 execution proof 与该 expectation 精确相等。缺失、部分发布、未验证状态、陈旧 hash、alias 或 version drift 均不表示 readiness，也绝不回退到任意恰好响应的 collection。
 
 Point ID 必须确定。先构建节点再构建边。发布拒绝缺失端点、跨发布引用、无效方向、重复有类型边、缺失证据、不兼容词义、无支持的语言或领域主张，以及不匹配的嵌入元数据。
 

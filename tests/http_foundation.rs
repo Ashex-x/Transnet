@@ -107,6 +107,16 @@ async fn target_probes_require_exact_empty_json_and_use_envelopes() {
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     let body = json(response).await;
     assert_eq!(body["data"]["status"], status);
+    if path == "/api/v1/readyz" {
+      assert_eq!(
+        body["data"]["components"],
+        serde_json::json!({
+          "canonical_data": "disabled",
+          "retrieval_data": "disabled",
+          "knowledge_projection": "disabled"
+        })
+      );
+    }
     assert_eq!(body["meta"]["request_id"], "probe-contract-1");
     assert_eq!(body["meta"]["schema_version"], "probe-v1");
   }

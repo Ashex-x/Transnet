@@ -4,7 +4,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本合同定义目标 island-port 到 Transnet 接口及内部共享 HTTP/1.1-over-UDS 规则。Island-port 负责互联网传输、认证、用户状态、文件接入、文档重建和最终展示。Transnet 不接收终端用户身份，也不持久化实时请求内容。
 
-状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。翻译边界现在严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；text 会进入当前 orchestrator，而有效的 segment 与 image 请求在结果组合落地前返回 `501 translation_capability_unavailable`。迁移期间可以通过显式配置保留 loopback listener。实时检索、引导式知识视图和知识路径仍未实现。
+状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。翻译边界现在严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；text 会进入当前 orchestrator，而有效的 segment 与 image 请求在结果组合落地前返回 `501 translation_capability_unavailable`。迁移期间可以通过显式配置保留 loopback listener。严格 knowledge-path handler 及其 application service 已在隔离 route-composition seam 后实现，但默认 runtime 尚未注入该 service 或公开 route。实时检索与引导式知识视图仍未实现为 runtime capability。
 
 ## 目录
 
@@ -244,6 +244,8 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 
 返回当前已实现的 BCP 47 语言 selector、输入类型、图片类型、purpose、annotation family、知识 lens、body 与语义限制、实时检索可用性、generation profile 和 schema 版本。空的闭合集明确表示当前 runtime 尚未实现该能力。它不暴露凭据、provider URL、socket 路径、并发状态或私有 feature flag。
 
+知识 lens 的激活是原子的。`AppState` 只接受一个经过验证且不可拆分的 knowledge route dependency bundle，其中 view 与 path service 必须共享同一个完整不可变 projection expectation；安装它时也会同时安装与该快照匹配的 active-release readiness。未提供 bundle 时两个 route 都不存在。只有安装该 bundle 时，runtime 才公布 `meaning`、`contrast`、`usage`、`form`、`origin` 和 `domain`，即使调用方提供了陈旧 capability 声明也不例外。`mechanism` 与 `application` 仍不公布，因为其显式技术关系策略尚不可执行。默认 executable 尚未构造该 bundle。
+
 Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cache-Control: no-store`。调用方可以在需要当前部署信息时重新获取，但合同不承诺 HTTP cache 或 validator 语义。
 
 请求：`{}`
@@ -277,7 +279,7 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 
 ## POST /api/v1/readyz
 
-仅当每个已配置必需依赖都能安全服务新请求时返回 `200`。可选规范、检索、embedding、vision、reasoning 或实时检索 capability 以闭合 component state 报告；只有配置要求时才成为必需依赖。
+仅当每个已配置必需依赖都能安全服务新请求时返回 `200`。知识 bundle 只报告 `canonical_data`、`retrieval_data` 与 `knowledge_projection`，其闭合值为 `available`、`unavailable` 或 `disabled`；响应不暴露 release ID、collection ID、hash 或 endpoint。只有活动 trio authority 返回 view service 所期望的准确完整规范 pin 与不可变 node/edge projection tuple 时，已配置 bundle 才可用。任何缺失、无效或不一致的 tuple 都使整个原子 bundle 不可用。未配置的 bundle 把三个 component 都报告为 disabled，且不影响 readiness。
 
 请求：`{}`
 
@@ -286,12 +288,9 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
   "data": {
     "status": "ready",
     "components": {
-      "generation_fast": "available",
-      "generation_reasoning": "available",
-      "embedding": "available",
       "canonical_data": "disabled",
       "retrieval_data": "disabled",
-      "live_retrieval": "disabled"
+      "knowledge_projection": "disabled"
     }
   },
   "meta": {"request_id": "req_example"}
@@ -335,6 +334,44 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 
 已实现的 target cursor foundation 使用不透明 `k1.<nonce>.<ciphertext>` 格式，以 XChaCha20-Poly1305 保护，并采用与过渡期 graph cursor 不同的 authenticated context。其加密 payload 绑定有类型 root family/ID、八个闭合 lens 之一、语言、response level、完整 canonical release/schema pin、不可变 node/edge collection ID 与 SHA-256 hash、assertion/registry/projection/lens-policy/ordering version、稳定 ordering key，以及最多八个有界 dependency continuation token。解码要求与当前请求 binding 精确一致，并拒绝未知 lens 或 cursor 版本、超长值、畸形 base64、篡改、不同密钥或变化后的 release/projection 数据。Payload 不包含 query text、生成 prose、evidence excerpt、credential、user identity 或 durable history。该 foundation 本身不公开 route，也不加入 application state。
 
+仓库中的 handler bundle 现已同时实现该 route 与 path route，但尚未把两者加入默认 runtime composition。它严格拒绝未知 JSON field，把共享 request context 映射到标准 success envelope，并为成功、problem 与错误 method 响应统一设置 `Cache-Control: no-store`。格式正确但并非 bundle 已配置不可变 release 的 pin 返回 `409 content_release_unavailable`；格式错误的字段返回 `422`。Handler 针对当前请求与不可变 execution binding 精确解码公开 `k1` cursor，只把稳定的末项 ordering key 传给 application，再为响应加密下一个 ordering key。它绝不把公开 cursor 转发到 retrieval-data，也不暴露 dependency continuation token。Application 会耗尽有界 dependency pagination，先物化并确定性排序完整合格 superset，再选择 response-level page，因此恢复后的页面不会遗漏 child frontier，也不会因 dependency page boundary 改变顺序。每个序列化 verified step 都包含 release ID 与 canonical schema version；若 relation 没有声明 projection wire name，则失败关闭。
+
+成功响应使用共享 envelope，并采用以下 route-specific shape：
+
+```json
+{
+  "data": {
+    "root": {"kind": "lexical_sense", "id": "sense_sweltering_hot_01"},
+    "lens": "contrast",
+    "content_release": "knowledge-2026-09",
+    "canonical_schema_version": "canonical-v1",
+    "branches": [
+      {
+        "order": 1,
+        "reason": "contrast",
+        "item_ids": [{"kind": "lexical_sense", "id": "sense_cool_01"}]
+      }
+    ],
+    "items": [
+      {
+        "node": {"kind": "lexical_sense", "id": "sense_sweltering_hot_01"},
+        "order": 1,
+        "relevance_reason": "contrast",
+        "evidence_state": "verified",
+        "path_to_root": null
+      }
+    ],
+    "truncated": false,
+    "next_cursor": null
+  },
+  "meta": {
+    "request_id": "01JKNOWLEDGEVIEW0000000000",
+    "schema_version": "knowledge-view-result-v1",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
+
 ## POST /api/v1/knowledge/paths
 
 在两个规范 root 之间返回最多三条、每条最多三跳且独立验证的路径。Server 选择并强制关系资格，不执行任意深度或 shortest-path inference。
@@ -344,11 +381,51 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
   "from": {"kind": "concept", "id": "concept_coriolis_force"},
   "to": {"kind": "concept", "id": "concept_weather_system"},
   "target_language": "en",
-  "content_release": "knowledge-2026-09"
+  "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1"
 }
 ```
 
-正常 outcome 为 `connected` 与 `no_verified_path`。`no_verified_path` 表示有界搜索没有找到每条 edge 都能在固定发布中成功补全精确合格事实修订的路径；它不证明搜索边界之外、其他发布或未发布知识中不存在关系。每个 path step 命名一个已补全 assertion、方向、条件、relevance、证据引用与 release。只基于相似度的候选可以在独立 exploratory 分区返回，但绝不成为 path step。
+request body 与两个嵌套 node reference 都拒绝未知字段。Node kind 使用闭合 canonical family catalog；lexeme root、虚构 family name 与超过 256 个 Unicode scalar 的 node identifier 会被拒绝。`target_language` 是严格 BCP-47 tag，不可变 release 与 canonical schema 组成共享 request context 使用的完整 pin。格式正确但不可用的 pin 返回 `409 content_release_unavailable`，并与格式错误的输入区分。
+
+```json
+{
+  "data": {
+    "outcome": "connected",
+    "from": {"kind": "concept", "id": "concept_coriolis_force"},
+    "to": {"kind": "concept", "id": "concept_weather_system"},
+    "target_language": "en",
+    "paths": [{
+      "order": 1,
+      "steps": [{
+        "edge_id": "edge_weather_17",
+        "relationship_revision": 2,
+        "assertion_id": "assertion_weather_17",
+        "assertion_revision": 3,
+        "traversal_id": "traversal_cause_effect",
+        "relation": "has_subtype",
+        "relation_registry_revision": 1,
+        "direction": "forward",
+        "source": {"kind": "concept", "id": "concept_coriolis_force"},
+        "target": {"kind": "concept", "id": "concept_weather_system"},
+        "conditions": [],
+        "evidence_ids": ["evidence_weather_4"],
+        "content_release": "knowledge-2026-09",
+        "canonical_schema_version": "canonical-v1"
+      }]
+    }]
+  },
+  "meta": {
+    "request_id": "01JPATHREQUEST0000000000000",
+    "schema_version": "knowledge-path-result-v1",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
+
+正常 outcome 为 `connected` 与 `no_verified_path`；后者在相同 success envelope 中返回空 `paths` array。`no_verified_path` 表示有界搜索没有找到每条 edge 都能在固定发布中成功补全精确合格事实修订的路径；它不证明搜索边界之外、其他发布或未发布知识中不存在关系。每个 path step 命名一个已补全 assertion、已声明 forward direction、结构化 condition、relation relevance、证据引用与完整 release pin。只基于相似度的候选绝不成为 path step。
+
+畸形 JSON 或 content type 返回 `400 invalid_json`；无效字段返回 `422 invalid_knowledge_path_request`；退役 pin 返回 `409 content_release_unavailable`；dependency 与 incomplete-search failure 返回可重试 `503` problem；deadline 耗尽返回可重试 `504 deadline_exceeded`；矛盾不可变 proof 返回 `502 invalid_knowledge_proof`。每个 success 与 problem response 都使用 `Cache-Control: no-store`；错误绝不回显 node ID 或 dependency payload。
 
 旧目标草案 `POST /api/v1/graph/get` 与 `POST /api/v1/graph/neighbors` 已从修订目标合同移除。当前可执行文件中的过渡期 `GET /v1/graph...` handler 在迁移或移除前仍是实现兼容行为；它们的存在不使其成为目标 v1 路由。
 

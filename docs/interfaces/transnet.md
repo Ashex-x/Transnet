@@ -4,7 +4,7 @@
 
 This contract defines the target island-port-to-Transnet interface and the shared internal HTTP/1.1-over-UDS rules. Island-port owns internet transport, authentication, user state, file ingestion, document reconstruction, and final presentation. Transnet receives no end-user identity and persists no live request content.
 
-Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 through the target inbound UDS and implements target capability discovery and health, liveness, and dependency-readiness probes plus the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. The translation boundary now strictly validates tagged text, structured segments, image regions, history, and professional guidance; text reaches the current orchestrator, while valid segment and image requests return `501 translation_capability_unavailable` until their result composition lands. Explicit configuration may retain the loopback listener during migration. Live retrieval, guided knowledge views, and knowledge paths remain unimplemented.
+Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 through the target inbound UDS and implements target capability discovery and health, liveness, and dependency-readiness probes plus the documented transitional translation, BasicCard, pinned-sense, and legacy graph slices. The translation boundary now strictly validates tagged text, structured segments, image regions, history, and professional guidance; text reaches the current orchestrator, while valid segment and image requests return `501 translation_capability_unavailable` until their result composition lands. Explicit configuration may retain the loopback listener during migration. The strict knowledge-path handler and its application service are implemented behind an isolated route-composition seam, but the default runtime does not yet inject that service or expose the route. Live retrieval and guided knowledge views remain unimplemented runtime capabilities.
 
 ## Contents
 
@@ -244,6 +244,8 @@ Each displayed item is the root or includes an explicit path to the root, a conc
 
 Returns currently implemented BCP 47 language selectors, input kinds, image types, purposes, annotation families, knowledge lenses, body and semantic limits, live-retrieval availability, generation profiles, and schema versions. Empty closed sets explicitly mean that the current runtime does not implement that capability. It exposes no credentials, provider URLs, socket paths, concurrency state, or private feature flags.
 
+Knowledge-lens activation is atomic. `AppState` accepts one validated, indivisible knowledge-route dependency bundle whose view and path services share the same complete immutable projection expectation; installing it also installs matching active-release readiness. Both routes are absent without the bundle. A runtime advertises exactly `meaning`, `contrast`, `usage`, `form`, `origin`, and `domain` only while that bundle is installed, even if a caller supplied a stale capability declaration. `mechanism` and `application` remain absent because their explicit technical relation policies are not executable. The default executable does not yet construct this bundle.
+
 Capabilities follows the interface-wide response policy: every response carries `Cache-Control: no-store`. Callers may refresh it when they need current deployment information, but the contract promises no HTTP caching or validator semantics.
 
 Request: `{}`
@@ -285,7 +287,7 @@ Response data: `{"status":"alive"}`.
 
 ## POST /api/v1/readyz
 
-Returns `200` only when every configured required dependency can safely serve new work. Optional canonical, retrieval, embedding, vision, reasoning, or live-retrieval capabilities are reported as closed component states and do not become required unless configuration says so.
+Returns `200` only when every configured required dependency can safely serve new work. The knowledge bundle reports only `canonical_data`, `retrieval_data`, and `knowledge_projection` with the closed values `available`, `unavailable`, or `disabled`; it exposes no release identifiers, collection identifiers, hashes, or endpoints. A configured bundle is available only when the active-trio authority returns the exact full canonical pin and immutable node/edge projection tuple expected by the view services. Any missing, invalid, or different tuple makes the whole atomic bundle unavailable. An unconfigured bundle reports all three components as disabled and does not affect readiness.
 
 Request: `{}`
 
@@ -294,12 +296,9 @@ Request: `{}`
   "data": {
     "status": "ready",
     "components": {
-      "generation_fast": "available",
-      "generation_reasoning": "available",
-      "embedding": "available",
       "canonical_data": "disabled",
       "retrieval_data": "disabled",
-      "live_retrieval": "disabled"
+      "knowledge_projection": "disabled"
     }
   },
   "meta": {"request_id": "req_example"}
@@ -343,6 +342,44 @@ The response contains the root, lens, ordered branches, stable nodes, explicit p
 
 The implemented target cursor foundation uses the opaque `k1.<nonce>.<ciphertext>` format protected with XChaCha20-Poly1305 and distinct authenticated context from the transitional graph cursor. Its encrypted payload binds the typed root family and ID, one of the eight closed lenses, language, response level, complete canonical release/schema pin, immutable node and edge collection IDs and SHA-256 hashes, assertion/registry/projection/lens-policy/ordering versions, stable ordering key, and at most eight bounded dependency continuation tokens. Decoding requires an exact current-request binding match and rejects unknown lens or cursor versions, excessive length, malformed base64, tampering, another key, or changed release/projection data. The payload contains no query text, generated prose, evidence excerpts, credentials, user identity, or durable history. This foundation does not itself expose a route or add application state.
 
+The checked-in handler bundle implements this route together with the path route without adding either to the default runtime composition. It strictly rejects unknown JSON fields, maps the shared request context into the standard success envelope, and applies `Cache-Control: no-store` to success, problem, and wrong-method responses. A well-formed pin that is not the bundle's configured immutable release returns `409 content_release_unavailable`; malformed fields return `422`. The handler decodes a public `k1` cursor against the exact current request and immutable execution binding, passes only its stable final-item ordering key to the application, and re-encrypts the next ordering key for the response. It never forwards a public cursor to retrieval-data or exposes a dependency continuation token. The application exhausts bounded dependency pagination to materialize and deterministically rank the eligible superset before selecting a response-level page, so a resumed page cannot skip a child frontier or change order because of dependency page boundaries. Every serialized verified step includes both the release ID and canonical schema version and fails closed when its relation has no declared projection wire name.
+
+A successful response has the shared envelope and this route-specific shape:
+
+```json
+{
+  "data": {
+    "root": {"kind": "lexical_sense", "id": "sense_sweltering_hot_01"},
+    "lens": "contrast",
+    "content_release": "knowledge-2026-09",
+    "canonical_schema_version": "canonical-v1",
+    "branches": [
+      {
+        "order": 1,
+        "reason": "contrast",
+        "item_ids": [{"kind": "lexical_sense", "id": "sense_cool_01"}]
+      }
+    ],
+    "items": [
+      {
+        "node": {"kind": "lexical_sense", "id": "sense_sweltering_hot_01"},
+        "order": 1,
+        "relevance_reason": "contrast",
+        "evidence_state": "verified",
+        "path_to_root": null
+      }
+    ],
+    "truncated": false,
+    "next_cursor": null
+  },
+  "meta": {
+    "request_id": "01JKNOWLEDGEVIEW0000000000",
+    "schema_version": "knowledge-view-result-v1",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
+
 ## POST /api/v1/knowledge/paths
 
 Returns up to three independently verified paths of at most three hops between two canonical roots. The server chooses and enforces relation eligibility and does not perform arbitrary-depth or shortest-path inference.
@@ -352,11 +389,51 @@ Returns up to three independently verified paths of at most three hops between t
   "from": {"kind": "concept", "id": "concept_coriolis_force"},
   "to": {"kind": "concept", "id": "concept_weather_system"},
   "target_language": "en",
-  "content_release": "knowledge-2026-09"
+  "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1"
 }
 ```
 
-Normal outcomes are `connected` and `no_verified_path`. `no_verified_path` means the bounded search found no path whose every edge had an exact eligible fact revision successfully hydrated in the pinned release; it does not prove that no relationship exists outside the searched bounds, in another release, or in unpublished knowledge. Every path step names one hydrated assertion, direction, conditions, relevance, evidence references, and release. Similarity-only candidates may be returned in a separate exploratory section but never as a path step.
+The request body and both nested node references reject unknown fields. Node kinds use the closed canonical family catalog; lexeme roots, invented family names, and node identifiers longer than 256 Unicode scalars are rejected. `target_language` is a strict BCP-47 tag, and the immutable release plus canonical schema form the full pin used by the shared request context. A well-formed unavailable pin returns `409 content_release_unavailable`, distinct from malformed input.
+
+```json
+{
+  "data": {
+    "outcome": "connected",
+    "from": {"kind": "concept", "id": "concept_coriolis_force"},
+    "to": {"kind": "concept", "id": "concept_weather_system"},
+    "target_language": "en",
+    "paths": [{
+      "order": 1,
+      "steps": [{
+        "edge_id": "edge_weather_17",
+        "relationship_revision": 2,
+        "assertion_id": "assertion_weather_17",
+        "assertion_revision": 3,
+        "traversal_id": "traversal_cause_effect",
+        "relation": "has_subtype",
+        "relation_registry_revision": 1,
+        "direction": "forward",
+        "source": {"kind": "concept", "id": "concept_coriolis_force"},
+        "target": {"kind": "concept", "id": "concept_weather_system"},
+        "conditions": [],
+        "evidence_ids": ["evidence_weather_4"],
+        "content_release": "knowledge-2026-09",
+        "canonical_schema_version": "canonical-v1"
+      }]
+    }]
+  },
+  "meta": {
+    "request_id": "01JPATHREQUEST0000000000000",
+    "schema_version": "knowledge-path-result-v1",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
+
+Normal outcomes are `connected` and `no_verified_path`; the latter returns an empty `paths` array in the same success envelope. `no_verified_path` means the bounded search found no path whose every edge had an exact eligible fact revision successfully hydrated in the pinned release; it does not prove that no relationship exists outside the searched bounds, in another release, or in unpublished knowledge. Every path step names one hydrated assertion, declared forward direction, structured conditions, relation relevance, evidence references, and full release pin. Similarity-only candidates never become path steps.
+
+Malformed JSON or content type returns `400 invalid_json`; invalid fields return `422 invalid_knowledge_path_request`; a retired pin returns `409 content_release_unavailable`; dependency and incomplete-search failures return retryable `503` problems; deadline exhaustion returns retryable `504 deadline_exceeded`; and contradictory immutable proof returns `502 invalid_knowledge_proof`. Every success and problem response uses `Cache-Control: no-store`; errors never echo node IDs or dependency payloads.
 
 The former target drafts `POST /api/v1/graph/get` and `POST /api/v1/graph/neighbors` are removed from the revised target contract. Transitional `GET /v1/graph...` handlers in the current executable remain implementation compatibility behavior until migrated or removed; their existence does not make them target v1 routes.
 
