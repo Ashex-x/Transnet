@@ -335,6 +335,44 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 
 已实现的 target cursor foundation 使用不透明 `k1.<nonce>.<ciphertext>` 格式，以 XChaCha20-Poly1305 保护，并采用与过渡期 graph cursor 不同的 authenticated context。其加密 payload 绑定有类型 root family/ID、八个闭合 lens 之一、语言、response level、完整 canonical release/schema pin、不可变 node/edge collection ID 与 SHA-256 hash、assertion/registry/projection/lens-policy/ordering version、稳定 ordering key，以及最多八个有界 dependency continuation token。解码要求与当前请求 binding 精确一致，并拒绝未知 lens 或 cursor 版本、超长值、畸形 base64、篡改、不同密钥或变化后的 release/projection 数据。Payload 不包含 query text、生成 prose、evidence excerpt、credential、user identity 或 durable history。该 foundation 本身不公开 route，也不加入 application state。
 
+仓库中的独立 handler module 现已实现该 route，但尚未加入默认 runtime composition。它严格拒绝未知 JSON field，把共享 request context 映射到标准 success envelope，并为成功与 problem 响应统一设置 `Cache-Control: no-store`。Handler 针对当前请求与不可变 execution binding 精确解码公开 `k1` cursor，只把稳定的末项 ordering key 传给 application，再为响应加密下一个 ordering key。它绝不把公开 cursor 转发到 retrieval-data，也不暴露 dependency continuation token。Application 会耗尽有界 dependency pagination，先物化并确定性排序完整合格 superset，再选择 response-level page，因此恢复后的页面不会遗漏 child frontier，也不会因 dependency page boundary 改变顺序。
+
+成功响应使用共享 envelope，并采用以下 route-specific shape：
+
+```json
+{
+  "data": {
+    "root": {"kind": "lexical_sense", "id": "sense_sweltering_hot_01"},
+    "lens": "contrast",
+    "content_release": "knowledge-2026-09",
+    "canonical_schema_version": "canonical-v1",
+    "branches": [
+      {
+        "order": 1,
+        "reason": "contrast",
+        "item_ids": [{"kind": "lexical_sense", "id": "sense_cool_01"}]
+      }
+    ],
+    "items": [
+      {
+        "node": {"kind": "lexical_sense", "id": "sense_sweltering_hot_01"},
+        "order": 1,
+        "relevance_reason": "contrast",
+        "evidence_state": "verified",
+        "path_to_root": null
+      }
+    ],
+    "truncated": false,
+    "next_cursor": null
+  },
+  "meta": {
+    "request_id": "01JKNOWLEDGEVIEW0000000000",
+    "schema_version": "knowledge-view-result-v1",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
+
 ## POST /api/v1/knowledge/paths
 
 在两个规范 root 之间返回最多三条、每条最多三跳且独立验证的路径。Server 选择并强制关系资格，不执行任意深度或 shortest-path inference。

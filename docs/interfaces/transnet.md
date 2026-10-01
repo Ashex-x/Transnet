@@ -343,6 +343,44 @@ The response contains the root, lens, ordered branches, stable nodes, explicit p
 
 The implemented target cursor foundation uses the opaque `k1.<nonce>.<ciphertext>` format protected with XChaCha20-Poly1305 and distinct authenticated context from the transitional graph cursor. Its encrypted payload binds the typed root family and ID, one of the eight closed lenses, language, response level, complete canonical release/schema pin, immutable node and edge collection IDs and SHA-256 hashes, assertion/registry/projection/lens-policy/ordering versions, stable ordering key, and at most eight bounded dependency continuation tokens. Decoding requires an exact current-request binding match and rejects unknown lens or cursor versions, excessive length, malformed base64, tampering, another key, or changed release/projection data. The payload contains no query text, generated prose, evidence excerpts, credentials, user identity, or durable history. This foundation does not itself expose a route or add application state.
 
+The checked-in standalone handler module now implements this route without adding it to the default runtime composition. It strictly rejects unknown JSON fields, maps the shared request context into the standard success envelope, and applies `Cache-Control: no-store` to success and problem responses. The handler decodes a public `k1` cursor against the exact current request and immutable execution binding, passes only its stable final-item ordering key to the application, and re-encrypts the next ordering key for the response. It never forwards a public cursor to retrieval-data or exposes a dependency continuation token. The application exhausts bounded dependency pagination to materialize and deterministically rank the eligible superset before selecting a response-level page, so a resumed page cannot skip a child frontier or change order because of dependency page boundaries.
+
+A successful response has the shared envelope and this route-specific shape:
+
+```json
+{
+  "data": {
+    "root": {"kind": "lexical_sense", "id": "sense_sweltering_hot_01"},
+    "lens": "contrast",
+    "content_release": "knowledge-2026-09",
+    "canonical_schema_version": "canonical-v1",
+    "branches": [
+      {
+        "order": 1,
+        "reason": "contrast",
+        "item_ids": [{"kind": "lexical_sense", "id": "sense_cool_01"}]
+      }
+    ],
+    "items": [
+      {
+        "node": {"kind": "lexical_sense", "id": "sense_sweltering_hot_01"},
+        "order": 1,
+        "relevance_reason": "contrast",
+        "evidence_state": "verified",
+        "path_to_root": null
+      }
+    ],
+    "truncated": false,
+    "next_cursor": null
+  },
+  "meta": {
+    "request_id": "01JKNOWLEDGEVIEW0000000000",
+    "schema_version": "knowledge-view-result-v1",
+    "content_release": "knowledge-2026-09"
+  }
+}
+```
+
 ## POST /api/v1/knowledge/paths
 
 Returns up to three independently verified paths of at most three hops between two canonical roots. The server chooses and enforces relation eligibility and does not perform arbitrary-depth or shortest-path inference.

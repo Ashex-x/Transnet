@@ -54,6 +54,7 @@ pub use envelope::{SuccessEnvelope, SuccessMeta};
 pub use readiness::{
   AlwaysReady, CanonicalDependencyReadiness, KnowledgeProjectionReadiness, Readiness,
 };
+pub use v1::knowledge_views::{route as knowledge_view_route, KnowledgeViewRouteState};
 
 use request_id::RequestId;
 
