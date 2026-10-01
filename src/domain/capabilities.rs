@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use crate::{
   application::translation::{MAX_CONNECTED_CHUNKS, MAX_CONNECTED_CHUNK_CHARS},
-  domain::translation_turn::{MAX_LEXICAL_CHARS, MAX_TURN_BYTES},
+  domain::translation_turn::{MAX_GENERATION_CONTEXT_BYTES, MAX_LEXICAL_CHARS, MAX_TURN_BYTES},
 };
 
 /// Current runtime capabilities safe to expose to an internal caller.
@@ -55,6 +55,7 @@ impl ServiceCapabilities {
       limits: CapabilityLimits {
         max_request_body_bytes,
         max_translation_bytes: MAX_TURN_BYTES,
+        max_generation_context_bytes: MAX_GENERATION_CONTEXT_BYTES,
         max_lexical_chars: MAX_LEXICAL_CHARS,
         max_connected_chunk_chars: MAX_CONNECTED_CHUNK_CHARS,
         max_connected_chunks: MAX_CONNECTED_CHUNKS,
@@ -63,7 +64,10 @@ impl ServiceCapabilities {
         available: false,
         default: LiveRetrievalDefault::Offline,
       },
-      generation_profiles: vec![GenerationProfileCapability::Fast],
+      generation_profiles: vec![
+        GenerationProfileCapability::Fast,
+        GenerationProfileCapability::Reasoning,
+      ],
       schema_versions: vec![SchemaVersionCapability::TranslationResultV1],
     }
   }
@@ -125,6 +129,8 @@ pub struct CapabilityLimits {
   pub max_request_body_bytes: usize,
   /// Maximum serialized translation turn size in bytes.
   pub max_translation_bytes: usize,
+  /// Maximum encoded request-local history and guidance passed into generation.
+  pub max_generation_context_bytes: usize,
   /// Largest input considered for lexical orchestration, in Unicode scalar values.
   pub max_lexical_chars: usize,
   /// Maximum connected-text chunk size, in Unicode scalar values.
@@ -156,6 +162,8 @@ pub enum LiveRetrievalDefault {
 pub enum GenerationProfileCapability {
   /// Ordinary bounded generation without reasoning escalation.
   Fast,
+  /// Single policy-owned repair escalation for invalid or explicitly ambiguous fast output.
+  Reasoning,
 }
 
 /// Result schema versions emitted by current target handlers.

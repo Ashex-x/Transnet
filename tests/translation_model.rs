@@ -78,11 +78,13 @@ fn settings(boundary: usize) -> TranslationConfig {
 
 fn turn(text: String) -> TranslationTurn {
   TranslationTurn::new(TranslationTurnRequest {
-    text,
+    text: Some(text),
+    input: None,
     source_language: "en".to_string(),
     target_language: "zh-CN".to_string(),
     response_level: "standard".to_string(),
     history: Vec::new(),
+    guidance: None,
   })
   .unwrap()
 }
@@ -117,7 +119,7 @@ async fn connected_text_port_keeps_length_selection_inside_the_adapter() {
     .translate_connected_text(
       ConnectedTextRequest {
         turn: &short_turn,
-        text: short_turn.text(),
+        text: short_turn.text().unwrap(),
         terminology: &[],
         preceding_translation: None,
       },
@@ -129,7 +131,7 @@ async fn connected_text_port_keeps_length_selection_inside_the_adapter() {
     .translate_connected_text(
       ConnectedTextRequest {
         turn: &long_turn,
-        text: long_turn.text(),
+        text: long_turn.text().unwrap(),
         terminology: &[],
         preceding_translation: None,
       },
@@ -160,7 +162,7 @@ async fn connected_text_adapter_passes_only_request_local_consistency_context() 
     .translate_connected_text(
       ConnectedTextRequest {
         turn: &turn,
-        text: turn.text(),
+        text: turn.text().unwrap(),
         terminology: &terms,
         preceding_translation: Some("数据库保持一致。"),
       },
@@ -248,7 +250,7 @@ async fn provider_failure_maps_to_a_stable_redacted_port_error() {
     .translate_connected_text(
       ConnectedTextRequest {
         turn: &secret_turn,
-        text: secret_turn.text(),
+        text: secret_turn.text().unwrap(),
         terminology: &[],
         preceding_translation: None,
       },

@@ -1,5 +1,6 @@
 //! Request-local unified translation values, normalization, and deterministic response projection.
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
@@ -16,6 +17,28 @@ pub const TRANSLATION_RESULT_SCHEMA_VERSION: &str = "translation-result-v1";
 pub const MAX_LEXICAL_CHARS: usize = 128;
 /// Maximum number of deterministic lookup forms emitted for one input.
 pub const MAX_DERIVED_FORMS: usize = 4;
+/// Maximum Unicode scalar count accepted for one text input or all segments together.
+pub const MAX_INPUT_SCALARS: usize = 131_072;
+/// Maximum number of structured segments.
+pub const MAX_SEGMENTS: usize = 256;
+/// Maximum Unicode scalar count in one structured segment.
+pub const MAX_SEGMENT_SCALARS: usize = 8_192;
+/// Maximum protected ranges in one segment.
+pub const MAX_PROTECTED_RANGES: usize = 128;
+/// Maximum number of inline images.
+pub const MAX_IMAGES: usize = 4;
+/// Maximum decoded bytes in one inline image.
+pub const MAX_IMAGE_BYTES: usize = 2 * 1_048_576;
+/// Maximum pixels along either image dimension.
+pub const MAX_IMAGE_DIMENSION: u32 = 4_096;
+/// Maximum number of image regions across a request.
+pub const MAX_IMAGE_REGIONS: usize = 16;
+/// Maximum terminology entries in request-scoped guidance.
+pub const MAX_TERMINOLOGY: usize = 128;
+/// Maximum Unicode scalar count in one terminology side.
+pub const MAX_TERM_SCALARS: usize = 256;
+/// Maximum JSON bytes retained for history and guidance passed to one generation prompt.
+pub const MAX_GENERATION_CONTEXT_BYTES: usize = 8_192;
 
 /// One prior linguistic turn, without identity, timestamps, or persistence instructions.
 #[derive(Clone, Deserialize, Serialize)]
@@ -35,8 +58,12 @@ pub struct TranslationHistory {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TranslationTurnRequest {
-  /// Text to translate; formatting is preserved in the provider input.
-  pub text: String,
+  /// Legacy text input retained during target-contract migration.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub text: Option<String>,
+  /// Target tagged input; exactly one of this or legacy `text` is required.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub input: Option<TranslationInput>,
   /// auto, en, or zh-CN.
   pub source_language: String,
   /// en or zh-CN.
@@ -46,6 +73,266 @@ pub struct TranslationTurnRequest {
   /// Chronological minimal turns, with no independent item-count cap.
   #[serde(default)]
   pub history: Vec<TranslationHistory>,
+  /// Request-scoped professional constraints.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub guidance: Option<TranslationGuidance>,
+}
+
+/// Closed translation input union.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TranslationInput {
+  /// One lexical or connected text value.
+  Text {
+    /// Source text to translate.
+    text: String,
+  },
+  /// Ordered document or localization segments.
+  Segments {
+    /// Segments in caller-defined reading order.
+    segments: Vec<TranslationSegment>,
+  },
+  /// Sanitized inline images with bounded regions.
+  ImageRegions {
+    /// Inline images containing the requested regions.
+    images: Vec<TranslationImage>,
+    /// Region identifiers in caller-defined reading order.
+    reading_order: Vec<String>,
+  },
+}
+
+/// Closed discriminator for a validated translation input without exposing its content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TranslationInputKind {
+  /// One lexical or connected text value.
+  Text,
+  /// Ordered document or localization segments.
+  Segments,
+  /// Sanitized inline images with bounded regions.
+  ImageRegions,
+}
+
+impl TranslationInput {
+  /// Returns the content-free discriminator for this input shape.
+  pub const fn kind(&self) -> TranslationInputKind {
+    match self {
+      Self::Text { .. } => TranslationInputKind::Text,
+      Self::Segments { .. } => TranslationInputKind::Segments,
+      Self::ImageRegions { .. } => TranslationInputKind::ImageRegions,
+    }
+  }
+}
+
+/// One ordered structured translation segment.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TranslationSegment {
+  /// Request-local opaque segment identifier.
+  pub segment_id: String,
+  /// Segment source text.
+  pub text: String,
+  /// Closed semantic role.
+  pub role: SegmentRole,
+  /// Closed markup mode.
+  pub format: SegmentFormat,
+  /// Non-overlapping Unicode-scalar ranges copied unchanged.
+  #[serde(default)]
+  pub protected_ranges: Vec<ProtectedRange>,
+}
+
+/// Closed segment roles.
+#[derive(Clone, Copy, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SegmentRole {
+  /// Document or section title.
+  Title,
+  /// Prose paragraph.
+  Paragraph,
+  /// One list item.
+  ListItem,
+  /// Image or table caption.
+  Caption,
+  /// User-interface copy.
+  Ui,
+  /// Timed subtitle text.
+  Subtitle,
+}
+
+/// Closed segment formats.
+#[derive(Clone, Copy, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SegmentFormat {
+  /// Unformatted plain text.
+  Plain,
+  /// Markdown source.
+  Markdown,
+  /// Sanitized HTML source.
+  Html,
+}
+
+/// Start-inclusive, end-exclusive Unicode-scalar range.
+#[derive(Clone, Copy, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProtectedRange {
+  /// First protected scalar.
+  pub start: usize,
+  /// Scalar after the protected range.
+  pub end: usize,
+}
+
+/// One sanitized inline image.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TranslationImage {
+  /// Request-local opaque image identifier.
+  pub image_id: String,
+  /// PNG, JPEG, or WebP media type.
+  pub media_type: String,
+  /// Standard padded base64 image bytes.
+  pub data: String,
+  /// Bounded normalized rectangles.
+  pub regions: Vec<ImageRegion>,
+}
+
+/// One normalized image rectangle.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ImageRegion {
+  /// Request-local opaque region identifier.
+  pub region_id: String,
+  /// Left coordinate.
+  pub x: f64,
+  /// Top coordinate.
+  pub y: f64,
+  /// Positive normalized width.
+  pub width: f64,
+  /// Positive normalized height.
+  pub height: f64,
+}
+
+/// Request-scoped translation guidance.
+#[derive(Clone, Deserialize, Serialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct TranslationGuidance {
+  /// General, publication, technical, localization, or subtitles.
+  #[serde(default)]
+  pub purpose: Option<GuidancePurpose>,
+  /// General, professional, specialist, or young-reader audience.
+  #[serde(default)]
+  pub audience: Option<GuidanceAudience>,
+  /// Preserve, neutral, formal, or informal register.
+  #[serde(default)]
+  pub register: Option<GuidanceRegister>,
+  /// Request-local terminology constraints.
+  #[serde(default)]
+  pub terminology: Vec<TerminologyConstraint>,
+  /// Requested alternatives; only zero is currently implemented.
+  #[serde(default)]
+  pub max_alternatives: u8,
+  /// Closed annotation families requested by the caller.
+  #[serde(default)]
+  pub annotations: Vec<AnnotationFamily>,
+  /// Offline, allowed, or required freshness policy.
+  #[serde(default)]
+  pub freshness: Option<FreshnessPolicy>,
+}
+
+/// Closed purposes for a translation request.
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GuidancePurpose {
+  /// General-purpose translation.
+  General,
+  /// Publication-ready copy.
+  Publication,
+  /// Technical material.
+  Technical,
+  /// Product localization.
+  Localization,
+  /// Subtitle translation.
+  Subtitles,
+}
+
+/// Closed intended audiences for a translation request.
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GuidanceAudience {
+  /// A general audience.
+  General,
+  /// A professional audience.
+  Professional,
+  /// A domain-specialist audience.
+  Specialist,
+  /// Younger readers.
+  YoungReader,
+}
+
+/// Closed register preferences for generated text.
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GuidanceRegister {
+  /// Preserve the source register.
+  Preserve,
+  /// Use neutral language.
+  Neutral,
+  /// Use formal language.
+  Formal,
+  /// Use informal language.
+  Informal,
+}
+
+/// Closed policies for one terminology constraint.
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminologyPolicy {
+  /// The requested target term must be used.
+  Required,
+  /// The requested target term should be preferred.
+  Preferred,
+  /// The requested target term must not be used.
+  Forbidden,
+}
+
+/// Closed annotation families callers may request.
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AnnotationFamily {
+  /// Meaning ambiguity annotations.
+  Ambiguity,
+  /// Terminology-choice annotations.
+  Terminology,
+  /// Register annotations.
+  Register,
+  /// Cultural-context annotations.
+  Culture,
+  /// Source-format annotations.
+  Format,
+  /// Human-review annotations.
+  Review,
+}
+
+/// Closed live-retrieval policy for a request.
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FreshnessPolicy {
+  /// Never perform live retrieval.
+  Offline,
+  /// Permit one bounded live-retrieval round.
+  Allowed,
+  /// Require live retrieval or fail explicitly.
+  Required,
+}
+
+/// One source-to-target terminology constraint.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TerminologyConstraint {
+  /// Exact source term.
+  pub source: String,
+  /// Required, preferred, or forbidden target term.
+  pub target: String,
+  /// Constraint strength.
+  pub policy: TerminologyPolicy,
 }
 
 /// Source-language selector supported by the initial translation contract.
@@ -146,17 +433,46 @@ pub enum TurnValidationError {
   /// The serialized request exceeds the service byte budget.
   #[error("translation request is too large")]
   TooLarge,
+  /// Valid constraints contradict one another.
+  #[error("translation constraints conflict: {0}")]
+  ConstraintConflict(&'static str),
+  /// Input is valid but its application result is not implemented yet.
+  #[error("translation input capability is unavailable: {0}")]
+  Unsupported(&'static str),
+  /// The declared inline-image media type is not supported.
+  #[error("unsupported translation image media type")]
+  UnsupportedImageMediaType,
 }
 
 /// Validated linguistic input; callers cannot mutate it after validation.
-#[derive(Clone, Serialize)]
+#[derive(Clone)]
 pub struct TranslationTurn {
-  text: String,
+  input: TranslationInput,
   source_language: SourceLanguage,
   target_language: TurnLanguage,
   history: Vec<TranslationHistory>,
-  #[serde(skip)]
+  guidance: TranslationGuidance,
   response_level: ResponseLevel,
+}
+
+impl Serialize for TranslationTurn {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    use serde::ser::{Error as _, SerializeStruct as _};
+
+    let text = self
+      .text()
+      .ok_or_else(|| S::Error::custom("structured translation input has no model serialization"))?;
+    let mut state = serializer.serialize_struct("TranslationTurn", 5)?;
+    state.serialize_field("text", text)?;
+    state.serialize_field("source_language", &self.source_language)?;
+    state.serialize_field("target_language", &self.target_language)?;
+    state.serialize_field("history", &self.history)?;
+    state.serialize_field("guidance", &self.guidance)?;
+    state.end()
+  }
 }
 
 impl TranslationTurn {
@@ -165,8 +481,25 @@ impl TranslationTurn {
   /// # Errors
   /// Returns a closed field error or a request-size error before any provider is called.
   pub fn new(request: TranslationTurnRequest) -> Result<Self, TurnValidationError> {
-    if request.text.trim().is_empty() {
-      return Err(TurnValidationError::Field("text"));
+    let encoded_bytes = serde_json::to_vec(&request)
+      .map_err(|_| TurnValidationError::Field("input"))?
+      .len();
+    let input = match (request.text, request.input) {
+      (Some(text), None) => TranslationInput::Text { text },
+      (None, Some(input)) => input,
+      _ => return Err(TurnValidationError::Field("input")),
+    };
+    let guidance = request.guidance.unwrap_or_default();
+    validate_guidance(&guidance)?;
+    let generation_context_bytes = serde_json::to_vec(&(&request.history, &guidance))
+      .map_err(|_| TurnValidationError::Field("generation_context"))?
+      .len();
+    if generation_context_bytes > MAX_GENERATION_CONTEXT_BYTES {
+      return Err(TurnValidationError::Field("generation_context"));
+    }
+    validate_input(&input, &guidance)?;
+    if encoded_bytes > MAX_TURN_BYTES {
+      return Err(TurnValidationError::TooLarge);
     }
     let source_language = SourceLanguage::parse(&request.source_language)
       .ok_or(TurnValidationError::Field("source_language"))?;
@@ -174,21 +507,6 @@ impl TranslationTurn {
       .ok_or(TurnValidationError::Field("target_language"))?;
     let response_level = ResponseLevel::parse(&request.response_level)
       .ok_or(TurnValidationError::Field("response_level"))?;
-    // Check raw lengths before serialization to avoid allocating another oversized payload.
-    let raw_bytes = request
-      .history
-      .iter()
-      .try_fold(request.text.len(), |bytes, turn| {
-        bytes
-          .checked_add(turn.source_text.len())?
-          .checked_add(turn.translated_text.len())?
-          .checked_add(turn.source_language.len())?
-          .checked_add(turn.target_language.len())
-      })
-      .ok_or(TurnValidationError::TooLarge)?;
-    if raw_bytes > MAX_TURN_BYTES {
-      return Err(TurnValidationError::TooLarge);
-    }
     for turn in &request.history {
       if turn.source_text.trim().is_empty()
         || turn.translated_text.trim().is_empty()
@@ -198,25 +516,30 @@ impl TranslationTurn {
         return Err(TurnValidationError::Field("history"));
       }
     }
-    if serde_json::to_vec(&request)
-      .map_err(|_| TurnValidationError::TooLarge)?
-      .len()
-      > MAX_TURN_BYTES
-    {
-      return Err(TurnValidationError::TooLarge);
-    }
     Ok(Self {
-      text: request.text,
+      input,
       source_language,
       target_language,
       history: request.history,
+      guidance,
       response_level,
     })
   }
 
-  /// Returns the original text without changing paragraph or formatting boundaries.
-  pub fn text(&self) -> &str {
-    &self.text
+  /// Returns the complete validated request-local input.
+  pub const fn input(&self) -> &TranslationInput {
+    &self.input
+  }
+  /// Returns the input discriminator without exposing request content.
+  pub const fn input_kind(&self) -> TranslationInputKind {
+    self.input.kind()
+  }
+  /// Returns the original text for a text input without changing formatting boundaries.
+  pub fn text(&self) -> Option<&str> {
+    match &self.input {
+      TranslationInput::Text { text } => Some(text),
+      TranslationInput::Segments { .. } | TranslationInput::ImageRegions { .. } => None,
+    }
   }
   /// Returns the source-language selector.
   pub const fn source_language(&self) -> SourceLanguage {
@@ -230,20 +553,294 @@ impl TranslationTurn {
   pub fn history(&self) -> &[TranslationHistory] {
     &self.history
   }
+  /// Returns validated request-local guidance, which must be discarded with this turn.
+  pub const fn guidance(&self) -> &TranslationGuidance {
+    &self.guidance
+  }
+  /// Reports whether accepted guidance needs orchestration that is not composed yet.
+  pub fn requires_guidance_execution(&self) -> bool {
+    guidance_requires_execution(&self.guidance)
+  }
   /// Returns the projection level, never passed to a generation prompt.
   pub fn response_level(&self) -> ResponseLevel {
     self.response_level
   }
   /// Derives one request-local lookup form while preserving significant symbols such as + and #.
-  pub fn lookup_form(&self) -> String {
-    TranslationNormalizer::new()
-      .normalize(&self.text, self.source_language)
-      .primary
+  pub fn lookup_form(&self) -> Option<String> {
+    self.text().map(|text| {
+      TranslationNormalizer::new()
+        .normalize(text, self.source_language)
+        .primary
+    })
   }
   /// Returns whether input is too long or structured to be one lexical unit.
   pub fn requires_passage(&self) -> bool {
-    self.text.chars().count() > MAX_LEXICAL_CHARS || self.text.contains(['\n', '\r'])
+    self
+      .text()
+      .is_none_or(|text| text.chars().count() > MAX_LEXICAL_CHARS || text.contains(['\n', '\r']))
   }
+}
+
+fn validate_input(
+  input: &TranslationInput,
+  guidance: &TranslationGuidance,
+) -> Result<(), TurnValidationError> {
+  match input {
+    TranslationInput::Text { text } => {
+      if text.trim().is_empty() || text.chars().count() > MAX_INPUT_SCALARS {
+        return Err(TurnValidationError::Field("input.text"));
+      }
+    }
+    TranslationInput::Segments { segments } => {
+      if segments.is_empty() || segments.len() > MAX_SEGMENTS {
+        return Err(TurnValidationError::Field("input.segments"));
+      }
+      let mut ids = std::collections::BTreeSet::new();
+      let mut total = 0usize;
+      for segment in segments {
+        let count = segment.text.chars().count();
+        total = total
+          .checked_add(count)
+          .ok_or(TurnValidationError::TooLarge)?;
+        if segment.segment_id.is_empty()
+          || !ids.insert(&segment.segment_id)
+          || segment.text.trim().is_empty()
+          || count > MAX_SEGMENT_SCALARS
+          || segment.protected_ranges.len() > MAX_PROTECTED_RANGES
+        {
+          return Err(TurnValidationError::Field("input.segments"));
+        }
+        let mut protected_ranges = segment
+          .protected_ranges
+          .iter()
+          .map(|range| (range.start, range.end))
+          .collect::<Vec<_>>();
+        protected_ranges.sort_unstable();
+        let mut previous_end = 0;
+        for &(start, end) in &protected_ranges {
+          if start >= end || end > count || start < previous_end {
+            return Err(TurnValidationError::Field(
+              "input.segments.protected_ranges",
+            ));
+          }
+          previous_end = end;
+        }
+        for term in guidance
+          .terminology
+          .iter()
+          .filter(|term| term.policy == TerminologyPolicy::Required)
+        {
+          if term.source != term.target
+            && term_occurrences(&segment.text, &term.source).any(|(start, end)| {
+              protected_ranges
+                .iter()
+                .any(|&(protected_start, protected_end)| {
+                  start < protected_end && end > protected_start
+                })
+            })
+          {
+            return Err(TurnValidationError::ConstraintConflict(
+              "guidance.terminology",
+            ));
+          }
+        }
+      }
+      if total > MAX_INPUT_SCALARS {
+        return Err(TurnValidationError::Field("input.segments"));
+      }
+    }
+    TranslationInput::ImageRegions {
+      images,
+      reading_order,
+    } => validate_images(images, reading_order)?,
+  }
+  Ok(())
+}
+
+fn term_occurrences(text: &str, term: &str) -> std::vec::IntoIter<(usize, usize)> {
+  let text = text.chars().collect::<Vec<_>>();
+  let term = term.chars().collect::<Vec<_>>();
+  let term_len = term.len();
+  text
+    .windows(term_len)
+    .enumerate()
+    .filter(move |(_, candidate)| *candidate == term)
+    .map(move |(start, _)| (start, start + term_len))
+    .collect::<Vec<_>>()
+    .into_iter()
+}
+
+fn guidance_requires_execution(guidance: &TranslationGuidance) -> bool {
+  guidance.purpose.is_some()
+    || guidance.audience.is_some()
+    || guidance.register.is_some()
+    || !guidance.terminology.is_empty()
+    || !guidance.annotations.is_empty()
+    || matches!(
+      guidance.freshness,
+      Some(FreshnessPolicy::Allowed | FreshnessPolicy::Required)
+    )
+}
+
+fn validate_guidance(guidance: &TranslationGuidance) -> Result<(), TurnValidationError> {
+  if guidance.max_alternatives > 2 {
+    return Err(TurnValidationError::Field("guidance.max_alternatives"));
+  }
+  if guidance.max_alternatives != 0 {
+    return Err(TurnValidationError::Unsupported(
+      "guidance.max_alternatives",
+    ));
+  }
+  if guidance.terminology.len() > MAX_TERMINOLOGY {
+    return Err(TurnValidationError::Field("guidance.terminology"));
+  }
+  let mut required = std::collections::BTreeMap::new();
+  for term in &guidance.terminology {
+    if term.source.trim().is_empty()
+      || term.target.trim().is_empty()
+      || term.source.chars().count() > MAX_TERM_SCALARS
+      || term.target.chars().count() > MAX_TERM_SCALARS
+    {
+      return Err(TurnValidationError::Field("guidance.terminology"));
+    }
+    if term.policy == TerminologyPolicy::Required
+      && required
+        .insert(&term.source, &term.target)
+        .is_some_and(|old| old != &term.target)
+    {
+      return Err(TurnValidationError::ConstraintConflict(
+        "guidance.terminology",
+      ));
+    }
+    if guidance.terminology.iter().any(|other| {
+      other.source == term.source
+        && other.target == term.target
+        && matches!(
+          (term.policy, other.policy),
+          (TerminologyPolicy::Required, TerminologyPolicy::Forbidden)
+            | (TerminologyPolicy::Forbidden, TerminologyPolicy::Required)
+        )
+    }) {
+      return Err(TurnValidationError::ConstraintConflict(
+        "guidance.terminology",
+      ));
+    }
+  }
+  Ok(())
+}
+
+fn validate_images(
+  images: &[TranslationImage],
+  reading_order: &[String],
+) -> Result<(), TurnValidationError> {
+  if images.is_empty() || images.len() > MAX_IMAGES {
+    return Err(TurnValidationError::Field("input.images"));
+  }
+  let mut image_ids = std::collections::BTreeSet::new();
+  let mut keys = std::collections::BTreeSet::new();
+  for image in images {
+    if image.image_id.is_empty() || !image_ids.insert(&image.image_id) {
+      return Err(TurnValidationError::Field("input.images"));
+    }
+    if !matches!(
+      image.media_type.as_str(),
+      "image/png" | "image/jpeg" | "image/webp"
+    ) {
+      return Err(TurnValidationError::UnsupportedImageMediaType);
+    }
+    let bytes = BASE64
+      .decode(&image.data)
+      .map_err(|_| TurnValidationError::Field("input.images.data"))?;
+    if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
+      return Err(TurnValidationError::Field("input.images.data"));
+    }
+    let (width, height) = image_dimensions(&bytes, &image.media_type)
+      .ok_or(TurnValidationError::Field("input.images.data"))?;
+    if width == 0 || height == 0 || width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION {
+      return Err(TurnValidationError::Field("input.images.data"));
+    }
+    let mut region_ids = std::collections::BTreeSet::new();
+    for region in &image.regions {
+      if region.region_id.is_empty()
+        || !region_ids.insert(&region.region_id)
+        || ![region.x, region.y, region.width, region.height]
+          .iter()
+          .all(|v| v.is_finite())
+        || region.x < 0.0
+        || region.y < 0.0
+        || region.width <= 0.0
+        || region.height <= 0.0
+        || region.x + region.width > 1.0
+        || region.y + region.height > 1.0
+      {
+        return Err(TurnValidationError::Field("input.images.regions"));
+      }
+      keys.insert(format!("{}:{}", image.image_id, region.region_id));
+    }
+  }
+  if keys.len() > MAX_IMAGE_REGIONS
+    || reading_order.len() != keys.len()
+    || reading_order
+      .iter()
+      .collect::<std::collections::BTreeSet<_>>()
+      .len()
+      != reading_order.len()
+    || reading_order.iter().any(|key| !keys.contains(key))
+  {
+    return Err(TurnValidationError::Field("input.reading_order"));
+  }
+  Ok(())
+}
+
+fn image_dimensions(bytes: &[u8], media_type: &str) -> Option<(u32, u32)> {
+  match media_type {
+    "image/png" if bytes.len() >= 24 && &bytes[..8] == b"\x89PNG\r\n\x1a\n" => Some((
+      u32::from_be_bytes(bytes[16..20].try_into().ok()?),
+      u32::from_be_bytes(bytes[20..24].try_into().ok()?),
+    )),
+    "image/webp"
+      if bytes.len() >= 30
+        && &bytes[..4] == b"RIFF"
+        && &bytes[8..12] == b"WEBP"
+        && &bytes[12..16] == b"VP8X" =>
+    {
+      Some((
+        1 + u32::from_le_bytes([bytes[24], bytes[25], bytes[26], 0]),
+        1 + u32::from_le_bytes([bytes[27], bytes[28], bytes[29], 0]),
+      ))
+    }
+    "image/jpeg" => jpeg_dimensions(bytes),
+    _ => None,
+  }
+}
+
+fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+  if bytes.get(..2)? != b"\xff\xd8" {
+    return None;
+  }
+  let mut offset = 2;
+  while offset + 4 <= bytes.len() {
+    if bytes[offset] != 0xff {
+      return None;
+    }
+    let marker = bytes[offset + 1];
+    offset += 2;
+    if marker == 0xd9 || marker == 0xda {
+      return None;
+    }
+    let length = u16::from_be_bytes([*bytes.get(offset)?, *bytes.get(offset + 1)?]) as usize;
+    if length < 2 || offset + length > bytes.len() {
+      return None;
+    }
+    if matches!(marker, 0xc0..=0xc3 | 0xc5..=0xc7 | 0xc9..=0xcb | 0xcd..=0xcf) && length >= 7 {
+      return Some((
+        u16::from_be_bytes([bytes[offset + 5], bytes[offset + 6]]) as u32,
+        u16::from_be_bytes([bytes[offset + 3], bytes[offset + 4]]) as u32,
+      ));
+    }
+    offset += length;
+  }
+  None
 }
 
 /// Deterministic bounded lookup forms derived only for the current request.
@@ -562,7 +1159,11 @@ pub struct TranslationVersionMetadata {
   /// Ordered, de-duplicated model identifiers that actually served the request.
   pub model_versions: Vec<String>,
   /// Ordered, de-duplicated prompt contract versions that actually served the request.
-  pub prompt_versions: Vec<&'static str>,
+  pub prompt_versions: Vec<String>,
+  /// Ordered profiles that actually served this request.
+  pub inference_profiles: Vec<crate::domain::model_runtime::GenerationProfile>,
+  /// Whether the request consumed its sole reasoning repair.
+  pub reasoning_escalated: bool,
   /// Retrieval version, absent until retrieval participates in the request.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub retrieval_version: Option<String>,
@@ -714,11 +1315,13 @@ mod tests {
 
   fn request() -> TranslationTurnRequest {
     TranslationTurnRequest {
-      text: "C++".to_string(),
+      text: Some("C++".to_string()),
+      input: None,
       source_language: "en".to_string(),
       target_language: "zh-CN".to_string(),
       response_level: "standard".to_string(),
       history: Vec::new(),
+      guidance: None,
     }
   }
 
@@ -848,13 +1451,26 @@ mod tests {
   }
 
   #[test]
-  fn history_has_no_item_cap_inside_the_common_body_bound() {
+  fn history_has_no_item_cap_inside_the_generation_context_bound() {
     let mut input = request();
-    input.history = (0..2_048)
+    input.history = (0..32)
       .map(|index| history(format!("turn-{index}")))
       .collect();
     let turn = TranslationTurn::new(input).unwrap();
-    assert_eq!(turn.history().len(), 2_048);
+    assert_eq!(turn.history().len(), 32);
+  }
+
+  #[test]
+  fn oversized_generation_context_fails_with_a_content_free_field() {
+    let secret = "private-history-context-991";
+    let mut input = request();
+    input.history = vec![history(format!(
+      "{secret}{}",
+      "x".repeat(MAX_GENERATION_CONTEXT_BYTES)
+    ))];
+    let error = TranslationTurn::new(input).unwrap_err();
+    assert_eq!(error, TurnValidationError::Field("generation_context"));
+    assert!(!format!("{error:?} {error}").contains(secret));
   }
 
   #[test]
@@ -867,10 +1483,150 @@ mod tests {
     );
 
     let mut oversized_text = request();
-    oversized_text.text = "x".repeat(MAX_TURN_BYTES);
+    oversized_text.text = Some("x".repeat(MAX_TURN_BYTES));
     assert_eq!(
       TranslationTurn::new(oversized_text).unwrap_err(),
-      TurnValidationError::TooLarge
+      TurnValidationError::Field("input.text")
+    );
+  }
+
+  #[test]
+  fn target_text_guidance_is_retained_after_validation() {
+    let request: TranslationTurnRequest = serde_json::from_value(json!({
+      "input": {"type": "text", "text": "torque"},
+      "source_language": "en", "target_language": "zh-CN", "response_level": "standard",
+      "guidance": {
+        "purpose": "technical", "audience": "specialist", "register": "preserve",
+        "terminology": [{"source": "torque", "target": "扭矩", "policy": "required"}],
+        "max_alternatives": 0, "annotations": ["terminology"], "freshness": "offline"
+      }
+    }))
+    .unwrap();
+    let turn = TranslationTurn::new(request).unwrap();
+    assert_eq!(turn.input_kind(), TranslationInputKind::Text);
+    assert_eq!(turn.text(), Some("torque"));
+    assert_eq!(turn.guidance().terminology[0].source, "torque");
+    assert!(turn.requires_guidance_execution());
+    let model_value = serde_json::to_value(&turn).unwrap();
+    assert_eq!(model_value["text"], "torque");
+    assert!(model_value.get("input").is_none());
+    assert!(serde_json::from_value::<TranslationTurnRequest>(json!({
+      "input": {"type": "text", "text": "secret", "extra": true},
+      "source_language": "en", "target_language": "zh-CN", "response_level": "brief"
+    }))
+    .is_err());
+  }
+
+  #[test]
+  fn segment_ranges_and_constraints_fail_closed_before_orchestration() {
+    let parse = |ranges: serde_json::Value, terms: serde_json::Value| {
+      serde_json::from_value(json!({
+        "input": {"type": "segments", "segments": [{
+          "segment_id": "s1", "text": "Launch {name}", "role": "title", "format": "plain",
+          "protected_ranges": ranges
+        }]},
+        "source_language": "en", "target_language": "zh-CN", "response_level": "standard",
+        "guidance": {"terminology": terms}
+      }))
+      .unwrap()
+    };
+    let first = TranslationTurn::new(parse(json!([{"start": 7, "end": 13}]), json!([]))).unwrap();
+    assert_eq!(first.input_kind(), TranslationInputKind::Segments);
+    assert_eq!(first.text(), None);
+    let ordered = TranslationTurn::new(parse(
+      json!([{"start": 7, "end": 13}, {"start": 0, "end": 6}]),
+      json!([]),
+    ))
+    .unwrap();
+    let TranslationInput::Segments { segments } = ordered.input() else {
+      panic!("validated segment input changed shape")
+    };
+    assert_eq!(segments[0].segment_id, "s1");
+    assert_eq!(segments[0].protected_ranges[0].start, 7);
+    assert_eq!(segments[0].protected_ranges[1].start, 0);
+    assert_eq!(
+      TranslationTurn::new(parse(
+        json!([{"start": 7, "end": 13}, {"start": 8, "end": 10}]),
+        json!([])
+      ))
+      .unwrap_err(),
+      TurnValidationError::Field("input.segments.protected_ranges")
+    );
+    assert_eq!(
+      TranslationTurn::new(parse(
+        json!([{"start": 7, "end": 13}]),
+        json!([{"source":"{name}","target":"产品", "policy":"required"}])
+      ))
+      .unwrap_err(),
+      TurnValidationError::ConstraintConflict("guidance.terminology")
+    );
+    assert_eq!(
+      TranslationTurn::new(parse(
+        json!([{"start": 7, "end": 13}]),
+        json!([{"source":"h {name}","target":"产品", "policy":"required"}])
+      ))
+      .unwrap_err(),
+      TurnValidationError::ConstraintConflict("guidance.terminology")
+    );
+  }
+
+  #[test]
+  fn image_headers_regions_and_reading_order_are_validated() {
+    let mut png = vec![0u8; 24];
+    png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+    png[16..20].copy_from_slice(&640u32.to_be_bytes());
+    png[20..24].copy_from_slice(&480u32.to_be_bytes());
+    let encoded = BASE64.encode(png);
+    let request: TranslationTurnRequest = serde_json::from_value(json!({
+      "input": {"type":"image_regions", "images":[{"image_id":"p1", "media_type":"image/png", "data":encoded,
+        "regions":[{"region_id":"r1","x":0.1,"y":0.2,"width":0.5,"height":0.2}]}], "reading_order":["p1:r1"]},
+      "source_language":"auto", "target_language":"en", "response_level":"standard"
+    })).unwrap();
+    let turn = TranslationTurn::new(request).unwrap();
+    assert_eq!(turn.input_kind(), TranslationInputKind::ImageRegions);
+    let TranslationInput::ImageRegions {
+      images,
+      reading_order,
+    } = turn.input()
+    else {
+      panic!("validated image input changed shape")
+    };
+    assert_eq!(images[0].image_id, "p1");
+    assert_eq!(images[0].data, encoded);
+    assert_eq!(images[0].regions[0].region_id, "r1");
+    assert_eq!(reading_order, &["p1:r1"]);
+  }
+
+  #[test]
+  fn alternatives_and_conflicting_required_terms_are_rejected_without_content() {
+    let mut input = request();
+    input.guidance = Some(TranslationGuidance {
+      max_alternatives: 1,
+      ..Default::default()
+    });
+    assert_eq!(
+      TranslationTurn::new(input).unwrap_err(),
+      TurnValidationError::Unsupported("guidance.max_alternatives")
+    );
+    let mut input = request();
+    input.guidance = Some(TranslationGuidance {
+      terminology: vec![
+        TerminologyConstraint {
+          source: "term".into(),
+          target: "甲".into(),
+          policy: TerminologyPolicy::Required,
+        },
+        TerminologyConstraint {
+          source: "term".into(),
+          target: "乙".into(),
+          policy: TerminologyPolicy::Required,
+        },
+      ],
+      ..Default::default()
+    });
+    assert_eq!(
+      TranslationTurn::new(input).unwrap_err(),
+      TurnValidationError::ConstraintConflict("guidance.terminology")
     );
   }
 
@@ -971,7 +1727,7 @@ mod tests {
     let secret_text = "current-secret-8172";
     let history_secret = "history-secret-4815";
     let mut input = request();
-    input.text = secret_text.to_string();
+    input.text = Some(secret_text.to_string());
     input.history = vec![history(history_secret)];
     assert_eq!(format!("{input:?}"), "TranslationTurnRequest(REDACTED)");
     let turn = TranslationTurn::new(input).unwrap();
@@ -980,10 +1736,32 @@ mod tests {
     assert!(!rendered.contains(history_secret));
 
     let mut invalid = request();
-    invalid.text = secret_text.to_string();
+    invalid.text = Some(secret_text.to_string());
     invalid.history = vec![history("  ")];
     let error = TranslationTurn::new(invalid).unwrap_err().to_string();
     assert!(!error.contains(secret_text));
     assert!(!error.contains(history_secret));
+
+    let structured: TranslationTurnRequest = serde_json::from_value(json!({
+      "input":{"type":"segments","segments":[{"segment_id":"private-id-733",
+        "text":"private-segment-734","role":"paragraph","format":"plain",
+        "protected_ranges":[]}]},
+      "source_language":"en","target_language":"zh-CN","response_level":"brief"
+    }))
+    .unwrap();
+    let rendered = format!("{:?}", TranslationTurn::new(structured).unwrap());
+    assert!(!rendered.contains("private-id-733"));
+    assert!(!rendered.contains("private-segment-734"));
+
+    let structured: TranslationTurnRequest = serde_json::from_value(json!({
+      "input":{"type":"segments","segments":[{"segment_id":"private-id-735",
+        "text":"private-segment-736","role":"paragraph","format":"plain"}]},
+      "source_language":"en","target_language":"zh-CN","response_level":"brief"
+    }))
+    .unwrap();
+    let error = serde_json::to_string(&TranslationTurn::new(structured).unwrap()).unwrap_err();
+    let rendered = error.to_string();
+    assert!(!rendered.contains("private-id-735"));
+    assert!(!rendered.contains("private-segment-736"));
   }
 }

@@ -12,7 +12,7 @@ Model output is never canonical evidence. Callers validate structure and referen
 
 The [model-runtime reference](model-runtime.md) owns call budgets, escalation, vision, and embedding lifecycle. Hidden reasoning is never a domain value or response field.
 
-The foundational `GenerationPort` and `EmbeddingPort` are implemented. Both receive the immutable request context plus cooperative cancellation, use bounded redacted values, and return closed errors. `ReasoningBudget` gives orchestration an atomic one-per-request claim; later translation work must own the qualifying escalation policy rather than placing that policy in an adapter.
+The foundational `GenerationPort` and `EmbeddingPort` are implemented. Both receive the immutable request context plus cooperative cancellation, use bounded redacted values, and return closed errors. Translation orchestration owns the `ReasoningBudget`, claims it only for the first source-ordered invalid or explicitly ambiguous fast result, and never exposes hidden reasoning. Adapters cannot escalate independently.
 
 ## Data operations
 

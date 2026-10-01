@@ -5,6 +5,7 @@ use std::{
   sync::atomic::{AtomicBool, Ordering},
 };
 
+use serde::Serialize;
 use thiserror::Error;
 
 /// Maximum UTF-8 bytes accepted by one generation operation.
@@ -17,7 +18,8 @@ pub const MAX_EMBEDDING_INPUT_BYTES: usize = 16_384;
 pub const MAX_MODEL_VERSION_BYTES: usize = 128;
 
 /// Closed invocation profile for the configured generation model.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum GenerationProfile {
   /// Default bounded inference for ordinary operations.
   Fast,

@@ -11,80 +11,49 @@ use axum::{
 use serde_json::{json, Value};
 use tower::ServiceExt;
 use transnet::{
-  app_router, app_router_with_http_config,
-  application::translation::TranslationOrchestrator,
-  domain::translation_turn::{
-    LexicalMeaningDraft, LexicalTurnDraft, TranslationTurn, TranslationUnit, TurnLanguage,
-  },
-  ports::translation_model::{
-    ConnectedTextModel, ConnectedTextOutput, ConnectedTextRequest, LexicalDraftModel,
-    LexicalDraftOutput, ModelOperationVersions, TranslationModelError,
-  },
-  AppState, HttpConfig, ProviderConfig, TranslationConfig, TranslationService,
+  app_router, app_router_with_http_config, application::translation::TranslationOrchestrator,
+  AppState, GenerationOutput, GenerationPort, GenerationRequest, GenerationResponse, HttpConfig,
+  ModelOperationContext, ModelOperationError, ModelVersion, ProviderConfig, TranslationConfig,
+  TranslationService,
 };
 
 #[derive(Clone)]
-struct FakeConnected {
-  outcome: Result<ConnectedTextOutput, TranslationModelError>,
+struct FakeGeneration {
+  connected: Result<String, ModelOperationError>,
+  lexical: Result<String, ModelOperationError>,
 }
 
 #[async_trait]
-impl ConnectedTextModel for FakeConnected {
-  async fn translate_connected_text(
+impl GenerationPort for FakeGeneration {
+  async fn generate(
     &self,
-    _request: ConnectedTextRequest<'_>,
-    _source_language: TurnLanguage,
-  ) -> Result<ConnectedTextOutput, TranslationModelError> {
-    self.outcome.clone()
+    context: ModelOperationContext<'_>,
+    request: GenerationRequest,
+  ) -> Result<GenerationResponse, ModelOperationError> {
+    context.ensure_active()?;
+    let outcome = if request.input.as_str().contains("lexical_translation") {
+      self.lexical.clone()
+    } else {
+      self.connected.clone()
+    }?;
+    Ok(GenerationResponse {
+      output: GenerationOutput::new(outcome).unwrap(),
+      model_version: ModelVersion::new("generation-model-v1").unwrap(),
+      prompt_version: request.prompt_version,
+    })
   }
 }
 
-#[derive(Clone)]
-struct FakeLexical {
-  outcome: Result<LexicalDraftOutput, TranslationModelError>,
+fn connected_output() -> String {
+  json!({"status":"complete", "translation":"那个计划仍然悬而未决。"}).to_string()
 }
 
-#[async_trait]
-impl LexicalDraftModel for FakeLexical {
-  async fn generate_lexical_draft(
-    &self,
-    _turn: &TranslationTurn,
-    _unit: TranslationUnit,
-    _source_language: TurnLanguage,
-  ) -> Result<LexicalDraftOutput, TranslationModelError> {
-    self.outcome.clone()
-  }
-}
-
-fn versions(model: &str, prompt: &'static str) -> ModelOperationVersions {
-  ModelOperationVersions {
-    model_version: model.to_string(),
-    prompt_version: prompt,
-  }
-}
-
-fn connected_output() -> ConnectedTextOutput {
-  ConnectedTextOutput {
-    translation: "那个计划仍然悬而未决。".to_string(),
-    versions: versions("connected-model-v2", "connected-text-prompt-v1"),
-  }
-}
-
-fn lexical_output() -> LexicalDraftOutput {
-  LexicalDraftOutput {
-    draft: LexicalTurnDraft {
-      translations: vec![LexicalMeaningDraft {
-        text: "热的".to_string(),
-        meaning: "having a high temperature".to_string(),
-        part_of_speech: "adjective".to_string(),
-        phrase_type: String::new(),
-        aliases: vec!["高温的".to_string()],
-        examples: Vec::new(),
-        usage_notes: vec!["Used for temperature.".to_string()],
-      }],
-    },
-    versions: versions("lexical-model-v3", "lexical-draft-prompt-v1"),
-  }
+fn lexical_output() -> String {
+  json!({"status":"complete", "translations":[{"text":"热的",
+    "meaning":"having a high temperature", "part_of_speech":"adjective",
+    "phrase_type":"", "aliases":["高温的"], "examples":[],
+    "usage_notes":["Used for temperature."]}]})
+  .to_string()
 }
 
 fn legacy_service() -> TranslationService {
@@ -107,13 +76,10 @@ fn legacy_service() -> TranslationService {
 }
 
 fn app(
-  connected: Result<ConnectedTextOutput, TranslationModelError>,
-  lexical: Result<LexicalDraftOutput, TranslationModelError>,
+  connected: Result<String, ModelOperationError>,
+  lexical: Result<String, ModelOperationError>,
 ) -> Router {
-  let orchestrator = TranslationOrchestrator::new(
-    Arc::new(FakeConnected { outcome: connected }),
-    Arc::new(FakeLexical { outcome: lexical }),
-  );
+  let orchestrator = TranslationOrchestrator::new(Arc::new(FakeGeneration { connected, lexical }));
   app_router(AppState::new(legacy_service()).with_translation_orchestrator(Arc::new(orchestrator)))
 }
 
@@ -163,11 +129,16 @@ async fn translation_success_uses_the_frozen_envelope_and_plural_versions() {
     body["meta"]["projection_version"],
     "translation-projection-v1"
   );
-  assert_eq!(body["meta"]["model_versions"], json!(["lexical-model-v3"]));
+  assert_eq!(
+    body["meta"]["model_versions"],
+    json!(["generation-model-v1"])
+  );
   assert_eq!(
     body["meta"]["prompt_versions"],
-    json!(["lexical-draft-prompt-v1"])
+    json!(["translation-lexical-v1"])
   );
+  assert_eq!(body["meta"]["inference_profiles"], json!(["fast"]));
+  assert_eq!(body["meta"]["reasoning_escalated"], false);
   assert!(body["meta"].get("retrieval_version").is_none());
   assert!(body["meta"].get("content_release").is_none());
 }
@@ -203,7 +174,7 @@ async fn passage_and_request_local_history_use_the_same_wire_contract() {
   assert_eq!(body["meta"]["response_level"], "full");
   assert_eq!(
     body["meta"]["model_versions"],
-    json!(["connected-model-v2"])
+    json!(["generation-model-v1"])
   );
   assert!(!body.to_string().contains("We discussed the proposal"));
 }
@@ -271,6 +242,144 @@ async fn malformed_unknown_and_semantically_invalid_requests_use_safe_problems()
 }
 
 #[tokio::test]
+async fn target_text_guidance_returns_explicit_unavailable_problem() {
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input": {"type": "text", "text": "hot"},
+      "source_language": "en", "target_language": "zh-CN", "response_level": "brief",
+      "guidance": {"purpose": "technical", "audience": "specialist", "register": "preserve",
+        "terminology": [], "max_alternatives": 0, "annotations": [], "freshness": "offline"}
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  assert_eq!(
+    body(response).await["code"],
+    "translation_capability_unavailable"
+  );
+}
+
+#[tokio::test]
+async fn live_freshness_remains_explicitly_unavailable() {
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input":{"type":"text","text":"current term"},
+      "source_language":"en","target_language":"zh-CN","response_level":"brief",
+      "guidance":{"freshness":"required"}
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  assert_eq!(
+    body(response).await["code"],
+    "translation_capability_unavailable"
+  );
+}
+
+#[tokio::test]
+async fn oversized_generation_context_is_rejected_before_model_execution() {
+  let secret = "private-generation-context-772";
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "text":"hot", "source_language":"en", "target_language":"zh-CN",
+      "response_level":"brief", "history":[{
+        "source_text":format!("{secret}{}", "x".repeat(8_192)),
+        "translated_text":"历史", "source_language":"en", "target_language":"zh-CN"
+      }]
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+  let problem = body(response).await;
+  assert_eq!(problem["errors"][0]["field"], "generation_context");
+  assert!(!problem.to_string().contains(secret));
+}
+
+#[tokio::test]
+async fn unsupported_inline_image_media_type_returns_415() {
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input": {"type": "image_regions", "images": [{"image_id":"p1",
+        "media_type":"image/gif", "data":"R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
+        "regions":[{"region_id":"r1","x":0.0,"y":0.0,"width":1.0,"height":1.0}]}],
+        "reading_order":["p1:r1"]},
+      "source_language":"auto", "target_language":"en", "response_level":"brief"
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+  assert_eq!(body(response).await["code"], "unsupported_image_media_type");
+}
+
+#[tokio::test]
+async fn structured_inputs_validate_then_fail_with_safe_capability_problem() {
+  let segment_secret = "private-segment-442";
+  let history_secret = "private-history-443";
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input": {"type": "segments", "segments": [{"segment_id":segment_secret,
+        "text":"Launch {name}", "role":"title", "format":"plain",
+        "protected_ranges":[{"start":7,"end":13}]}]},
+      "source_language":"en", "target_language":"zh-CN", "response_level":"standard",
+      "history":[{"source_text":history_secret,"translated_text":"私密译文",
+        "source_language":"en","target_language":"zh-CN"}],
+      "guidance":{"purpose":"localization","freshness":"offline"}
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  let problem = body(response).await;
+  assert_eq!(problem["code"], "translation_capability_unavailable");
+  assert!(!problem.to_string().contains(segment_secret));
+  assert!(!problem.to_string().contains(history_secret));
+  assert!(!problem.to_string().contains("Launch"));
+}
+
+#[tokio::test]
+async fn validated_image_bytes_and_order_never_enter_the_capability_problem() {
+  let image_id = "private-image-991";
+  let region_id = "private-region-992";
+  let encoded = "iVBORw0KGgoAAAAAAAAAAAAAAAEAAAAB";
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input":{"type":"image_regions","images":[{"image_id":image_id,
+        "media_type":"image/png","data":encoded,"regions":[{"region_id":region_id,
+        "x":0.0,"y":0.0,"width":1.0,"height":1.0}]}],
+        "reading_order":[format!("{image_id}:{region_id}")]},
+      "source_language":"auto","target_language":"en","response_level":"brief"
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  let problem = body(response).await;
+  assert_eq!(problem["code"], "translation_capability_unavailable");
+  let rendered = problem.to_string();
+  assert!(!rendered.contains(image_id));
+  assert!(!rendered.contains(region_id));
+  assert!(!rendered.contains(encoded));
+}
+
+#[tokio::test]
+async fn contradictory_guidance_returns_redacted_constraint_problem() {
+  let secret = "private-source-term-193";
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "input": {"type":"text", "text":"ordinary text"},
+      "source_language":"en", "target_language":"zh-CN", "response_level":"brief",
+      "guidance":{"terminology":[
+        {"source":secret,"target":"甲","policy":"required"},
+        {"source":secret,"target":"乙","policy":"required"}
+      ]}
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+  let problem = body(response).await;
+  assert_eq!(problem["code"], "constraint_conflict");
+  assert!(!problem.to_string().contains(secret));
+}
+
+#[tokio::test]
 async fn target_route_rejects_other_methods_and_unknown_paths_with_shared_problems() {
   let router = app(Ok(connected_output()), Ok(lexical_output()));
   let method = router
@@ -302,18 +411,15 @@ async fn target_route_rejects_other_methods_and_unknown_paths_with_shared_proble
 
 #[tokio::test]
 async fn model_failures_map_to_stable_redacted_problem_statuses() {
-  let unavailable = app(
-    Err(TranslationModelError::Unavailable),
-    Ok(lexical_output()),
-  )
-  .oneshot(request(json!({
-    "text": "This contains private-source-991.",
-    "source_language": "en",
-    "target_language": "zh-CN",
-    "response_level": "brief"
-  })))
-  .await
-  .unwrap();
+  let unavailable = app(Err(ModelOperationError::Unavailable), Ok(lexical_output()))
+    .oneshot(request(json!({
+      "text": "This contains private-source-991.",
+      "source_language": "en",
+      "target_language": "zh-CN",
+      "response_level": "brief"
+    })))
+    .await
+    .unwrap();
   assert_eq!(unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
   assert_eq!(
     unavailable.headers()["x-request-id"],
@@ -326,7 +432,7 @@ async fn model_failures_map_to_stable_redacted_problem_statuses() {
 
   let invalid = app(
     Ok(connected_output()),
-    Err(TranslationModelError::InvalidOutput),
+    Err(ModelOperationError::InvalidOutput),
   )
   .oneshot(request(json!({
     "text": "hot",
@@ -342,14 +448,10 @@ async fn model_failures_map_to_stable_redacted_problem_statuses() {
 
 #[tokio::test]
 async fn target_payload_limit_uses_the_shared_problem_contract() {
-  let orchestrator = TranslationOrchestrator::new(
-    Arc::new(FakeConnected {
-      outcome: Ok(connected_output()),
-    }),
-    Arc::new(FakeLexical {
-      outcome: Ok(lexical_output()),
-    }),
-  );
+  let orchestrator = TranslationOrchestrator::new(Arc::new(FakeGeneration {
+    connected: Ok(connected_output()),
+    lexical: Ok(lexical_output()),
+  }));
   let router = app_router_with_http_config(
     AppState::new(legacy_service()).with_translation_orchestrator(Arc::new(orchestrator)),
     &HttpConfig {

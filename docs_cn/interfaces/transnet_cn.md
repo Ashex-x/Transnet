@@ -4,7 +4,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 本合同定义目标 island-port 到 Transnet 接口及内部共享 HTTP/1.1-over-UDS 规则。Island-port 负责互联网传输、认证、用户状态、文件接入、文档重建和最终展示。Transnet 不接收终端用户身份，也不持久化实时请求内容。
 
-状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。迁移期间可以通过显式配置保留 loopback listener。结构化 segment、image region、实时检索、引导式知识视图和知识路径，必须等 handler、组合、测试与文档共同落地后才算已实现。
+状态：修订后的目标 v1 合同。仓库中的可执行文件已通过目标入站 UDS 服务 HTTP/1.1，并实现目标 capability discovery 以及 health、liveness 与依赖 readiness probe，另有已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。翻译边界现在严格校验 tagged text、结构化 segment、image region、history 与专业 guidance；text 会进入当前 orchestrator，而有效的 segment 与 image 请求在结果组合落地前返回 `501 translation_capability_unavailable`。迁移期间可以通过显式配置保留 loopback listener。实时检索、引导式知识视图和知识路径仍未实现。
 
 ## 目录
 
@@ -50,7 +50,7 @@ Transnet 不接受用户、学习者、账户、owner、session、cookie、beare
 
 一个调用方 deadline 覆盖完整操作。规范读取、embedding、生成与经许可实时检索获得受剩余时间限制的子 deadline，且不能延长请求。
 
-当前 HTTP boundary 已在过渡期与目标 path 上实现请求上下文基础。若存在 `X-Deadline-At`，它必须是准入时刻之后不超过 120 秒、微秒精度的 UTC RFC 3339 时间戳；省略该 header 时使用 30 秒 deadline。无效或过长 deadline 返回 `400 invalid_deadline`，已耗尽 deadline 返回 `504 deadline_exceeded`。Middleware 存储一个不可变 `RequestContext`，其中包含安全 request ID、绝对 deadline、`transnet-service-v1` schema、剩余预算计算以及供后续 application composition 使用的可选发布 pin。现有 handler 尚不会在预算耗尽时自动取消；下游采用将逐步完成。
+HTTP boundary 已在过渡期与目标 path 上实现请求上下文基础。若存在 `X-Deadline-At`，它必须是准入时刻之后不超过 120 秒、微秒精度的 UTC RFC 3339 时间戳；省略该 header 时使用 30 秒 deadline。无效或过长 deadline 返回 `400 invalid_deadline`，已耗尽 deadline 返回 `504 deadline_exceeded`。Middleware 存储一个不可变 `RequestContext`，其中包含安全 request ID、绝对 deadline、`transnet-service-v1` schema、剩余预算计算以及供后续 application composition 使用的可选发布 pin。翻译生成现在让每次 fast 或 reasoning 调用都消耗该剩余 deadline，并携带协作式 request-local cancellation signal。
 
 足够的规范命中使用零次生成调用。普通翻译、视觉读取、分类与 grounded composition 使用 Gemma4-27B `fast` profile。长输入在同一模型上使用有界语义 chunk、有界并行 fast 调用、一个请求级术语台账与确定性重组。
 
@@ -150,7 +150,9 @@ Transnet 不接受用户、学习者、账户、owner、session、cookie、beare
 
 文本最多 131,072 个 Unicode scalar。Segment 输入最多 256 项，每项 8,192 scalar，总计 131,072 scalar。每个 segment 最多 128 个 protected range。这些限制仍受编码 body 上限约束。
 
-`history` 可选并按时间排序。每项只包含先前源文本、译文与语言 tag，不含 turn ID、时间、用户 ID、反馈、模型 metadata 或保存状态。公共 body 上限约束 history，不另设项目数上限。
+迁移期间，当前 runtime 同时接受 tagged text shape 与 legacy 顶层 `text` 字段；调用方必须且只能发送其中一种。校验后，请求 domain 仅在本次请求内保留完整 tagged input、guidance 与 history，使后续 orchestration 无需重新解析 wire body 即可保留调用方 ID、顺序、protected range 与 inline image data。不含依赖执行的 guidance 的 tagged text 正常处理。Segment 与 image-region 请求会在返回不含内容的 `501 translation_capability_unavailable` problem 前完成有界的结构、media header、尺寸、region 与顺序校验，且这些输入不会调用 model。完整图片解码属于后续 image-region 执行 slice。
+
+`history` 可选并按时间排序。每项只包含先前源文本、译文与语言 tag，不含 turn ID、时间、用户 ID、反馈、模型 metadata 或保存状态。不另设项目数上限，但 history 与 guidance 的 JSON 编码合计最多 8,192 byte，从而保证每个已接受的文本请求都符合 65,536-byte generation-input 合同。超限 aggregate 会在任何 model call 前返回 `422 invalid_translation_request`，并只带不含内容的 `generation_context` field。
 
 ## 专业 guidance
 
@@ -173,6 +175,8 @@ Transnet 不接受用户、学习者、账户、owner、session、cookie、beare
 `purpose` 接受 `general`、`publication`、`technical`、`localization` 或 `subtitles`。`audience` 接受 `general`、`professional`、`specialist` 或 `young_reader`。`register` 接受 `preserve`、`neutral`、`formal` 或 `informal`。术语 policy 接受 `required`、`preferred` 或 `forbidden`；最多 128 项，source 与 target 各不超过 256 scalar。`max_alternatives` 为 0 至 2。
 
 Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术语。互相矛盾的 required term、protected range 或格式规则返回 `422 constraint_conflict`，而不是静默丢弃约束。
+
+在 guidance-aware orchestration 完成组合之前，有效但依赖执行的 guidance 返回 `501 translation_capability_unavailable`；runtime 绝不静默忽略已接受的约束。单独显式指定 `offline` freshness 可以接受，因为它维持默认的禁用网络行为。
 
 ## 翻译输出
 
@@ -254,9 +258,9 @@ Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cac
     "purposes": [],
     "annotation_families": [],
     "knowledge_lenses": [],
-    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
+    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_generation_context_bytes": 8192, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
     "live_retrieval": {"available": false, "default": "offline"},
-    "generation_profiles": ["fast"],
+    "generation_profiles": ["fast", "reasoning"],
     "schema_versions": ["translation-result-v1"]
   },
   "meta": {"request_id": "req_example"}

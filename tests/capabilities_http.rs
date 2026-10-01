@@ -78,12 +78,16 @@ async fn reports_only_implemented_content_free_capabilities() {
   assert_eq!(json["data"]["knowledge_lenses"], serde_json::json!([]));
   assert_eq!(json["data"]["limits"]["max_request_body_bytes"], 8_192);
   assert_eq!(
+    json["data"]["limits"]["max_generation_context_bytes"],
+    8_192
+  );
+  assert_eq!(
     json["data"]["live_retrieval"],
     serde_json::json!({"available": false, "default": "offline"})
   );
   assert_eq!(
     json["data"]["generation_profiles"],
-    serde_json::json!(["fast"])
+    serde_json::json!(["fast", "reasoning"])
   );
   assert_eq!(
     json["data"]["schema_versions"],
