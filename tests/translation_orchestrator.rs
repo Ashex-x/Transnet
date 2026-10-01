@@ -372,6 +372,82 @@ async fn segments_preserve_request_order_ids_protected_content_and_format() {
 }
 
 #[tokio::test]
+async fn segment_guidance_is_prompted_enforced_and_bound_to_the_result() {
+  let generation = Arc::new(FakeGeneration::new([Ok(connected("Measure torque."))]));
+  let orchestrator = TranslationOrchestrator::new(generation.clone());
+  let turn = TranslationTurn::new(TranslationTurnRequest {
+    text: None,
+    input: Some(TranslationInput::Segments {
+      segments: vec![TranslationSegment {
+        segment_id: "technical".into(),
+        text: "测量扭矩值".into(),
+        role: transnet::domain::translation_turn::SegmentRole::Paragraph,
+        format: transnet::domain::translation_turn::SegmentFormat::Plain,
+        protected_ranges: Vec::new(),
+      }],
+    }),
+    source_language: "zh-CN".into(),
+    target_language: "en".into(),
+    response_level: "standard".into(),
+    history: Vec::new(),
+    guidance: Some(TranslationGuidance {
+      purpose: Some(GuidancePurpose::Technical),
+      terminology: vec![TerminologyConstraint {
+        source: "扭矩".into(),
+        target: "torque".into(),
+        policy: TerminologyPolicy::Required,
+      }],
+      ..TranslationGuidance::default()
+    }),
+  })
+  .unwrap();
+
+  let result = orchestrator
+    .translate(&context(30), Arc::new(CancellationSignal::default()), &turn)
+    .await
+    .unwrap();
+  result.validate_for_turn(&turn).unwrap();
+  let encoded = serde_json::to_value(result.translation).unwrap();
+  assert_eq!(encoded["terminology_decisions"][0]["source"], "扭矩");
+  assert_eq!(encoded["terminology_decisions"][0]["target"], "torque");
+  let prompt: serde_json::Value = serde_json::from_str(&generation.calls()[0].input).unwrap();
+  assert_eq!(prompt["guidance"]["purpose"], "technical");
+  assert_eq!(prompt["guidance"]["terminology"][0]["source"], "扭矩");
+}
+
+#[tokio::test]
+async fn segment_terminology_violation_uses_only_one_repair_then_fails_closed() {
+  let generation = Arc::new(FakeGeneration::new([
+    Ok(connected("错误")),
+    Ok(connected("仍然错误")),
+  ]));
+  let orchestrator = TranslationOrchestrator::new(generation.clone());
+  let mut request: TranslationTurnRequest = serde_json::from_value(serde_json::json!({
+    "input":{"type":"segments","segments":[{"segment_id":"s","text":"torque",
+      "role":"paragraph","format":"plain"}]},
+    "source_language":"en","target_language":"zh-CN","response_level":"standard"
+  }))
+  .unwrap();
+  request.guidance = Some(TranslationGuidance {
+    terminology: vec![TerminologyConstraint {
+      source: "torque".into(),
+      target: "扭矩".into(),
+      policy: TerminologyPolicy::Required,
+    }],
+    ..TranslationGuidance::default()
+  });
+  let turn = TranslationTurn::new(request).unwrap();
+  assert_eq!(
+    orchestrator
+      .translate(&context(30), Arc::new(CancellationSignal::default()), &turn)
+      .await
+      .unwrap_err(),
+    TranslationOrchestrationError::GuidanceViolation
+  );
+  assert_eq!(generation.calls().len(), 2);
+}
+
+#[tokio::test]
 async fn segment_postcondition_failures_share_one_reasoning_repair() {
   let generation = Arc::new(SegmentGeneration {
     invalidate_fast: true,

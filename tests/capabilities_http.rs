@@ -167,6 +167,40 @@ async fn structured_capabilities_activate_only_with_the_translation_orchestrator
     json["data"]["annotation_families"],
     serde_json::json!(["format"])
   );
+  assert_eq!(
+    json["data"]["purposes"],
+    serde_json::json!([
+      "general",
+      "publication",
+      "technical",
+      "localization",
+      "subtitles"
+    ])
+  );
+}
+
+#[tokio::test]
+async fn caller_capabilities_cannot_drop_composed_translation_features() {
+  let response = app_with_state(8_192, |state| {
+    state
+      .with_translation_orchestrator(Arc::new(TranslationOrchestrator::new(Arc::new(
+        UnusedGeneration,
+      ))))
+      .with_capabilities(ServiceCapabilities::current(7))
+  })
+  .oneshot(post("{}"))
+  .await
+  .unwrap();
+  let (_, json) = body(response).await;
+  assert_eq!(
+    json["data"]["input_types"],
+    serde_json::json!(["text", "segments", "image_regions"])
+  );
+  assert_eq!(
+    json["data"]["image_media_types"],
+    serde_json::json!(["image/png", "image/jpeg", "image/webp"])
+  );
+  assert_eq!(json["data"]["limits"]["max_request_body_bytes"], 8_192);
 }
 
 #[tokio::test]

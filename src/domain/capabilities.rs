@@ -72,19 +72,40 @@ impl ServiceCapabilities {
     }
   }
 
-  /// Activates image-region input only when the neutral VLM operation is composed.
-  pub fn with_image_region_translation(mut self) -> Self {
-    if !self
-      .input_types
-      .contains(&InputTypeCapability::ImageRegions)
-    {
-      self.input_types.push(InputTypeCapability::ImageRegions);
+  /// Atomically derives every capability owned by the unified translation orchestrator.
+  pub fn with_translation_orchestrator(mut self, available: bool) -> Self {
+    self.input_types.retain(|value| {
+      !matches!(
+        value,
+        InputTypeCapability::Segments | InputTypeCapability::ImageRegions
+      )
+    });
+    self.image_media_types.clear();
+    self.purposes.clear();
+    self
+      .annotation_families
+      .retain(|value| *value != AnnotationFamilyCapability::Format);
+    if available {
+      self.input_types.extend([
+        InputTypeCapability::Segments,
+        InputTypeCapability::ImageRegions,
+      ]);
+      self.image_media_types = vec![
+        ImageMediaTypeCapability::Png,
+        ImageMediaTypeCapability::Jpeg,
+        ImageMediaTypeCapability::WebP,
+      ];
+      self.purposes = vec![
+        PurposeCapability::General,
+        PurposeCapability::Publication,
+        PurposeCapability::Technical,
+        PurposeCapability::Localization,
+        PurposeCapability::Subtitles,
+      ];
+      self
+        .annotation_families
+        .push(AnnotationFamilyCapability::Format);
     }
-    self.image_media_types = vec![
-      ImageMediaTypeCapability::Png,
-      ImageMediaTypeCapability::Jpeg,
-      ImageMediaTypeCapability::WebP,
-    ];
     self
   }
 
@@ -100,23 +121,6 @@ impl ServiceCapabilities {
         KnowledgeLensCapability::Origin,
         KnowledgeLensCapability::Domain,
       ];
-    }
-    self
-  }
-
-  /// Advertises the structured-segment input and emitted format annotations as one runtime unit.
-  pub fn with_segment_translation(mut self, available: bool) -> Self {
-    self
-      .input_types
-      .retain(|value| *value != InputTypeCapability::Segments);
-    self
-      .annotation_families
-      .retain(|value| *value != AnnotationFamilyCapability::Format);
-    if available {
-      self.input_types.push(InputTypeCapability::Segments);
-      self
-        .annotation_families
-        .push(AnnotationFamilyCapability::Format);
     }
     self
   }
@@ -189,9 +193,21 @@ pub enum ImageMediaTypeCapability {
   WebP,
 }
 
-/// Request purposes; the enum is intentionally uninhabited until guidance is implemented.
+/// Request purposes executed by the unified translation orchestrator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub enum PurposeCapability {}
+#[serde(rename_all = "snake_case")]
+pub enum PurposeCapability {
+  /// General-purpose translation.
+  General,
+  /// Publication-ready wording.
+  Publication,
+  /// Technical material.
+  Technical,
+  /// Product localization.
+  Localization,
+  /// Subtitle translation.
+  Subtitles,
+}
 
 /// Result annotation families emitted by currently executable translation paths.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -245,14 +261,18 @@ mod tests {
   }
 
   #[test]
-  fn image_regions_activate_only_through_explicit_composition() {
+  fn translation_capabilities_activate_atomically() {
     let disabled = ServiceCapabilities::current(1_024);
     assert_eq!(disabled.input_types, vec![InputTypeCapability::Text]);
     assert!(disabled.image_media_types.is_empty());
-    let enabled = disabled.with_image_region_translation();
+    let enabled = disabled.with_translation_orchestrator(true);
     assert_eq!(
       enabled.input_types,
-      vec![InputTypeCapability::Text, InputTypeCapability::ImageRegions]
+      vec![
+        InputTypeCapability::Text,
+        InputTypeCapability::Segments,
+        InputTypeCapability::ImageRegions
+      ]
     );
     assert_eq!(
       enabled.image_media_types,
@@ -261,6 +281,11 @@ mod tests {
         ImageMediaTypeCapability::Jpeg,
         ImageMediaTypeCapability::WebP,
       ]
+    );
+    assert_eq!(enabled.purposes.len(), 5);
+    assert_eq!(
+      enabled.with_translation_orchestrator(false).input_types,
+      vec![InputTypeCapability::Text]
     );
   }
 }

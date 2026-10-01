@@ -14,7 +14,7 @@ Application 接受一种带判别标签的输入形式。文本是低延迟默�
 
 长输入可使用有界请求级分块计划与术语台账。分块尊重语义和段落边界、保持顺序，并在组合时不丢内容。台账只为当前请求跟踪名称、缩写与重复术语；它不是翻译记忆或持久任务。
 
-结构化 segment 使用有界并行 fast call，同时在组装结果中保持确定性请求顺序。每个 prompt 绑定 segment role、format、source/target language、protected scalar range 与 prompt contract；调用方 ID 不会发送给 model。整个请求共享一次 reasoning-repair budget。确定性 postcondition 会拒绝缺失或重排的 protected value、改变的换行数、Markdown delimiter 或 HTML tag。成功结果使用调用方 segment ID、零起始 segment order、`translation_0` 及可选闭合 format annotation；完成后不保留任何 segment 内容。
+结构化 segment 使用有界并行 fast call，同时在组装结果中保持确定性请求顺序。每个 prompt 绑定 segment role、format、source/target language、protected scalar range、请求 guidance 与 prompt contract；调用方 ID 不会发送给 model。Required 与 forbidden terminology 使用适合文字体系的匹配进行检查，包括嵌在未分词 CJK 文本中的术语；结果记录完整且有序的 terminology decision 列表。整个请求共享一次 reasoning-repair budget。确定性 postcondition 会拒绝缺失、重排或重复的 protected value，以及改变的段落换行、Markdown 结构 delimiter 或 HTML tag。成功结果在返回前针对请求完成校验，并使用调用方 segment ID、零起始 segment order、`translation_0` 及可选闭合 format annotation；完成后不保留任何 segment 内容。
 
 Gemma4-27B 默认通过 fast profile 处理文本。闭合升级策略对 invalid、ambiguous 或违反 guidance 的输出最多允许一次 reasoning profile 调用；隐藏 reasoning 既不返回也不观测。`offline` 永不执行检索。由于尚未配置 production search authority，`allowed` 当前会退化为普通翻译且不会声称实时支持，`required` 则在生成前显式失败。配置 search authority 后，现有有界 live-retrieval service 仍是唯一允许的检索路径，并且每个依赖实时材料的声明都必须携带 response-local citation。
 

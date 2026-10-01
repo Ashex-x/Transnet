@@ -204,8 +204,7 @@ impl AppState {
     orchestrator: Arc<TranslationOrchestrator>,
   ) -> Self {
     self.translation_orchestrator = Some(orchestrator);
-    self.capabilities = self.capabilities.with_segment_translation(true);
-    self.capabilities = self.capabilities.with_image_region_translation();
+    self.capabilities = self.capabilities.with_translation_orchestrator(true);
     self
   }
 
@@ -359,7 +358,7 @@ impl AppState {
   /// Replaces the content-free capability declaration derived by runtime composition.
   pub fn with_capabilities(mut self, capabilities: ServiceCapabilities) -> Self {
     self.capabilities =
-      capabilities.with_segment_translation(self.translation_orchestrator.is_some());
+      capabilities.with_translation_orchestrator(self.translation_orchestrator.is_some());
     self
   }
 

@@ -251,7 +251,7 @@ HTTP 序列化之前会执行 request-bound validation：structured result 的 I
 
 返回当前已实现的 BCP 47 语言 selector、输入类型、图片类型、purpose、annotation family、知识 lens、body 与语义限制、实时检索可用性、generation profile 和 schema 版本。空的闭合集明确表示当前 runtime 尚未实现该能力。它不暴露凭据、provider URL、socket 路径、并发状态或私有 feature flag。
 
-安装 translation orchestrator 会原子地公布 `segments` 与 `format` annotation family；缺少该依赖的 state 两者都不公布。Image input 仍不存在于 capability 中。
+安装 translation orchestrator 会原子地公布 `segments`、`image_regions`、三种已接受图片媒体类型、全部五种闭合 purpose 与 `format` annotation family；缺少该依赖的 state 不公布其中任何一项。替换调用方提供的 capability 声明不能部分移除或虚构这个原子集合。
 
 知识 lens 的激活是原子的。`AppState` 只接受一个经过验证且不可拆分的 knowledge route dependency bundle，其中 view 与 path service 必须共享同一个完整不可变 projection expectation；安装它时也会同时安装与该快照匹配的 active-release readiness。未提供 bundle 时两个 route 都不存在。只有安装该 bundle 时，runtime 才公布 `meaning`、`contrast`、`usage`、`form`、`origin` 和 `domain`，即使调用方提供了陈旧 capability 声明也不例外。`mechanism` 与 `application` 仍不公布，因为其显式技术关系策略尚不可执行。默认 executable 尚未构造该 bundle。
 

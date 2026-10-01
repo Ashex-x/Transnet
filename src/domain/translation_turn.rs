@@ -629,20 +629,26 @@ fn validate_input(
           }
           previous_end = end;
         }
-        for term in guidance
-          .terminology
-          .iter()
-          .filter(|term| term.policy == TerminologyPolicy::Required)
-        {
-          if term.source != term.target
-            && term_occurrences(&segment.text, &term.source).any(|(start, end)| {
+        for term in &guidance.terminology {
+          let source_present = term_occurrences(&segment.text, &term.source)
+            .next()
+            .is_some();
+          let protected_contains = |value: &str| {
+            term_occurrences(&segment.text, value).any(|(start, end)| {
               protected_ranges
                 .iter()
                 .any(|&(protected_start, protected_end)| {
                   start < protected_end && end > protected_start
                 })
             })
-          {
+          };
+          let required_conflict = term.policy == TerminologyPolicy::Required
+            && term.source != term.target
+            && protected_contains(&term.source);
+          let forbidden_conflict = term.policy == TerminologyPolicy::Forbidden
+            && source_present
+            && protected_contains(&term.target);
+          if required_conflict || forbidden_conflict {
             return Err(TurnValidationError::ConstraintConflict(
               "guidance.terminology",
             ));
@@ -2304,7 +2310,7 @@ mod tests {
       "guidance": {
         "purpose": "technical", "audience": "specialist", "register": "preserve",
         "terminology": [{"source": "torque", "target": "扭矩", "policy": "required"}],
-        "max_alternatives": 0, "annotations": ["terminology"], "freshness": "offline"
+        "max_alternatives": 0, "annotations": [], "freshness": "offline"
       }
     }))
     .unwrap();
@@ -2370,6 +2376,14 @@ mod tests {
       TranslationTurn::new(parse(
         json!([{"start": 7, "end": 13}]),
         json!([{"source":"h {name}","target":"产品", "policy":"required"}])
+      ))
+      .unwrap_err(),
+      TurnValidationError::ConstraintConflict("guidance.terminology")
+    );
+    assert_eq!(
+      TranslationTurn::new(parse(
+        json!([{"start": 7, "end": 13}]),
+        json!([{"source":"Launch","target":"{name}", "policy":"forbidden"}])
       ))
       .unwrap_err(),
       TurnValidationError::ConstraintConflict("guidance.terminology")
