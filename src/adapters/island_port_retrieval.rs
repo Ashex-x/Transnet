@@ -8,17 +8,18 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use crate::{
   adapters::island_port::{IslandPortClientError, IslandPortTransport},
   domain::{
-    canonical::{CanonicalId, ReleaseId},
+    canonical::{CanonicalId, CanonicalReleasePin, ReleaseId},
     request_context::RequestContext,
     retrieval_data::{
       validate_cursor, validate_limit, EdgeCandidate, EdgeSearchRequest, EdgeSearchResult,
-      NeighborCandidate, NeighborDirection, NeighborEdge, NeighborNode, NeighborSearchRequest,
-      NeighborSearchResult, NodeCandidate, NodeCandidatePayload, NodeMatchMechanism,
-      NodeProjectionExecutionExpectation, NodeProjectionExecutionProof, NodeSearchRequest,
-      NodeSearchResult, RetrievalDataScore, RetrievalDataValidationError, RetrievalFilters,
-      RetrievalNodeType, RetrievalPublicationState, RetrievalRelation, RetrievalVerificationState,
-      ScaleCandidate, ScaleSearchRequest, ScaleSearchResult, RELATION_REGISTRY_VERSION,
-      RETRIEVAL_DATA_SCHEMA_VERSION,
+      NeighborCandidate, NeighborDirection, NeighborEdge, NeighborNode,
+      NeighborProjectionExecutionExpectation, NeighborProjectionExecutionProof,
+      NeighborSearchRequest, NeighborSearchResult, NodeCandidate, NodeCandidatePayload,
+      NodeMatchMechanism, NodeProjectionExecutionExpectation, NodeProjectionExecutionProof,
+      NodeSearchRequest, NodeSearchResult, RetrievalDataScore, RetrievalDataValidationError,
+      RetrievalFilters, RetrievalNodeType, RetrievalPublicationState, RetrievalRelation,
+      RetrievalVerificationState, ScaleCandidate, ScaleSearchRequest, ScaleSearchResult,
+      RELATION_REGISTRY_VERSION, RETRIEVAL_DATA_SCHEMA_VERSION,
     },
   },
   ports::retrieval_data::{RetrievalDataError, RetrievalDataPort},
@@ -226,6 +227,13 @@ impl RetrievalDataPort for IslandPortRetrievalClient {
     request: NeighborSearchRequest,
   ) -> Result<NeighborSearchResult, RetrievalDataError> {
     validate_release(context, &request.release_id)?;
+    request
+      .execution
+      .validate()
+      .map_err(|_| RetrievalDataError::InvalidRequest)?;
+    if request.execution.content.release_id != request.release_id {
+      return Err(RetrievalDataError::InvalidRequest);
+    }
     validate_limit(request.limit)?;
     if request.relation_types.is_empty()
       || request.relation_types.len() > 50
@@ -244,6 +252,7 @@ impl RetrievalDataPort for IslandPortRetrievalClient {
     let allowed_verification = request.verification_states.clone();
     let direction = request.direction;
     let limit = request.limit;
+    let expected_execution = request.execution.clone();
     let response: ResponseDto<NeighborsDto> = self
       .call(
         "/api/v1/neighbors/search",
@@ -252,6 +261,10 @@ impl RetrievalDataPort for IslandPortRetrievalClient {
       )
       .await?;
     let (release_id, value) = response.into_value(context)?;
+    let execution = value.execution.into_domain()?;
+    execution
+      .validate_against(&expected_execution)
+      .map_err(|_| RetrievalDataError::InconsistentData)?;
     let echoed_root = parse_id(value.root_node_id)?;
     if echoed_root != root_node_id || value.neighbors.len() > limit {
       return Err(RetrievalDataError::InconsistentData);
@@ -276,6 +289,7 @@ impl RetrievalDataPort for IslandPortRetrievalClient {
     }
     Ok(NeighborSearchResult {
       release_id,
+      execution,
       root_node_id: echoed_root,
       neighbors,
       next_cursor: value.next_cursor,
@@ -625,6 +639,7 @@ struct NeighborSearchInputDto {
   languages: Vec<String>,
   domain_ids: Vec<String>,
   release_id: String,
+  execution: NeighborProjectionExecutionDto,
   limit: usize,
   cursor: Option<String>,
 }
@@ -659,9 +674,58 @@ impl From<NeighborSearchRequest> for NeighborSearchInputDto {
         .map(|value| value.as_str().to_string())
         .collect(),
       release_id: value.release_id.to_string(),
+      execution: NeighborProjectionExecutionDto::from(value.execution),
       limit: value.limit,
       cursor: value.cursor,
     }
+  }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NeighborProjectionExecutionDto {
+  content_release: String,
+  canonical_schema_version: String,
+  node_collection_id: String,
+  node_collection_content_hash: String,
+  edge_collection_id: String,
+  edge_collection_content_hash: String,
+  relationship_registry_version: u32,
+  edge_dense_input_version: String,
+  edge_lexical_input_version: String,
+}
+
+impl From<NeighborProjectionExecutionExpectation> for NeighborProjectionExecutionDto {
+  fn from(value: NeighborProjectionExecutionExpectation) -> Self {
+    Self {
+      content_release: value.content.release_id.to_string(),
+      canonical_schema_version: value.content.canonical_schema_version,
+      node_collection_id: value.node_collection_id.to_string(),
+      node_collection_content_hash: value.node_collection_content_hash,
+      edge_collection_id: value.edge_collection_id.to_string(),
+      edge_collection_content_hash: value.edge_collection_content_hash,
+      relationship_registry_version: value.relationship_registry_version,
+      edge_dense_input_version: value.edge_dense_input_version,
+      edge_lexical_input_version: value.edge_lexical_input_version,
+    }
+  }
+}
+
+impl NeighborProjectionExecutionDto {
+  fn into_domain(self) -> Result<NeighborProjectionExecutionProof, RetrievalDataError> {
+    let release_id = parse_id(self.content_release)?;
+    let content = CanonicalReleasePin::new(release_id, self.canonical_schema_version)
+      .ok_or(RetrievalDataError::InconsistentData)?;
+    Ok(NeighborProjectionExecutionProof {
+      content,
+      node_collection_id: parse_id(self.node_collection_id)?,
+      node_collection_content_hash: self.node_collection_content_hash,
+      edge_collection_id: parse_id(self.edge_collection_id)?,
+      edge_collection_content_hash: self.edge_collection_content_hash,
+      relationship_registry_version: self.relationship_registry_version,
+      edge_dense_input_version: self.edge_dense_input_version,
+      edge_lexical_input_version: self.edge_lexical_input_version,
+    })
   }
 }
 
@@ -914,12 +978,16 @@ struct EdgeCandidateDto {
   relation_registry_version: u32,
   assertion_id: String,
   assertion_revision: u32,
+  relationship_revision: u32,
   verification_state: String,
 }
 
 impl EdgeCandidateDto {
   fn into_domain(self) -> Result<EdgeCandidate, RetrievalDataError> {
-    if self.relation_registry_version != RELATION_REGISTRY_VERSION || self.assertion_revision == 0 {
+    if self.relation_registry_version != RELATION_REGISTRY_VERSION
+      || self.assertion_revision == 0
+      || self.relationship_revision == 0
+    {
       return Err(RetrievalDataError::InconsistentData);
     }
     Ok(EdgeCandidate {
@@ -934,6 +1002,7 @@ impl EdgeCandidateDto {
       relation_registry_version: self.relation_registry_version,
       assertion_id: parse_id(self.assertion_id)?,
       assertion_revision: self.assertion_revision,
+      relationship_revision: self.relationship_revision,
       verification_state: parse_verification(&self.verification_state)?,
     })
   }
@@ -942,6 +1011,7 @@ impl EdgeCandidateDto {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct NeighborsDto {
+  execution: NeighborProjectionExecutionDto,
   root_node_id: String,
   neighbors: Vec<NeighborCandidateDto>,
   next_cursor: Option<String>,
@@ -975,12 +1045,16 @@ struct NeighborEdgeDto {
   relation_registry_version: u32,
   assertion_id: String,
   assertion_revision: u32,
+  relationship_revision: u32,
   verification_state: String,
 }
 
 impl NeighborEdgeDto {
   fn into_domain(self) -> Result<NeighborEdge, RetrievalDataError> {
-    if self.relation_registry_version != RELATION_REGISTRY_VERSION || self.assertion_revision == 0 {
+    if self.relation_registry_version != RELATION_REGISTRY_VERSION
+      || self.assertion_revision == 0
+      || self.relationship_revision == 0
+    {
       return Err(RetrievalDataError::InconsistentData);
     }
     Ok(NeighborEdge {
@@ -994,6 +1068,7 @@ impl NeighborEdgeDto {
       relation_registry_version: self.relation_registry_version,
       assertion_id: parse_id(self.assertion_id)?,
       assertion_revision: self.assertion_revision,
+      relationship_revision: self.relationship_revision,
       verification_state: parse_verification(&self.verification_state)?,
     })
   }
@@ -1114,6 +1189,26 @@ mod tests {
 
   fn execution() -> NodeProjectionExecutionExpectation {
     NodeProjectionExecutionExpectation::v1("sha256:model-r1").unwrap()
+  }
+
+  fn neighbor_execution() -> NeighborProjectionExecutionExpectation {
+    NeighborProjectionExecutionExpectation {
+      content: CanonicalReleasePin::new(
+        CanonicalId::new("knowledge-2026-09").unwrap(),
+        "canonical-v1".to_owned(),
+      )
+      .unwrap(),
+      node_collection_id: CanonicalId::new("nodes-release-1").unwrap(),
+      node_collection_content_hash:
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+      edge_collection_id: CanonicalId::new("edges-release-1").unwrap(),
+      edge_collection_content_hash:
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned(),
+      relationship_registry_version: RELATION_REGISTRY_VERSION,
+      edge_dense_input_version: crate::domain::embedding_input::EDGE_DENSE_INPUT_VERSION.to_owned(),
+      edge_lexical_input_version: crate::domain::embedding_input::EDGE_LEXICAL_INPUT_VERSION
+        .to_owned(),
+    }
   }
 
   #[tokio::test]
@@ -1265,6 +1360,7 @@ mod tests {
           languages: vec![LanguageTag::parse("en").unwrap()],
           domain_ids: vec![],
           release_id: CanonicalId::new("knowledge-2026-09").unwrap(),
+          execution: neighbor_execution(),
           limit: 20,
           cursor: None,
         },
@@ -1333,6 +1429,7 @@ mod tests {
             languages: vec![LanguageTag::parse("en").unwrap()],
             domain_ids: vec![],
             release_id: CanonicalId::new("knowledge-2026-09").unwrap(),
+            execution: neighbor_execution(),
             limit: 20,
             cursor: None,
           },
@@ -1340,6 +1437,88 @@ mod tests {
         .await;
       assert_eq!(result, Err(RetrievalDataError::InconsistentData));
     }
+  }
+
+  #[tokio::test]
+  async fn neighbors_require_and_preserve_exact_projection_proof() {
+    let response = r#"{
+      "request_id":"request-1","schema_version":"retrieval-data-v1","outcome":"ok",
+      "value":{"execution":{"content_release":"knowledge-2026-09","canonical_schema_version":"canonical-v1",
+      "node_collection_id":"nodes-release-1","node_collection_content_hash":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "edge_collection_id":"edges-release-1","edge_collection_content_hash":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "relationship_registry_version":1,"edge_dense_input_version":"edge-dense-input-v1","edge_lexical_input_version":"edge-lexical-input-v1"},
+      "root_node_id":"node-1","neighbors":[{"edge":{"edge_id":"edge-1","source_node_id":"node-1","target_node_id":"node-2",
+      "relation_type":"higher_degree_than","relation_type_id":"relation-degree","traversal_id":"traversal-higher",
+      "relation_registry_version":1,"assertion_id":"assertion-1","assertion_revision":2,"relationship_revision":3,
+      "verification_state":"verified"},"node":{"node_id":"node-2","node_type":"lexical_sense","canonical_label":"scorching"}}],"next_cursor":null},
+      "error":null,"release_id":"knowledge-2026-09"}"#;
+    let transport = transport(response);
+    let client = IslandPortRetrievalClient::new(transport.clone());
+    let result = client
+      .search_neighbors(
+        &context(),
+        NeighborSearchRequest {
+          node_id: CanonicalId::new("node-1").unwrap(),
+          direction: NeighborDirection::Both,
+          relation_types: vec![RetrievalRelation::from_wire_name("higher_degree_than").unwrap()],
+          verification_states: vec![RetrievalVerificationState::Verified],
+          languages: vec![LanguageTag::parse("en").unwrap()],
+          domain_ids: vec![],
+          release_id: CanonicalId::new("knowledge-2026-09").unwrap(),
+          execution: neighbor_execution(),
+          limit: 20,
+          cursor: None,
+        },
+      )
+      .await
+      .unwrap();
+    assert_eq!(result.neighbors[0].edge.relationship_revision, 3);
+    assert_eq!(
+      result.neighbors[0]
+        .edge
+        .assertion_projection()
+        .traversal_id
+        .as_str(),
+      "traversal-higher"
+    );
+    let request = transport.request.lock().unwrap();
+    let (_, body) = request.as_ref().unwrap();
+    let body: serde_json::Value = serde_json::from_slice(body).unwrap();
+    assert_eq!(
+      body["input"]["execution"]["canonical_schema_version"],
+      "canonical-v1"
+    );
+  }
+
+  #[tokio::test]
+  async fn neighbors_reject_projection_proof_drift() {
+    let response = r#"{
+      "request_id":"request-1","schema_version":"retrieval-data-v1","outcome":"ok",
+      "value":{"execution":{"content_release":"knowledge-2026-09","canonical_schema_version":"canonical-v1",
+      "node_collection_id":"nodes-release-1","node_collection_content_hash":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "edge_collection_id":"edges-release-1","edge_collection_content_hash":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "relationship_registry_version":1,"edge_dense_input_version":"edge-dense-input-v1","edge_lexical_input_version":"edge-lexical-input-v1"},
+      "root_node_id":"node-1","neighbors":[],"next_cursor":null},
+      "error":null,"release_id":"knowledge-2026-09"}"#;
+    let client = IslandPortRetrievalClient::new(transport(response));
+    let result = client
+      .search_neighbors(
+        &context(),
+        NeighborSearchRequest {
+          node_id: CanonicalId::new("node-1").unwrap(),
+          direction: NeighborDirection::Both,
+          relation_types: vec![RetrievalRelation::from_wire_name("higher_degree_than").unwrap()],
+          verification_states: vec![RetrievalVerificationState::Verified],
+          languages: vec![LanguageTag::parse("en").unwrap()],
+          domain_ids: vec![],
+          release_id: CanonicalId::new("knowledge-2026-09").unwrap(),
+          execution: neighbor_execution(),
+          limit: 20,
+          cursor: None,
+        },
+      )
+      .await;
+    assert_eq!(result, Err(RetrievalDataError::InconsistentData));
   }
 
   #[tokio::test]

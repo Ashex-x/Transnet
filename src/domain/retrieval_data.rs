@@ -5,13 +5,17 @@ use std::fmt;
 use thiserror::Error;
 
 use super::{
-  canonical::{CanonicalId, LanguageTag, ReleaseId},
+  canonical::{CanonicalId, CanonicalReleasePin, LanguageTag, ReleaseId},
   canonical_translation::DomainId,
   graph::GraphRelationType,
 };
 
 use super::{
-  embedding_input::{NODE_DENSE_INPUT_VERSION, NODE_LEXICAL_INPUT_VERSION},
+  embedding_input::{
+    EDGE_DENSE_INPUT_VERSION, EDGE_LEXICAL_INPUT_VERSION, NODE_DENSE_INPUT_VERSION,
+    NODE_LEXICAL_INPUT_VERSION,
+  },
+  knowledge_hydration::CanonicalAssertionProjectionRef,
   knowledge_projection::{LEXICAL_ENCODER_IDENTITY, LEXICAL_ENCODER_REVISION},
 };
 
@@ -613,10 +617,91 @@ pub struct NeighborSearchRequest {
   pub domain_ids: Vec<DomainId>,
   /// Duplicate release field that must equal the request-context pin.
   pub release_id: ReleaseId,
+  /// Full immutable release, collection, registry, and input contract expected for traversal.
+  pub execution: NeighborProjectionExecutionExpectation,
   /// Maximum neighbors returned.
   pub limit: usize,
   /// Opaque cursor issued by the same operation and scope.
   pub cursor: Option<String>,
+}
+
+/// Exact immutable collections and contracts selected for one neighbor traversal.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NeighborProjectionExecutionExpectation {
+  /// Full authoritative content release and schema pin.
+  pub content: CanonicalReleasePin,
+  /// Immutable physical node collection.
+  pub node_collection_id: CanonicalId,
+  /// SHA-256 node collection content hash.
+  pub node_collection_content_hash: String,
+  /// Immutable physical edge collection.
+  pub edge_collection_id: CanonicalId,
+  /// SHA-256 edge collection content hash.
+  pub edge_collection_content_hash: String,
+  /// Exact relationship registry revision.
+  pub relationship_registry_version: u32,
+  /// Frozen edge dense input contract.
+  pub edge_dense_input_version: String,
+  /// Frozen edge lexical input contract.
+  pub edge_lexical_input_version: String,
+}
+
+impl NeighborProjectionExecutionExpectation {
+  /// Validates collection hashes and every frozen traversal contract.
+  pub fn validate(&self) -> Result<(), RetrievalDataValidationError> {
+    if !valid_sha256(&self.node_collection_content_hash)
+      || !valid_sha256(&self.edge_collection_content_hash)
+      || self.relationship_registry_version != RELATION_REGISTRY_VERSION
+      || self.edge_dense_input_version != EDGE_DENSE_INPUT_VERSION
+      || self.edge_lexical_input_version != EDGE_LEXICAL_INPUT_VERSION
+    {
+      return Err(RetrievalDataValidationError::InvalidFilters);
+    }
+    Ok(())
+  }
+}
+
+/// Server-observed immutable projection proof for one neighbor traversal.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NeighborProjectionExecutionProof {
+  /// Full authoritative content release and schema pin echoed by island-port.
+  pub content: CanonicalReleasePin,
+  /// Immutable physical node collection used for endpoint hydration.
+  pub node_collection_id: CanonicalId,
+  /// SHA-256 node collection content hash.
+  pub node_collection_content_hash: String,
+  /// Immutable physical edge collection used for traversal.
+  pub edge_collection_id: CanonicalId,
+  /// SHA-256 edge collection content hash.
+  pub edge_collection_content_hash: String,
+  /// Exact relationship registry revision observed by traversal.
+  pub relationship_registry_version: u32,
+  /// Frozen edge dense input contract observed by traversal.
+  pub edge_dense_input_version: String,
+  /// Frozen edge lexical input contract observed by traversal.
+  pub edge_lexical_input_version: String,
+}
+
+impl NeighborProjectionExecutionProof {
+  /// Requires an exact echo of the caller's immutable traversal expectation.
+  pub fn validate_against(
+    &self,
+    expected: &NeighborProjectionExecutionExpectation,
+  ) -> Result<(), RetrievalDataValidationError> {
+    expected.validate()?;
+    if self.content != expected.content
+      || self.node_collection_id != expected.node_collection_id
+      || self.node_collection_content_hash != expected.node_collection_content_hash
+      || self.edge_collection_id != expected.edge_collection_id
+      || self.edge_collection_content_hash != expected.edge_collection_content_hash
+      || self.relationship_registry_version != expected.relationship_registry_version
+      || self.edge_dense_input_version != expected.edge_dense_input_version
+      || self.edge_lexical_input_version != expected.edge_lexical_input_version
+    {
+      return Err(RetrievalDataValidationError::IneligibleCandidate);
+    }
+    Ok(())
+  }
 }
 
 /// One validated score comparable only within the same release and model.
@@ -706,8 +791,27 @@ pub struct EdgeCandidate {
   pub assertion_id: CanonicalId,
   /// Positive immutable assertion revision.
   pub assertion_revision: u32,
+  /// Positive immutable publisher relationship revision.
+  pub relationship_revision: u32,
   /// Verification class echoed by the projection.
   pub verification_state: RetrievalVerificationState,
+}
+
+impl EdgeCandidate {
+  /// Returns the exact assertion projection reference required for canonical hydration.
+  pub fn assertion_projection(&self) -> CanonicalAssertionProjectionRef {
+    CanonicalAssertionProjectionRef {
+      edge_id: self.edge_id.clone(),
+      relationship_revision: self.relationship_revision,
+      assertion_id: self.assertion_id.clone(),
+      assertion_revision: self.assertion_revision,
+      traversal_id: self.traversal_id.clone(),
+      source_node_id: self.source_node_id.clone(),
+      target_node_id: self.target_node_id.clone(),
+      relation_type: self.relation_type.relation_type(),
+      relation_registry_revision: self.relation_registry_version,
+    }
+  }
 }
 
 /// Minimal opposite endpoint returned with a direct edge.
@@ -742,8 +846,27 @@ pub struct NeighborEdge {
   pub assertion_id: CanonicalId,
   /// Positive immutable assertion revision that must be hydrated exactly.
   pub assertion_revision: u32,
+  /// Positive immutable publisher relationship revision.
+  pub relationship_revision: u32,
   /// Verification class echoed by the projection.
   pub verification_state: RetrievalVerificationState,
+}
+
+impl NeighborEdge {
+  /// Returns the exact assertion projection reference required for canonical hydration.
+  pub fn assertion_projection(&self) -> CanonicalAssertionProjectionRef {
+    CanonicalAssertionProjectionRef {
+      edge_id: self.edge_id.clone(),
+      relationship_revision: self.relationship_revision,
+      assertion_id: self.assertion_id.clone(),
+      assertion_revision: self.assertion_revision,
+      traversal_id: self.traversal_id.clone(),
+      source_node_id: self.source_node_id.clone(),
+      target_node_id: self.target_node_id.clone(),
+      relation_type: self.relation_type.relation_type(),
+      relation_registry_revision: self.relation_registry_version,
+    }
+  }
 }
 
 /// One direct edge and its opposite endpoint.
@@ -789,6 +912,8 @@ pub struct EdgeSearchResult {
 pub struct NeighborSearchResult {
   /// Immutable release echoed by island-port.
   pub release_id: ReleaseId,
+  /// Exact immutable projection execution proof echoed by island-port.
+  pub execution: NeighborProjectionExecutionProof,
   /// Root echoed by the endpoint.
   pub root_node_id: CanonicalId,
   /// Bounded direct neighbors in authoritative retrieval order.

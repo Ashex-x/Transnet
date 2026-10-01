@@ -442,6 +442,7 @@ Response:
         "relation_registry_version": 1,
         "assertion_id": "assertion_sweltering_degree_scorching_01",
         "assertion_revision": 2,
+        "relationship_revision": 3,
         "relation_type_id": "relation_degree",
         "traversal_id": "traversal_higher_degree",
         "verification_state": "verified"
@@ -452,7 +453,7 @@ Response:
 }
 ```
 
-Each result is a candidate pointer. Before factual use, Transnet hydrates the exact assertion and validates its selected registry traversal through `POST /api/v1/assertions/get` for the same release. Similarity remains nomination only.
+Each result is a candidate pointer. Before factual use, Transnet hydrates the exact relationship and assertion revisions and validates its selected registry traversal through `POST /api/v1/assertions/get` for the same release. Similarity remains nomination only.
 
 ## POST /api/v1/neighbors/search
 
@@ -469,6 +470,17 @@ Request:
   "languages": ["en"],
   "domain_ids": ["domain_weather"],
   "release_id": "knowledge-2026-09",
+  "execution": {
+    "content_release": "knowledge-2026-09",
+    "canonical_schema_version": "canonical-v1",
+    "node_collection_id": "knowledge_nodes__knowledge_2026_09",
+    "node_collection_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "edge_collection_id": "knowledge_edges__knowledge_2026_09",
+    "edge_collection_content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "relationship_registry_version": 1,
+    "edge_dense_input_version": "edge-dense-input-v1",
+    "edge_lexical_input_version": "edge-lexical-input-v1"
+  },
   "limit": 20,
   "cursor": null
 }
@@ -482,6 +494,17 @@ Response:
   "schema_version": "retrieval-data-v1",
   "outcome": "ok",
   "value": {
+    "execution": {
+      "content_release": "knowledge-2026-09",
+      "canonical_schema_version": "canonical-v1",
+      "node_collection_id": "knowledge_nodes__knowledge_2026_09",
+      "node_collection_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "edge_collection_id": "knowledge_edges__knowledge_2026_09",
+      "edge_collection_content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "relationship_registry_version": 1,
+      "edge_dense_input_version": "edge-dense-input-v1",
+      "edge_lexical_input_version": "edge-lexical-input-v1"
+    },
     "root_node_id": "node_sweltering_hot_01",
     "neighbors": [
       {
@@ -493,6 +516,7 @@ Response:
           "relation_registry_version": 1,
           "assertion_id": "assertion_sweltering_degree_scorching_01",
           "assertion_revision": 2,
+          "relationship_revision": 3,
           "relation_type_id": "relation_degree",
           "traversal_id": "traversal_higher_degree",
           "verification_state": "verified"
@@ -510,7 +534,7 @@ Response:
 }
 ```
 
-Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. Every neighbor edge carries exact assertion identity/revision, relation type identity, traversal identity, and registry version `1`; Transnet must hydrate and validate that exact assertion projection before treating the edge as a verified path step. A missing assertion, substituted revision, unknown traversal/relation, endpoint disagreement, or registry mismatch invalidates the candidate. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
+Expansion remains bounded to one selected root at a time and returns only relationships eligible for that root and request scope. The request and response bind the full content release/schema pin, immutable node and edge collection IDs and SHA-256 content hashes, registry revision, and edge dense/lexical input versions; any missing or changed member fails closed. Every neighbor edge carries exact relationship and assertion revisions, relation type identity, traversal identity, endpoints, and registry version `1`, forming the exact assertion projection reference Transnet must hydrate before treating the edge as a verified path step. A missing assertion, substituted revision, unknown traversal/relation, endpoint disagreement, or registry mismatch invalidates the candidate. The service may assemble a short path only when every step is a named, independently evidence-eligible edge. Arbitrary-depth traversal, similarity-chain path claims, centrality, and mutable graph transactions are outside this contract.
 
 ## Internal publication operations
 
