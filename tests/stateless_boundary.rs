@@ -7,7 +7,7 @@ use axum::{
 use tower::ServiceExt;
 use transnet::{app_router, AppState};
 
-const REMOVED_PRIVATE_STATE_MODULES: &[&str] = &[
+const REMOVED_OBSOLETE_MODULES: &[&str] = &[
   "src/adapters/in_memory/feedback.rs",
   "src/adapters/in_memory/graph_view.rs",
   "src/adapters/in_memory/idempotency.rs",
@@ -37,6 +37,17 @@ const REMOVED_PRIVATE_STATE_MODULES: &[&str] = &[
   "src/ports/lookup_job.rs",
   "src/ports/practice_state.rs",
   "src/ports/repository.rs",
+  "src/domain/translation.rs",
+  "src/application/lookup.rs",
+  "src/application/retrieval.rs",
+  "src/application/graph.rs",
+  "src/application/graph_topology_cache.rs",
+  "src/adapters/learning_model.rs",
+  "src/adapters/in_memory_retrieval.rs",
+  "src/ports/learning_model.rs",
+  "src/ports/translation_model.rs",
+  "src/ports/graph_repository.rs",
+  "src/ports/vector_retriever.rs",
 ];
 
 fn router() -> axum::Router {
@@ -47,7 +58,7 @@ fn router() -> axum::Router {
 fn obsolete_private_state_modules_are_absent_from_the_source_surface() {
   let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
 
-  for relative_path in REMOVED_PRIVATE_STATE_MODULES {
+  for relative_path in REMOVED_OBSOLETE_MODULES {
     assert!(
       !manifest.join(relative_path).exists(),
       "obsolete private-state module returned: {relative_path}"
@@ -112,7 +123,7 @@ async fn translation_and_lookup_reject_unknown_and_private_fields() {
   for (path, base) in [
     (
       "/api/v1/translations",
-      serde_json::json!({"text":"hello","source_language":"en","target_language":"zh-CN","response_level":"brief"}),
+      serde_json::json!({"input":{"type":"text","text":"hello"},"source_language":"en","target_language":"zh-CN","response_level":"brief"}),
     ),
     (
       "/api/v1/basic-cards/lookup",
@@ -208,20 +219,18 @@ fn debug_diagnostics_redact_request_and_generated_text() {
   use transnet::domain::{
     canonical::LanguageTag,
     retrieval::RetrievalRequest,
-    translation::{Confidence, EnglishDialect, TranslationInput, TranslationResult},
+    translation_turn::{TranslationTurn, TranslationTurnRequest},
   };
   let secret = "private-sentinel-8391";
-  let input =
-    TranslationInput::new(secret, "en", Some(secret), "en", EnglishDialect::American).unwrap();
-  let result = TranslationResult {
-    source_language: secret.into(),
-    language_confidence: Confidence::High,
-    entries: Vec::new(),
-    warnings: vec![secret.into()],
-  };
+  let input: TranslationTurnRequest = serde_json::from_value(serde_json::json!({
+    "input":{"type":"text","text":secret},
+    "source_language":"en","target_language":"zh-CN","response_level":"brief"
+  }))
+  .unwrap();
+  let turn = TranslationTurn::new(input).unwrap();
   let retrieval =
     RetrievalRequest::for_public_api(secret, LanguageTag::parse("en").unwrap()).unwrap();
-  let debug = format!("{input:?}{result:?}{retrieval:?}");
+  let debug = format!("{turn:?}{retrieval:?}");
   assert!(!debug.contains(secret));
   assert!(debug.contains("REDACTED"));
 }

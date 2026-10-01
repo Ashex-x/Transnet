@@ -1764,8 +1764,9 @@ mod tests {
   fn admitted_context_and_escaped_chunk_fit_generation_input() {
     let hostile_text = format!("a{}", "\u{0001}".repeat(MAX_CONNECTED_CHUNK_CHARS - 1));
     let turn = TranslationTurn::new(TranslationTurnRequest {
-      text: Some(hostile_text.clone()),
-      input: None,
+      input: TranslationInput::Text {
+        text: hostile_text.clone(),
+      },
       source_language: "en".to_string(),
       target_language: "zh-CN".to_string(),
       response_level: "brief".to_string(),

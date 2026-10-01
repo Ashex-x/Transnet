@@ -23,10 +23,7 @@ pub mod resilience;
 /// Owned Unix-domain listener lifecycle and HTTP serving.
 #[cfg(unix)]
 pub mod server;
-/// Crate-private compatibility-free HTTP helpers.
-mod types;
 
-pub use adapters::learning_model::OpenAiLearningModel;
 pub use adapters::model_runtime::{OpenAiEmbeddingAdapter, OpenAiGenerationAdapter};
 pub use api::{
   app_router, app_router_with_http_config, AlwaysReady, AppState, CompositeKnowledgeReadiness,
@@ -34,7 +31,6 @@ pub use api::{
   KnowledgeRouteDependencies, KnowledgeRouteDependenciesError, Readiness, ReadinessComponentState,
   ReadinessReport, SuccessEnvelope, SuccessMeta,
 };
-pub use application::canonical_lookup::{CanonicalLookupError, CanonicalLookupService};
 pub use application::observability::{
   ClosedMetricsDispatcher, TelemetryDropSnapshot, MAX_IN_FLIGHT_METRIC_RECORDS,
 };

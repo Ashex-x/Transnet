@@ -34,7 +34,7 @@ Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start t
 
 ## Configure
 
-The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` requires the Unix `socket_path` and `socket_mode`; `[http]` sets the body limit. `[translation]` and the provider sections retain internal model policy while the provider adapter is consolidated. See the [configuration guide](docs/guides/configuration.md). Do not commit real provider credentials.
+The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` requires the Unix `socket_path` and `socket_mode`; `[http]` sets the body limit. `[translation]`, `[gemma4]`, and `[provider_resilience.gemma4]` define the single generation boundary. See the [configuration guide](docs/guides/configuration.md). Do not commit real provider credentials.
 
 `RUST_LOG` overrides `server.log_level`. `server.log_format = "json"` writes newline-delimited JSON; any other value writes compact text. Debug builds log to `logs/debug/transnet.log`, release builds log to `logs/release/transnet.log`; each file is replaced on startup.
 
@@ -76,10 +76,10 @@ curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/a
   --header 'content-type: application/json' --data '{}'
 curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/api/v1/translations \
   --header 'content-type: application/json' \
-  --data '{"text":"Hello","source_language":"auto","target_language":"zh-CN","response_level":"standard"}'
+  --data '{"input":{"type":"text","text":"Hello"},"source_language":"auto","target_language":"zh-CN","response_level":"standard"}'
 ```
 
-The checked-in configuration uses the target UDS listener. MySQL canonical cards and releases plus Qdrant knowledge nodes and edges remain target capabilities until their status is advanced in the interface and guide documents. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
+The checked-in configuration uses the target UDS listener. Canonical and knowledge clients are implemented and opt-in; their production Island-port/MySQL/Qdrant authorities remain external and unverified. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
 
 Legacy TCP, CORS, `POST /translate`, `/v1/lookups`, `/v1/senses/*`, and raw `/v1/graph*` surfaces are not registered.
 

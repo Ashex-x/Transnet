@@ -260,7 +260,7 @@ async fn enabled_runtime_reuses_one_authority_for_service_and_read_only_probe() 
     assert_eq!(response.status(), expected);
     let response = router.oneshot(Request::post("/api/v1/translations")
       .header("content-type", "application/json")
-      .body(Body::from(r#"{"text":"hello","source_language":"en","target_language":"zh-CN","response_level":"brief"}"#))
+        .body(Body::from(r#"{"input":{"type":"text","text":"hello"},"source_language":"en","target_language":"zh-CN","response_level":"brief"}"#))
       .unwrap()).await.unwrap();
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(

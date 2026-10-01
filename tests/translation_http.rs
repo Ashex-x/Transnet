@@ -214,7 +214,7 @@ async fn relationship_page_deadline_and_cancellation_keep_closed_problem_semanti
         .with_relationship_page_runtime(relationship_runtime(error)),
     )
     .oneshot(request(json!({
-      "text":"hot", "source_language":"en", "target_language":"zh-CN",
+      "input":{"type":"text","text":"hot"}, "source_language":"en", "target_language":"zh-CN",
       "response_level":"standard"
     })))
     .await
@@ -268,7 +268,7 @@ async fn production_router_propagates_runtime_drain_to_translation() {
   runtime.cancel();
   let response = app
     .oneshot(request(json!({
-      "text":"hello world", "source_language":"en", "target_language":"zh-CN",
+      "input":{"type":"text","text":"hello world"}, "source_language":"en", "target_language":"zh-CN",
       "response_level":"brief"
     })))
     .await
@@ -281,7 +281,7 @@ async fn production_router_propagates_runtime_drain_to_translation() {
 async fn translation_success_uses_the_frozen_envelope_and_plural_versions() {
   let response = app(Ok(connected_output()), Ok(lexical_output()))
     .oneshot(request(json!({
-      "text": "hot",
+      "input": {"type":"text", "text": "hot"},
       "source_language": "en",
       "target_language": "zh-CN",
       "response_level": "standard",
@@ -339,7 +339,7 @@ async fn translation_success_uses_the_frozen_envelope_and_plural_versions() {
 async fn passage_and_request_local_history_use_the_same_wire_contract() {
   let response = app(Ok(connected_output()), Ok(lexical_output()))
     .oneshot(request(json!({
-      "text": "That plan is still up in the air.",
+      "input": {"type":"text", "text": "That plan is still up in the air."},
       "source_language": "en",
       "target_language": "zh-CN",
       "response_level": "full",
@@ -375,10 +375,23 @@ async fn passage_and_request_local_history_use_the_same_wire_contract() {
 #[tokio::test]
 async fn malformed_unknown_and_semantically_invalid_requests_use_safe_problems() {
   let service = app(Ok(connected_output()), Ok(lexical_output()));
+  let legacy = service
+    .clone()
+    .oneshot(request(json!({
+      "text": "retired-shape",
+      "source_language": "en",
+      "target_language": "zh-CN",
+      "response_level": "brief"
+    })))
+    .await
+    .unwrap();
+  assert_eq!(legacy.status(), StatusCode::BAD_REQUEST);
+  assert_eq!(body(legacy).await["code"], "invalid_json");
+
   let unknown = service
     .clone()
     .oneshot(request(json!({
-      "text": "hot",
+      "input": {"type":"text", "text": "hot"},
       "source_language": "en",
       "target_language": "zh-CN",
       "response_level": "brief",
@@ -399,7 +412,7 @@ async fn malformed_unknown_and_semantically_invalid_requests_use_safe_problems()
   let unknown_history = service
     .clone()
     .oneshot(request(json!({
-      "text": "hot",
+      "input": {"type":"text", "text": "hot"},
       "source_language": "en",
       "target_language": "zh-CN",
       "response_level": "brief",
@@ -420,7 +433,7 @@ async fn malformed_unknown_and_semantically_invalid_requests_use_safe_problems()
 
   let invalid = service
     .oneshot(request(json!({
-      "text": "hot",
+      "input": {"type":"text", "text": "hot"},
       "source_language": "en",
       "target_language": "fr",
       "response_level": "brief"
@@ -467,7 +480,7 @@ async fn oversized_generation_context_is_rejected_before_model_execution() {
   let secret = "private-generation-context-772";
   let response = app(Ok(connected_output()), Ok(lexical_output()))
     .oneshot(request(json!({
-      "text":"hot", "source_language":"en", "target_language":"zh-CN",
+      "input":{"type":"text","text":"hot"}, "source_language":"en", "target_language":"zh-CN",
       "response_level":"brief", "history":[{
         "source_text":format!("{secret}{}", "x".repeat(8_192)),
         "translated_text":"历史", "source_language":"en", "target_language":"zh-CN"
@@ -679,7 +692,7 @@ async fn target_route_rejects_other_methods_and_unknown_paths_with_shared_proble
 async fn model_failures_map_to_stable_redacted_problem_statuses() {
   let unavailable = app(Err(ModelOperationError::Unavailable), Ok(lexical_output()))
     .oneshot(request(json!({
-      "text": "This contains private-source-991.",
+      "input": {"type":"text", "text": "This contains private-source-991."},
       "source_language": "en",
       "target_language": "zh-CN",
       "response_level": "brief"
@@ -701,7 +714,7 @@ async fn model_failures_map_to_stable_redacted_problem_statuses() {
     Err(ModelOperationError::InvalidOutput),
   )
   .oneshot(request(json!({
-    "text": "hot",
+    "input": {"type":"text", "text": "hot"},
     "source_language": "en",
     "target_language": "zh-CN",
     "response_level": "full"
@@ -727,7 +740,7 @@ async fn target_payload_limit_uses_the_shared_problem_contract() {
   .unwrap();
   let response = router
     .oneshot(request(json!({
-      "text": "This payload exceeds the configured test limit.",
+      "input": {"type":"text", "text": "This payload exceeds the configured test limit."},
       "source_language": "en",
       "target_language": "zh-CN",
       "response_level": "brief"
@@ -744,7 +757,7 @@ async fn missing_orchestrator_fails_closed_on_the_target_route() {
   let router = app_router(AppState::new());
   let response = router
     .oneshot(request(json!({
-      "text": "hot",
+      "input": {"type":"text", "text": "hot"},
       "source_language": "en",
       "target_language": "zh-CN",
       "response_level": "brief"

@@ -20,7 +20,7 @@ English: [Transnet delivery plan](../docs/todo.md)
 - [x] 仅 UDS 的 HTTP 进程、请求边界、请求 ID、健康探针、优雅停机和脱敏结构化 Trace。
 - [x] 单一中立 fast/reasoning generation provider、有界容错和运行指标。
 - [x] 目标翻译以及可选 canonical/knowledge route composition。
-- [x] 规范查询、词义详情、内容发布和有界图读取的库基础与进程内测试适配器；它们并非生产存储组合。
+- [x] 严格 canonical-data 与 retrieval-data client、BasicCard mapper、固定发布的 root/view/path service、离线 publication fake 及合同测试；生产 authority 仍属外部。
 - [x] 翻译、查询、词义详情和有界图读取的目标人工合同与机器合同。
 - [x] Transnet-owned publication projection/client、relationship-page composition seam 与完整目标线上语义。
 - [ ] 生产 Island-port/MySQL/Qdrant 执行、配对激活、production relationship-page authority 与真实验收。

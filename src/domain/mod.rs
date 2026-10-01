@@ -10,8 +10,6 @@ pub mod canonical_content;
 pub mod canonical_translation;
 /// Content-free declarations of implemented service capabilities.
 pub mod capabilities;
-/// Immutable content-release staging, validation, publication, and rollback invariants.
-pub mod content_release;
 /// Bounded canonical-domain inventory and request-local assessment values.
 pub mod domain_assessment;
 /// Release-pinned authoritative material and canonical embedding-input contracts.
@@ -50,7 +48,5 @@ pub mod retrieval;
 pub mod retrieval_data;
 /// Root-first canonical and exploratory retrieval outcomes.
 pub mod root_retrieval;
-/// Structured multilingual-to-English translation.
-pub mod translation;
 /// Request-local unified translation values, normalization, and response projection.
 pub mod translation_turn;

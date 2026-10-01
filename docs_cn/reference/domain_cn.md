@@ -32,7 +32,7 @@ Verified 内容是已发布规范知识；inferred 解释与 exploratory 候选�
 
 一个内容视图由 MySQL 卡片发布及配对的不可变 Qdrant 节点与边 collection 构成。请求只固定三元组一次，每次结构化与向量读取都使用它。MySQL 或签名发布工件是权威来源；Qdrant 是可重建投影，其候选需要同一发布补全。
 
-已实现的 M3 foundation 通过 `KnowledgeReleaseTrio` 表示该激活候选：现有 canonical-only `CanonicalReleasePin`、一个强类型不可变节点 collection manifest、一个强类型不可变边 collection manifest，以及共享的 dense/sparse embedding 修订。边 manifest 绑定已验证节点内容哈希并携带完整端点数量。`ActiveContentVersion` 只保留给较早的进程内单索引检索基础，不是发布权威；其中单个 `vector_collection_id` 绝不能代替两个 M3 collection。
+已实现的 M3 foundation 通过 `KnowledgeReleaseTrio` 表示该激活候选：现有 canonical-only `CanonicalReleasePin`、一个强类型不可变节点 collection manifest、一个强类型不可变边 collection manifest，以及共享的 dense/sparse embedding 修订。边 manifest 绑定已验证节点内容哈希并携带完整端点数量。`ActiveContentVersion` 只作为确定性 match 建模所用的 domain-level compatibility shape 保留；任何可执行 runtime service 都不会选择它，它也不是发布权威。其中单个 `vector_collection_id` 绝不能代替两个 M3 collection。
 
 已实现的关系 registry 冻结 retrieval-data 合同中的全部 v1 wire 名与 inverse 对。只有 taxonomy 对 `is_a` / `has_subtype` 具有传递性；当前所有 v1 关系均声明因果性不适用，所有非 taxonomy 关系均声明传递性不适用。发布声明与这些 registry 语义冲突时闭合失败。Assertion domain 为文档规定的词汇、短语、术语、概念、实体、领域、科学、语言及语义尺度 family 提供闭合目录。`CanonicalNodeId` 将 publisher 提供的不透明 ID 与其 family 一并保留，绝不生成 ID。当前 graph read 与 node projection model 仍仅支持 `Sense`、`Lexeme`、`Construction` 和 `Scale`；其他 family 在具备权威 publisher mapping 前保持不可投影。
 
