@@ -22,6 +22,8 @@ pub mod knowledge_projection;
 pub mod knowledge_publication;
 /// Exhaustive server-owned policy for guided knowledge lenses.
 pub mod knowledge_view_policy;
+/// Release-pinned guided view composition over authoritative assertion proofs.
+pub mod knowledge_views;
 /// Structured lookup orchestration.
 pub mod lookup;
 /// Bounded response-neutral delivery of closed metric events.

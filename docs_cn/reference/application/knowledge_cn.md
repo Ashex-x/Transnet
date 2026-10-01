@@ -4,7 +4,7 @@ English: [Knowledge application](../../../docs/reference/application/knowledge.m
 
 本模块负责单词与固定短语请求的词义解析、领域评估、发布固定检索、关系排序、页面组织与确定性投影。
 
-状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。有界领域评估基础与严格出站 inventory client 已实现，但尚未由默认在线 composition 暴露。新的有界 root-retrieval application boundary 已组合注入式 canonical root resolver、共享 canonical-data knowledge-node hydration client、ephemeral embedding、query lexical encoding 与严格 retrieval-data port。Root resolver 当前仍只有 fake 实现，且该流程尚未暴露公开 route。闭合 knowledge-lens catalog、server-owned traversal 与 item budget、已校验 view superset 及有界 verified-path result 已实现为 domain 与 application policy；检索 orchestration、transport handler 与完整页面组织仍属于目标行为。
+状态：当前规范查询使用只读检索端口，在请求内组装每张卡片。查询衍生的快照缓存及其公共缓存合同已经移除。图拓扑缓存仍属于发布固定的规范内容缓存。有界领域评估基础与严格出站 inventory client 已实现，但尚未由默认在线 composition 暴露。新的有界 root-retrieval application boundary 已组合注入式 canonical root resolver、共享 canonical-data knowledge-node hydration client、ephemeral embedding、query lexical encoding 与严格 retrieval-data port。Root resolver 当前仍只有 fake 实现，且该流程尚未暴露公开 route。闭合 knowledge-lens catalog、server-owned traversal 与 item budget、已校验 view superset 及有界 verified-path result 已实现为 domain 与 application policy。Guided-view application service 现已执行有界 direct-neighbor expansion、校验完整 immutable projection proof、从 canonical-data 补全每个精确 assertion traversal 与展示 node，并返回确定性的显式路径。Transport handler 与完整 relationship-page composition 仍属于目标行为。
 
 canonical-only 服务从权威端选择一次发布 pin，再通过读取 port 组合已审核翻译候选、确定性排序的词汇候选和无歧义的词义详情。它使用带 canonical-only content pin 的现有 lookup-card 类型，不伪造向量集合，也不把有意的纯词法读取误称为向量故障降级。可执行文件只在显式配置时构造并保存该依赖，用 active-release 只读探针检查就绪，并通过冻结的 BasicCard lookup 与固定发布 sense 路由提供该能力。外部 island-port server 仍需实现匹配的内部合同。请求局部查询形式有界且去重：基线规范化形式最强，谨慎的空白或外围标点变体只是较低优先级的拼写候选。已发布别名、形态、转写和语义归属由权威端确定，不从查询字符串猜测。
 
@@ -33,6 +33,8 @@ Root retrieval 始终先完成 canonical resolution。Not-found 与同优先级�
 模型可组织所提供事实并生成精简解释，但不能虚构 endpoint 或修改事实元数据。确定性校验检查每个引用。空或支持较弱的分区被省略。
 
 规范知识是断言图，而不是存储树。版本化关系注册表定义参与者角色，以及哪些 n 元断言允许生成二元遍历投影。已实现的 meaning、contrast、usage、form、origin 与 domain 闭合 policy 会推导准确 relation family、可补全 endpoint family、深度、item budget 与 display-evidence 资格，不接受调用方提供 graph control。Mechanism 与 application 在 registry 提供显式技术关系之前保持不可用；弱主题关联绝不能证明这两个 lens。每个非 root 引导视图 item 都必须保留一条回到 verified root、由独立证据支持 assertion projection 组成的一至三跳无环路径。Step 只能从完整发布 pin 下的精确规范补全结果构建，并沿声明的 source-to-target traversal 前进；反向遍历必须存在单独声明的 inverse traversal。请求局部且有依据的解释可保持 `inferred`；仅基于相似度的 `exploratory` 材料不能进入事实视图或充当 path step。有序 branch 精确划分所有非 root item，truncation 必须与 cursor 是否存在一致，response projection 始终使用 request 绑定的 level。`knowledge/paths` 最多接纳三条互异有序路径，每条最多三跳；`no_verified_path` 表示成功的有界搜索结果，而不是对全局不存在关系的声明。
+
+Guided-view service 在整个 expansion 中保留一个调用方提供的 canonical release pin 与一份精确 node/edge collection proof。Retrieval-data 只提供 verified neighbor nomination；canonical-data 必须返回精确 assertion revision、已声明 traversal、evidence lineage、可展示的权威 endpoint record，以及任何完整 semantic scale。缺少已提名 canonical record 会报告为 partial publication，transport 不可用则是独立的 dependency failure。排序只使用冻结 lens relation 顺序、endpoint-family 顺序与 canonical identity，绝不使用 similarity score。
 
 `brief`、`standard` 与 `full` 是同一个已校验超集的投影。响应级别只改变广度，不改变事实选择或真实性状态。
 
