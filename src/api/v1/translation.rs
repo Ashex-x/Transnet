@@ -76,7 +76,7 @@ pub(crate) async fn translate(
     )
     .await
   {
-    Ok(result) => success(result, &request_id),
+    Ok(result) => success(result, &turn, &request_id),
     Err(TranslationOrchestrationError::UnsupportedSourceLanguage) => {
       invalid_translation_field("source_language", &request_id)
     }
@@ -119,8 +119,12 @@ pub(crate) async fn translate(
   }
 }
 
-fn success(result: ProjectedTranslationResult, request_id: &RequestId) -> Response {
-  if result.validate().is_err() {
+fn success(
+  result: ProjectedTranslationResult,
+  turn: &TranslationTurn,
+  request_id: &RequestId,
+) -> Response {
+  if result.validate_for_turn(turn).is_err() {
     return problem::response(
       StatusCode::BAD_GATEWAY,
       "invalid_model_output",

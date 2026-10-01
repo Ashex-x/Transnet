@@ -39,6 +39,10 @@ pub const MAX_TERMINOLOGY: usize = 128;
 pub const MAX_TERM_SCALARS: usize = 256;
 /// Maximum JSON bytes retained for history and guidance passed to one generation prompt.
 pub const MAX_GENERATION_CONTEXT_BYTES: usize = 8_192;
+/// Maximum Unicode scalar count for caller-owned and response-local opaque identities.
+pub const MAX_TRANSLATION_RESULT_ID_SCALARS: usize = 128;
+/// Maximum distinct version values reported for one request.
+pub const MAX_TRANSLATION_VERSION_VALUES: usize = 16;
 
 /// One prior linguistic turn, without identity, timestamps, or persistence instructions.
 #[derive(Clone, Deserialize, Serialize)]
@@ -602,7 +606,7 @@ fn validate_input(
         total = total
           .checked_add(count)
           .ok_or(TurnValidationError::TooLarge)?;
-        if segment.segment_id.is_empty()
+        if !bounded_id(&segment.segment_id)
           || !ids.insert(&segment.segment_id)
           || segment.text.trim().is_empty()
           || count > MAX_SEGMENT_SCALARS
@@ -739,7 +743,10 @@ fn validate_images(
   let mut image_ids = std::collections::BTreeSet::new();
   let mut keys = std::collections::BTreeSet::new();
   for image in images {
-    if image.image_id.is_empty() || !image_ids.insert(&image.image_id) {
+    if !bounded_id(&image.image_id)
+      || image.image_id.contains(':')
+      || !image_ids.insert(&image.image_id)
+    {
       return Err(TurnValidationError::Field("input.images"));
     }
     if !matches!(
@@ -761,7 +768,8 @@ fn validate_images(
     }
     let mut region_ids = std::collections::BTreeSet::new();
     for region in &image.regions {
-      if region.region_id.is_empty()
+      if !bounded_id(&region.region_id)
+        || region.region_id.contains(':')
         || !region_ids.insert(&region.region_id)
         || ![region.x, region.y, region.width, region.height]
           .iter()
@@ -790,6 +798,12 @@ fn validate_images(
     return Err(TurnValidationError::Field("input.reading_order"));
   }
   Ok(())
+}
+
+fn bounded_id(value: &str) -> bool {
+  value.trim() == value
+    && !value.is_empty()
+    && value.chars().count() <= MAX_TRANSLATION_RESULT_ID_SCALARS
 }
 
 fn image_dimensions(bytes: &[u8], media_type: &str) -> Option<(u32, u32)> {
@@ -1426,10 +1440,13 @@ impl ProjectedTranslationResult {
   /// Validates the superset and every response-local citation before HTTP serialization.
   pub fn validate(&self) -> Result<(), TranslationResultValidationError> {
     self.translation.validate()?;
+    validate_metadata(&self.metadata)?;
     let mut source_ids = std::collections::BTreeSet::new();
+    let mut cited_source_ids = std::collections::BTreeSet::new();
     if self.external_sources.len() > 5
+      || (!self.external_sources.is_empty() && self.metadata.retrieval_version.is_none())
       || self.external_sources.iter().any(|source| {
-        source.source_id.trim().is_empty()
+        !bounded_id(&source.source_id)
           || !source_ids.insert(source.source_id.as_str())
           || !bounded(&source.title, 512)
           || !bounded(&source.url, 2_048)
@@ -1437,22 +1454,194 @@ impl ProjectedTranslationResult {
     {
       return Err(TranslationResultValidationError::InvalidValue);
     }
-    if self
-      .translation
-      .annotations()
-      .flat_map(|annotation| &annotation.citations)
-      .any(|citation| {
+    if self.translation.annotations().any(|annotation| {
+      let mut citations = std::collections::BTreeSet::new();
+      annotation.citations.iter().any(|citation| {
+        cited_source_ids.insert(citation.source_id.as_str());
         !source_ids.contains(citation.source_id.as_str())
+          || !bounded_id(&citation.source_id)
           || citation
             .fragment_id
             .as_deref()
-            .is_some_and(|value| !bounded(value, 256))
+            .is_some_and(|value| !bounded_id(value))
+          || !citations.insert((citation.source_id.as_str(), citation.fragment_id.as_deref()))
       })
+    }) || cited_source_ids != source_ids
     {
       return Err(TranslationResultValidationError::InvalidValue);
     }
     Ok(())
   }
+
+  /// Validates this projection against the exact originating request shape and selectors.
+  pub fn validate_for_turn(
+    &self,
+    turn: &TranslationTurn,
+  ) -> Result<(), TranslationResultValidationError> {
+    self.validate()?;
+    if self.metadata.response_level != turn.response_level() {
+      return Err(TranslationResultValidationError::InvalidValue);
+    }
+    validate_result_binding(&self.translation, turn)
+  }
+
+  /// Applies deterministic breadth and removes source descriptors no longer cited afterward.
+  pub fn project(mut self, level: ResponseLevel) -> Self {
+    self.translation = self.translation.project(level);
+    self.metadata.response_level = level;
+    let cited = self
+      .translation
+      .annotations()
+      .flat_map(|annotation| &annotation.citations)
+      .map(|citation| citation.source_id.as_str())
+      .collect::<std::collections::BTreeSet<_>>();
+    self
+      .external_sources
+      .retain(|source| cited.contains(source.source_id.as_str()));
+    self
+  }
+}
+
+fn validate_metadata(
+  metadata: &TranslationVersionMetadata,
+) -> Result<(), TranslationResultValidationError> {
+  if metadata.schema_version != TRANSLATION_RESULT_SCHEMA_VERSION
+    || metadata.normalizer_version != NORMALIZER_VERSION
+    || metadata.projection_version != PROJECTION_VERSION
+    || !valid_version_values(&metadata.model_versions)
+    || !valid_version_values(&metadata.prompt_versions)
+    || metadata.inference_profiles.len() > MAX_TRANSLATION_VERSION_VALUES
+    || metadata
+      .inference_profiles
+      .iter()
+      .enumerate()
+      .any(|(index, profile)| metadata.inference_profiles[..index].contains(profile))
+    || metadata
+      .retrieval_version
+      .as_deref()
+      .is_some_and(|value| !bounded(value, 128))
+    || metadata
+      .content_release
+      .as_deref()
+      .is_some_and(|value| !bounded(value, 128))
+  {
+    return Err(TranslationResultValidationError::InvalidValue);
+  }
+  Ok(())
+}
+
+fn valid_version_values(values: &[String]) -> bool {
+  values.len() <= MAX_TRANSLATION_VERSION_VALUES
+    && values.iter().all(|value| bounded(value, 128))
+    && values
+      .iter()
+      .enumerate()
+      .all(|(index, value)| !values[..index].contains(value))
+}
+
+fn validate_result_binding(
+  result: &TranslationTurnResult,
+  turn: &TranslationTurn,
+) -> Result<(), TranslationResultValidationError> {
+  let valid = match (turn.input(), result) {
+    (
+      TranslationInput::Text { .. },
+      TranslationTurnResult::Word {
+        detected_source_language,
+        translations,
+        ..
+      }
+      | TranslationTurnResult::Phrase {
+        detected_source_language,
+        translations,
+        ..
+      }
+      | TranslationTurnResult::Passage {
+        detected_source_language,
+        translations,
+        ..
+      },
+    ) => {
+      source_matches(turn.source_language(), *detected_source_language)
+        && translations
+          .iter()
+          .all(|translation| translation.language == turn.target_language())
+    }
+    (
+      TranslationInput::Segments { segments },
+      TranslationTurnResult::Segment {
+        segments: output,
+        terminology_decisions,
+      },
+    ) => {
+      segments.len() == output.len()
+        && segments.iter().zip(output).all(|(input, result)| {
+          input.segment_id == result.segment_id
+            && source_matches(turn.source_language(), result.detected_source_language)
+            && result
+              .translations
+              .iter()
+              .all(|translation| translation.language == turn.target_language())
+        })
+        && terminology_matches(turn.guidance(), terminology_decisions)
+    }
+    (
+      TranslationInput::ImageRegions {
+        images,
+        reading_order,
+      },
+      TranslationTurnResult::ImageRegion {
+        regions,
+        terminology_decisions,
+      },
+    ) => {
+      reading_order.len() == regions.len()
+        && reading_order.iter().zip(regions).all(|(key, result)| {
+          format!("{}:{}", result.image_id, result.region_id) == *key
+            && images.iter().any(|image| {
+              image.image_id == result.image_id
+                && image
+                  .regions
+                  .iter()
+                  .any(|region| region.region_id == result.region_id)
+            })
+            && source_matches(turn.source_language(), result.detected_source_language)
+            && result
+              .translations
+              .iter()
+              .all(|translation| translation.language == turn.target_language())
+        })
+        && terminology_matches(turn.guidance(), terminology_decisions)
+    }
+    _ => false,
+  };
+  if valid {
+    Ok(())
+  } else {
+    Err(TranslationResultValidationError::InvalidIdentityOrder)
+  }
+}
+
+fn source_matches(expected: SourceLanguage, actual: TurnLanguage) -> bool {
+  matches!(expected, SourceLanguage::Auto) || expected == SourceLanguage::Known(actual)
+}
+
+fn terminology_matches(guidance: &TranslationGuidance, decisions: &[TerminologyDecision]) -> bool {
+  guidance.terminology.len() == decisions.len()
+    && guidance
+      .terminology
+      .iter()
+      .zip(decisions)
+      .all(|(constraint, decision)| {
+        constraint.source == decision.source
+          && constraint.policy == decision.policy
+          && match constraint.policy {
+            TerminologyPolicy::Required | TerminologyPolicy::Preferred => {
+              decision.target.as_deref() == Some(constraint.target.as_str())
+            }
+            TerminologyPolicy::Forbidden => decision.target.is_none(),
+          }
+      })
 }
 
 /// One translation with optional meaning-specific generated detail.
@@ -1510,19 +1699,19 @@ impl TranslationTurnResult {
         annotations,
         review,
         ..
-      }
-      | Self::Phrase {
+      } => validate_result_unit(translations, annotations, review, ResultUnitKind::Word),
+      Self::Phrase {
         translations,
         annotations,
         review,
         ..
-      }
-      | Self::Passage {
+      } => validate_result_unit(translations, annotations, review, ResultUnitKind::Phrase),
+      Self::Passage {
         translations,
         annotations,
         review,
         ..
-      } => validate_result_unit(translations, annotations, review),
+      } => validate_result_unit(translations, annotations, review, ResultUnitKind::Passage),
       Self::Segment {
         segments,
         terminology_decisions,
@@ -1533,12 +1722,17 @@ impl TranslationTurnResult {
         let mut ids = std::collections::BTreeSet::new();
         for (order, segment) in segments.iter().enumerate() {
           if segment.order != order
-            || segment.segment_id.trim().is_empty()
+            || !bounded_id(&segment.segment_id)
             || !ids.insert(segment.segment_id.as_str())
           {
             return Err(TranslationResultValidationError::InvalidIdentityOrder);
           }
-          validate_result_unit(&segment.translations, &segment.annotations, &segment.review)?;
+          validate_result_unit(
+            &segment.translations,
+            &segment.annotations,
+            &segment.review,
+            ResultUnitKind::Structured,
+          )?;
         }
         validate_terminology_decisions(terminology_decisions)
       }
@@ -1552,13 +1746,18 @@ impl TranslationTurnResult {
         let mut ids = std::collections::BTreeSet::new();
         for (order, region) in regions.iter().enumerate() {
           if region.order != order
-            || region.image_id.trim().is_empty()
-            || region.region_id.trim().is_empty()
+            || !bounded_id(&region.image_id)
+            || !bounded_id(&region.region_id)
             || !ids.insert((region.image_id.as_str(), region.region_id.as_str()))
           {
             return Err(TranslationResultValidationError::InvalidIdentityOrder);
           }
-          validate_result_unit(&region.translations, &region.annotations, &region.review)?;
+          validate_result_unit(
+            &region.translations,
+            &region.annotations,
+            &region.review,
+            ResultUnitKind::Structured,
+          )?;
         }
         validate_terminology_decisions(terminology_decisions)
       }
@@ -1716,22 +1915,33 @@ fn validate_result_unit(
   translations: &[TurnTranslation],
   annotations: &[TranslationAnnotation],
   review: &TranslationReview,
+  kind: ResultUnitKind,
 ) -> Result<(), TranslationResultValidationError> {
-  let mut translation_ids = std::collections::BTreeSet::new();
-  if translations.is_empty()
-    || translations.iter().enumerate().any(|(order, value)| {
-      value.order != order
-        || value.translation_id.trim().is_empty()
-        || !translation_ids.insert(value.translation_id.as_str())
-        || !bounded(&value.text, 32_768)
-    })
-  {
+  if translations.is_empty() {
     return Err(TranslationResultValidationError::Empty);
   }
+  if (matches!(kind, ResultUnitKind::Passage | ResultUnitKind::Structured)
+    && translations.len() != 1)
+    || translations.iter().enumerate().any(|(order, value)| {
+      value.order != order
+        || value.translation_id != format!("translation_{order}")
+        || !bounded_id(&value.translation_id)
+        || !bounded(&value.text, 32_768)
+        || !validate_translation_shape(value, kind)
+    })
+  {
+    return Err(TranslationResultValidationError::InvalidValue);
+  }
+  let mut has_review_annotation = false;
   if annotations.len() > 64
-    || annotations
-      .iter()
-      .any(|value| !bounded(&value.message, 512) || value.citations.len() > 16)
+    || annotations.iter().any(|value| {
+      has_review_annotation |= value.code == TranslationAnnotationCode::ReviewRequired;
+      !bounded(&value.message, 512)
+        || value.citations.len() > 16
+        || annotation_family(value.code) != value.family
+        || (value.code == TranslationAnnotationCode::ReviewRequired
+          && value.minimum_level != ResponseLevel::Brief)
+    })
   {
     return Err(TranslationResultValidationError::InvalidValue);
   }
@@ -1739,14 +1949,87 @@ fn validate_result_unit(
     TranslationReviewState::Clean => review.issues.is_empty(),
     TranslationReviewState::ReviewRecommended => !review.issues.is_empty(),
   };
-  if !review_is_valid {
+  if !review_is_valid
+    || has_review_annotation != (review.state == TranslationReviewState::ReviewRecommended)
+  {
     return Err(TranslationResultValidationError::InvalidReview);
   }
-  let mut issues = std::collections::BTreeSet::new();
-  if !review.issues.iter().all(|issue| issues.insert(*issue)) {
+  if review.issues.windows(2).any(|pair| pair[0] >= pair[1]) {
     return Err(TranslationResultValidationError::InvalidReview);
   }
   Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum ResultUnitKind {
+  Word,
+  Phrase,
+  Passage,
+  Structured,
+}
+
+fn validate_translation_shape(value: &TurnTranslation, kind: ResultUnitKind) -> bool {
+  match kind {
+    ResultUnitKind::Word | ResultUnitKind::Phrase => {
+      value
+        .meaning
+        .as_deref()
+        .is_some_and(|text| bounded(text, 512))
+        && value
+          .details
+          .as_ref()
+          .is_none_or(|details| validate_details(details, kind))
+    }
+    ResultUnitKind::Passage | ResultUnitKind::Structured => {
+      value.meaning.is_none() && value.details.is_none()
+    }
+  }
+}
+
+fn validate_details(details: &TurnDetails, kind: ResultUnitKind) -> bool {
+  let expected_shape = match kind {
+    ResultUnitKind::Word => {
+      details.unit == TranslationUnit::Word
+        && details
+          .part_of_speech
+          .as_deref()
+          .is_some_and(|value| bounded(value, 64))
+        && details.phrase_type.is_none()
+    }
+    ResultUnitKind::Phrase => {
+      details.unit == TranslationUnit::Phrase
+        && details.part_of_speech.is_none()
+        && details
+          .phrase_type
+          .as_deref()
+          .is_some_and(|value| bounded(value, 64))
+    }
+    ResultUnitKind::Passage | ResultUnitKind::Structured => false,
+  };
+  expected_shape
+    && details.generated
+    && details.evidence_state == "exploratory"
+    && details.aliases.len() <= 6
+    && details.aliases.iter().all(|value| bounded(value, 128))
+    && details.examples.len() <= 4
+    && details
+      .examples
+      .iter()
+      .all(|value| bounded(&value.source_text, 512) && bounded(&value.translated_text, 512))
+    && details.usage_notes.len() <= 6
+    && details.usage_notes.iter().all(|value| bounded(value, 512))
+}
+
+const fn annotation_family(code: TranslationAnnotationCode) -> AnnotationFamily {
+  match code {
+    TranslationAnnotationCode::AmbiguityDetected => AnnotationFamily::Ambiguity,
+    TranslationAnnotationCode::TermSelected => AnnotationFamily::Terminology,
+    TranslationAnnotationCode::ProtectedContentPreserved
+    | TranslationAnnotationCode::FormatPreserved => AnnotationFamily::Format,
+    TranslationAnnotationCode::RegisterApplied => AnnotationFamily::Register,
+    TranslationAnnotationCode::CulturalContext => AnnotationFamily::Culture,
+    TranslationAnnotationCode::ReviewRequired => AnnotationFamily::Review,
+  }
 }
 
 fn validate_terminology_decisions(
@@ -1762,6 +2045,10 @@ fn validate_terminology_decisions(
         .target
         .as_deref()
         .is_some_and(|target| !bounded(target, MAX_TERM_SCALARS))
+      || match value.policy {
+        TerminologyPolicy::Required | TerminologyPolicy::Preferred => value.target.is_none(),
+        TerminologyPolicy::Forbidden => value.target.is_some(),
+      }
       || !sources.insert(value.source.as_str())
   }) {
     return Err(TranslationResultValidationError::InvalidValue);
@@ -2275,6 +2562,13 @@ mod tests {
           annotations: vec![
             annotation(ResponseLevel::Brief),
             annotation(ResponseLevel::Full),
+            TranslationAnnotation {
+              family: AnnotationFamily::Review,
+              code: TranslationAnnotationCode::ReviewRequired,
+              message: "Formatting requires review.".into(),
+              minimum_level: ResponseLevel::Brief,
+              citations: Vec::new(),
+            },
           ],
           review: review.clone(),
         },
@@ -2315,11 +2609,11 @@ mod tests {
         .as_array()
         .unwrap()
         .len(),
-      1
+      2
     );
     assert_eq!(
       full["segments"][0]["annotations"].as_array().unwrap().len(),
-      2
+      3
     );
   }
 
@@ -2357,7 +2651,7 @@ mod tests {
         prompt_versions: Vec::new(),
         inference_profiles: Vec::new(),
         reasoning_escalated: false,
-        retrieval_version: None,
+        retrieval_version: Some("live-retrieval-v1".into()),
         content_release: None,
       },
       external_sources: vec![ExternalSourceReference {
@@ -2392,6 +2686,152 @@ mod tests {
       invalid.validate(),
       Err(TranslationResultValidationError::InvalidIdentityOrder)
     );
+  }
+
+  #[test]
+  fn result_variants_reject_cross_family_shapes_and_noncanonical_ids() {
+    let mut passage =
+      TranslationTurnResult::passage("译文".into(), TurnLanguage::English, TurnLanguage::Chinese);
+    let TranslationTurnResult::Passage { translations, .. } = &mut passage else {
+      unreachable!()
+    };
+    translations[0].translation_id = "caller-picked".into();
+    assert_eq!(
+      passage.validate(),
+      Err(TranslationResultValidationError::InvalidValue)
+    );
+
+    let mut passage =
+      TranslationTurnResult::passage("译文".into(), TurnLanguage::English, TurnLanguage::Chinese);
+    let TranslationTurnResult::Passage { translations, .. } = &mut passage else {
+      unreachable!()
+    };
+    translations.push(plain_translation("第二个译文"));
+    translations[1].translation_id = "translation_1".into();
+    translations[1].order = 1;
+    assert_eq!(
+      passage.validate(),
+      Err(TranslationResultValidationError::InvalidValue)
+    );
+  }
+
+  #[test]
+  fn request_bound_validation_rejects_substituted_segment_identity() {
+    let turn = TranslationTurn::new(
+      serde_json::from_value(json!({
+        "input":{"type":"segments","segments":[{"segment_id":"expected","text":"Title",
+          "role":"title","format":"plain","protected_ranges":[]}]},
+        "source_language":"en","target_language":"zh-CN","response_level":"brief","history":[]
+      }))
+      .unwrap(),
+    )
+    .unwrap();
+    let result = ProjectedTranslationResult {
+      translation: TranslationTurnResult::Segment {
+        segments: vec![SegmentTranslationResult {
+          segment_id: "substituted".into(),
+          order: 0,
+          detected_source_language: TurnLanguage::English,
+          translations: vec![plain_translation("标题")],
+          annotations: Vec::new(),
+          review: TranslationReview::clean(),
+        }],
+        terminology_decisions: Vec::new(),
+      },
+      metadata: metadata(ResponseLevel::Brief),
+      external_sources: Vec::new(),
+    };
+    assert_eq!(
+      result.validate_for_turn(&turn),
+      Err(TranslationResultValidationError::InvalidIdentityOrder)
+    );
+  }
+
+  #[test]
+  fn projection_removes_sources_whose_annotations_are_not_visible() {
+    let translation = TranslationTurnResult::ImageRegion {
+      regions: vec![ImageRegionTranslationResult {
+        image_id: "page-1".into(),
+        region_id: "region-1".into(),
+        order: 0,
+        detected_source_language: TurnLanguage::English,
+        translations: vec![plain_translation("警告")],
+        annotations: vec![TranslationAnnotation {
+          family: AnnotationFamily::Culture,
+          code: TranslationAnnotationCode::CulturalContext,
+          message: "Full-only context.".into(),
+          minimum_level: ResponseLevel::Full,
+          citations: vec![CitationReference {
+            source_id: "live_1".into(),
+            fragment_id: None,
+          }],
+        }],
+        review: TranslationReview::clean(),
+      }],
+      terminology_decisions: Vec::new(),
+    };
+    let projected = ProjectedTranslationResult {
+      translation,
+      metadata: metadata(ResponseLevel::Full),
+      external_sources: vec![ExternalSourceReference {
+        source_id: "live_1".into(),
+        title: "Public notice".into(),
+        url: "https://example.invalid/notice".into(),
+      }],
+    }
+    .project(ResponseLevel::Brief);
+    assert!(projected.external_sources.is_empty());
+    assert_eq!(projected.validate(), Ok(()));
+  }
+
+  #[test]
+  fn closed_annotation_review_and_metadata_invariants_fail_closed() {
+    let mut translation =
+      TranslationTurnResult::passage("译文".into(), TurnLanguage::English, TurnLanguage::Chinese);
+    let TranslationTurnResult::Passage { annotations, .. } = &mut translation else {
+      unreachable!()
+    };
+    annotations.push(TranslationAnnotation {
+      family: AnnotationFamily::Culture,
+      code: TranslationAnnotationCode::TermSelected,
+      message: "Mismatched family.".into(),
+      minimum_level: ResponseLevel::Brief,
+      citations: Vec::new(),
+    });
+    assert_eq!(
+      translation.validate(),
+      Err(TranslationResultValidationError::InvalidValue)
+    );
+
+    let mut result = ProjectedTranslationResult {
+      translation: TranslationTurnResult::passage(
+        "译文".into(),
+        TurnLanguage::English,
+        TurnLanguage::Chinese,
+      ),
+      metadata: metadata(ResponseLevel::Brief),
+      external_sources: Vec::new(),
+    };
+    result.metadata.schema_version = "translation-result-v0";
+    assert_eq!(
+      result.validate(),
+      Err(TranslationResultValidationError::InvalidValue)
+    );
+  }
+
+  fn metadata(response_level: ResponseLevel) -> TranslationVersionMetadata {
+    TranslationVersionMetadata {
+      schema_version: TRANSLATION_RESULT_SCHEMA_VERSION,
+      normalizer_version: NORMALIZER_VERSION,
+      projection_version: PROJECTION_VERSION,
+      response_level,
+      model_versions: Vec::new(),
+      prompt_versions: Vec::new(),
+      inference_profiles: Vec::new(),
+      reasoning_escalated: false,
+      retrieval_version: None,
+      content_release: None,
+    }
   }
 
   #[test]

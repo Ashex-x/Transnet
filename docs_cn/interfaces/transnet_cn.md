@@ -124,7 +124,7 @@ HTTP boundary 已在过渡期与目标 path 上实现请求上下文基础。若
 }
 ```
 
-视觉输入包含经清理的 inline 图片与归一化矩形。坐标是 0 至 1 的有限十进制值，从左上角测量。每个 region ID 在所属图片内唯一；矩形必须具有正面积且位于边界内；`reading_order` 恰好引用每个 region 一次。若涉及文件或 PDF，island-port 在请求前完成渲染与选页。
+视觉输入包含经清理的 inline 图片与归一化矩形。调用方提供的 segment、image 与 region ID 是非空 opaque value，最多 128 个 Unicode scalar；image 与 region ID 不得包含 `:`，因为 `reading_order` 使用无歧义的 `image_id:region_id` 形式。坐标是 0 至 1 的有限十进制值，从左上角测量。每个 region ID 在所属图片内唯一；矩形必须具有正面积且位于边界内；`reading_order` 恰好引用每个 region 一次。若涉及文件或 PDF，island-port 在请求前完成渲染与选页。
 
 ```json
 {
@@ -193,7 +193,7 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
         "detected_source_language": "en",
         "translations": [{"translation_id": "translation_0", "order": 0, "text": "发布 {product_name}", "language": "zh-CN"}],
         "annotations": [
-          {"type": "terminology", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
+          {"type": "format", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
         ],
         "review": {"state": "clean", "issues": []}
       }
@@ -208,6 +208,8 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 `brief`、`standard` 与 `full` 是一个已验证超集的确定性投影。较低级别移除支持详情，但绝不改变所选含义、译文、protected content、证据状态或 review outcome。空分区省略。
 
 Typed annotation 使用闭合 family `ambiguity`、`terminology`、`register`、`culture`、`format` 与 `review`；闭合 code 为 `ambiguity_detected`、`term_selected`、`protected_content_preserved`、`register_applied`、`cultural_context`、`format_preserved` 与 `review_required`。每项 annotation 均包含有界 display message 及可选的响应级 citation reference。`data.external_sources` 如存在，只包含被这些 citation 引用的 source；source 与 fragment ID 只在本次响应内有效，绝不是规范证据。当前 offline 文本路径不返回 external source。结果校验会在序列化前拒绝未知 citation target、重复 source ID、identity/order 缺口、重复 review issue、与 issue 矛盾的 clean review state，以及空主译文。
+
+HTTP 序列化之前会执行 request-bound validation：structured result 的 ID 与顺序必须精确匹配原始 segment 或 image reading order；每条 translation 必须使用请求的 target language；显式声明的 source language 必须被保留。Translation ID 必须严格为 `translation_<zero-based order>`。Passage、segment 与 image-region unit 只有一条 primary connected-text translation，且不携带 lexical meaning/detail object；word 与 phrase unit 保留有界 meaning label，并且只允许与自身类型一致的 generated exploratory detail shape。Annotation code 只能属于一个闭合 family，review issue 严格排序，且 `review_required` 仅且必须出现在 `review_recommended` unit。Projection 删除最后一条 citation 被移除后不再被引用的 source descriptor。Schema、normalizer、projector、model、prompt、profile、retrieval 与 release metadata 都会接受边界和一致性校验，不会未经检查直接透传。
 
 ## 实时检索
 

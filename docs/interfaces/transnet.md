@@ -124,7 +124,7 @@ Structured document and localization input uses ordered segments. Segment IDs ar
 }
 ```
 
-Vision input contains sanitized inline images and normalized rectangles. Coordinates are finite decimal values from 0 through 1, measured from the top-left. Each region ID is unique within its image, rectangles must have positive area and remain in bounds, and `reading_order` references every region exactly once. If a file or PDF is involved, island-port renders and selects pages before this request.
+Vision input contains sanitized inline images and normalized rectangles. Caller-owned segment, image, and region IDs are nonblank opaque values of at most 128 Unicode scalars; image and region IDs exclude `:` because `reading_order` uses the unambiguous `image_id:region_id` form. Coordinates are finite decimal values from 0 through 1, measured from the top-left. Each region ID is unique within its image, rectangles must have positive area and remain in bounds, and `reading_order` references every region exactly once. If a file or PDF is involved, island-port renders and selects pages before this request.
 
 ```json
 {
@@ -193,7 +193,7 @@ The result is discriminated by `unit`: `word`, `phrase`, `passage`, `segment`, o
         "detected_source_language": "en",
         "translations": [{"translation_id": "translation_0", "order": 0, "text": "发布 {product_name}", "language": "zh-CN"}],
         "annotations": [
-          {"type": "terminology", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
+          {"type": "format", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
         ],
         "review": {"state": "clean", "issues": []}
       }
@@ -208,6 +208,8 @@ Image output uses `unit: "image_region"` and `regions` with `image_id`, `region_
 `brief`, `standard`, and `full` are deterministic projections of one validated superset. A lower level removes supporting detail but never changes the selected meaning, translation, protected content, evidence state, or review outcome. Empty sections are omitted.
 
 Typed annotations use the closed families `ambiguity`, `terminology`, `register`, `culture`, `format`, and `review`; closed codes are `ambiguity_detected`, `term_selected`, `protected_content_preserved`, `register_applied`, `cultural_context`, `format_preserved`, and `review_required`. Each annotation has a bounded display message and optional response-local citation references. `data.external_sources`, when present, contains only sources referenced by those citations; source and fragment IDs are response-local and never canonical evidence. The current offline text path returns no external sources. Result validation rejects unknown citation targets, duplicate source IDs, identity/order gaps, duplicate review issues, contradictory clean review state, and empty primary translations before serialization.
+
+Validation is request-bound before HTTP serialization: structured result IDs and order must exactly equal the originating segment or image reading order, every translation must use the requested target language, and a declared source language must be preserved. Translation IDs are exactly `translation_<zero-based order>`. Passage, segment, and image-region units have one primary connected-text translation and no lexical meaning/detail object; word and phrase units retain bounded meaning labels and may carry only their matching generated exploratory detail shape. Annotation codes have one closed family, review issues are strictly ordered, and `review_required` appears exactly for `review_recommended` units. Projection prunes source descriptors when their last citation is removed. Schema, normalizer, projector, model, prompt, profile, retrieval, and release metadata are bounded and validated rather than passed through unchecked.
 
 ## Live retrieval
 
