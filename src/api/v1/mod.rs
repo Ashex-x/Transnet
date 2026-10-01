@@ -14,7 +14,7 @@ pub(crate) mod probe;
 pub(crate) mod sense;
 pub(crate) mod translation;
 
-/// Builds the target `/api/v1` routes implemented by the current loopback runtime.
+/// Builds the target `/api/v1` routes served by the Unix-domain-socket runtime.
 pub(crate) fn target_router(
   knowledge: Option<knowledge_views::KnowledgeRouteDependencies>,
   runtime_cancellation: Arc<crate::domain::model_runtime::CancellationSignal>,

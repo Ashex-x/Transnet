@@ -17,8 +17,7 @@ use tracing::Level;
 
 use crate::{
   application::{
-    canonical_read::CanonicalReadService,
-    relationship_page::RelationshipPageRuntime,
+    canonical_read::CanonicalReadService, relationship_page::RelationshipPageRuntime,
     translation::TranslationOrchestrator,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
