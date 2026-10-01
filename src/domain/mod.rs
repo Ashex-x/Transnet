@@ -22,6 +22,8 @@ pub mod knowledge_publication;
 pub mod knowledge_release;
 /// Bounded canonical lookup-card presentation values with assertion-level provenance.
 pub mod lookup_card;
+/// Provider-neutral model runtime values and request-local call policy.
+pub mod model_runtime;
 /// Closed, redacted metric names and categorical event dimensions.
 pub mod observability;
 /// Request-scoped correlation, deadline, schema, and release context.

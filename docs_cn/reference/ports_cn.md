@@ -12,6 +12,8 @@ Port 模块定义 application service 从模型和数据依赖所需的窄操作
 
 [模型运行时参考](model-runtime_cn.md)负责调用预算、升级、视觉与 embedding 生命周期。隐藏 reasoning 绝不是 domain value 或响应字段。
 
+基础 `GenerationPort` 与 `EmbeddingPort` 已实现。两者都接收不可变请求 context 与协作式取消，使用有界脱敏值，并返回闭合错误。`ReasoningBudget` 为编排提供每请求一次的原子 claim；后续翻译工作必须在 application 中拥有符合条件的升级策略，而不是把该策略放入 adapter。
+
 ## 数据操作
 
 结构化读取解析活动发布、规范候选、完整词义详情、领域清单、事实、证据与来源。向量读取检索按发布过滤的节点、边候选及有界浅层邻域。Method 表达这些用例，而不是 SQL、Qdrant-native 请求或通用 repository 访问。

@@ -27,6 +27,7 @@ pub mod server;
 pub mod types;
 
 pub use adapters::learning_model::OpenAiLearningModel;
+pub use adapters::model_runtime::{OpenAiEmbeddingAdapter, OpenAiGenerationAdapter};
 pub use api::{
   app_router, app_router_with_http_config, AlwaysReady, AppState, GraphCursorProtectionKey,
   GraphCursorProtectionKeyError, Readiness, SuccessEnvelope, SuccessMeta,
@@ -46,7 +47,15 @@ pub use domain::capabilities::{
   LiveRetrievalDefault, PurposeCapability, SchemaVersionCapability, ServiceCapabilities,
   SourceLanguageCapability, TargetLanguageCapability,
 };
+pub use domain::model_runtime::{
+  CancellationSignal, EmbeddingInput, EphemeralEmbedding, GenerationInput, GenerationOutput,
+  GenerationProfile, ModelValueError, ModelVersion, ReasoningBudget,
+};
 pub use domain::request_context::{RequestContext, RequestContextError, RequestId};
+pub use ports::model_runtime::{
+  EmbeddingPort, EmbeddingRequest, GenerationPort, GenerationRequest, GenerationResponse,
+  ModelOperationContext, ModelOperationError,
+};
 pub use provider::{TranslationError, TranslationProviderMetrics, TranslationService};
 pub use resilience::{ProviderMetricsSnapshot, ProviderPolicy, ProviderPolicyError};
 pub use types::{TranslateRequest, TranslateResponse};

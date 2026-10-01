@@ -12,5 +12,7 @@ pub mod island_port;
 pub mod island_port_publication;
 /// OpenAI-compatible structured lexical-model client.
 pub mod learning_model;
+/// Provider-neutral OpenAI-compatible generation and ephemeral embedding adapters.
+pub mod model_runtime;
 /// ULID-backed and deterministic public-ID implementations.
 pub mod public_id;

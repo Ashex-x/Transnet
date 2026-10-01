@@ -12,6 +12,8 @@ Model output is never canonical evidence. Callers validate structure and referen
 
 The [model-runtime reference](model-runtime.md) owns call budgets, escalation, vision, and embedding lifecycle. Hidden reasoning is never a domain value or response field.
 
+The foundational `GenerationPort` and `EmbeddingPort` are implemented. Both receive the immutable request context plus cooperative cancellation, use bounded redacted values, and return closed errors. `ReasoningBudget` gives orchestration an atomic one-per-request claim; later translation work must own the qualifying escalation policy rather than placing that policy in an adapter.
+
 ## Data operations
 
 Structured reads resolve active releases, canonical candidates, complete sense details, domain inventories, facts, evidence, and provenance. Vector reads retrieve release-filtered node and edge candidates and bounded shallow neighborhoods. Methods express these use cases rather than SQL, Qdrant-native requests, or generic repository access.

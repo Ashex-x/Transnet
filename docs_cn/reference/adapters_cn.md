@@ -10,6 +10,8 @@ Adapter 模块实现模型与数据 port。它负责外部协议机制，同时�
 
 当前运行时仍在 `translation.long_text_chars` 处选择 Gemma 4 或 TranslateGemma。这是过渡期已实现行为，不是目标 provider 拓扑。后续运行时切片将移除第二个生成模型，并通过 application 自有分块在同一 VLM 上处理长输入。
 
+已实现的兼容 generation adapter 对两个中立 profile 都调用现有 resilient Gemma endpoint，以剩余请求 deadline 限制调用，观察协作式取消，并校验有界输出和版本 metadata。已实现的 OpenAI-compatible embedding adapter 校验严格的单向量响应、有限固定 dimension 和所配置的 artifact version。Runtime composition 尚未使用这些 adapter；legacy provider adapter 会一直保留到翻译与检索编排迁移。
+
 Provider adapter 绝不记录 prompt、源文本、历史、provider body、凭据或生成内容。错误只暴露闭合依赖与操作分类。
 
 ## Island-port 数据访问

@@ -10,6 +10,8 @@ The target OpenAI-compatible generation adapter owns HTTP construction, authenti
 
 The current runtime still selects Gemma 4 or TranslateGemma at `translation.long_text_chars`. That is transitional implemented behavior, not the target provider topology. A later runtime slice removes the second generator and routes long input through application-owned chunking on the same VLM.
 
+The implemented compatibility generation adapter invokes the existing resilient Gemma endpoint for both neutral profiles, caps the call by the remaining request deadline, observes cooperative cancellation, and validates bounded output and version metadata. The implemented OpenAI-compatible embedding adapter validates a strict one-vector response, finite fixed dimensions, and its configured artifact version. Runtime composition does not yet use these adapters; legacy provider adapters remain intact until translation and retrieval orchestration migrate.
+
 Provider adapters never log prompts, source text, history, provider bodies, credentials, or generated content. Errors expose only closed dependency and operation categories.
 
 ## Island-port data access
