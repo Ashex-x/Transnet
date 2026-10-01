@@ -14,6 +14,10 @@ allow_credentials = false
 [canonical]
 enabled = false
 
+[knowledge]
+enabled = false
+required = false
+
 [translation]
 long_text_chars = 4000
 timeout_seconds = 60

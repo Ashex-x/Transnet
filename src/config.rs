@@ -1,6 +1,6 @@
 //! Runtime configuration for the server, HTTP boundary, model providers, and resilience policy.
 
-use std::{fmt, time::Duration};
+use std::{fmt, fs, path::Path, sync::Arc, time::Duration};
 
 use axum::http::{HeaderValue, Uri};
 use serde::Deserialize;
@@ -31,6 +31,9 @@ pub struct AppConfig {
   /// Optional canonical-only read capability; disabled for local model-only operation.
   #[serde(default)]
   pub canonical: CanonicalRuntimeConfig,
+  /// Optional knowledge-view and path runtime; disabled until every dependency is configured.
+  #[serde(default)]
+  pub knowledge: KnowledgeRuntimeConfig,
 }
 
 /// Opt-in outbound island-port canonical read configuration.
@@ -120,6 +123,205 @@ impl fmt::Debug for EnabledCanonicalRuntimeConfig {
       .field("timeout", &self.timeout)
       .finish()
   }
+}
+
+/// Opt-in knowledge runtime configuration without inline key material.
+#[derive(Clone, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct KnowledgeRuntimeConfig {
+  /// Whether knowledge views and paths may be composed into the runtime.
+  pub enabled: bool,
+  /// Whether an enabled knowledge dependency participates in readiness.
+  pub required: bool,
+  /// Name of the environment variable containing stable cursor-secret bytes.
+  pub cursor_secret_env: Option<String>,
+  /// Absolute path to a root-owned cursor-secret file unreadable by group or other users.
+  pub cursor_secret_file: Option<String>,
+}
+
+/// Validated settings for an enabled knowledge runtime.
+#[derive(Clone, PartialEq, Eq)]
+pub struct EnabledKnowledgeRuntimeConfig {
+  /// Whether knowledge dependency failure makes readiness fail.
+  pub required: bool,
+  /// Existing validated island-port UDS and timeout settings reused by knowledge operations.
+  pub canonical: EnabledCanonicalRuntimeConfig,
+  /// Stable secret loaded from the configured external source.
+  cursor_secret: KnowledgeCursorSecret,
+}
+
+/// Stable secret bytes that are never formatted or serialized.
+#[derive(Clone, PartialEq, Eq)]
+struct KnowledgeCursorSecret(Arc<[u8]>);
+
+impl KnowledgeCursorSecret {
+  fn new(bytes: Vec<u8>) -> Result<Self, KnowledgeRuntimeConfigError> {
+    if !(32..=4_096).contains(&bytes.len()) {
+      return Err(KnowledgeRuntimeConfigError::InvalidSecret);
+    }
+    Ok(Self(Arc::from(bytes)))
+  }
+}
+
+/// Closed knowledge-runtime configuration failures without secret references or values.
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum KnowledgeRuntimeConfigError {
+  /// Required readiness cannot be selected while the capability is disabled.
+  #[error("knowledge required policy requires an enabled capability")]
+  RequiredWhileDisabled,
+  /// Enabled knowledge requires the validated canonical island-port dependency.
+  #[error("enabled knowledge capability requires the canonical island-port dependency")]
+  MissingCanonicalDependency,
+  /// Exactly one external cursor-secret source must be selected.
+  #[error("enabled knowledge capability requires exactly one cursor-secret reference")]
+  InvalidSecretReference,
+  /// The referenced environment value or file could not be loaded safely.
+  #[error("knowledge cursor-secret source is unavailable")]
+  SecretUnavailable,
+  /// Loaded secret material did not satisfy the bounded minimum strength.
+  #[error("knowledge cursor-secret material must contain between 32 and 4096 bytes")]
+  InvalidSecret,
+  /// A secret file was not a regular root-owned file with no group or other permissions.
+  #[error("knowledge cursor-secret file must be root-owned and owner-only")]
+  UnsafeSecretFile,
+}
+
+impl KnowledgeRuntimeConfig {
+  /// Resolves the opt-in capability and loads one stable cursor secret from its external source.
+  ///
+  /// Disabled operation needs neither a canonical dependency nor a secret reference. Enabled
+  /// operation reuses an already validated canonical UDS path and timeout rather than accepting a
+  /// second transport configuration.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed error for contradictory policy, missing canonical dependency, ambiguous or
+  /// unsafe secret references, unavailable secret material, or an invalid secret length.
+  pub fn resolve(
+    &self,
+    canonical: Option<&EnabledCanonicalRuntimeConfig>,
+  ) -> Result<Option<EnabledKnowledgeRuntimeConfig>, KnowledgeRuntimeConfigError> {
+    self.resolve_with(canonical, load_environment_secret, load_secret_file)
+  }
+
+  fn resolve_with<E, F>(
+    &self,
+    canonical: Option<&EnabledCanonicalRuntimeConfig>,
+    environment: E,
+    file: F,
+  ) -> Result<Option<EnabledKnowledgeRuntimeConfig>, KnowledgeRuntimeConfigError>
+  where
+    E: FnOnce(&str) -> Result<Vec<u8>, KnowledgeRuntimeConfigError>,
+    F: FnOnce(&str) -> Result<Vec<u8>, KnowledgeRuntimeConfigError>,
+  {
+    if !self.enabled {
+      return if self.required {
+        Err(KnowledgeRuntimeConfigError::RequiredWhileDisabled)
+      } else {
+        Ok(None)
+      };
+    }
+    let canonical = canonical
+      .cloned()
+      .ok_or(KnowledgeRuntimeConfigError::MissingCanonicalDependency)?;
+    let secret = match (&self.cursor_secret_env, &self.cursor_secret_file) {
+      (Some(name), None) if valid_environment_name(name) => environment(name)?,
+      (None, Some(path)) if valid_secret_path(path) => file(path)?,
+      _ => return Err(KnowledgeRuntimeConfigError::InvalidSecretReference),
+    };
+    Ok(Some(EnabledKnowledgeRuntimeConfig {
+      required: self.required,
+      canonical,
+      cursor_secret: KnowledgeCursorSecret::new(secret)?,
+    }))
+  }
+}
+
+impl EnabledKnowledgeRuntimeConfig {
+  /// Returns the stable cursor-secret bytes only for constructing the authenticated cursor codec.
+  #[allow(
+    dead_code,
+    reason = "the configuration slice intentionally precedes knowledge runtime composition"
+  )]
+  pub(crate) fn cursor_secret(&self) -> &[u8] {
+    &self.cursor_secret.0
+  }
+}
+
+impl fmt::Debug for KnowledgeRuntimeConfig {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter
+      .debug_struct("KnowledgeRuntimeConfig")
+      .field("enabled", &self.enabled)
+      .field("required", &self.required)
+      .field(
+        "cursor_secret_env",
+        &self.cursor_secret_env.as_ref().map(|_| "[REDACTED]"),
+      )
+      .field(
+        "cursor_secret_file",
+        &self.cursor_secret_file.as_ref().map(|_| "[REDACTED]"),
+      )
+      .finish()
+  }
+}
+
+impl fmt::Debug for EnabledKnowledgeRuntimeConfig {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter
+      .debug_struct("EnabledKnowledgeRuntimeConfig")
+      .field("required", &self.required)
+      .field("canonical", &self.canonical)
+      .field("cursor_secret", &"[REDACTED]")
+      .finish()
+  }
+}
+
+fn valid_environment_name(value: &str) -> bool {
+  (1..=128).contains(&value.len())
+    && value.bytes().enumerate().all(|(index, byte)| {
+      byte.is_ascii_uppercase() || byte == b'_' || (index > 0 && byte.is_ascii_digit())
+    })
+}
+
+fn valid_secret_path(value: &str) -> bool {
+  (2..=4_096).contains(&value.len())
+    && value.starts_with('/')
+    && !value.chars().any(char::is_whitespace)
+    && !value.bytes().any(|byte| byte == 0)
+    && !value.split('/').any(|component| component == "..")
+}
+
+fn load_environment_secret(name: &str) -> Result<Vec<u8>, KnowledgeRuntimeConfigError> {
+  std::env::var(name)
+    .map(String::into_bytes)
+    .map_err(|_| KnowledgeRuntimeConfigError::SecretUnavailable)
+}
+
+#[cfg(unix)]
+fn load_secret_file(path: &str) -> Result<Vec<u8>, KnowledgeRuntimeConfigError> {
+  use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+  let path = Path::new(path);
+  let link =
+    fs::symlink_metadata(path).map_err(|_| KnowledgeRuntimeConfigError::SecretUnavailable)?;
+  if link.file_type().is_symlink() || !link.is_file() {
+    return Err(KnowledgeRuntimeConfigError::UnsafeSecretFile);
+  }
+  let mode = link.permissions().mode() & 0o777;
+  if link.uid() != 0 || mode & 0o077 != 0 || mode & 0o400 == 0 {
+    return Err(KnowledgeRuntimeConfigError::UnsafeSecretFile);
+  }
+  let mut bytes = fs::read(path).map_err(|_| KnowledgeRuntimeConfigError::SecretUnavailable)?;
+  while matches!(bytes.last(), Some(b'\n' | b'\r')) {
+    bytes.pop();
+  }
+  Ok(bytes)
+}
+
+#[cfg(not(unix))]
+fn load_secret_file(_path: &str) -> Result<Vec<u8>, KnowledgeRuntimeConfigError> {
+  Err(KnowledgeRuntimeConfigError::UnsafeSecretFile)
 }
 
 /// Listener and logging settings.
@@ -465,5 +667,164 @@ api_key = "TRANSLATE_GEMMA_CREDENTIAL_SECRET"
       assert!(!provider_debug.contains(credential));
     }
     assert!(app_debug.contains("ProviderApiKey([REDACTED])"));
+  }
+
+  #[test]
+  fn disabled_knowledge_needs_no_dependency_or_secret() {
+    let config = KnowledgeRuntimeConfig::default();
+    assert!(config
+      .resolve_with(None, |_| unreachable!(), |_| unreachable!())
+      .unwrap()
+      .is_none());
+
+    let contradictory = KnowledgeRuntimeConfig {
+      required: true,
+      ..KnowledgeRuntimeConfig::default()
+    };
+    assert_eq!(
+      contradictory.resolve_with(None, |_| unreachable!(), |_| unreachable!()),
+      Err(KnowledgeRuntimeConfigError::RequiredWhileDisabled)
+    );
+  }
+
+  #[test]
+  fn enabled_knowledge_reuses_validated_canonical_transport() {
+    let canonical = enabled_canonical();
+    let config = KnowledgeRuntimeConfig {
+      enabled: true,
+      required: true,
+      cursor_secret_env: Some("TRANSNET_CURSOR_SECRET".into()),
+      cursor_secret_file: None,
+    };
+    let enabled = config
+      .resolve_with(
+        Some(&canonical),
+        |name| {
+          assert_eq!(name, "TRANSNET_CURSOR_SECRET");
+          Ok(vec![7; 32])
+        },
+        |_| unreachable!(),
+      )
+      .unwrap()
+      .unwrap();
+
+    assert!(enabled.required);
+    assert_eq!(enabled.canonical, canonical);
+    assert_eq!(enabled.cursor_secret(), &[7; 32]);
+  }
+
+  #[test]
+  fn enabled_knowledge_requires_one_safe_external_reference() {
+    let canonical = enabled_canonical();
+    for config in [
+      KnowledgeRuntimeConfig {
+        enabled: true,
+        ..KnowledgeRuntimeConfig::default()
+      },
+      KnowledgeRuntimeConfig {
+        enabled: true,
+        cursor_secret_env: Some("CURSOR_SECRET".into()),
+        cursor_secret_file: Some("/run/secrets/transnet-cursor".into()),
+        ..KnowledgeRuntimeConfig::default()
+      },
+      KnowledgeRuntimeConfig {
+        enabled: true,
+        cursor_secret_env: Some("unsafe-name".into()),
+        ..KnowledgeRuntimeConfig::default()
+      },
+      KnowledgeRuntimeConfig {
+        enabled: true,
+        cursor_secret_file: Some("relative/secret".into()),
+        ..KnowledgeRuntimeConfig::default()
+      },
+    ] {
+      assert_eq!(
+        config.resolve_with(Some(&canonical), |_| unreachable!(), |_| unreachable!()),
+        Err(KnowledgeRuntimeConfigError::InvalidSecretReference)
+      );
+    }
+    let missing_dependency = KnowledgeRuntimeConfig {
+      enabled: true,
+      cursor_secret_env: Some("CURSOR_SECRET".into()),
+      ..KnowledgeRuntimeConfig::default()
+    };
+    assert_eq!(
+      missing_dependency.resolve_with(None, |_| Ok(vec![0; 32]), |_| unreachable!()),
+      Err(KnowledgeRuntimeConfigError::MissingCanonicalDependency)
+    );
+  }
+
+  #[test]
+  fn cursor_secret_strength_and_file_policy_fail_closed() {
+    let canonical = enabled_canonical();
+    let environment = KnowledgeRuntimeConfig {
+      enabled: true,
+      cursor_secret_env: Some("CURSOR_SECRET".into()),
+      ..KnowledgeRuntimeConfig::default()
+    };
+    assert_eq!(
+      environment.resolve_with(Some(&canonical), |_| Ok(vec![1; 31]), |_| unreachable!()),
+      Err(KnowledgeRuntimeConfigError::InvalidSecret)
+    );
+
+    let file = KnowledgeRuntimeConfig {
+      enabled: true,
+      cursor_secret_file: Some("/run/secrets/transnet-cursor".into()),
+      ..KnowledgeRuntimeConfig::default()
+    };
+    assert_eq!(
+      file.resolve_with(
+        Some(&canonical),
+        |_| unreachable!(),
+        |_| Err(KnowledgeRuntimeConfigError::UnsafeSecretFile),
+      ),
+      Err(KnowledgeRuntimeConfigError::UnsafeSecretFile)
+    );
+  }
+
+  #[test]
+  fn knowledge_debug_and_errors_never_expose_references_or_values() {
+    let config = KnowledgeRuntimeConfig {
+      enabled: true,
+      required: false,
+      cursor_secret_env: Some("PRIVATE_CURSOR_ENV".into()),
+      cursor_secret_file: None,
+    };
+    let enabled = config
+      .resolve_with(
+        Some(&enabled_canonical()),
+        |_| Ok(b"PRIVATE_CURSOR_SECRET_VALUE_123456".to_vec()),
+        |_| unreachable!(),
+      )
+      .unwrap()
+      .unwrap();
+    let diagnostics = format!("{config:?} {enabled:?}");
+    assert!(!diagnostics.contains("PRIVATE_CURSOR_ENV"));
+    assert!(!diagnostics.contains("PRIVATE_CURSOR_SECRET_VALUE"));
+    assert!(diagnostics.contains("[REDACTED]"));
+    assert!(!KnowledgeRuntimeConfigError::SecretUnavailable
+      .to_string()
+      .contains("PRIVATE"));
+  }
+
+  #[test]
+  fn knowledge_configuration_rejects_inline_or_unknown_fields() {
+    let result = toml::from_str::<KnowledgeRuntimeConfig>(
+      r#"
+enabled = true
+required = false
+cursor_secret = "INLINE_SECRET_MUST_NEVER_BE_ACCEPTED"
+"#,
+    );
+
+    let error = result.unwrap_err().to_string();
+    assert!(error.contains("unknown field"));
+  }
+
+  fn enabled_canonical() -> EnabledCanonicalRuntimeConfig {
+    EnabledCanonicalRuntimeConfig {
+      socket_path: "/run/island-port/island-port.sock".into(),
+      timeout: Duration::from_secs(2),
+    }
   }
 }
