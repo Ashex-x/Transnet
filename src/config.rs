@@ -6,7 +6,10 @@ use axum::http::{HeaderValue, Uri};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::resilience::{ProviderPolicy, ProviderPolicyError};
+use crate::{
+  domain::knowledge_cursor::KnowledgeCursorProtectionKey,
+  resilience::{ProviderPolicy, ProviderPolicyError},
+};
 
 /// Default maximum accepted HTTP request body size in bytes.
 pub const DEFAULT_MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
@@ -34,6 +37,38 @@ pub struct AppConfig {
   /// Optional knowledge-view and path runtime; disabled until every dependency is configured.
   #[serde(default)]
   pub knowledge: KnowledgeRuntimeConfig,
+}
+
+/// Closed application-configuration loading failures that never reproduce configuration contents.
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum AppConfigLoadError {
+  /// The configured file could not be read as UTF-8 text.
+  #[error("application configuration is unavailable")]
+  Unavailable,
+  /// The configuration did not match the strict application schema.
+  #[error("application configuration is invalid")]
+  Invalid,
+}
+
+impl AppConfig {
+  /// Parses strict TOML without retaining or returning source-bearing parser diagnostics.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed error when `source` does not match the application configuration schema.
+  pub fn parse_toml(source: &str) -> Result<Self, AppConfigLoadError> {
+    toml::from_str(source).map_err(|_| AppConfigLoadError::Invalid)
+  }
+
+  /// Loads strict TOML without exposing its path or contents through returned errors.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed unavailable or invalid error without chaining filesystem or parser details.
+  pub fn load(path: impl AsRef<Path>) -> Result<Self, AppConfigLoadError> {
+    let source = fs::read_to_string(path).map_err(|_| AppConfigLoadError::Unavailable)?;
+    Self::parse_toml(&source)
+  }
 }
 
 /// Opt-in outbound island-port canonical read configuration.
@@ -238,13 +273,16 @@ impl KnowledgeRuntimeConfig {
 }
 
 impl EnabledKnowledgeRuntimeConfig {
-  /// Returns the stable cursor-secret bytes only for constructing the authenticated cursor codec.
-  #[allow(
-    dead_code,
-    reason = "the configuration slice intentionally precedes knowledge runtime composition"
-  )]
-  pub(crate) fn cursor_secret(&self) -> &[u8] {
-    &self.cursor_secret.0
+  /// Derives an opaque cursor-protection key without exposing the loaded secret bytes.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed error if the retained secret cannot satisfy the cursor-key contract.
+  pub fn cursor_protection_key(
+    &self,
+  ) -> Result<KnowledgeCursorProtectionKey, KnowledgeRuntimeConfigError> {
+    KnowledgeCursorProtectionKey::new(&self.cursor_secret.0)
+      .map_err(|_| KnowledgeRuntimeConfigError::InvalidSecret)
   }
 }
 
@@ -300,23 +338,53 @@ fn load_environment_secret(name: &str) -> Result<Vec<u8>, KnowledgeRuntimeConfig
 
 #[cfg(unix)]
 fn load_secret_file(path: &str) -> Result<Vec<u8>, KnowledgeRuntimeConfigError> {
-  use std::os::unix::fs::{MetadataExt, PermissionsExt};
+  use std::{
+    io::Read,
+    os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
+  };
 
   let path = Path::new(path);
-  let link =
-    fs::symlink_metadata(path).map_err(|_| KnowledgeRuntimeConfigError::SecretUnavailable)?;
-  if link.file_type().is_symlink() || !link.is_file() {
+  validate_secret_parent(path)?;
+  let file = fs::OpenOptions::new()
+    .read(true)
+    .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+    .open(path)
+    .map_err(|_| KnowledgeRuntimeConfigError::SecretUnavailable)?;
+  let metadata = file
+    .metadata()
+    .map_err(|_| KnowledgeRuntimeConfigError::SecretUnavailable)?;
+  if !metadata.is_file() {
     return Err(KnowledgeRuntimeConfigError::UnsafeSecretFile);
   }
-  let mode = link.permissions().mode() & 0o777;
-  if link.uid() != 0 || mode & 0o077 != 0 || mode & 0o400 == 0 {
+  let mode = metadata.permissions().mode() & 0o777;
+  if metadata.uid() != 0 || mode & 0o077 != 0 || mode & 0o400 == 0 {
     return Err(KnowledgeRuntimeConfigError::UnsafeSecretFile);
   }
-  let mut bytes = fs::read(path).map_err(|_| KnowledgeRuntimeConfigError::SecretUnavailable)?;
+  let mut bytes = Vec::new();
+  file
+    .take(4_098)
+    .read_to_end(&mut bytes)
+    .map_err(|_| KnowledgeRuntimeConfigError::SecretUnavailable)?;
   while matches!(bytes.last(), Some(b'\n' | b'\r')) {
     bytes.pop();
   }
   Ok(bytes)
+}
+
+#[cfg(unix)]
+fn validate_secret_parent(path: &Path) -> Result<(), KnowledgeRuntimeConfigError> {
+  use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+  let parent = path
+    .parent()
+    .ok_or(KnowledgeRuntimeConfigError::UnsafeSecretFile)?;
+  let metadata =
+    fs::metadata(parent).map_err(|_| KnowledgeRuntimeConfigError::SecretUnavailable)?;
+  let mode = metadata.permissions().mode() & 0o777;
+  if !metadata.is_dir() || metadata.uid() != 0 || mode & 0o022 != 0 {
+    return Err(KnowledgeRuntimeConfigError::UnsafeSecretFile);
+  }
+  Ok(())
 }
 
 #[cfg(not(unix))]
@@ -710,7 +778,8 @@ api_key = "TRANSLATE_GEMMA_CREDENTIAL_SECRET"
 
     assert!(enabled.required);
     assert_eq!(enabled.canonical, canonical);
-    assert_eq!(enabled.cursor_secret(), &[7; 32]);
+    let key = enabled.cursor_protection_key().unwrap();
+    assert_eq!(format!("{key:?}"), "KnowledgeCursorProtectionKey(REDACTED)");
   }
 
   #[test]
@@ -819,6 +888,20 @@ cursor_secret = "INLINE_SECRET_MUST_NEVER_BE_ACCEPTED"
 
     let error = result.unwrap_err().to_string();
     assert!(error.contains("unknown field"));
+  }
+
+  #[test]
+  fn application_config_parser_never_echoes_rejected_inline_secrets() {
+    let source = include_str!("../config/transnet.toml").replace(
+      "required = false",
+      "required = false\ncursor_secret = \"INLINE_SECRET_MUST_NEVER_BE_ECHOED\"",
+    );
+
+    let error = AppConfig::parse_toml(&source).unwrap_err();
+    let diagnostics = format!("{error} {error:?}");
+    assert_eq!(error, AppConfigLoadError::Invalid);
+    assert!(!diagnostics.contains("INLINE_SECRET_MUST_NEVER_BE_ECHOED"));
+    assert!(!diagnostics.contains("cursor_secret"));
   }
 
   fn enabled_canonical() -> EnabledCanonicalRuntimeConfig {

@@ -1,6 +1,6 @@
 //! Transnet process entry point.
 
-use std::{fs, net::IpAddr, path::Path, sync::Arc};
+use std::{net::IpAddr, path::Path, sync::Arc};
 
 use anyhow::{ensure, Context, Result};
 use transnet::{
@@ -19,11 +19,7 @@ use transnet::{
 #[tokio::main]
 async fn main() -> Result<()> {
   let config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("config/transnet.toml");
-  let config: AppConfig = toml::from_str(
-    &fs::read_to_string(&config_path)
-      .with_context(|| format!("failed to read {}", config_path.display()))?,
-  )
-  .with_context(|| format!("failed to parse {}", config_path.display()))?;
+  let config = AppConfig::load(&config_path).context("failed to load application configuration")?;
 
   logger::init(&config.server.log_level, &config.server.log_format)?;
   if let Err(error) = run(config).await {
