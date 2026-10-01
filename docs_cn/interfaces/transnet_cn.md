@@ -207,13 +207,13 @@ Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术�
 
 `brief`、`standard` 与 `full` 是一个已验证超集的确定性投影。较低级别移除支持详情，但绝不改变所选含义、译文、protected content、证据状态或 review outcome。空分区省略。
 
-Typed annotation 使用闭合 family `ambiguity`、`terminology`、`register`、`culture`、`format` 与 `review`；闭合 code 为 `ambiguity_detected`、`term_selected`、`protected_content_preserved`、`register_applied`、`cultural_context`、`format_preserved` 与 `review_required`。每项 annotation 均包含有界 display message 及可选的响应级 citation reference。`data.external_sources` 如存在，只包含被这些 citation 引用的 source；source 与 fragment ID 只在本次响应内有效，绝不是规范证据。当前 offline 文本路径不返回 external source。结果校验会在序列化前拒绝未知 citation target、重复 source ID、identity/order 缺口、重复 review issue、与 issue 矛盾的 clean review state，以及空主译文。
+Typed annotation 使用闭合 family `ambiguity`、`terminology`、`register`、`culture`、`format` 与 `review`；闭合 code 为 `ambiguity_detected`、`term_selected`、`protected_content_preserved`、`register_applied`、`cultural_context`、`format_preserved`、`review_required` 与 `live_source_used`。每项 annotation 均包含有界 display message 及可选的响应级 citation reference。`data.external_sources` 如存在，只包含被这些 citation 引用的 source；source、claim 与 fragment ID 只在本次响应内有效，绝不是规范证据。当前 offline 文本路径不返回 external source。结果校验会在序列化前拒绝未知 citation target、重复 source/claim pair、重复 source ID、identity/order 缺口、重复 review issue、与 issue 矛盾的 clean review state，以及空主译文。
 
 HTTP 序列化之前会执行 request-bound validation：structured result 的 ID 与顺序必须精确匹配原始 segment 或 image reading order；每条 translation 必须使用请求的 target language；显式声明的 source language 必须被保留。Translation ID 必须严格为 `translation_<zero-based order>`。Passage、segment 与 image-region unit 只有一条 primary connected-text translation，且不携带 lexical meaning/detail object；word 与 phrase unit 保留有界 meaning label，并且只允许与自身类型一致的 generated exploratory detail shape。Annotation code 只能属于一个闭合 family，review issue 严格排序，且 `review_required` 仅且必须出现在 `review_recommended` unit。Projection 删除最后一条 citation 被移除后不再被引用的 source descriptor。Schema、normalizer、projector、model、prompt、profile、retrieval 与 release metadata 都会接受边界和一致性校验，不会未经检查直接透传。
 
 ## 实时检索
 
-`guidance.freshness` 接受 `offline`、`allowed` 或 `required`。`offline` 是默认值并禁止网络检索。`allowed` 是显式许可，只在确定性分类发现时效性 claim 时检索。`required` 始终尝试检索；若有界操作无法安全完成，返回 `503 live_retrieval_unavailable`。
+`guidance.freshness` 接受 `offline`、`allowed` 或 `required`。`offline` 是默认值并禁止网络检索。当前 claim-bound 实现只为 text 支持非 offline freshness；segment 与 image-region 请求使用 `allowed` 或 `required` 时，会在网络、解码或生成前以 `501 translation_capability_unavailable` 失败。对于 text，`allowed` 是显式许可，只在确定性分类发现时效性 claim 时检索。`required` 始终尝试检索；live sub-deadline 到期或有界依赖操作无法安全完成时返回 `503 live_retrieval_unavailable`，调用方整体 deadline 耗尽仍返回 `504`。
 
 实时检索是受编排的 search/fetch port，不是无限制模型浏览。它最多执行一轮搜索、选择五个结果、并发抓取三个页面，并遵守配置的子 deadline。Fetcher 只允许公开 HTTP(S)，解析并校验每次 redirect，拒绝 loopback、link-local、私有、保留及 Unix-socket 目标，限制响应 byte，并只接受配置的文本 media type。
 
@@ -221,7 +221,7 @@ HTTP 序列化之前会执行 request-bound validation：structured result 的 I
 
 抓取内容是不可信数据。它不能修改系统指令、请求其他 URL、泄露凭据、绕过发布 filter 或成为规范证据。Embedding 模型可在内存中排序抓取片段；片段与向量均随请求丢弃。
 
-基于实时检索的 claim 引用响应级 `live_N` source。抓取 fragment 是结构化的不可信 prompt 数据，绝不是 instruction。实时材料参与时，模型必须引用至少一个已准入 identifier；伪造、重复、缺失 citation 或暴露未引用 source 都会失败关闭。Operation 之外只返回已引用 source 的 title 与公开 URL，metadata 记录 `translation-live-v1`，抓取材料随请求丢弃。实时 source 标记为 `live_external`，而不是 `verified`。无法获得材料的 `allowed` 尝试会明确退化为建议 review；相同情况下 `required` 映射为 `503 live_retrieval_unavailable`。
+基于实时检索的 claim 使用严格的响应级 `{source_id, claim_id}` citation。Lexical claim 使用 `translation_N`；connected-text claim 使用有序重组产生的确定性 `chunk_N` identity。抓取 fragment 是结构化的不可信 prompt 数据，绝不是 instruction。每个实时辅助 claim 都必须引用至少一个已准入 `live_N` source；伪造、重复、缺失、跨 claim citation 或暴露未引用 source 都会失败关闭。Operation 之外只返回已引用 source 的 title 与最终校验过的抓取 URL，每个 descriptor 标记为 `live_external` 而不是 `verified`，metadata 记录 `translation-live-v1`，抓取材料随请求丢弃。无法获得材料或只达到 live sub-deadline 的 `allowed` 尝试会明确退化为建议 review；相同情况下 `required` 映射为 `503 live_retrieval_unavailable`。
 
 ```json
 {
@@ -229,10 +229,7 @@ HTTP 序列化之前会执行 request-bound validation：structured result 的 I
     {
       "source_id": "live_1",
       "title": "Example current terminology notice",
-      "publisher": "Example standards body",
       "url": "https://example.org/notices/current-term",
-      "published_at": "2026-09-20T00:00:00.000000Z",
-      "retrieved_at": "2026-10-01T08:00:00.000000Z",
       "evidence_state": "live_external"
     }
   ]
@@ -253,6 +250,8 @@ HTTP 序列化之前会执行 request-bound validation：structured result 的 I
 
 安装 translation orchestrator 会原子地公布 `segments`、`image_regions`、三种已接受图片媒体类型与 `format` annotation family；缺少该依赖的 state 不公布其中任何一项。扁平的 v1 capability shape 无法表达按 input 区分的 guidance 支持，因此在所有已公布 input 都执行相同 purpose 集之前，`purposes` 保持为空。替换调用方提供的 capability 声明不能部分移除或虚构这个原子集合。
 
+实时检索 capability 还会声明具备完整 claim-bound attribution 的精确 `input_types`。当前已组合实现只报告 `text`；不可用 deployment 会同时报告空列表与 `available: false`。
+
 知识 lens 的激活是原子的。`AppState` 只接受一个经过验证且不可拆分的 knowledge route dependency bundle，其中 view 与 path service 必须共享同一个完整不可变 projection expectation；安装它时也会同时安装与该快照匹配的 active-release readiness。未提供 bundle 时两个 route 都不存在。只有安装该 bundle 时，runtime 才公布 `meaning`、`contrast`、`usage`、`form`、`origin` 和 `domain`，即使调用方提供了陈旧 capability 声明也不例外。`mechanism` 与 `application` 仍不公布，因为其显式技术关系策略尚不可执行。默认 executable 尚未构造该 bundle。
 
 Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cache-Control: no-store`。调用方可以在需要当前部署信息时重新获取，但合同不承诺 HTTP cache 或 validator 语义。
@@ -270,7 +269,7 @@ Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cac
     "annotation_families": ["format"],
     "knowledge_lenses": [],
     "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_generation_context_bytes": 8192, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
-    "live_retrieval": {"available": false, "default": "offline"},
+    "live_retrieval": {"available": false, "default": "offline", "input_types": []},
     "generation_profiles": ["fast", "reasoning"],
     "schema_versions": ["translation-result-v1"]
   },

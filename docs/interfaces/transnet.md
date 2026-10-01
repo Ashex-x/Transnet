@@ -207,13 +207,13 @@ Image output uses `unit: "image_region"` and `regions` with `image_id`, `region_
 
 `brief`, `standard`, and `full` are deterministic projections of one validated superset. A lower level removes supporting detail but never changes the selected meaning, translation, protected content, evidence state, or review outcome. Empty sections are omitted.
 
-Typed annotations use the closed families `ambiguity`, `terminology`, `register`, `culture`, `format`, and `review`; closed codes are `ambiguity_detected`, `term_selected`, `protected_content_preserved`, `register_applied`, `cultural_context`, `format_preserved`, and `review_required`. Each annotation has a bounded display message and optional response-local citation references. `data.external_sources`, when present, contains only sources referenced by those citations; source and fragment IDs are response-local and never canonical evidence. The current offline text path returns no external sources. Result validation rejects unknown citation targets, duplicate source IDs, identity/order gaps, duplicate review issues, contradictory clean review state, and empty primary translations before serialization.
+Typed annotations use the closed families `ambiguity`, `terminology`, `register`, `culture`, `format`, and `review`; closed codes are `ambiguity_detected`, `term_selected`, `protected_content_preserved`, `register_applied`, `cultural_context`, `format_preserved`, `review_required`, and `live_source_used`. Each annotation has a bounded display message and optional response-local citation references. `data.external_sources`, when present, contains only sources referenced by those citations; source, claim, and fragment IDs are response-local and never canonical evidence. The current offline text path returns no external sources. Result validation rejects unknown citation targets, duplicate source/claim pairs, duplicate source IDs, identity/order gaps, duplicate review issues, contradictory clean review state, and empty primary translations before serialization.
 
 Validation is request-bound before HTTP serialization: structured result IDs and order must exactly equal the originating segment or image reading order, every translation must use the requested target language, and a declared source language must be preserved. Translation IDs are exactly `translation_<zero-based order>`. Passage, segment, and image-region units have one primary connected-text translation and no lexical meaning/detail object; word and phrase units retain bounded meaning labels and may carry only their matching generated exploratory detail shape. Annotation codes have one closed family, review issues are strictly ordered, and `review_required` appears exactly for `review_recommended` units. Projection prunes source descriptors when their last citation is removed. Schema, normalizer, projector, model, prompt, profile, retrieval, and release metadata are bounded and validated rather than passed through unchecked.
 
 ## Live retrieval
 
-`guidance.freshness` accepts `offline`, `allowed`, or `required`. `offline` is the default and prohibits network retrieval. `allowed` is explicit permission to retrieve only when deterministic classification finds a freshness-sensitive claim. `required` always attempts retrieval and returns `503 live_retrieval_unavailable` if the bounded operation cannot complete safely.
+`guidance.freshness` accepts `offline`, `allowed`, or `required`. `offline` is the default and prohibits network retrieval. The current claim-bound implementation supports non-offline freshness only for text; segment and image-region requests using `allowed` or `required` fail with `501 translation_capability_unavailable` before network, decoding, or generation. For text, `allowed` is explicit permission to retrieve only when deterministic classification finds a freshness-sensitive claim. `required` always attempts retrieval and returns `503 live_retrieval_unavailable` if the live subdeadline expires or the bounded dependency operation cannot complete safely; exhaustion of the caller's overall deadline remains `504`.
 
 Live retrieval is an orchestrated search/fetch port, not unrestricted model browsing. It performs at most one search round, selects at most five results, fetches at most three pages concurrently, and obeys a configured sub-deadline. The fetcher allows only public HTTP(S), resolves and validates every redirect, rejects loopback, link-local, private, reserved, and Unix-socket destinations, bounds response bytes, and accepts only configured textual media types.
 
@@ -221,7 +221,7 @@ Live retrieval is an orchestrated search/fetch port, not unrestricted model brow
 
 Fetched content is untrusted data. It cannot modify system instructions, request another URL, expose credentials, bypass release filters, or become canonical evidence. The embedding model may rank fetched fragments in memory; both fragments and vectors are discarded with the request.
 
-Claims based on live retrieval reference response-local `live_N` sources. Retrieved fragments are structured untrusted prompt data and never instructions. The model must cite at least one admitted identifier when live material participates; fabricated, duplicate, missing, and uncited exposed sources fail closed. Only cited source titles and public URLs leave the operation, metadata records `translation-live-v1`, and fetched material is discarded with the request. Live sources are labeled `live_external`, not `verified`. An `allowed` attempt that cannot obtain material is an explicit review-recommended degradation; `required` maps the same condition to `503 live_retrieval_unavailable`.
+Claims based on live retrieval use strict response-local `{source_id, claim_id}` citations. Lexical claims use `translation_N`; connected-text claims use the deterministic `chunk_N` identity from ordered reassembly. Retrieved fragments are structured untrusted prompt data and never instructions. Every live-assisted claim must cite at least one admitted `live_N` source; fabricated, duplicate, missing, cross-claim, and uncited exposed sources fail closed. Only cited source titles and the final validated fetched URLs leave the operation, every descriptor is labeled `live_external` rather than `verified`, metadata records `translation-live-v1`, and fetched material is discarded with the request. An `allowed` attempt that cannot obtain material or reaches only its live subdeadline is an explicit review-recommended degradation; `required` maps the same condition to `503 live_retrieval_unavailable`.
 
 ```json
 {
@@ -229,10 +229,7 @@ Claims based on live retrieval reference response-local `live_N` sources. Retrie
     {
       "source_id": "live_1",
       "title": "Example current terminology notice",
-      "publisher": "Example standards body",
       "url": "https://example.org/notices/current-term",
-      "published_at": "2026-09-20T00:00:00.000000Z",
-      "retrieved_at": "2026-10-01T08:00:00.000000Z",
       "evidence_state": "live_external"
     }
   ]
@@ -253,6 +250,8 @@ Returns currently implemented BCP 47 language selectors, input kinds, image type
 
 Installing the translation orchestrator atomically advertises `segments`, `image_regions`, the three accepted image media types, and the `format` annotation family; a state without that dependency advertises none of them. The flat v1 capability shape cannot express input-specific guidance support, so `purposes` remains empty until every advertised input executes the same purpose set. Replacing a caller-supplied capability declaration cannot partially remove or fabricate that atomic set.
 
+Live-retrieval capability additionally declares the exact `input_types` with complete claim-bound attribution. The current composed implementation reports only `text`; an unavailable deployment reports an empty list together with `available: false`.
+
 Knowledge-lens activation is atomic. `AppState` accepts one validated, indivisible knowledge-route dependency bundle whose view and path services share the same complete immutable projection expectation; installing it also installs matching active-release readiness. Both routes are absent without the bundle. A runtime advertises exactly `meaning`, `contrast`, `usage`, `form`, `origin`, and `domain` only while that bundle is installed, even if a caller supplied a stale capability declaration. `mechanism` and `application` remain absent because their explicit technical relation policies are not executable. The default executable does not yet construct this bundle.
 
 Capabilities follows the interface-wide response policy: every response carries `Cache-Control: no-store`. Callers may refresh it when they need current deployment information, but the contract promises no HTTP caching or validator semantics.
@@ -270,7 +269,7 @@ Request: `{}`
     "annotation_families": ["format"],
     "knowledge_lenses": [],
     "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_generation_context_bytes": 8192, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
-    "live_retrieval": {"available": false, "default": "offline"},
+    "live_retrieval": {"available": false, "default": "offline", "input_types": []},
     "generation_profiles": ["fast", "reasoning"],
     "schema_versions": ["translation-result-v1"]
   },

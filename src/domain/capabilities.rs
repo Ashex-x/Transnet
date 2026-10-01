@@ -63,6 +63,7 @@ impl ServiceCapabilities {
       live_retrieval: LiveRetrievalCapability {
         available: false,
         default: LiveRetrievalDefault::Offline,
+        input_types: Vec::new(),
       },
       generation_profiles: vec![
         GenerationProfileCapability::Fast,
@@ -121,6 +122,11 @@ impl ServiceCapabilities {
   /// Advertises live retrieval only for a completely composed translation retrieval operation.
   pub fn with_live_retrieval(mut self, available: bool) -> Self {
     self.live_retrieval.available = available;
+    self.live_retrieval.input_types = if available {
+      vec![InputTypeCapability::Text]
+    } else {
+      Vec::new()
+    };
     self
   }
   /// Rebinds the configured HTTP body limit without changing activated capabilities.
@@ -291,7 +297,9 @@ mod tests {
   fn live_retrieval_activates_only_through_explicit_composition() {
     let disabled = ServiceCapabilities::current(1_024);
     assert!(!disabled.live_retrieval.available);
-    assert!(disabled.with_live_retrieval(true).live_retrieval.available);
+    let enabled = disabled.with_live_retrieval(true).live_retrieval;
+    assert!(enabled.available);
+    assert_eq!(enabled.input_types, vec![InputTypeCapability::Text]);
   }
 }
 
@@ -313,12 +321,14 @@ pub struct CapabilityLimits {
 }
 
 /// Live-retrieval declaration.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct LiveRetrievalCapability {
   /// Whether the runtime can perform live retrieval.
   pub available: bool,
   /// Default policy applied when callers omit retrieval guidance.
   pub default: LiveRetrievalDefault,
+  /// Input families with a complete claim-bound live attribution workflow.
+  pub input_types: Vec<InputTypeCapability>,
 }
 
 /// Closed default live-retrieval policy.

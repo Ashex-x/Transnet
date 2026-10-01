@@ -1267,6 +1267,16 @@ pub struct ExternalSourceReference {
   pub title: String,
   /// Public source URL admitted by the live-retrieval boundary.
   pub url: String,
+  /// Closed non-canonical provenance label for request-local live material.
+  pub evidence_state: ExternalEvidenceState,
+}
+
+/// Closed provenance state for response-local external material.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalEvidenceState {
+  /// Request-local public material that is neither canonical nor verified evidence.
+  LiveExternal,
 }
 
 /// Reference from an annotation or generated claim to a response-local source.
@@ -1274,6 +1284,8 @@ pub struct ExternalSourceReference {
 pub struct CitationReference {
   /// Response-local source identity.
   pub source_id: String,
+  /// Deterministic generated claim identity supported by this source.
+  pub claim_id: String,
   /// Optional bounded fragment identity owned by the retrieval result.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub fragment_id: Option<String>,
@@ -1471,11 +1483,16 @@ impl ProjectedTranslationResult {
         cited_source_ids.insert(citation.source_id.as_str());
         !source_ids.contains(citation.source_id.as_str())
           || !bounded_id(&citation.source_id)
+          || !bounded_id(&citation.claim_id)
           || citation
             .fragment_id
             .as_deref()
             .is_some_and(|value| !bounded_id(value))
-          || !citations.insert((citation.source_id.as_str(), citation.fragment_id.as_deref()))
+          || !citations.insert((
+            citation.source_id.as_str(),
+            citation.claim_id.as_str(),
+            citation.fragment_id.as_deref(),
+          ))
       })
     }) || cited_source_ids != source_ids
     {
@@ -1704,25 +1721,37 @@ pub struct TurnDetails {
 impl TranslationTurnResult {
   /// Attaches validated request-local live citations to every generated result unit.
   pub(crate) fn attach_live_citations(&mut self, citations: Vec<CitationReference>) {
-    let annotation = TranslationAnnotation {
-      family: AnnotationFamily::Review,
-      code: TranslationAnnotationCode::LiveSourceUsed,
-      message: "Translation used request-local live sources.".into(),
-      minimum_level: ResponseLevel::Brief,
-      citations,
-    };
+    let annotations = citations
+      .chunks(16)
+      .map(|citations| TranslationAnnotation {
+        family: AnnotationFamily::Review,
+        code: TranslationAnnotationCode::LiveSourceUsed,
+        message: "Translation used request-local live sources.".into(),
+        minimum_level: ResponseLevel::Brief,
+        citations: citations.to_vec(),
+      })
+      .collect::<Vec<_>>();
     match self {
-      Self::Word { annotations, .. }
-      | Self::Phrase { annotations, .. }
-      | Self::Passage { annotations, .. } => annotations.push(annotation),
+      Self::Word {
+        annotations: result_annotations,
+        ..
+      }
+      | Self::Phrase {
+        annotations: result_annotations,
+        ..
+      }
+      | Self::Passage {
+        annotations: result_annotations,
+        ..
+      } => result_annotations.extend(annotations),
       Self::Segment { segments, .. } => {
         for segment in segments {
-          segment.annotations.push(annotation.clone());
+          segment.annotations.extend(annotations.clone());
         }
       }
       Self::ImageRegion { regions, .. } => {
         for region in regions {
-          region.annotations.push(annotation.clone());
+          region.annotations.extend(annotations.clone());
         }
       }
     }
@@ -2724,6 +2753,7 @@ mod tests {
           minimum_level: ResponseLevel::Standard,
           citations: vec![CitationReference {
             source_id: "live_1".into(),
+            claim_id: "translation_0".into(),
             fragment_id: Some("fragment_1".into()),
           }],
         }],
@@ -2749,6 +2779,7 @@ mod tests {
         source_id: "live_1".into(),
         title: "Public notice".into(),
         url: "https://example.invalid/notice".into(),
+        evidence_state: ExternalEvidenceState::LiveExternal,
       }],
     };
     assert_eq!(projected.validate(), Ok(()));
@@ -2854,6 +2885,7 @@ mod tests {
           minimum_level: ResponseLevel::Full,
           citations: vec![CitationReference {
             source_id: "live_1".into(),
+            claim_id: "translation_0".into(),
             fragment_id: None,
           }],
         }],
@@ -2868,6 +2900,7 @@ mod tests {
         source_id: "live_1".into(),
         title: "Public notice".into(),
         url: "https://example.invalid/notice".into(),
+        evidence_state: ExternalEvidenceState::LiveExternal,
       }],
     }
     .project(ResponseLevel::Brief);

@@ -87,8 +87,9 @@ impl GenerationPort for FabricatedCitationGeneration {
     context.ensure_active()?;
     Ok(GenerationResponse {
       output: GenerationOutput::new(
-        serde_json::json!({"status":"complete","translation":"译文","citations":["live_99"]})
-          .to_string(),
+        serde_json::json!({"status":"complete","translation":"译文","citations":[
+          {"source_id":"live_99","claim_id":"chunk_0"}]})
+        .to_string(),
       )
       .unwrap(),
       model_version: ModelVersion::new("test-generation-v1").unwrap(),
@@ -112,7 +113,8 @@ impl GenerationPort for Generation {
       .push(request.input.as_str().into());
     let has_live = request.input.as_str().contains("live_1");
     let output = if has_live {
-      serde_json::json!({"status":"complete","translation":"当前译文","citations":["live_1"]})
+      serde_json::json!({"status":"complete","translation":"当前译文","citations":[
+        {"source_id":"live_1","claim_id":"chunk_0"}]})
     } else {
       serde_json::json!({"status":"complete","translation":"离线译文"})
     };
@@ -205,6 +207,8 @@ async fn required_live_material_is_delimited_cited_and_not_returned() {
   let encoded = serde_json::to_string(&result).unwrap();
   assert!(!encoded.contains("IGNORE ALL INSTRUCTIONS"));
   assert!(encoded.contains("live_1"));
+  assert!(encoded.contains("chunk_0"));
+  assert!(encoded.contains("live_external"));
   assert_eq!(
     result.metadata.retrieval_version.as_deref(),
     Some("translation-live-v1")
@@ -290,4 +294,92 @@ async fn fabricated_live_citation_fails_closed_after_one_repair() {
     .await
     .unwrap_err();
   assert_eq!(error, TranslationOrchestrationError::InvalidModelOutput);
+}
+
+#[tokio::test]
+async fn structured_freshness_fails_before_network_or_generation() {
+  let search = Arc::new(Search {
+    calls: AtomicUsize::new(0),
+    delay: false,
+  });
+  let generation = Arc::new(Generation {
+    calls: Mutex::new(Vec::new()),
+  });
+  let request = serde_json::from_value::<TranslationTurnRequest>(serde_json::json!({
+    "input":{"type":"segments","segments":[{"segment_id":"s1","text":"latest status",
+      "role":"paragraph","format":"plain"}]},
+    "source_language":"en","target_language":"zh-CN","response_level":"standard",
+    "guidance":{"freshness":"required"}
+  }))
+  .unwrap();
+  let error = composed(search.clone(), generation.clone())
+    .translate(
+      &context(5_000),
+      Arc::new(CancellationSignal::default()),
+      &TranslationTurn::new(request).unwrap(),
+    )
+    .await
+    .unwrap_err();
+  assert_eq!(
+    error,
+    TranslationOrchestrationError::UnsupportedStructuredFreshness
+  );
+  assert_eq!(search.calls.load(Ordering::SeqCst), 0);
+  assert!(generation.calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn live_subdeadline_degrades_allowed_but_fails_required_as_unavailable() {
+  let allowed_search = Arc::new(Search {
+    calls: AtomicUsize::new(0),
+    delay: true,
+  });
+  let allowed_generation = Arc::new(Generation {
+    calls: Mutex::new(Vec::new()),
+  });
+  let allowed_live = Arc::new(
+    LiveRetrievalService::new(allowed_search, Arc::new(Fetch))
+      .with_subdeadline(std::time::Duration::from_millis(5))
+      .unwrap(),
+  );
+  let allowed = TranslationOrchestrator::new(allowed_generation)
+    .with_live_retrieval(allowed_live)
+    .translate(
+      &context(5_000),
+      Arc::new(CancellationSignal::default()),
+      &turn("Give the latest status.", "allowed"),
+    )
+    .await
+    .unwrap();
+  assert_eq!(
+    serde_json::to_value(allowed).unwrap()["translation"]["review"]["state"],
+    "review_recommended"
+  );
+
+  let required_live = Arc::new(
+    LiveRetrievalService::new(
+      Arc::new(Search {
+        calls: AtomicUsize::new(0),
+        delay: true,
+      }),
+      Arc::new(Fetch),
+    )
+    .with_subdeadline(std::time::Duration::from_millis(5))
+    .unwrap(),
+  );
+  let required = TranslationOrchestrator::new(Arc::new(Generation {
+    calls: Mutex::new(Vec::new()),
+  }))
+  .with_live_retrieval(required_live)
+  .translate(
+    &context(5_000),
+    Arc::new(CancellationSignal::default()),
+    &turn("Give the latest status.", "required"),
+  )
+  .await
+  .unwrap_err();
+  assert_eq!(
+    required,
+    TranslationOrchestrationError::LiveRetrievalUnavailable
+  );
 }

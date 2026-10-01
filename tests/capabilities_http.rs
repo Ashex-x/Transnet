@@ -122,7 +122,7 @@ async fn reports_only_implemented_content_free_capabilities() {
   );
   assert_eq!(
     json["data"]["live_retrieval"],
-    serde_json::json!({"available": false, "default": "offline"})
+    serde_json::json!({"available": false, "default": "offline", "input_types": []})
   );
   assert_eq!(
     json["data"]["generation_profiles"],

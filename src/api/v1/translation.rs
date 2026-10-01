@@ -83,6 +83,9 @@ pub(crate) async fn translate(
     Err(TranslationOrchestrationError::UnsupportedImageGuidance) => {
       unsupported_capability("guidance", &request_id)
     }
+    Err(TranslationOrchestrationError::UnsupportedStructuredFreshness) => {
+      unsupported_capability("guidance.freshness", &request_id)
+    }
     Err(TranslationOrchestrationError::InvalidImageData) => {
       invalid_translation_field("input.images.data", &request_id)
     }
