@@ -14,7 +14,7 @@ The target listener serves HTTP/1.1 JSON on one owned Unix socket. Admission enf
 
 Middleware order is deterministic: identify the route, establish safe request context, apply limits and deadlines, invoke the handler, map failures, and record content-free telemetry. Cancellation and permits must be released on every exit path.
 
-The implemented admission middleware now validates or generates one safe request ID and derives one absolute request deadline from optional `X-Deadline-At`, using a 30-second default and rejecting caller budgets beyond 120 seconds. It inserts the public request-safe context into request extensions before a handler runs. The context exposes only correlation, schema, deadline budget, and an optional immutable release ID; it contains no request body, identity, credentials, or arbitrary headers. Automatic timeout cancellation and propagation into every application port remain target work.
+The implemented admission middleware now validates or generates one safe request ID and derives one absolute request deadline from optional `X-Deadline-At`, using a 30-second default and rejecting caller budgets beyond 120 seconds. It inserts the public request-safe context into request extensions before a handler runs. The context exposes only correlation, schema, deadline budget, and an optional immutable release ID; it contains no request body, identity, credentials, or arbitrary headers. The isolated knowledge-route bundle creates a request-owned cancellation guard: dropping the request cancels its path work, and an injectable runtime signal can cancel it during drain. Automatic timeout cancellation and propagation into every other application port remain target work.
 
 ## Handler rule
 

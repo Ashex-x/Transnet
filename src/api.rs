@@ -56,7 +56,10 @@ pub use readiness::{
   KnowledgeProjectionReadiness, KnowledgeReadinessComponents, Readiness, ReadinessComponentState,
   ReadinessReport,
 };
-pub use v1::knowledge_views::{route as knowledge_view_route, KnowledgeViewRouteState};
+pub use v1::{
+  knowledge_paths::KnowledgePathUseCase,
+  knowledge_views::{knowledge_router, KnowledgeRouteDependencies},
+};
 
 use request_id::RequestId;
 

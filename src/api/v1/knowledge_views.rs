@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use axum::{
-  extract::{rejection::JsonRejection, Extension, State},
+  extract::{rejection::JsonRejection, Extension},
   http::StatusCode,
   response::{IntoResponse, Response},
   routing::post,
@@ -36,6 +36,7 @@ use super::super::{
   envelope::SuccessEnvelope,
   problem::{self, FieldError},
 };
+use super::knowledge_paths::{self, KnowledgePathUseCase, RequestCancellationFactory};
 
 const RESULT_SCHEMA_VERSION: &str = "knowledge-view-result-v1";
 const ASSERTION_VERSION: &str = "canonical-assertions-v1";
@@ -43,29 +44,57 @@ const PROJECTION_VERSION: &str = "knowledge-projection-v1";
 const LENS_POLICY_VERSION: &str = "knowledge-lenses-v1";
 const ORDERING_VERSION: &str = "knowledge-order-v1";
 
-/// Dependencies owned by the standalone knowledge-view route.
+/// Dependencies required to install both target knowledge routes atomically.
 #[derive(Clone)]
-pub struct KnowledgeViewRouteState {
+pub struct KnowledgeRouteDependencies {
   service: Arc<KnowledgeViewService>,
   cursors: Arc<KnowledgeCursorCodec>,
+  paths: Arc<dyn KnowledgePathUseCase>,
+  runtime_cancellation: Arc<crate::domain::model_runtime::CancellationSignal>,
 }
 
-impl KnowledgeViewRouteState {
-  /// Creates route state from the application service and stable cursor codec.
-  pub fn new(service: Arc<KnowledgeViewService>, cursors: Arc<KnowledgeCursorCodec>) -> Self {
-    Self { service, cursors }
+impl KnowledgeRouteDependencies {
+  /// Creates the atomic route dependency bundle.
+  pub fn new(
+    service: Arc<KnowledgeViewService>,
+    cursors: Arc<KnowledgeCursorCodec>,
+    paths: Arc<dyn KnowledgePathUseCase>,
+  ) -> Self {
+    Self {
+      service,
+      cursors,
+      paths,
+      runtime_cancellation: Arc::new(crate::domain::model_runtime::CancellationSignal::default()),
+    }
+  }
+
+  /// Connects request cancellation to the runtime drain signal used by the eventual server.
+  pub fn with_runtime_cancellation(
+    mut self,
+    runtime_cancellation: Arc<crate::domain::model_runtime::CancellationSignal>,
+  ) -> Self {
+    self.runtime_cancellation = runtime_cancellation;
+    self
   }
 }
 
-/// Builds only the strict target knowledge-view route without global runtime wiring.
-pub fn route(state: KnowledgeViewRouteState) -> Router {
+/// Builds both strict target knowledge routes for one merge beneath `/api/v1`.
+pub fn knowledge_router<S>(dependencies: KnowledgeRouteDependencies) -> Router<S>
+where
+  S: Clone + Send + Sync + 'static,
+{
+  let paths = knowledge_paths::router(dependencies.paths.clone());
+  let cancellations = RequestCancellationFactory::new(dependencies.runtime_cancellation.clone());
   Router::new()
-    .route("/api/v1/knowledge/views", post(view))
-    .with_state(state)
+    .route("/knowledge/views", post(view))
+    .layer(Extension(dependencies))
+    .merge(paths)
+    .layer(Extension(cancellations))
+    .method_not_allowed_fallback(super::method_not_allowed)
 }
 
 async fn view(
-  State(state): State<KnowledgeViewRouteState>,
+  Extension(state): Extension<KnowledgeRouteDependencies>,
   Extension(context): Extension<RequestContext>,
   payload: Result<Json<KnowledgeViewHttpRequest>, JsonRejection>,
 ) -> Response {
@@ -78,7 +107,10 @@ async fn view(
   };
   let request = match input.into_domain(state.service.execution()) {
     Ok(value) => value,
-    Err((field, message)) => return invalid_field(&context, field, message),
+    Err(ViewRequestError::Invalid(field, message)) => {
+      return invalid_field(&context, field, message)
+    }
+    Err(ViewRequestError::UnavailableRelease) => return unavailable_release(&context),
   };
   let binding = match cursor_binding(&request, state.service.execution()) {
     Ok(value) => value,
@@ -151,25 +183,38 @@ impl KnowledgeViewHttpRequest {
   fn into_domain(
     self,
     execution: &crate::domain::retrieval_data::NeighborProjectionExecutionExpectation,
-  ) -> Result<KnowledgeViewRequest, (&'static str, &'static str)> {
-    let family = parse_node_family(&self.root.kind)
-      .ok_or(("root.kind", "must be a supported canonical node kind."))?;
-    let node_id = CanonicalId::new(&self.root.id)
-      .map_err(|_| ("root.id", "must be a valid canonical node identifier."))?;
+  ) -> Result<KnowledgeViewRequest, ViewRequestError> {
+    let family = parse_node_family(&self.root.kind).ok_or(ViewRequestError::Invalid(
+      "root.kind",
+      "must be a supported canonical node kind.",
+    ))?;
+    let node_id = CanonicalId::new(&self.root.id).map_err(|_| {
+      ViewRequestError::Invalid("root.id", "must be a valid canonical node identifier.")
+    })?;
     if self.root.id.chars().count() > 256 {
-      return Err(("root.id", "must be at most 256 Unicode characters."));
-    }
-    let lens = KnowledgeLens::parse(&self.lens)
-      .ok_or(("lens", "must be one of the eight closed knowledge lenses."))?;
-    let target_language = LanguageTag::parse(&self.target_language)
-      .map_err(|_| ("target_language", "must be a valid BCP-47 language tag."))?;
-    let response_level = ResponseLevel::parse(&self.response_level)
-      .ok_or(("response_level", "must be brief, standard, or full."))?;
-    if self.content_release != execution.content.release_id.as_str() {
-      return Err((
-        "content_release",
-        "must match the configured immutable knowledge release.",
+      return Err(ViewRequestError::Invalid(
+        "root.id",
+        "must be at most 256 Unicode characters.",
       ));
+    }
+    let lens = KnowledgeLens::parse(&self.lens).ok_or(ViewRequestError::Invalid(
+      "lens",
+      "must be one of the eight closed knowledge lenses.",
+    ))?;
+    let target_language = LanguageTag::parse(&self.target_language).map_err(|_| {
+      ViewRequestError::Invalid("target_language", "must be a valid BCP-47 language tag.")
+    })?;
+    let response_level = ResponseLevel::parse(&self.response_level).ok_or(
+      ViewRequestError::Invalid("response_level", "must be brief, standard, or full."),
+    )?;
+    if self.content_release != execution.content.release_id.as_str() {
+      CanonicalId::new(&self.content_release).map_err(|_| {
+        ViewRequestError::Invalid(
+          "content_release",
+          "must be a valid canonical release identifier.",
+        )
+      })?;
+      return Err(ViewRequestError::UnavailableRelease);
     }
     Ok(KnowledgeViewRequest {
       root: KnowledgeRoot {
@@ -182,6 +227,12 @@ impl KnowledgeViewHttpRequest {
       cursor: self.cursor,
     })
   }
+}
+
+#[derive(Debug)]
+enum ViewRequestError {
+  Invalid(&'static str, &'static str),
+  UnavailableRelease,
 }
 
 fn cursor_binding(
@@ -235,7 +286,10 @@ impl KnowledgeViewResponse {
       .iter()
       .map(|item| item.node.clone())
       .collect::<std::collections::BTreeSet<_>>();
-    let items = projected.into_iter().map(ItemResponse::from).collect();
+    let items = projected
+      .into_iter()
+      .map(ItemResponse::try_from)
+      .collect::<Result<Vec<_>, _>>()?;
     let branches = result
       .branches
       .iter()
@@ -290,19 +344,31 @@ struct ItemResponse {
   path_to_root: Option<PathResponse>,
 }
 
-impl From<&KnowledgeViewItem> for ItemResponse {
-  fn from(item: &KnowledgeViewItem) -> Self {
-    Self {
+impl TryFrom<&KnowledgeViewItem> for ItemResponse {
+  type Error = ();
+
+  fn try_from(item: &KnowledgeViewItem) -> Result<Self, Self::Error> {
+    Ok(Self {
       node: NodeRefResponse::from(&item.node),
       order: item.order,
       relevance_reason: relevance_name(item.branch),
       evidence_state: evidence_state_name(item.evidence_state),
-      path_to_root: item.path_to_root.as_ref().map(|path| PathResponse {
-        root: NodeRefResponse::from(&path.root),
-        item: NodeRefResponse::from(&path.item),
-        steps: path.steps.iter().map(StepResponse::from).collect(),
-      }),
-    }
+      path_to_root: item
+        .path_to_root
+        .as_ref()
+        .map(|path| {
+          Ok::<PathResponse, ()>(PathResponse {
+            root: NodeRefResponse::from(&path.root),
+            item: NodeRefResponse::from(&path.item),
+            steps: path
+              .steps
+              .iter()
+              .map(StepResponse::try_from)
+              .collect::<Result<Vec<_>, _>>()?,
+          })
+        })
+        .transpose()?,
+    })
   }
 }
 
@@ -327,24 +393,28 @@ struct StepResponse {
   evidence_ids: Vec<String>,
   conditions: Vec<ConditionResponse>,
   content_release: String,
+  canonical_schema_version: String,
 }
 
-impl From<&VerifiedKnowledgeStep> for StepResponse {
-  fn from(step: &VerifiedKnowledgeStep) -> Self {
+impl TryFrom<&VerifiedKnowledgeStep> for StepResponse {
+  type Error = ();
+
+  fn try_from(step: &VerifiedKnowledgeStep) -> Result<Self, Self::Error> {
     let assertion = step.projection().assertion();
     let traversal = step.projection().traversal();
-    Self {
+    let relation = traversal
+      .relation_type
+      .rule()
+      .require_qdrant_wire_name()
+      .map_err(|_| ())?;
+    Ok(Self {
       edge_id: traversal.edge_id.to_string(),
       relationship_revision: traversal.relationship_revision,
       assertion_id: assertion.assertion_id.to_string(),
       assertion_revision: assertion.assertion_revision,
       traversal_id: traversal.traversal_id.to_string(),
       relation_registry_revision: traversal.relation_registry_revision,
-      relation: traversal
-        .relation_type
-        .rule()
-        .qdrant_wire_name
-        .unwrap_or("unprojectable"),
+      relation,
       source: NodeRefResponse::from(&traversal.source),
       target: NodeRefResponse::from(&traversal.target),
       evidence_ids: assertion
@@ -366,7 +436,8 @@ impl From<&VerifiedKnowledgeStep> for StepResponse {
         })
         .collect(),
       content_release: step.release().release_id.to_string(),
-    }
+      canonical_schema_version: step.release().canonical_schema_version.clone(),
+    })
   }
 }
 
@@ -458,6 +529,18 @@ fn inconsistent_configuration(context: &RequestContext) -> Response {
   )
 }
 
+fn unavailable_release(context: &RequestContext) -> Response {
+  problem::response(
+    StatusCode::CONFLICT,
+    "content_release_unavailable",
+    "Content release unavailable",
+    "The requested immutable content release is not available.",
+    context.request_id(),
+    false,
+    Vec::new(),
+  )
+}
+
 fn map_service_error(error: KnowledgeViewServiceError, context: &RequestContext) -> Response {
   let (status, code, title, detail, retryable) = match error {
     KnowledgeViewServiceError::LensUnavailable => (
@@ -525,7 +608,7 @@ mod tests {
       canonical_translation::CanonicalTranslationRevision,
       domain_assessment::DomainInventory,
       embedding_input::{EDGE_DENSE_INPUT_VERSION, EDGE_LEXICAL_INPUT_VERSION},
-      knowledge_hydration::HydratedKnowledgeNode,
+      knowledge_hydration::{HydratedAssertionProjection, HydratedKnowledgeNode},
       request_context::RequestId,
       retrieval::RepositoryMatch,
       retrieval_data::{
@@ -588,6 +671,29 @@ mod tests {
   }
 
   struct RootCanonical;
+
+  struct UnusedPathUseCase {
+    pin: CanonicalReleasePin,
+  }
+
+  #[async_trait]
+  impl KnowledgePathUseCase for UnusedPathUseCase {
+    fn execution_pin(&self) -> &CanonicalReleasePin {
+      &self.pin
+    }
+
+    async fn find(
+      &self,
+      _: &RequestContext,
+      _: &crate::domain::model_runtime::CancellationSignal,
+      _: crate::domain::knowledge_view::KnowledgePathRequest,
+    ) -> Result<
+      crate::domain::knowledge_view::KnowledgePathResult,
+      crate::application::knowledge_paths::KnowledgePathSearchError,
+    > {
+      Err(crate::application::knowledge_paths::KnowledgePathSearchError::DependencyUnavailable)
+    }
+  }
 
   #[async_trait]
   impl CanonicalReadPort for RootCanonical {
@@ -714,9 +820,10 @@ mod tests {
     .unwrap()
   }
 
-  fn state() -> KnowledgeViewRouteState {
+  fn state() -> KnowledgeRouteDependencies {
     let expected = execution();
-    KnowledgeViewRouteState::new(
+    let pin = expected.content.clone();
+    KnowledgeRouteDependencies::new(
       Arc::new(KnowledgeViewService::new(
         Arc::new(EmptyRetrieval {
           proof: proof(&expected),
@@ -727,6 +834,7 @@ mod tests {
       Arc::new(KnowledgeCursorCodec::new(
         crate::domain::knowledge_cursor::KnowledgeCursorProtectionKey::new([9_u8; 32]).unwrap(),
       )),
+      Arc::new(UnusedPathUseCase { pin }),
     )
   }
 
@@ -738,12 +846,12 @@ mod tests {
   }
 
   async fn send(body: String) -> Response {
-    route(state())
+    knowledge_router(state())
       .layer(Extension(context()))
       .oneshot(
         Request::builder()
           .method("POST")
-          .uri("/api/v1/knowledge/views")
+          .uri("/knowledge/views")
           .header("content-type", "application/json")
           .body(Body::from(body))
           .unwrap(),
@@ -777,6 +885,28 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn rejects_unavailable_release_and_wrong_method_with_no_store() {
+    let response = send(body(None, "").replace("release-1", "release-2")).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+
+    let response = knowledge_router(state())
+      .layer(Extension(context()))
+      .layer(Extension(RequestId::new("request-1").unwrap()))
+      .oneshot(
+        Request::builder()
+          .method("GET")
+          .uri("/knowledge/views")
+          .body(Body::empty())
+          .unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+  }
+
+  #[tokio::test]
   async fn rejects_tampered_or_differently_bound_cursor_before_service() {
     let response = send(body(Some("k1.invalid.invalid"), "")).await;
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
@@ -800,12 +930,12 @@ mod tests {
       .cursors
       .encode(&KnowledgeCursor::new(binding, "sha256:resume", Vec::new()).unwrap())
       .unwrap();
-    let response = route(route_state)
+    let response = knowledge_router(route_state)
       .layer(Extension(context()))
       .oneshot(
         Request::builder()
           .method("POST")
-          .uri("/api/v1/knowledge/views")
+          .uri("/knowledge/views")
           .header("content-type", "application/json")
           .body(Body::from(body(Some(&wrong), "")))
           .unwrap(),
@@ -814,5 +944,24 @@ mod tests {
       .unwrap();
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(response.headers()["cache-control"], "no-store");
+  }
+
+  #[test]
+  fn verified_step_serialization_preserves_the_full_pin() {
+    let pin = execution().content;
+    let projection = HydratedAssertionProjection::topology_fixture(
+      CanonicalNodeId::publisher_assigned(CanonicalNodeFamily::Concept, id("source")),
+      CanonicalNodeId::publisher_assigned(CanonicalNodeFamily::Concept, id("target")),
+      id("edge-1"),
+      id("assertion-1"),
+      pin.release_id.clone(),
+    );
+    let step = VerifiedKnowledgeStep::from_hydrated(projection, pin.clone()).unwrap();
+    let response = StepResponse::try_from(&step).unwrap();
+    assert_eq!(response.content_release, pin.release_id.as_str());
+    assert_eq!(
+      response.canonical_schema_version,
+      pin.canonical_schema_version
+    );
   }
 }

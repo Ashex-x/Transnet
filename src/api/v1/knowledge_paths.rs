@@ -26,14 +26,17 @@ use crate::{
   },
 };
 
-use super::super::{
-  problem, problem::FieldError, request_id::RequestId, AppState, SuccessEnvelope,
-};
+use super::super::{problem, problem::FieldError, request_id::RequestId, SuccessEnvelope};
 
 const RESULT_SCHEMA_VERSION: &str = "knowledge-path-result-v1";
 
 #[async_trait]
-pub(crate) trait KnowledgePathUseCase: Send + Sync {
+/// Request-independent boundary used by the knowledge-path HTTP route.
+pub trait KnowledgePathUseCase: Send + Sync {
+  /// Returns the one immutable canonical pin served by this instance.
+  fn execution_pin(&self) -> &CanonicalReleasePin;
+
+  /// Finds bounded verified paths under the supplied request-owned cancellation signal.
   async fn find(
     &self,
     context: &RequestContext,
@@ -44,6 +47,10 @@ pub(crate) trait KnowledgePathUseCase: Send + Sync {
 
 #[async_trait]
 impl KnowledgePathUseCase for BoundedKnowledgePathService {
+  fn execution_pin(&self) -> &CanonicalReleasePin {
+    &self.execution().content
+  }
+
   async fn find(
     &self,
     context: &RequestContext,
@@ -54,12 +61,13 @@ impl KnowledgePathUseCase for BoundedKnowledgePathService {
   }
 }
 
-/// Builds the isolated path route without changing shared runtime state composition.
-pub(crate) fn router(service: Arc<dyn KnowledgePathUseCase>) -> Router<AppState> {
+pub(super) fn router<S>(service: Arc<dyn KnowledgePathUseCase>) -> Router<S>
+where
+  S: Clone + Send + Sync + 'static,
+{
   Router::new()
     .route("/knowledge/paths", post(find))
     .layer(Extension(service))
-    .method_not_allowed_fallback(super::method_not_allowed)
 }
 
 #[derive(Deserialize)]
@@ -81,6 +89,7 @@ struct NodeRefDto {
 
 async fn find(
   Extension(service): Extension<Arc<dyn KnowledgePathUseCase>>,
+  Extension(cancellations): Extension<RequestCancellationFactory>,
   Extension(request_id): Extension<RequestId>,
   Extension(context): Extension<RequestContext>,
   payload: Result<Json<KnowledgePathHttpRequest>, JsonRejection>,
@@ -96,6 +105,9 @@ async fn find(
     Ok(value) => value,
     Err(error) => return invalid_field(&request_id, error.field, error.message),
   };
+  if &request.release != service.execution_pin() {
+    return unavailable_release(&request_id);
+  }
   let context = match context
     .clone()
     .with_content_release(request.release.release_id.clone())
@@ -103,8 +115,8 @@ async fn find(
     Ok(value) => value,
     Err(_) => return invalid_field(&request_id, "content_release", "is invalid."),
   };
-  let cancellation = CancellationSignal::default();
-  match service.find(&context, &cancellation, request).await {
+  let cancellation = cancellations.start();
+  match service.find(&context, cancellation.signal(), request).await {
     Ok(result) => match response_from_result(result) {
       Ok(data) => problem::no_store(
         (
@@ -166,8 +178,55 @@ struct RequestFieldError {
 
 fn parse_node(value: NodeRefDto) -> Result<CanonicalNodeId, ()> {
   let family = family_from_wire(&value.kind).ok_or(())?;
+  if value.id.chars().count() > 256 {
+    return Err(());
+  }
   let id = CanonicalId::new(value.id).map_err(|_| ())?;
   Ok(CanonicalNodeId::publisher_assigned(family, id))
+}
+
+/// Cancels in-flight path work whenever its owning request future is dropped.
+#[derive(Clone)]
+pub(super) struct RequestCancellationFactory {
+  runtime: Arc<CancellationSignal>,
+}
+
+impl RequestCancellationFactory {
+  pub(super) fn new(runtime: Arc<CancellationSignal>) -> Self {
+    Self { runtime }
+  }
+
+  fn start(&self) -> RequestCancellation {
+    let signal = Arc::new(CancellationSignal::default());
+    if self.runtime.is_cancelled() {
+      signal.cancel();
+    }
+    let runtime = self.runtime.clone();
+    let request = signal.clone();
+    let watcher = tokio::spawn(async move {
+      runtime.cancelled().await;
+      request.cancel();
+    });
+    RequestCancellation { signal, watcher }
+  }
+}
+
+struct RequestCancellation {
+  signal: Arc<CancellationSignal>,
+  watcher: tokio::task::JoinHandle<()>,
+}
+
+impl RequestCancellation {
+  fn signal(&self) -> &CancellationSignal {
+    &self.signal
+  }
+}
+
+impl Drop for RequestCancellation {
+  fn drop(&mut self) {
+    self.signal.cancel();
+    self.watcher.abort();
+  }
 }
 
 fn family_from_wire(value: &str) -> Option<CanonicalNodeFamily> {
@@ -393,6 +452,18 @@ fn invalid_field(request_id: &RequestId, field: &'static str, message: &'static 
   )
 }
 
+fn unavailable_release(request_id: &RequestId) -> Response {
+  problem::response(
+    StatusCode::CONFLICT,
+    "content_release_unavailable",
+    "Content release unavailable",
+    "The requested immutable content release is not available.",
+    request_id,
+    false,
+    Vec::new(),
+  )
+}
+
 fn map_error(error: KnowledgePathSearchError, request_id: &RequestId) -> Response {
   let (status, code, title, detail, retryable) = match error {
     KnowledgePathSearchError::InvalidRequest => (
@@ -463,6 +534,7 @@ mod tests {
 
   use super::*;
   use crate::{
+    api::AppState,
     config::{ProviderApiKey, ProviderConfig, TranslationConfig},
     domain::{
       knowledge_hydration::HydratedAssertionProjection, knowledge_view::VerifiedKnowledgePath,
@@ -480,10 +552,15 @@ mod tests {
   struct FakeUseCase {
     mode: Mode,
     observed_schema: Mutex<Option<String>>,
+    pin: CanonicalReleasePin,
   }
 
   #[async_trait]
   impl KnowledgePathUseCase for FakeUseCase {
+    fn execution_pin(&self) -> &CanonicalReleasePin {
+      &self.pin
+    }
+
     async fn find(
       &self,
       context: &RequestContext,
@@ -524,9 +601,17 @@ mod tests {
     let use_case: Arc<dyn KnowledgePathUseCase> = Arc::new(FakeUseCase {
       mode,
       observed_schema: Mutex::new(None),
+      pin: CanonicalReleasePin::new(id("release-1"), "canonical-v1".into()).unwrap(),
     });
     Router::new()
-      .nest("/api/v1", router(use_case))
+      .nest(
+        "/api/v1",
+        router(use_case)
+          .layer(Extension(RequestCancellationFactory::new(Arc::new(
+            CancellationSignal::default(),
+          ))))
+          .method_not_allowed_fallback(super::super::method_not_allowed),
+      )
       .with_state(state())
       .layer(middleware::from_fn(
         super::super::super::request_context::establish,
@@ -657,6 +742,38 @@ mod tests {
       .unwrap();
     assert_eq!(wrong_method.status(), StatusCode::METHOD_NOT_ALLOWED);
     assert_eq!(wrong_method.headers()[header::CACHE_CONTROL], "no-store");
+  }
+
+  #[tokio::test]
+  async fn rejects_unavailable_pin_and_oversized_node_before_use_case() {
+    let unavailable = valid_body().replace("release-1", "release-2");
+    let response = app(Mode::Empty)
+      .oneshot(request(unavailable))
+      .await
+      .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+      body(response).await.1["code"],
+      "content_release_unavailable"
+    );
+
+    let oversized = valid_body().replace("concept-coriolis", &"x".repeat(257));
+    let response = app(Mode::Empty).oneshot(request(oversized)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+  }
+
+  #[tokio::test]
+  async fn runtime_drain_reaches_the_request_owned_cancellation_signal() {
+    let runtime = Arc::new(CancellationSignal::default());
+    let request = RequestCancellationFactory::new(runtime.clone()).start();
+    runtime.cancel();
+    tokio::time::timeout(
+      std::time::Duration::from_secs(1),
+      request.signal().cancelled(),
+    )
+    .await
+    .unwrap();
+    assert!(request.signal().is_cancelled());
   }
 
   #[tokio::test]
