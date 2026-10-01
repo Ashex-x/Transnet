@@ -10,6 +10,8 @@ canonical-only 服务从权威端选择一次发布 pin，再通过读取 port �
 
 公开的固定发布 sense follow-up 使用调用方的 `CanonicalReleasePin` 与 sense ID，不再重新选择 active 内容。现有候选/证据类型携带的 source attribution 来自权威发布的权利审核 metadata，绝不由 source ID 推导。HTTP 边界通过 `POST /api/v1/senses/get` 暴露该 seam；application 模块仍不依赖 transport DTO。
 
+离线 `KnowledgePublicationService` 是建立在 `KnowledgePublicationPort` 上的独立 application 边界。它校验一个不可变、固定发布的 plan，开始或重放 build intent，把权威 status 作为唯一恢复进度来源，只提交剩余的有界 node batch 后冻结 node，再提交剩余的 edge batch 后冻结 edge，最后对冻结工件执行 reconciliation。它不保存 publication progress 或 cache。只有权威 reconciliation 成功才能返回 `PublicationActivationCandidate`；activation 与 rollback 仍由外部认证 publisher/control-plane 通过 island-port 执行，绝不属于在线请求 runtime。
+
 ## 解析与评估
 
 规范化产生有界语言感知查询形式，但不充当规范身份。解析采用闭合顺序：精确规范形式 -> 精确已发布别名 -> 有界屈折 -> 有界拼写修正 -> 有界转写 -> 语义提名。分数或向量信号不能把较低类别提升到合格较高类别之上。只有最佳可用类别的候选会保留；一个词义表示已解析，多个不同词义要求澄清或保留歧义，无候选则是显式未找到结果。实质合理的同形词、不同词性、短语级含义与领域特定词义保持分离。

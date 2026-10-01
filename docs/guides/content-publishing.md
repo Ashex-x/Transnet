@@ -4,7 +4,7 @@
 
 This guide defines the proposed release workflow for MySQL basic cards and canonical translations plus paired Qdrant knowledge-node and knowledge-edge collections. It is intended for content engineers and release operators.
 
-Status: proposed; the current runtime has no ingestion or publication pipeline. Transnet now has an offline deterministic preparation foundation that creates release-pinned node-first and edge-second build artifacts without generating embeddings, allocating collection IDs, writing Qdrant, or marking a production collection verified.
+Status: partially implemented on the Transnet side and not production-complete. The online runtime has no ingestion or mutation pipeline. Transnet has deterministic release-pinned projection preparation, a strict outbound publication client, and offline application orchestration through authoritative status-based resume and reconciliation. It does not generate production embeddings, allocate real collection IDs, write Qdrant, persist island-port build state, or activate a release.
 
 ## Preconditions
 
@@ -72,7 +72,7 @@ The edge dense and lexical inputs bind both frozen endpoint input hashes and the
 
 The execution baseline uses `Qwen/Qwen3-Embedding-0.6B` at 1,024 dimensions for the `semantic` vector, but publication remains blocked until deployment supplies an exact immutable artifact revision and island-port can attest the revision it actually loaded. Lexical publication uses the non-neural `transnet-lexical-bm25-v1` encoder and the `lexical` sparse vector. It preserves NFC spelling, case, and attached technical `+`/`#` symbols, assigns collision-free release-local term indices from sorted UTF-8 terms, computes document-side BM25 term-frequency saturation only after the complete collection is frozen, and delegates collection-derived IDF to Qdrant's `idf` modifier. IDF never changes a canonical input hash. The exact tokenizer, dictionary, numeric, and execution bounds are normative in the [Qdrant contract](../interfaces/qdrant.md#lexical-encoder-contract).
 
-The checked-in publication foundation validates the node-first lifecycle, stable build and batch identities, conflicting retries, execution receipts, dictionary proofs, and the input/projection/persisted/manifest hash hierarchy. Its outbound publication port and strict island-port client now carry begin, bounded node and edge batches, freeze receipts, reconciliation, status, and abort through the shared UDS transport, with fake-transport contract tests. A failed or abandoned build cannot become an activation candidate, and reconciliation never activates a release. Production remains blocked on a deployed immutable Qwen revision, island-port server-side publication and attestation, real embedding and lexical execution, Qdrant mutation, reconciliation persistence, and activation/rollback acceptance.
+The checked-in publication foundation validates the node-first lifecycle, stable build and batch identities, conflicting retries, execution receipts, dictionary proofs, and the input/projection/persisted/manifest hash hierarchy. Its outbound publication port and strict island-port client carry begin, bounded node and edge batches, freeze receipts, reconciliation, status, and abort through the shared UDS transport. `KnowledgePublicationService` drives that contract from immutable projection artifacts, always resumes from island-port's authoritative status, retains no local publication progress, and returns only a typed activation candidate after successful reconciliation. A failed or abandoned build cannot become a candidate, and reconciliation never activates a release. Production remains blocked on a deployed immutable Qwen revision and attestation, real dense and lexical execution, island-port build/status and reconciliation persistence, Qdrant node/edge collection creation and mutation, production collection verification and persisted hashes, real MySQL/Qdrant reconciliation, and release-trio end-to-end acceptance.
 
 ## Reconcile and evaluate
 
@@ -84,9 +84,9 @@ Run the [quality-assurance guide](quality-assurance.md) against the exact staged
 
 Activate the MySQL card and canonical-translation release plus paired Qdrant node and edge versions as one logical release. Every request pins the same release identity across both stores. A partial build is never visible, and an alias is never the source of version authority.
 
-Transnet's online request path has read-only authority. Authenticated publisher tooling prepares deterministic projections; island-port owns MySQL/Qdrant credentials, collection mutation, reconciliation persistence, and the atomic active pointer. Activation selects only a completely reconciled immutable trio. Rollback selects a previously validated retained trio without rewriting it, and retention keeps every selected old collection addressable for its supported lifetime.
+Transnet's online request path has read-only authority. Transnet publication orchestration stops at `PublicationActivationCandidate`. An external authenticated publisher/control-plane submits that candidate to island-port, which owns MySQL/Qdrant credentials, collection mutation, reconciliation persistence, and the atomic active pointer. Activation selects only a completely reconciled immutable trio.
 
-Rollback selects one unchanged retained trio. Published canonical records are never silently rewritten.
+Rollback re-activates one previously verified and retained immutable trio through the same island-port authority. It does not rewrite the old canonical release or rebuild its immutable Qdrant collections. The target must remain verified, retained, and addressable; build GC must never delete an active or retained rollback target. Production retention and rollback behavior still require external validation.
 
 ## Correct, quarantine, and remove
 

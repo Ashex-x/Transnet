@@ -4,7 +4,7 @@ English: [Publish canonical knowledge content](../../docs/guides/content-publish
 
 本指南定义 MySQL 基础卡、规范翻译以及配对 Qdrant 知识节点/知识边集合的拟议发布流程，面向内容工程师和发布运维人员。
 
-状态：拟议；当前运行时没有摄取或发布流水线。Transnet 目前具有离线、确定性的准备基础，可建立钉住发布的 node-first、edge-second 构建工件，但不生成嵌入、不分配 collection ID、不写入 Qdrant，也不把 production collection 标为 verified。
+状态：Transnet 侧已部分实现，但尚未 production-complete。在线 runtime 没有摄取或 mutation 流水线。Transnet 已具备确定性的固定发布 projection preparation、严格出站 publication client，以及通过权威 status 恢复并完成 reconciliation 的离线 application orchestration。它不生成 production embedding、不分配真实 collection ID、不写入 Qdrant、不持久化 island-port build state，也不激活 release。
 
 ## 前置条件
 
@@ -62,7 +62,7 @@ flowchart LR
 
 Execution baseline 为 `semantic` vector 使用 1,024 维的 `Qwen/Qwen3-Embedding-0.6B`，但在部署提供精确不可变 artifact revision 且 island-port 能证明其实际加载的 revision 之前，publication 仍然闭合失败。Lexical publication 使用非神经的 `transnet-lexical-bm25-v1` encoder 与 `lexical` sparse vector。它保留 NFC spelling、大小写以及附着的技术符号 `+`/`#`，从按 UTF-8 排序的 term 构造无碰撞 release-local index，仅在完整 collection 冻结后计算 document-side BM25 term-frequency saturation，并将依赖 collection 的 IDF 交给 Qdrant `idf` modifier。IDF 绝不改变 canonical input hash。精确 tokenizer、dictionary、数值和执行边界由 [Qdrant 合同](../interfaces/qdrant_cn.md#lexical-encoder-合同)规定。
 
-仓库内 publication foundation 会校验 node-first lifecycle、稳定 build/batch identity、冲突 retry、execution receipt、dictionary proof 以及 input/projection/persisted/manifest hash hierarchy。其出站 publication port 与严格 island-port client 现在通过共享 UDS transport 承载 begin、有界 node/edge batch、freeze receipt、reconciliation、status 与 abort，并由 fake-transport contract test 验证。Failed 或 abandoned build 不能成为 activation candidate，reconciliation 也不会激活 release。Production 仍受阻于已部署的不可变 Qwen revision、island-port server-side publication 与 attestation、真实 embedding/lexical execution、Qdrant mutation、reconciliation persistence 和 activation/rollback acceptance。
+仓库内 publication foundation 会校验 node-first lifecycle、稳定 build/batch identity、冲突 retry、execution receipt、dictionary proof 以及 input/projection/persisted/manifest hash hierarchy。其出站 publication port 与严格 island-port client 通过共享 UDS transport 承载 begin、有界 node/edge batch、freeze receipt、reconciliation、status 与 abort。`KnowledgePublicationService` 从不可变 projection 工件驱动该合同，始终以 island-port 权威 status 恢复，不保留本地 publication progress，并且只在 reconciliation 成功后返回 typed activation candidate。Failed 或 abandoned build 不能成为 candidate，reconciliation 也不会激活 release。Production 仍受阻于已部署的不可变 Qwen revision 与 attestation、真实 dense/lexical execution、island-port build/status 与 reconciliation persistence、Qdrant node/edge collection 创建和 mutation、production collection verification 与 persisted hash、真实 MySQL/Qdrant reconciliation，以及 release-trio E2E 验收。
 
 Publisher 必须先完成并验证确定性节点投影，再冻结节点 manifest，并针对该精确节点哈希构建边。对账比较规范根、规范 schema、强类型物理 collection ID、payload schema、嵌入修订与维度、节点/边哈希和数量以及完整端点覆盖。成员缺失、活动 alias、跨发布引用、未解析的关系 wire 映射或未验证 collection 均阻止激活。
 
@@ -72,9 +72,11 @@ Publisher 必须先完成并验证确定性节点投影，再冻结节点 manife
 
 ## 激活与回滚
 
-MySQL 卡片与规范翻译发布以及配对 Qdrant 节点/边版本作为一个逻辑发布激活，每个请求在两个存储间钉住同一发布身份。部分构建不可见，别名不作为版本权威；回滚选择未改动的保留发布。已发布规范记录绝不静默改写。
+MySQL 卡片与规范翻译发布以及配对 Qdrant 节点/边版本作为一个逻辑发布激活，每个请求在两个存储间钉住同一发布身份。部分构建不可见，别名不作为版本权威；已发布规范记录绝不静默改写。
 
-Transnet 在线请求路径只有读取权限。经认证的 publisher 工具准备确定性投影；island-port 拥有 MySQL/Qdrant 凭据、collection mutation、对账持久化与原子活动指针。激活只能选择完全对账的不可变三件套。回滚选择先前已验证且保留的三件套而不重写它，保留策略必须在支持期内保持所选旧 collection 可寻址。
+Transnet 在线请求路径只有读取权限。Transnet publication orchestration 在 `PublicationActivationCandidate` 处停止。外部认证 publisher/control-plane 将该 candidate 提交给 island-port；island-port 拥有 MySQL/Qdrant 凭据、collection mutation、对账持久化与原子活动指针。激活只能选择完全对账的不可变三件套。
+
+回滚通过同一个 island-port authority 重新激活此前已验证且保留的不可变三件套。它不改写旧 canonical release，也不重建旧 immutable Qdrant collection。目标必须仍处于 verified、retained 且可寻址状态；build GC 绝不能删除 active 或 retained rollback target。Production retention 与 rollback 行为仍需外部验证。
 
 ## 修正、隔离与删除
 
