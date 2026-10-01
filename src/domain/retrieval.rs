@@ -382,13 +382,6 @@ impl RepositoryMatch {
       });
     }
 
-    if self.kind == LexicalMatchKind::ExactCanonical
-      && self.matched_form_id.is_none()
-      && self.candidate.lexeme.lemma == self.matched_form
-    {
-      return true;
-    }
-
     self.matched_form_id.as_ref().is_some_and(|matched_id| {
       self.candidate.forms.iter().any(|form| {
         form.id == *matched_id
@@ -785,17 +778,30 @@ mod tests {
         definition_evidence_ids: vec![evidence_id.clone()],
         status: CanonicalStatus::Active,
       },
-      forms: vec![WordForm {
-        id: id(&format!("form-{sense_id}")),
-        lexeme_id: id(&format!("lexeme-{sense_id}")),
-        release_id: release_id.clone(),
-        form: format!("{lemma}er"),
-        normalized_form: format!("{lemma}er"),
-        kind: FormKind::Inflection,
-        morphology: Some("comparative".to_string()),
-        evidence_ids: vec![evidence_id.clone()],
-        status: CanonicalStatus::Active,
-      }],
+      forms: vec![
+        WordForm {
+          id: id(&format!("form-{sense_id}-lemma")),
+          lexeme_id: id(&format!("lexeme-{sense_id}")),
+          release_id: release_id.clone(),
+          form: lemma.to_string(),
+          normalized_form: normalize_lookup_key(lemma),
+          kind: FormKind::Lemma,
+          morphology: None,
+          evidence_ids: vec![evidence_id.clone()],
+          status: CanonicalStatus::Active,
+        },
+        WordForm {
+          id: id(&format!("form-{sense_id}")),
+          lexeme_id: id(&format!("lexeme-{sense_id}")),
+          release_id: release_id.clone(),
+          form: format!("{lemma}er"),
+          normalized_form: format!("{lemma}er"),
+          kind: FormKind::Inflection,
+          morphology: Some("comparative".to_string()),
+          evidence_ids: vec![evidence_id.clone()],
+          status: CanonicalStatus::Active,
+        },
+      ],
       evidence: vec![EvidenceFragment {
         id: evidence_id,
         source_id: id("source-1"),
@@ -840,9 +846,25 @@ mod tests {
     score: RetrievalScore,
   ) -> RepositoryMatch {
     let matched_form = match kind {
-      LexicalMatchKind::ExactCanonical => None,
+      LexicalMatchKind::ExactCanonical => candidate
+        .forms
+        .iter()
+        .find(|form| form.kind == FormKind::Lemma),
       LexicalMatchKind::Semantic => None,
-      _ => candidate.forms.first(),
+      LexicalMatchKind::Inflection => candidate
+        .forms
+        .iter()
+        .find(|form| form.kind == FormKind::Inflection),
+      LexicalMatchKind::ExactAlias => candidate.forms.iter().find(|form| {
+        matches!(
+          form.kind,
+          FormKind::SpellingVariant | FormKind::Alias | FormKind::Phrase
+        )
+      }),
+      LexicalMatchKind::SpellingCorrection | LexicalMatchKind::Transliteration => candidate
+        .forms
+        .iter()
+        .find(|form| form.kind != FormKind::Lemma),
     };
     RepositoryMatch {
       matched_form_id: matched_form.map(|form| form.id.clone()),

@@ -297,6 +297,17 @@ async fn candidate_match_source_must_equal_the_authoritative_stored_form() {
     .pointer_mut("/value/matches/0/match_class")
     .unwrap() = json!("exact_alias");
   cases.push(false_alias);
+  let mut unrelated_but_self_consistent = candidate_response();
+  *unrelated_but_self_consistent
+    .pointer_mut("/value/matches/0/matched_form")
+    .unwrap() = json!("unrelated");
+  *unrelated_but_self_consistent
+    .pointer_mut("/value/matches/0/candidate/forms/0/form")
+    .unwrap() = json!("unrelated");
+  *unrelated_but_self_consistent
+    .pointer_mut("/value/matches/0/candidate/forms/0/normalized_form")
+    .unwrap() = json!("unrelated");
+  cases.push(unrelated_but_self_consistent);
 
   for response in cases {
     let error = IslandPortCanonicalClient::new(Arc::new(FakeTransport::new(response)))

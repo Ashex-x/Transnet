@@ -20,9 +20,9 @@ use thiserror::Error;
 
 use crate::domain::{
   canonical::{
-    CanonicalId, CanonicalReleasePin, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
-    EvidenceKind, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech, LexicalSource, Sense,
-    SourcePermissions, WordForm,
+    normalize_lookup_key, CanonicalId, CanonicalReleasePin, CanonicalStatus, EvidenceConfidence,
+    EvidenceFragment, EvidenceKind, FormKind, LanguageTag, Lexeme, LexicalPartOfSpeech,
+    LexicalSource, Sense, SourcePermissions, WordForm,
   },
   canonical_content::{
     CanonicalEvidenceLineage, CanonicalEvidenceOrigin, CanonicalExample, CanonicalFactualAssertion,
@@ -336,6 +336,11 @@ impl IslandPortCanonicalClient {
       return Err(IslandPortClientError::InvalidRequest);
     }
     let evidence_use = input.evidence_use;
+    let submitted_lookup_forms = input
+      .lookup_forms
+      .iter()
+      .map(|form| form.form.clone())
+      .collect::<BTreeSet<_>>();
     let envelope = RequestEnvelope {
       context: context_dto(context, release_id),
       input: BasicCardResolveInputDto::from(input),
@@ -352,7 +357,7 @@ impl IslandPortCanonicalClient {
     value
       .matches
       .into_iter()
-      .map(|candidate| candidate.into_domain(release_id, evidence_use))
+      .map(|candidate| candidate.into_domain(release_id, evidence_use, &submitted_lookup_forms))
       .collect()
   }
 
@@ -1063,6 +1068,7 @@ impl CandidateMatchDto {
     self,
     release_id: &crate::domain::canonical::ReleaseId,
     evidence_use: crate::domain::canonical::EvidenceUse,
+    submitted_lookup_forms: &BTreeSet<String>,
   ) -> Result<RepositoryMatch, IslandPortClientError> {
     if self.matched_form.trim().is_empty() {
       return Err(IslandPortClientError::InconsistentData);
@@ -1070,6 +1076,9 @@ impl CandidateMatchDto {
     let matched_form_id = canonical_id(self.matched_form_id)?;
     let candidate = self.candidate.into_domain(release_id, evidence_use)?;
     let matched_form = self.matched_form;
+    if !submitted_lookup_forms.contains(&normalize_lookup_key(&matched_form)) {
+      return Err(IslandPortClientError::InconsistentData);
+    }
     let repository_match = RepositoryMatch {
       candidate,
       matched_form_id: Some(matched_form_id),
