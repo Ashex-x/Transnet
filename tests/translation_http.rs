@@ -150,11 +150,10 @@ async fn relationship_page_capability_requires_both_runtime_dependencies_in_any_
       .body(Body::from("{}"))
       .unwrap()
   };
-  let page_only =
-    app_router(AppState::new().with_relationship_page_runtime(runtime.clone()))
-      .oneshot(capability_request())
-      .await
-      .unwrap();
+  let page_only = app_router(AppState::new().with_relationship_page_runtime(runtime.clone()))
+    .oneshot(capability_request())
+    .await
+    .unwrap();
   assert!(!body(page_only).await["data"]["schema_versions"]
     .as_array()
     .unwrap()
