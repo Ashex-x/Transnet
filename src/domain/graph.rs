@@ -443,7 +443,23 @@ impl GraphRelationType {
       Self::Hyponym => Some("is_a"),
       Self::LowerDegree => Some("lower_degree_than"),
       Self::HigherDegree => Some("higher_degree_than"),
-      _ => None,
+      Self::Synonym => Some("synonym"),
+      Self::NearSynonym => Some("near_synonym"),
+      Self::TranslationEquivalent => Some("translation_equivalent"),
+      Self::Antonym => Some("antonym"),
+      Self::Holonym => Some("has_part"),
+      Self::Meronym => Some("part_of"),
+      Self::ConfusableWith => Some("confusable_with"),
+      Self::AssociatedWith => Some("associated_with"),
+      Self::InflectionOf => Some("inflection_of"),
+      Self::HasInflection => Some("has_inflection"),
+      Self::DerivationallyRelatedTo => Some("derivationally_related_to"),
+      Self::EtymologicallyDerivedFrom => Some("etymologically_derived_from"),
+      Self::EtymologicalSourceOf => Some("etymological_source_of"),
+      Self::ConstructionMember => Some("member_of_construction"),
+      Self::HasConstructionMember => Some("has_construction_member"),
+      Self::ScaleContains => Some("scale_contains"),
+      Self::MemberOfScale => Some("member_of_scale"),
     };
     let direction = if self.is_symmetric() {
       RelationshipDirection::Symmetric
@@ -457,10 +473,12 @@ impl GraphRelationType {
       target_kinds,
       direction,
       inverse: self.inverse(),
-      // The current authoritative contract states that a registry owns these properties but does
-      // not freeze their values for each relation. Unspecified prevents accidental inference.
-      transitivity: RelationshipProperty::Unspecified,
-      causality: RelationshipProperty::Unspecified,
+      transitivity: if matches!(self, Self::Hypernym | Self::Hyponym) {
+        RelationshipProperty::Declared
+      } else {
+        RelationshipProperty::NotApplicable
+      },
+      causality: RelationshipProperty::NotApplicable,
       allowed_scope_fields: RelationshipScopeFields {
         dialect: true,
         domain: false,
@@ -1606,11 +1624,66 @@ mod tests {
   }
 
   #[test]
-  fn unresolved_qdrant_relation_names_fail_closed() {
-    assert_eq!(
-      GraphRelationType::Synonym.rule().require_qdrant_wire_name(),
-      Err(GraphValidationError::UnresolvedQdrantRelation)
-    );
+  fn relationship_registry_freezes_every_v1_wire_name_and_property() {
+    let expected = [
+      (GraphRelationType::Synonym, "synonym"),
+      (GraphRelationType::NearSynonym, "near_synonym"),
+      (
+        GraphRelationType::TranslationEquivalent,
+        "translation_equivalent",
+      ),
+      (GraphRelationType::Antonym, "antonym"),
+      (GraphRelationType::Hypernym, "has_subtype"),
+      (GraphRelationType::Hyponym, "is_a"),
+      (GraphRelationType::Holonym, "has_part"),
+      (GraphRelationType::Meronym, "part_of"),
+      (GraphRelationType::ConfusableWith, "confusable_with"),
+      (GraphRelationType::AssociatedWith, "associated_with"),
+      (GraphRelationType::InflectionOf, "inflection_of"),
+      (GraphRelationType::HasInflection, "has_inflection"),
+      (
+        GraphRelationType::DerivationallyRelatedTo,
+        "derivationally_related_to",
+      ),
+      (
+        GraphRelationType::EtymologicallyDerivedFrom,
+        "etymologically_derived_from",
+      ),
+      (
+        GraphRelationType::EtymologicalSourceOf,
+        "etymological_source_of",
+      ),
+      (
+        GraphRelationType::ConstructionMember,
+        "member_of_construction",
+      ),
+      (
+        GraphRelationType::HasConstructionMember,
+        "has_construction_member",
+      ),
+      (GraphRelationType::ScaleContains, "scale_contains"),
+      (GraphRelationType::MemberOfScale, "member_of_scale"),
+      (GraphRelationType::LowerDegree, "lower_degree_than"),
+      (GraphRelationType::HigherDegree, "higher_degree_than"),
+    ];
+
+    for (relation_type, wire_name) in expected {
+      let rule = relation_type.rule();
+      assert_eq!(rule.require_qdrant_wire_name(), Ok(wire_name));
+      assert_eq!(rule.inverse.inverse(), relation_type);
+      assert_eq!(rule.causality, RelationshipProperty::NotApplicable);
+      assert_eq!(
+        rule.transitivity,
+        if matches!(
+          relation_type,
+          GraphRelationType::Hypernym | GraphRelationType::Hyponym
+        ) {
+          RelationshipProperty::Declared
+        } else {
+          RelationshipProperty::NotApplicable
+        }
+      );
+    }
   }
 
   #[test]
@@ -1657,11 +1730,8 @@ mod tests {
   }
 
   #[test]
-  fn admission_rejects_unresolved_or_reversed_wire_direction() {
-    assert_eq!(
-      published(GraphRelationType::Synonym).validate(),
-      Err(GraphValidationError::UnresolvedQdrantRelation)
-    );
+  fn admission_accepts_frozen_names_and_rejects_reversed_wire_direction() {
+    assert_eq!(published(GraphRelationType::Synonym).validate(), Ok(()));
     let mut reversed = published(GraphRelationType::Hypernym);
     reversed.declared_wire_relation = "is_a".to_string();
     assert_eq!(

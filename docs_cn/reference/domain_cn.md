@@ -34,7 +34,7 @@ Verified 内容是已发布规范知识；inferred 解释与 exploratory 候选�
 
 已实现的 M3 foundation 通过 `KnowledgeReleaseTrio` 表示该激活候选：现有 canonical-only `CanonicalReleasePin`、一个强类型不可变节点 collection manifest、一个强类型不可变边 collection manifest，以及共享的 dense/sparse embedding 修订。边 manifest 绑定已验证节点内容哈希并携带完整端点数量。`ActiveContentVersion` 只保留给较早的进程内单索引检索基础，不是发布权威；其中单个 `vector_collection_id` 绝不能代替两个 M3 collection。
 
-目标关系 registry 在 retrieval-data 合同中冻结 v1 wire 名与 inverse 对。只有 taxonomy 对 `is_a` / `has_subtype` 具有传递性，只有另行注册的显式 causation 关系可以具有因果性，其他关系均声明这些属性不适用。当前 Rust registry 仍只实现先前冻结的 taxonomy 与 named-degree wire 映射，因此新冻结映射在代码与测试落地前仍属目标工作并闭合失败。目标节点目录比已实现的 `Sense`、`Lexeme`、`Construction` 和 `Scale` 读取模型 family 更广；phrase、term、concept、entity 及专业节点必须先具备 publisher 所有的 canonical entity 映射，才能在不使用合成 ID 的情况下加入。
+已实现的关系 registry 冻结 retrieval-data 合同中的全部 v1 wire 名与 inverse 对。只有 taxonomy 对 `is_a` / `has_subtype` 具有传递性；当前所有 v1 关系均声明因果性不适用，所有非 taxonomy 关系均声明传递性不适用。发布声明与这些 registry 语义冲突时闭合失败。目标节点目录仍比已实现的 `Sense`、`Lexeme`、`Construction` 和 `Scale` 读取模型 family 更广；phrase、term、concept、entity 及专业节点必须先具备 publisher 所有的 canonical entity 映射，才能在不使用合成 ID 的情况下加入。
 
 `PublishedRelationship` 是已实现的 Stage 2 admission aggregate。它将 stored relation 与两个端点的发布所有权、精确声明的 wire 方向和 inverse、经审核的 M2 evidence lineage 以及 verified lifecycle state 绑定。稳定 `PublishedEdgeIdentity` 包含 canonical relationship ID 与 revision，并排除 evidence revision。Evidence 变更通过新的不可变 relationship revision、精确 release membership、evidence content hash 与 projection/content hash 绑定。批量校验先按稳定 identity 排序，再验证候选，并使用独立的 scope-aware semantic key 拒绝重复 typed assertion，不受输入顺序或所提供 edge ID 影响。
 

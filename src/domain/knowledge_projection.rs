@@ -1403,23 +1403,21 @@ mod tests {
   }
 
   #[test]
-  fn unresolved_wire_mapping_never_enters_projection() {
+  fn every_frozen_wire_mapping_can_enter_projection() {
     let nodes = build_node_projection(
       id("release-1"),
       embedding("knowledge-graph-v1"),
       node_inputs("release-1"),
     )
     .unwrap();
-    let mut unresolved = relationship("edge-1", "alpha", "beta");
-    unresolved.relation.relation_type = GraphRelationType::Synonym;
-    unresolved.declared_inverse = GraphRelationType::Synonym;
-    unresolved.declared_wire_relation = "synonym".to_string();
-    assert!(matches!(
-      build_edge_projection(&nodes, embedding("knowledge-graph-v1"), vec![unresolved]),
-      Err(ProjectionValidationError::RelationshipAdmission(
-        GraphValidationError::UnresolvedQdrantRelation
-      ))
-    ));
+    let mut synonym = relationship("edge-1", "alpha", "beta");
+    synonym.relation.relation_type = GraphRelationType::Synonym;
+    synonym.declared_inverse = GraphRelationType::Synonym;
+    synonym.declared_wire_relation = "synonym".to_string();
+    let build =
+      build_edge_projection(&nodes, embedding("knowledge-graph-v1"), vec![synonym]).unwrap();
+
+    assert_eq!(build.points[0].wire_relation, "synonym");
   }
 
   #[test]
