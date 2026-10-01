@@ -55,6 +55,63 @@ impl KnowledgePublicationService {
     Self { publication }
   }
 
+  /// Reads the authoritative state of one offline publication build.
+  ///
+  /// This operation is stateless and never infers progress from local files or prior calls.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed publication failure when the authority is unavailable or echoes a different
+  /// build identity.
+  pub async fn status(
+    &self,
+    context: &KnowledgePublicationContext,
+    canonical: &CanonicalReleasePin,
+    build_id: &PublicationBuildId,
+  ) -> Result<PublicationStatus, KnowledgeReleaseFailure> {
+    let status = self
+      .publication
+      .status(context, canonical, build_id)
+      .await?;
+    if status.build_id != *build_id {
+      return Err(KnowledgeReleaseFailure::IdempotencyConflict);
+    }
+    Ok(status)
+  }
+
+  /// Requests an idempotent legal abort of one non-activated offline publication build.
+  ///
+  /// Activation candidates cannot be aborted, and this operation never deletes immutable
+  /// collections or selects an active or rollback release.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed publication failure when the authority rejects the lifecycle transition,
+  /// cannot complete the request, or echoes a different build identity.
+  pub async fn abort(
+    &self,
+    context: &KnowledgePublicationContext,
+    canonical: &CanonicalReleasePin,
+    build_id: &PublicationBuildId,
+    idempotency_key: &PublicationIdempotencyKey,
+  ) -> Result<PublicationStatus, KnowledgeReleaseFailure> {
+    let fingerprint = PublicationRequestFingerprint::derive("abort", &[build_id.as_str()])
+      .map_err(KnowledgeReleaseFailure::from)?;
+    let status = self
+      .publication
+      .abort(context, canonical, build_id, idempotency_key, &fingerprint)
+      .await?;
+    if status.build_id != *build_id
+      || !matches!(
+        status.state,
+        PublicationBuildState::Aborting | PublicationBuildState::Abandoned
+      )
+    {
+      return Err(KnowledgeReleaseFailure::InvalidLifecycleTransition);
+    }
+    Ok(status)
+  }
+
   /// Executes or safely resumes one node-first build through reconciliation.
   ///
   /// The returned value is only an activation candidate. This service never activates or rolls
@@ -929,11 +986,18 @@ mod tests {
       &self,
       _context: &KnowledgePublicationContext,
       _canonical: &CanonicalReleasePin,
-      _build_id: &PublicationBuildId,
+      build_id: &PublicationBuildId,
       _idempotency_key: &PublicationIdempotencyKey,
-      _fingerprint: &PublicationRequestFingerprint,
+      fingerprint: &PublicationRequestFingerprint,
     ) -> Result<PublicationStatus, KnowledgeReleaseFailure> {
-      unreachable!("abort is an explicit caller operation outside publish")
+      let mut state = self.state.lock().unwrap();
+      state.events.push(format!("abort:{}", fingerprint.as_str()));
+      Ok(PublicationStatus {
+        build_id: build_id.clone(),
+        state: PublicationBuildState::Abandoned,
+        next_node_ordinal: state.next_node,
+        next_edge_ordinal: state.next_edge,
+      })
     }
   }
 
@@ -1586,5 +1650,38 @@ mod tests {
     )
     .await;
     assert_eq!(port.snapshot().candidate_count, 0);
+  }
+
+  #[tokio::test]
+  async fn explicit_status_and_abort_use_only_authoritative_state() {
+    let port = Arc::new(FakePublicationPort::new(FakeState::default()));
+    let service = KnowledgePublicationService::new(port.clone());
+    let plan = plan(2);
+    let build_id = PublicationBuildId::derive(
+      &plan.canonical.release_id,
+      plan.nodes.embedding.payload_schema_version(),
+      &plan.nodes.content_hash,
+      &plan.compatibility.entry_id,
+    )
+    .unwrap();
+    let status = service
+      .status(&context(), &plan.canonical, &build_id)
+      .await
+      .unwrap();
+    assert_eq!(status.state, PublicationBuildState::AcceptingNodes);
+
+    let aborted = service
+      .abort(
+        &context(),
+        &plan.canonical,
+        &build_id,
+        &PublicationIdempotencyKey::parse("abort-offline-r1").unwrap(),
+      )
+      .await
+      .unwrap();
+    assert_eq!(aborted.state, PublicationBuildState::Abandoned);
+    let events = &port.snapshot().events;
+    assert_eq!(events[0], "status");
+    assert!(events[1].starts_with("abort:sha256:"));
   }
 }
