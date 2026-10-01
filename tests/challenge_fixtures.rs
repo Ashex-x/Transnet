@@ -12,6 +12,9 @@ struct ChallengeSet {
   schema_version: String,
   license: String,
   provenance: String,
+  provenance_policy: String,
+  reviewed: bool,
+  contains_production_data: bool,
   cases: Vec<ChallengeCase>,
 }
 
@@ -32,6 +35,12 @@ fn target_challenge_fixture_is_versioned_licensed_and_complete_by_category() {
   assert_eq!(fixture.schema_version, "transnet-challenges-v1");
   assert_eq!(fixture.license, "Apache-2.0");
   assert_eq!(fixture.provenance, "synthetic");
+  assert_eq!(
+    fixture.provenance_policy,
+    "repository_authored_synthetic_only"
+  );
+  assert!(fixture.reviewed);
+  assert!(!fixture.contains_production_data);
   assert!(FIXTURE.len() <= 65_536);
   assert!(!fixture.cases.is_empty() && fixture.cases.len() <= 64);
 

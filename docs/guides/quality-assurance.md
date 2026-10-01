@@ -4,7 +4,7 @@
 
 This guide defines evaluation, release gates, and monitoring for the [Transnet service design](../transnet.md).
 
-Status: proposed; the complete harness and datasets are not implemented.
+Status: partially implemented. The checked-in synthetic semantic challenge set and executable-evidence matrix cover the runtime slices named below; production datasets, external-provider acceptance, migrations, and the complete release harness remain external or incomplete.
 
 ## Versioned evaluation artifacts
 
@@ -44,7 +44,9 @@ Inject MySQL, Qdrant node, Qdrant edge, and model failures; invalid structured o
 
 A release passes only when translation, routing, canonical-card, sense and concept resolution, domain assessment, retrieval, relationship semantics, page composition, evidence, degraded-mode, non-persistence, activation, rollback, schema-compatibility, and injection suites pass. Production monitoring records only aggregate operational outcomes and contains no request content or raw provider bodies.
 
-The checked-in `tests/fixtures/target_challenges_v1.json` foundation is manually reviewed synthetic material, licensed under the repository's Apache-2.0 license, schema-versioned, and covers every required challenge category. Its contract test fixes the license and synthetic provenance markers and rejects unknown fields, missing categories, excessive fixture or case counts, duplicate or unsafe IDs, unsupported language pairs, unbounded content, and malformed or duplicate expected codes. Scenario-specific executable evaluators are added alongside the corresponding target runtime slices; fixture presence alone is never treated as behavioral acceptance.
+The checked-in `tests/fixtures/target_challenges_v1.json` foundation is manually reviewed synthetic material, licensed under the repository's Apache-2.0 license, schema-versioned, and covers routing, translation fidelity, terminology, register, formatting, sense, concept and domain resolution, domain assessment, relationship semantics and selection, path validity, omission, fabrication, culture, and prompt injection. Its contract test fixes the license, reviewed repository-authored synthetic provenance, and explicit absence of production data; it rejects unknown fields, missing categories, excessive fixture or case counts, duplicate or unsafe IDs, unsupported language pairs, unbounded content, and malformed or duplicate expected codes.
+
+`tests/fixtures/target_execution_matrix_v1.json` records the currently executable success and failure evidence. Success rows cover segments, image regions, guidance, live citations, labeled alternatives, and relationship-page projection. Failure rows cover canonical, retrieval, live, and model dependencies; stale releases and partial publication; rate limits, timeouts, cancellation, rollback, observability drops, UDS lifecycle, non-persistence, privacy, and injection isolation. Its strict contract test uses closed suite values, bounded identifiers/seeds/codes, exact category coverage, reviewed Apache-2.0 synthetic provenance, and repository-relative evidence references. Every evidence reference must resolve to a checked-in Rust test function; a fixture row without executable evidence fails the suite. This matrix is status evidence for those named tests, not a claim that production authorities or the complete release harness exist.
 
 ## Related documents
 
