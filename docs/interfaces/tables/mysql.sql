@@ -21,6 +21,26 @@ CREATE DATABASE IF NOT EXISTS island_product
 
 USE transnet_canonical;
 
+-- Applied migration history is owned by the migration runner. A row enters
+-- applying before non-transactional MySQL DDL begins and becomes applied only
+-- after verification succeeds. A remaining applying row blocks later migrations
+-- until an operator follows the documented recovery procedure.
+CREATE TABLE schema_migration (
+  migration_version BIGINT UNSIGNED PRIMARY KEY,
+  migration_name VARCHAR(255) CHARACTER SET ascii NOT NULL,
+  migration_checksum BINARY(32) NOT NULL,
+  state ENUM('applying', 'applied') NOT NULL,
+  runner_version VARCHAR(64) CHARACTER SET ascii NOT NULL,
+  started_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  completed_at TIMESTAMP(6) NULL,
+  execution_milliseconds BIGINT UNSIGNED NULL,
+  UNIQUE KEY uq_schema_migration_name (migration_name),
+  CONSTRAINT ck_schema_migration_completion CHECK (
+    (state = 'applying' AND completed_at IS NULL) OR
+    (state = 'applied' AND completed_at IS NOT NULL)
+  )
+) ENGINE = InnoDB;
+
 -- One row identifies and activates a complete SQL/Qdrant release trio. The
 -- component manifest contains closed, schema-validated component names, versions,
 -- counts, hashes, vector dimensions, and embedding-model versions.
@@ -83,16 +103,27 @@ CREATE TABLE publication_idempotency (
     REFERENCES publication_job (job_id)
 ) ENGINE = InnoDB;
 
--- Source identity is small and independently governed. citation_metadata is
--- versioned because source classes have different citation shapes.
+-- Stable source identity. Rights, citation data, and lifecycle are immutable
+-- revisions below so an old release never observes later source metadata.
 CREATE TABLE canonical_source (
   source_id VARCHAR(128) CHARACTER SET ascii PRIMARY KEY,
   source_class VARCHAR(64) CHARACTER SET ascii NOT NULL,
+  created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+) ENGINE = InnoDB;
+
+CREATE TABLE canonical_source_revision (
+  source_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
+  revision INT UNSIGNED NOT NULL,
   citation_schema_version VARCHAR(64) CHARACTER SET ascii NOT NULL,
   citation_metadata JSON NOT NULL,
   rights_policy VARCHAR(128) CHARACTER SET ascii NOT NULL,
   lifecycle_state ENUM('active', 'restricted', 'withdrawn') NOT NULL,
   content_hash BINARY(32) NOT NULL,
+  PRIMARY KEY (source_id, revision),
+  KEY ix_source_revision_state (lifecycle_state, source_id, revision),
+  CONSTRAINT fk_source_revision_identity FOREIGN KEY (source_id)
+    REFERENCES canonical_source (source_id),
+  CONSTRAINT ck_source_revision_positive CHECK (revision > 0),
   CONSTRAINT ck_source_citation_json CHECK (JSON_VALID(citation_metadata))
 ) ENGINE = InnoDB;
 
@@ -103,17 +134,33 @@ CREATE TABLE evidence_revision (
   evidence_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
   revision INT UNSIGNED NOT NULL,
   source_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
+  source_revision INT UNSIGNED NOT NULL,
   evidence_state ENUM('supported', 'disputed', 'withdrawn') NOT NULL,
   redistribution_policy VARCHAR(128) CHARACTER SET ascii NOT NULL,
   payload_schema_version VARCHAR(64) CHARACTER SET ascii NOT NULL,
   payload JSON NOT NULL,
   content_hash BINARY(32) NOT NULL,
   PRIMARY KEY (evidence_id, revision),
-  KEY ix_evidence_source_state (source_id, evidence_state),
-  CONSTRAINT fk_evidence_source FOREIGN KEY (source_id)
-    REFERENCES canonical_source (source_id),
+  KEY ix_evidence_source_state (source_id, source_revision, evidence_state),
+  CONSTRAINT fk_evidence_source FOREIGN KEY (source_id, source_revision)
+    REFERENCES canonical_source_revision (source_id, revision),
   CONSTRAINT ck_evidence_revision CHECK (revision > 0),
   CONSTRAINT ck_evidence_payload_json CHECK (JSON_VALID(payload))
+) ENGINE = InnoDB;
+
+-- Versioned entity-family registry. Adding a content family is a data publication,
+-- not an ALTER TABLE. The payload defines parent rules, allowed reference roles,
+-- indexed-field requirements, and the closed revision-payload schema.
+CREATE TABLE entity_type_revision (
+  entity_type VARCHAR(64) CHARACTER SET ascii NOT NULL,
+  registry_version INT UNSIGNED NOT NULL,
+  lifecycle_state ENUM('draft', 'approved', 'withdrawn') NOT NULL,
+  payload_schema_version VARCHAR(64) CHARACTER SET ascii NOT NULL,
+  definition JSON NOT NULL,
+  content_hash BINARY(32) NOT NULL,
+  PRIMARY KEY (entity_type, registry_version),
+  CONSTRAINT ck_entity_type_registry_version CHECK (registry_version > 0),
+  CONSTRAINT ck_entity_type_definition_json CHECK (JSON_VALID(definition))
 ) ENGINE = InnoDB;
 
 -- Stable identity shared by lexemes, senses, cards, translations, domains, facts,
@@ -121,7 +168,7 @@ CREATE TABLE evidence_revision (
 -- sense -> lexeme; semantic relationships belong in canonical_relationship.
 CREATE TABLE canonical_entity (
   entity_id VARCHAR(128) CHARACTER SET ascii PRIMARY KEY,
-  entity_type ENUM('lexeme', 'sense', 'basic_card', 'translation', 'domain', 'fact', 'semantic_scale') NOT NULL,
+  entity_type VARCHAR(64) CHARACTER SET ascii NOT NULL,
   parent_entity_id VARCHAR(128) CHARACTER SET ascii NULL,
   created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   KEY ix_canonical_entity_type (entity_type, entity_id),
@@ -144,7 +191,8 @@ CREATE TABLE canonical_entity (
 --   translation: source/target text, unit, fingerprint, dialect/register/scope,
 --                evidence/provenance, rights, selection and review data
 --   domain: labels, definition, scopes, hierarchy, fact families, languages/profile
---   fact: subject, predicate, object/literal, statement, scope and support
+--   fact: relation registry pin, statement, scope, conditions and support;
+--         participant values live only in canonical_assertion_participant
 --   semantic_scale: dimension, direction, conditions, ordered sense-qualified
 --                   members, domains and evidence
 CREATE TABLE canonical_entity_revision (
@@ -170,6 +218,58 @@ CREATE TABLE canonical_entity_revision (
   CONSTRAINT ck_entity_revision_payload_json CHECK (JSON_VALID(payload))
 ) ENGINE = InnoDB;
 
+-- Versioned relation semantics. A release pins the exact registry revision used
+-- to validate direction, inverse projection, symmetry, transitivity, causality,
+-- endpoint roles, and type compatibility. allowed_roles is a closed schema-owned
+-- array and never contains request-derived labels.
+CREATE TABLE relation_type_revision (
+  relation_type VARCHAR(128) CHARACTER SET ascii NOT NULL,
+  registry_version INT UNSIGNED NOT NULL,
+  lifecycle_state ENUM('draft', 'approved', 'withdrawn') NOT NULL,
+  directionality ENUM('directed', 'symmetric') NOT NULL,
+  inverse_relation_type VARCHAR(128) CHARACTER SET ascii NULL,
+  transitivity ENUM('none', 'declared', 'safe_projection') NOT NULL,
+  causal BOOLEAN NOT NULL DEFAULT FALSE,
+  allowed_roles JSON NOT NULL,
+  payload_schema_version VARCHAR(64) CHARACTER SET ascii NOT NULL,
+  content_hash BINARY(32) NOT NULL,
+  PRIMARY KEY (relation_type, registry_version),
+  CONSTRAINT ck_relation_registry_version CHECK (registry_version > 0),
+  CONSTRAINT ck_relation_allowed_roles_json CHECK (JSON_VALID(allowed_roles)),
+  CONSTRAINT ck_relation_symmetric_inverse CHECK (
+    directionality <> 'symmetric' OR inverse_relation_type IS NULL
+  )
+) ENGINE = InnoDB;
+
+-- N-ary participants for fact entities. Exactly one of participant_entity_id or
+-- literal_payload is present. Binary traversal edges below are validated
+-- projections of these authoritative assertion participants.
+CREATE TABLE canonical_assertion_participant (
+  fact_entity_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
+  fact_revision INT UNSIGNED NOT NULL,
+  participant_role VARCHAR(128) CHARACTER SET ascii NOT NULL,
+  participant_ordinal SMALLINT UNSIGNED NOT NULL,
+  participant_entity_id VARCHAR(128) CHARACTER SET ascii NULL,
+  literal_payload JSON NULL,
+  PRIMARY KEY (
+    fact_entity_id, fact_revision, participant_role, participant_ordinal
+  ),
+  KEY ix_assertion_participant_entity (
+    participant_entity_id, participant_role, fact_entity_id, fact_revision
+  ),
+  CONSTRAINT fk_assertion_participant_fact FOREIGN KEY (fact_entity_id, fact_revision)
+    REFERENCES canonical_entity_revision (entity_id, revision),
+  CONSTRAINT fk_assertion_participant_entity FOREIGN KEY (participant_entity_id)
+    REFERENCES canonical_entity (entity_id),
+  CONSTRAINT ck_assertion_participant_value CHECK (
+    (participant_entity_id IS NOT NULL AND literal_payload IS NULL) OR
+    (participant_entity_id IS NULL AND literal_payload IS NOT NULL)
+  ),
+  CONSTRAINT ck_assertion_literal_json CHECK (
+    literal_payload IS NULL OR JSON_VALID(literal_payload)
+  )
+) ENGINE = InnoDB;
+
 -- Stable stored-edge identity. fact_entity_id must name a canonical_entity whose
 -- type is fact; the publication validator enforces that cross-row type constraint.
 CREATE TABLE canonical_relationship (
@@ -192,6 +292,7 @@ CREATE TABLE canonical_relationship_revision (
   source_entity_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
   target_entity_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
   relation_type VARCHAR(128) CHARACTER SET ascii NOT NULL,
+  relation_registry_version INT UNSIGNED NOT NULL,
   direction ENUM('directed', 'symmetric') NOT NULL,
   publication_state ENUM('draft', 'approved', 'withdrawn') NOT NULL,
   verification_state ENUM('verified', 'withdrawn') NOT NULL,
@@ -211,19 +312,24 @@ CREATE TABLE canonical_relationship_revision (
     REFERENCES canonical_entity (entity_id),
   CONSTRAINT fk_relationship_revision_target FOREIGN KEY (target_entity_id)
     REFERENCES canonical_entity (entity_id),
+  CONSTRAINT fk_relationship_relation_type FOREIGN KEY (
+    relation_type, relation_registry_version
+  ) REFERENCES relation_type_revision (relation_type, registry_version),
   CONSTRAINT ck_relationship_version CHECK (relation_version > 0),
   CONSTRAINT ck_relationship_fact_revision CHECK (fact_revision > 0),
   CONSTRAINT ck_relationship_distinct_endpoints CHECK (source_entity_id <> target_entity_id),
   CONSTRAINT ck_relationship_payload_json CHECK (JSON_VALID(payload))
 ) ENGINE = InnoDB;
 
--- One generic membership table pins both entity revisions and relationship
--- versions. MySQL cannot express a polymorphic foreign key; the publication
--- transaction validates member_kind against the corresponding revision table
--- before a release can enter validated or active state.
+-- One generic membership table pins source, evidence, entity-type, entity,
+-- relation-type, and relationship revisions. MySQL cannot express a polymorphic
+-- foreign key; the publication transaction validates member_kind against the
+-- corresponding revision table before a release can enter validated or active state.
 CREATE TABLE release_member (
   release_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
-  member_kind ENUM('entity', 'relationship') NOT NULL,
+  member_kind ENUM(
+    'source', 'evidence', 'entity_type', 'entity', 'relation_type', 'relationship'
+  ) NOT NULL,
   member_id VARCHAR(128) CHARACTER SET ascii NOT NULL,
   member_revision INT UNSIGNED NOT NULL,
   member_type VARCHAR(64) CHARACTER SET ascii NOT NULL,
@@ -250,17 +356,41 @@ CREATE TABLE qdrant_projection_outbox (
   attempt_count SMALLINT UNSIGNED NOT NULL DEFAULT 0,
   available_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   last_attempt_at TIMESTAMP(6) NULL,
+  lease_owner VARCHAR(128) CHARACTER SET ascii NULL,
+  lease_expires_at TIMESTAMP(6) NULL,
   diagnostic_code VARCHAR(128) CHARACTER SET ascii NULL,
   UNIQUE KEY uq_projection_command (
     release_id, point_family, canonical_id, canonical_revision, operation
   ),
   KEY ix_projection_dispatch (state, available_at, command_id),
+  KEY ix_projection_reclaim (state, lease_expires_at, command_id),
   CONSTRAINT fk_projection_release FOREIGN KEY (release_id)
     REFERENCES content_release (release_id),
-  CONSTRAINT ck_projection_revision CHECK (canonical_revision > 0)
+  CONSTRAINT ck_projection_revision CHECK (canonical_revision > 0),
+  CONSTRAINT ck_projection_lease CHECK (
+    (state = 'processing' AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL) OR
+    (state <> 'processing' AND lease_owner IS NULL AND lease_expires_at IS NULL)
+  )
 ) ENGINE = InnoDB;
 
 USE island_product;
+
+-- Product data has an independent migration history and deployment cadence.
+CREATE TABLE schema_migration (
+  migration_version BIGINT UNSIGNED PRIMARY KEY,
+  migration_name VARCHAR(255) CHARACTER SET ascii NOT NULL,
+  migration_checksum BINARY(32) NOT NULL,
+  state ENUM('applying', 'applied') NOT NULL,
+  runner_version VARCHAR(64) CHARACTER SET ascii NOT NULL,
+  started_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  completed_at TIMESTAMP(6) NULL,
+  execution_milliseconds BIGINT UNSIGNED NULL,
+  UNIQUE KEY uq_schema_migration_name (migration_name),
+  CONSTRAINT ck_schema_migration_completion CHECK (
+    (state = 'applying' AND completed_at IS NULL) OR
+    (state = 'applied' AND completed_at IS NOT NULL)
+  )
+) ENGINE = InnoDB;
 
 -- Append-only judgment events. No raw user identifier or free-form moderation text
 -- is allowed. Idempotent replay returns this row; a fingerprint mismatch conflicts.
@@ -278,6 +408,9 @@ CREATE TABLE relationship_judgment_event (
   recorded_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   UNIQUE KEY uq_judgment_idempotency (
     principal_ref, route_scope, idempotency_key_digest
+  ),
+  UNIQUE KEY uq_judgment_event_target (
+    event_id, principal_ref, content_release, edge_id, relation_version
   ),
   KEY ix_judgment_target_time (
     content_release, edge_id, relation_version, recorded_at
@@ -318,13 +451,17 @@ CREATE TABLE relationship_judgment_current (
   KEY ix_current_aggregate (
     content_release, edge_id, relation_version, moderation_state, judgment
   ),
-  CONSTRAINT fk_current_latest_event FOREIGN KEY (latest_event_id)
-    REFERENCES relationship_judgment_event (event_id),
+  CONSTRAINT fk_current_latest_event FOREIGN KEY (
+    latest_event_id, principal_ref, content_release, edge_id, relation_version
+  ) REFERENCES relationship_judgment_event (
+    event_id, principal_ref, content_release, edge_id, relation_version
+  ),
   CONSTRAINT ck_current_projection_version CHECK (projection_version > 0)
 ) ENGINE = InnoDB;
 
--- One row identifies an immutable anonymous aggregate batch. active_slot enforces
--- that graph reads can resolve only one complete active snapshot.
+-- One row identifies an immutable anonymous aggregate batch. Algorithm and privacy
+-- threshold are versioned data so future policies do not require DDL. active_slot
+-- enforces that graph reads can resolve only one complete active snapshot.
 CREATE TABLE relationship_aggregate_release (
   aggregate_version VARCHAR(128) CHARACTER SET ascii PRIMARY KEY,
   lifecycle_state ENUM('staged', 'active', 'retired') NOT NULL,
@@ -333,6 +470,7 @@ CREATE TABLE relationship_aggregate_release (
   ) STORED,
   policy_version VARCHAR(64) CHARACTER SET ascii NOT NULL,
   algorithm_version VARCHAR(64) CHARACTER SET ascii NOT NULL,
+  minimum_group_size INT UNSIGNED NOT NULL,
   source_window_end TIMESTAMP(6) NOT NULL,
   row_count BIGINT UNSIGNED NOT NULL,
   content_hash BINARY(32) NOT NULL,
@@ -341,19 +479,19 @@ CREATE TABLE relationship_aggregate_release (
   activated_at TIMESTAMP(6) NULL,
   UNIQUE KEY uq_aggregate_release_active (active_slot),
   UNIQUE KEY uq_aggregate_release_hash (content_hash),
+  UNIQUE KEY uq_aggregate_minimum_group (aggregate_version, minimum_group_size),
   CONSTRAINT fk_aggregate_predecessor FOREIGN KEY (predecessor_version)
     REFERENCES relationship_aggregate_release (aggregate_version),
-  CONSTRAINT ck_aggregate_algorithm CHECK (
-    algorithm_version = 'relationship-distance-v1'
-  ),
+  CONSTRAINT ck_aggregate_minimum_group CHECK (minimum_group_size > 0),
   CONSTRAINT ck_aggregate_activation CHECK (
     lifecycle_state <> 'active' OR activated_at IS NOT NULL
   )
 ) ENGINE = InnoDB;
 
 -- Counts and their derived distance are one immutable projection because they have
--- identical keys and lifecycle. Rows below the privacy threshold are retained only
--- inside island-port and are never returned to Transnet.
+-- identical keys and lifecycle. minimum_group_size is copied from the aggregate
+-- release and protected by the composite foreign key. Rows below the privacy
+-- threshold are retained only inside island-port and are never returned to Transnet.
 CREATE TABLE relationship_assessment_projection (
   aggregate_version VARCHAR(128) CHARACTER SET ascii NOT NULL,
   content_release VARCHAR(128) CHARACTER SET ascii NOT NULL,
@@ -361,6 +499,7 @@ CREATE TABLE relationship_assessment_projection (
   relation_version INT UNSIGNED NOT NULL,
   eligible_confirm_count INT UNSIGNED NOT NULL,
   eligible_challenge_count INT UNSIGNED NOT NULL,
+  minimum_group_size INT UNSIGNED NOT NULL,
   threshold_state ENUM('below_threshold', 'eligible') NOT NULL,
   base_distance_basis_points SMALLINT UNSIGNED NOT NULL,
   adjustment_basis_points SMALLINT NOT NULL,
@@ -369,28 +508,23 @@ CREATE TABLE relationship_assessment_projection (
   PRIMARY KEY (aggregate_version, content_release, edge_id, relation_version),
   KEY ix_assessment_target (content_release, edge_id, relation_version),
   KEY ix_assessment_rank (aggregate_version, effective_distance_basis_points),
-  CONSTRAINT fk_assessment_release FOREIGN KEY (aggregate_version)
-    REFERENCES relationship_aggregate_release (aggregate_version),
+  CONSTRAINT fk_assessment_release FOREIGN KEY (
+    aggregate_version, minimum_group_size
+  ) REFERENCES relationship_aggregate_release (
+    aggregate_version, minimum_group_size
+  ),
   CONSTRAINT ck_assessment_relation_version CHECK (relation_version > 0),
   CONSTRAINT ck_assessment_threshold CHECK (
     (threshold_state = 'eligible' AND
-      eligible_confirm_count + eligible_challenge_count >= 5) OR
+      eligible_confirm_count + eligible_challenge_count >= minimum_group_size) OR
     (threshold_state = 'below_threshold' AND
-      eligible_confirm_count + eligible_challenge_count < 5)
+      eligible_confirm_count + eligible_challenge_count < minimum_group_size)
   ),
+  CONSTRAINT ck_assessment_minimum_group CHECK (minimum_group_size > 0),
   CONSTRAINT ck_assessment_base CHECK (
     base_distance_basis_points BETWEEN 0 AND 10000
   ),
-  CONSTRAINT ck_assessment_adjustment CHECK (
-    adjustment_basis_points BETWEEN -1500 AND 1500
-  ),
   CONSTRAINT ck_assessment_effective CHECK (
     effective_distance_basis_points BETWEEN 0 AND 10000
-  ),
-  CONSTRAINT ck_assessment_formula CHECK (
-    effective_distance_basis_points = LEAST(
-      10000,
-      GREATEST(0, base_distance_basis_points - adjustment_basis_points)
-    )
   )
 ) ENGINE = InnoDB;

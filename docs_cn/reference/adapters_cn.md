@@ -6,7 +6,9 @@ Adapter 模块实现模型与数据 port。它负责外部协议机制，同时�
 
 ## 模型 provider
 
-共享 OpenAI-compatible client 负责 HTTP 构造、认证、响应大小限制、严格结构化输出解码、安全错误映射与容错集成。Gemma 4 负责短文本及有界结构化组织请求策略；TranslateGemma 负责较长连续文本策略。当前运行时在 translation.long_text_chars 处选择两者。
+目标 OpenAI-compatible 生成 adapter 负责单个 Gemma4-27B VLM 的 HTTP 构造、认证、响应大小限制、图片编码、严格结构化输出解码、安全错误映射与容错集成。它把 domain-neutral `fast` 与 `reasoning` profile 映射到 provider 设置，而不暴露 provider-native reasoning 字段。独立 embedding adapter 服务于离线规范发布与在线临时候选提名。
+
+当前运行时仍在 `translation.long_text_chars` 处选择 Gemma 4 或 TranslateGemma。这是过渡期已实现行为，不是目标 provider 拓扑。后续运行时切片将移除第二个生成模型，并通过 application 自有分块在同一 VLM 上处理长输入。
 
 Provider adapter 绝不记录 prompt、源文本、历史、provider body、凭据或生成内容。错误只暴露闭合依赖与操作分类。
 
@@ -24,11 +26,11 @@ Stage 4 在同一出站 transport 中增加 active canonical release 读取。�
 
 Publication adapter 是复用同一可注入 transport 的独立 outbound-only client。私有 strict DTO 把 `KnowledgePublicationPort` operation 映射到 `knowledge-publication-v1` 的 begin、node/edge batch、freeze、reconcile、status 与 abort call。其纯 node/edge batch inspection 与最终 send 使用同一套 DTO/JSON/base64 serializer；inspection 不执行 transport I/O，并为最大合法 request-ID/deadline representation 预留空间，send 则再次执行 1 MiB 防御性校验。它还强制校验 request/deadline/release 回显、256-point bound、256 KiB control/response bound、闭合 outcome/code 组合、精确 execution receipt 和 cross-artifact hash。Fake transport test 在不增加 Qdrant/MySQL driver、island-port server、embedding execution、activation 或 runtime handler wiring 的情况下验证该合同。
 
-对应 island-port server 位于本仓库之外，必须同步实现 `interfaces/mysql.md` 中的当前 delta。在 peer 升级之前，不兼容或不完整响应会 fail closed，且不能声称真实 island-port/MySQL E2E 已验证。
+对应 island-port server 位于本仓库之外，必须同步实现 `interfaces/canonical-data.md` 中的当前 delta。在 peer 升级之前，不兼容或不完整响应会 fail closed，且不能声称真实 island-port/MySQL E2E 已验证。
 
 结构化与向量映射保留发布标识符与闭合结果。Island-port 负责 MySQL 和 Qdrant driver、查询、连接池、事务、collection 选择与凭据。Transnet 不暴露 SQL 或 Qdrant-native 请求。文件系统权限认证进程；JSON 绝不转发终端用户身份或凭据。
 
-在线 adapter 只读。单独授权的 publisher 组合使用可变更操作。精确 payload 保留在 [SQL](../interfaces/mysql_cn.md) 与[向量](../interfaces/qdrant_cn.md)接口。
+在线 adapter 只读。单独授权的 publisher 组合使用可变更操作。精确 payload 保留在[规范数据](../interfaces/canonical-data_cn.md)与[检索数据](../interfaces/retrieval-data_cn.md)接口。
 
 ## 验证
 

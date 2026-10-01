@@ -2,121 +2,75 @@
 
 English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
-本合同定义 island-port 如何向 Transnet 请求翻译与关系知识，并获得构建客户端响应所需的信息。它是内部服务接口，不是面向互联网的 WebUI API。Island-port 负责客户端 HTTPS/WSS 传输、认证、用户数据、个性化、响应合并和最终公开响应。Transnet 不接收终端用户身份或用户所属状态。
+本合同定义目标 island-port 到 Transnet 接口及内部共享 HTTP/1.1-over-UDS 规则。Island-port 负责互联网传输、认证、用户状态、文件接入、文档重建和最终展示。Transnet 不接收终端用户身份，也不持久化实时请求内容。
 
-本文档同时定义所有涉及 Transnet 的内部进程边界共享的传输合同，适用于 island-port、Transnet、发布工具和部署工具。
-
-状态：目标合同，并明确标注当前运行时覆盖范围。当前运行时仍使用过渡性回环 HTTP；统一翻译、BasicCard lookup 与固定发布 sense follow-up 已完成组合。目标入站 UDS、外部 island-port/MySQL 实现与生产验收，以及后续向量/关系能力仍未完成。
-
-
-当前过渡性运行时在处理器分派前强制执行无状态边界。它拒绝 Cookie、Cookie2、Authorization、Proxy-Authorization、X-API-Key、Lookup-Capability、Remote-User、X-Authenticated-User、X-Forwarded-User，以及 X-User-*、X-Learner-*、X-Account-*、X-Owner-*、X-Session-* 请求头，且不回显其值。只有现有图查询路由接受严格解析的查询参数；其他路由拒绝查询字符串。边界错误返回 HTTP 400、`invalid_service_request` 问题码和请求 ID。响应携带 `Cache-Control: no-store`。出站模型 Provider 凭据与入站终端用户凭据保持分离。
-
-当前 `POST /translate` 仅接受 `text`、`source_lang`、`target_lang`。回环运行时也暴露下文定义的统一 `POST /api/v1/translations` 请求与响应合同；迁移到目标 UDS listener 仍未实现。当前 `POST /v1/lookups` 接受 `query`、`source_language`、`target_language`、`context`、`explanation_language`、`english_dialect`、`detail` 和 `include`；目标语言仍限 `en`，详情仍为 `brief` 或 `full`，include 仅接受 `relations` 与 `word_history`。包括 `learner_level` 在内的未知字段会被拒绝，`practice_preview` 也会被拒绝。查询任务轮询路由及可复用的学习者、练习、私有反馈、保存布局、持久请求任务模块已经移除。
-
-规范查询对每个请求执行发布固定读取，不包含查询快照缓存、查询指纹或持久化依赖。保留的拓扑缓存仅保存按规范节点身份和发布元数据索引的规范图数据。规范发音与用法易错点仍属于词汇内容，不属于语音训练或个人学习者状态。
+状态：修订后的目标 v1 合同。仓库中的可执行文件仍使用回环 HTTP，且只实现已记录的过渡期翻译、BasicCard、固定发布 sense 与旧 graph 切片。结构化 segment、image region、capability、实时检索、目标入站 UDS、引导式知识视图和知识路径，必须等 handler、组合、测试与文档共同落地后才算已实现。
 
 ## 目录
 
-- [Transnet 服务接口](#transnet-服务接口)
-  - [目录](#目录)
-  - [连接合同](#连接合同)
-  - [HTTP 与 JSON 规则](#http-与-json-规则)
-  - [Deadline、限制与生命周期](#deadline限制与生命周期)
-  - [示例](#示例)
-  - [服务边界](#服务边界)
-  - [共享线上规则](#共享线上规则)
-  - [简单翻译请求](#简单翻译请求)
-  - [请求级翻译历史](#请求级翻译历史)
-  - [共享翻译结果](#共享翻译结果)
-  - [响应级别](#响应级别)
-  - [翻译持久化](#翻译持久化)
-  - [关系评估元数据](#关系评估元数据)
-  - [POST /api/v1/health](#post-apiv1health)
-  - [POST /api/v1/livez](#post-apiv1livez)
-  - [POST /api/v1/readyz](#post-apiv1readyz)
-  - [POST /api/v1/translations](#post-apiv1translations)
-  - [POST /api/v1/basic-cards/lookup](#post-apiv1basic-cardslookup)
-  - [POST /api/v1/senses/get](#post-apiv1sensesget)
-  - [POST /api/v1/graph/get](#post-apiv1graphget)
-  - [POST /api/v1/graph/neighbors](#post-apiv1graphneighbors)
-  - [相关文档](#相关文档)
+- [连接与线上规则](#连接与线上规则)
+- [隐私与请求生命周期](#隐私与请求生命周期)
+- [Deadline 与调用预算](#deadline-与调用预算)
+- [成功与错误 envelope](#成功与错误-envelope)
+- [翻译输入](#翻译输入)
+- [专业 guidance](#专业-guidance)
+- [翻译输出](#翻译输出)
+- [实时检索](#实时检索)
+- [知识视图](#知识视图)
+- [POST /api/v1/capabilities](#post-apiv1capabilities)
+- [POST /api/v1/health](#post-apiv1health)
+- [POST /api/v1/livez](#post-apiv1livez)
+- [POST /api/v1/readyz](#post-apiv1readyz)
+- [POST /api/v1/translations](#post-apiv1translations)
+- [POST /api/v1/basic-cards/lookup](#post-apiv1basic-cardslookup)
+- [POST /api/v1/senses/get](#post-apiv1sensesget)
+- [POST /api/v1/knowledge/views](#post-apiv1knowledgeviews)
+- [POST /api/v1/knowledge/paths](#post-apiv1knowledgepaths)
+- [相关文档](#相关文档)
 
-## 连接合同
+## 连接与线上规则
 
-所有涉及 Transnet 的内部接口均使用 Unix 域流套接字（UDS）上的 HTTP/1.1。TCP listener、主机名和端口号不属于这些内部合同。Island-port 通过 `/run/transnet/transnet.sock` 调用 Transnet；Transnet 通过 `/run/island-port/island-port.sock` 调用 island-port 的结构化、向量与图 endpoint。部署可通过配置迁移套接字，但 endpoint 路径和 payload schema 不变。客户端到 island-port 的流量不受本 UDS 规则约束，而使用 island-port 的公开 HTTPS/WSS 合同。
+Transnet 监听 `/run/transnet/transnet.sock`；Transnet 数据 adapter 调用 `/run/island-port/island-port.sock`。部署可以通过配置迁移 socket，但 endpoint 路径和 payload 不变。Socket owner 创建父目录，只在证明旧 socket 不活动后移除它，以 `0660` 模式绑定，并依赖文件系统 workload identity，而不是转发的用户 header。
 
-套接字所属进程创建父目录；仅在确认无活跃 listener 后删除自己的陈旧套接字；以 `0660` 模式绑定并使用专用服务账户运行。配置的用户组授予调用权限，套接字目录权限防止路径替换。服务拒绝从 TCP 转发的请求，也不信任客户端提供的身份 header。
+每个操作使用 HTTP/1.1、origin-form `/api/v1/...` 路径、`Host: localhost`、UTF-8 JSON 与 `POST`。空输入为 `{}`。Client 发送 `Content-Type: application/json`、`Accept: application/json`、有界 `Content-Length` 和可选 `X-Request-Id`。拒绝 query string、chunked request body、multipart body、upgrade 与响应 streaming。Server 拒绝未知 JSON 字段，并返回 `X-Request-Id` 与 `Cache-Control: no-store`。
 
-在单机环境中，套接字所有权用于认证调用工作负载。这些 Transnet 与数据库 port 接口仅支持 UDS，不向互联网客户端暴露。
+默认 body 上限为 1 MiB。含 inline 图片的翻译请求可使用该路由专属 12 MiB 编码 body 上限。最多接受四张解码图片，每张不超过 2 MiB 或 4096 × 4096 像素；整个请求最多十六个 region。支持 `image/png`、`image/jpeg` 与 `image/webp`。
 
-```mermaid
-flowchart LR
-  client["WebUI / 互联网客户端"] -->|"HTTPS 或 WSS"| port["island-port"]
-  port -->|"Transnet socket：api/v1"| transnet["Transnet"]
-  transnet -->|"island-port socket：api/v1"| port
-  port --> database["MySQL / Qdrant"]
-  port -->|"将 Transnet 结果与用户数据合并"| client
-```
+ID 是不透明 URL-safe 字符串。时间戳为 UTC RFC 3339 微秒精度。语言值是 capability 公布的规范 BCP 47 tag；`auto` 只允许用于源语言。
 
-## HTTP 与 JSON 规则
+## 隐私与请求生命周期
 
-请求使用 HTTP/1.1 origin-form 路径及 `Host: localhost`；Host 值不参与路由。请求与响应 body 均为 UTF-8 JSON，并设置 `Content-Type: application/json`。包括读取与探针在内的所有操作均使用 `POST` 并携带一个 JSON object；空输入为 `{}`。拒绝 query string、表单、multipart body、协议升级和流式响应。
+Transnet 不接受用户、学习者、账户、owner、session、cookie、bearer token、画像、偏好、保存状态、掌握状态或持久历史。Island-port 可以发送当前文本、有界 inline 图片、专业 guidance 及按时间排序的最小历史翻译，作为请求级语言上下文。
 
-所有内部 HTTP 接口统一使用 `/api/v1/...` 前缀。所属服务由连接的 UDS 而非路径片段标识：`/run/transnet/transnet.sock` 上的请求使用本文定义的 Transnet 路由；`/run/island-port/island-port.sock` 上的请求使用各自合同定义的结构化数据或向量数据路由。同一套接字上的资源名称用于区分路由域。统一版本前缀可使客户端保持一致，并避免在线上 API 中暴露存储技术名称。
+文本、segment、图片、protected range、术语、历史、规范化形式、chunk plan、provider 输入输出、隐藏 reasoning、实时搜索 query 与结果、推断解释及在线 embedding 只在请求内存在。它们绝不进入 MySQL、Qdrant、日志、trace、指标、cache、持久队列、备份、发布候选或后续训练数据。
 
-客户端发送 `Accept: application/json`、有界 `Content-Length`，并可发送 `X-Request-Id`。拒绝 chunked request body。服务端返回 `X-Request-Id`，拒绝未知 JSON 字段，并在有界请求数后关闭连接。ID 为不透明 URL-safe 字符串；时间为 UTC RFC 3339 微秒精度。
+规范内容只能通过经认证的离线发布工作流进入存储。实时结果绝不自行发布。产品自有保存、编辑、反馈与文档状态保留在 island-port。
 
-应用成功与错误 schema 由各接口合同定义。HTTP status 表示传输级接收结果；数据操作还可在 JSON 中返回其文档定义的闭合 outcome。Island-port 在两个方向上传播 request ID，但绝不向 Transnet 转发用户身份或用户所属状态。格式错误 JSON、不支持的媒体类型、未知 endpoint 或不支持的方法会在应用分派前失败。
+## Deadline 与调用预算
 
-## Deadline、限制与生命周期
+一个调用方 deadline 覆盖完整操作。规范读取、embedding、生成与经许可实时检索获得受剩余时间限制的子 deadline，且不能延长请求。
 
-内部数据请求在文档定义的 request context 中携带 `deadline_at`。公开 Transnet 请求继承服务端的有界 deadline，除非 endpoint schema 明确接受该字段。接收方拒绝已过期 deadline，调用下游时不得延长。所属合同会明确可重试操作；变更重试必须携带幂等键。
+足够的规范命中使用零次生成调用。普通翻译、视觉读取、分类与 grounded composition 使用 Gemma4-27B `fast` profile。长输入在同一模型上使用有界语义 chunk、有界并行 fast 调用、一个请求级术语台账与确定性重组。
 
-默认最大 body 为 1,048,576 字节，除非 endpoint 规定更小限制。服务端限制响应大小、并发、解析时间和连接寿命。优雅停机时停止接受新连接，在 deadline 内完成已接收请求，关闭 listener，随后 unlink 自己的套接字。
+一个请求最多使用一次 `reasoning` profile，仅用于无法消除的重要歧义、冲突术语或格式约束、fast composition 无法安全表达的已验证多跳解释，或一次无效结构化 fast 结果。输入长度本身绝不触发 reasoning。隐藏 reasoning 绝不返回。精确策略由[模型运行时参考](../reference/model-runtime_cn.md)负责。
 
-日志和指标不得包含请求 body、响应 body、规范文本、向量、凭据或套接字 peer 细节。可观测性可以记录 request ID、静态 endpoint 模板、outcome 类别、字节数和耗时。
+## 成功与错误 envelope
 
-## 示例
-
-以下调用使用 curl 的 Unix socket 支持；URL host 只是占位符，不会建立 TCP 连接。
-
-```bash
-curl --unix-socket /run/transnet/transnet.sock \
-  --request POST http://localhost/api/v1/health \
-  --header 'content-type: application/json' \
-  --header 'accept: application/json' \
-  --data '{}'
-```
-
-本文档是 Transnet 的主接口合同。Transnet 是共享、无用户状态的翻译与关系知识服务：翻译连续文本，并围绕一个或多个实质合理的词汇词义或领域概念构建有界的含义专属详情。调用产品负责其用户、私有状态和展示工作流。
-
-状态：目标服务合同。当前运行时仍使用过渡性回环 TCP listener 和旧路径；运行时可用性以本文档说明为准。
-
-## 服务边界
-
-Transnet 不接受用户 ID、学习者 ID、账户 ID、Cookie、终端用户 Bearer token、画像、偏好集合、保存项目状态、掌握度状态或持久个人历史记录。它只接受 island-port 选择的最小先前翻译 turn 作为请求级语言上下文。学习画像、课程、练习、掌握度、复习日程、辅导、进度追踪、写作评估、语音和发音都不是 Transnet 模块。
-
-当前文本与翻译历史是请求载荷，不是用户记录。它们只能在有界请求生命周期内存在于内存中，绝不能写入 MySQL、Qdrant、日志、指标、trace、缓存或持久队列。Island-port 负责历史选择及响应与终端用户之间的所有关联。
-
-Transnet 默认仅通过 `/run/transnet/transnet.sock` 上的 HTTP/1.1 提供服务，不绑定 TCP 端口，也不终止 TLS。文件系统所有权认证本地调用服务而非终端用户。跨主机网关认证远程调用方并通过本地套接字连接。
-
-## 共享线上规则
-
-请求和响应均使用 JSON。每个响应返回 `X-Request-Id`。时间为 UTC RFC 3339 微秒精度；ID 为不透明 URL-safe 字符串，客户端不得推断类型或顺序。未知请求字段会被拒绝。
-
-成功应用响应使用 `data` 和 `meta`。`meta.request_id` 与响应头一致；规范读取还会返回用于应答的不可变内容发布。
+成功使用 `data` 与 `meta`。`meta.request_id` 与响应 header 一致。可选 metadata 只在对应组件实际参与时出现。
 
 ```json
 {
   "data": {},
   "meta": {
     "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
-    "content_release": "knowledge-2026-09"
+    "schema_version": "translation-result-v1",
+    "inference_profiles": ["fast"],
+    "reasoning_escalated": false
   }
 }
 ```
 
-错误使用统一安全的 RFC 9457-style problem envelope，`Content-Type` 为 `application/problem+json`，绝不回显请求文本、上下文、凭据、provider body、向量、prompt 或存储内部信息。`request_id` 与 `X-Request-Id` 响应头一致；没有字段级诊断时，`errors` 为空数组。
+错误使用 `application/problem+json`，绝不回显私有内容，并拒绝未知字段。
 
 ```json
 {
@@ -127,597 +81,268 @@ Transnet 默认仅通过 `/run/transnet/transnet.sock` 上的 HTTP/1.1 提供服
   "detail": "One or more translation fields are invalid.",
   "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX",
   "retryable": false,
-  "errors": [
-    {
-      "field": "target_language",
-      "message": "must be one of `en` or `zh-CN`."
-    }
-  ]
+  "errors": [{"field": "target_language", "message": "is not supported by this deployment."}]
 }
 ```
 
-常见状态码为：`400` JSON 格式错误或未知字段，`401` 部署认证失败，`404` 未知规范资源，`409` 发布冲突，`413` 请求体过大，`422` 语义输入无效，`429` 有界容量限制，`502` provider 结果无效，`503` 必需依赖不可用，`504` 超时。
+公共状态包括：`400` 畸形 JSON 或未知字段、`401` workload 认证失败、`404` 未知规范资源、`409` 固定发布不可用、`413` body 过大、`415` 不支持的图片类型、`422` 无效语义输入、`429` 有界容量、`502` 无效依赖结果、`503` 必需依赖不可用，以及 `504` deadline 过期。
 
-## 简单翻译请求
+## 翻译输入
 
-易用性是合同要求。WebUI 只要求文本、源语言、目标语言和响应级别，不要求用户选择翻译或查询、领域、方言、受众、目的、语域、格式策略、检索过滤器或模型。Island-port 转发相同四个字段，并可添加请求级历史；其他决定均由 Transnet 自动推导。
+`input` 是 tagged union。`text` 是最简单的默认输入。
 
 ```json
 {
-  "text": "What does ‘hot’ mean here?",
+  "input": {"type": "text", "text": "The launch date is still up in the air."},
   "source_language": "auto",
   "target_language": "zh-CN",
   "response_level": "standard"
 }
 ```
 
-初始版本中，`source_language` 只接受 `auto`、`en` 或 `zh-CN`，`target_language` 只接受 `en` 或 `zh-CN`。WebUI 可显示“中文”或“CN”，但线上值使用有效语言标签 `zh-CN`。`response_level` 只接受 `brief`、`standard` 或 `full`。Island-port 在调用 Transnet 前校验这些闭合值，Transnet 再次校验。
-
-## 请求级翻译历史
-
-Island-port 可添加 `history` 以支持多轮翻译。数组按时间从旧到新排列，每项只包含先前源文本、译文及其语言。合同不限制项目数量：island-port 负责选择、截断与发送数量。通用最大请求 body 仍适用，因此“无限”表示没有独立历史条数上限，而不是 HTTP body 无界。
+结构化文档与 localization 输入使用有序 segment。Segment ID 属于请求级并原样返回。`role` 接受 `title`、`paragraph`、`list_item`、`caption`、`ui` 或 `subtitle`；`format` 接受 `plain`、`markdown` 或 `html`。Protected range 使用从零开始的 Unicode scalar offset，start 包含、end 不包含，不得重叠，并必须精确复现。
 
 ```json
 {
-  "text": "Make that more natural.",
+  "input": {
+    "type": "segments",
+    "segments": [
+      {
+        "segment_id": "seg_title",
+        "text": "Launch {product_name}",
+        "role": "title",
+        "format": "plain",
+        "protected_ranges": [{"start": 7, "end": 21}]
+      }
+    ]
+  },
   "source_language": "en",
   "target_language": "zh-CN",
-  "response_level": "standard",
-  "history": [
+  "response_level": "standard"
+}
+```
+
+视觉输入包含经清理的 inline 图片与归一化矩形。坐标是 0 至 1 的有限十进制值，从左上角测量。每个 region ID 在所属图片内唯一；矩形必须具有正面积且位于边界内；`reading_order` 恰好引用每个 region 一次。若涉及文件或 PDF，island-port 在请求前完成渲染与选页。
+
+```json
+{
+  "input": {
+    "type": "image_regions",
+    "images": [
+      {
+        "image_id": "page_1",
+        "media_type": "image/png",
+        "data": "<base64-encoded PNG>",
+        "regions": [
+          {"region_id": "heading", "x": 0.05, "y": 0.06, "width": 0.9, "height": 0.12}
+        ]
+      }
+    ],
+    "reading_order": ["page_1:heading"]
+  },
+  "source_language": "auto",
+  "target_language": "en",
+  "response_level": "standard"
+}
+```
+
+文本最多 131,072 个 Unicode scalar。Segment 输入最多 256 项，每项 8,192 scalar，总计 131,072 scalar。每个 segment 最多 128 个 protected range。这些限制仍受编码 body 上限约束。
+
+`history` 可选并按时间排序。每项只包含先前源文本、译文与语言 tag，不含 turn ID、时间、用户 ID、反馈、模型 metadata 或保存状态。公共 body 上限约束 history，不另设项目数上限。
+
+## 专业 guidance
+
+`guidance` 可选且仅属于当前请求。省略时分别使用 `general`、`general`、`preserve`、零个 alternative、response-level 默认 annotation 与 `offline` freshness。
+
+```json
+{
+  "purpose": "technical",
+  "audience": "specialist",
+  "register": "preserve",
+  "terminology": [
+    {"source": "torque", "target": "扭矩", "policy": "required"}
+  ],
+  "max_alternatives": 1,
+  "annotations": ["ambiguity", "terminology", "register", "culture"],
+  "freshness": "offline"
+}
+```
+
+`purpose` 接受 `general`、`publication`、`technical`、`localization` 或 `subtitles`。`audience` 接受 `general`、`professional`、`specialist` 或 `young_reader`。`register` 接受 `preserve`、`neutral`、`formal` 或 `informal`。术语 policy 接受 `required`、`preferred` 或 `forbidden`；最多 128 项，source 与 target 各不超过 256 scalar。`max_alternatives` 为 0 至 2。
+
+Guidance 约束当前结果，但绝不创建画像、翻译记忆或规范术语。互相矛盾的 required term、protected range 或格式规则返回 `422 constraint_conflict`，而不是静默丢弃约束。
+
+## 翻译输出
+
+文本输出保留现有按含义区分的有序翻译列表。Segment 与 image-region 输出保留请求顺序与 ID。每个 unit 有一个主译文及不超过请求数量且实质有用的 alternative。
+
+```json
+{
+  "translation": {
+    "input_type": "segments",
+    "detected_source_languages": ["en"],
+    "segments": [
+      {
+        "segment_id": "seg_title",
+        "translations": [{"text": "发布 {product_name}", "language": "zh-CN"}],
+        "annotations": [
+          {"type": "terminology", "code": "protected_content_preserved", "message": "Protected content was copied unchanged."}
+        ],
+        "review": {"state": "clean", "issues": []}
+      }
+    ],
+    "terminology_decisions": []
+  }
+}
+```
+
+图片输出使用含 `image_id`、`region_id`、检测语言、翻译、annotation 与 review 的 `regions`。它不返回图片或无限制 OCR transcript。Review state 为 `clean` 或 `review_recommended`；闭合 issue code 包括 `low_confidence`、`source_ambiguous`、`terminology_conflict`、`format_risk`、`protected_content_mismatch`、`visual_order_uncertain` 与 `live_source_incomplete`。
+
+`brief`、`standard` 与 `full` 是一个已验证超集的确定性投影。较低级别移除支持详情，但绝不改变所选含义、译文、protected content、证据状态或 review outcome。空分区省略。
+
+## 实时检索
+
+`guidance.freshness` 接受 `offline`、`allowed` 或 `required`。`offline` 是默认值并禁止网络检索。`allowed` 是显式许可，只在确定性分类发现时效性 claim 时检索。`required` 始终尝试检索；若有界操作无法安全完成，返回 `503 live_retrieval_unavailable`。
+
+实时检索是受编排的 search/fetch port，不是无限制模型浏览。它最多执行一轮搜索、选择五个结果、并发抓取三个页面，并遵守配置的子 deadline。Fetcher 只允许公开 HTTP(S)，解析并校验每次 redirect，拒绝 loopback、link-local、私有、保留及 Unix-socket 目标，限制响应 byte，并只接受配置的文本 media type。
+
+抓取内容是不可信数据。它不能修改系统指令、请求其他 URL、泄露凭据、绕过发布 filter 或成为规范证据。Embedding 模型可在内存中排序抓取片段；片段与向量均随请求丢弃。
+
+基于实时检索的 claim 引用响应级 source。实时 source 标记为 `live_external`，而不是 `verified`。
+
+```json
+{
+  "external_sources": [
     {
-      "source_text": "The launch date is still up in the air.",
-      "translated_text": "发布日期仍未确定。",
-      "source_language": "en",
-      "target_language": "zh-CN"
+      "source_id": "live_1",
+      "title": "Example current terminology notice",
+      "publisher": "Example standards body",
+      "url": "https://example.org/notices/current-term",
+      "published_at": "2026-09-20T00:00:00.000000Z",
+      "retrieved_at": "2026-10-01T08:00:00.000000Z",
+      "evidence_state": "live_external"
     }
   ]
 }
 ```
 
-历史是语言上下文，不是被存储的历史记录。它不含 turn ID、时间、用户 ID、反馈、偏好、领域标签、模型元数据或保存状态。Transnet 只将其用于指代解析、术语一致、语气连续和后续指令，并在当前请求结束后丢弃；响应绝不逐字返回历史。
+## 知识视图
 
-## 共享翻译结果
+规范知识是证据支持的 assertion graph。知识树是通过某个 lens 生成的确定性 root-specific 投影，绝不作为规范 parentage 存储。同一稳定节点可以出现在多个 lens branch，而不会获得第二身份。
 
-每个成功翻译都在 `data.translation` 返回一个 `TranslationResult`。`translations` 是有序数组而不是单一字符串，因为单词或短语可能需要多个实质不同的含义。第一项是根据当前文本与历史得出的首选解释；仅在歧义有实质意义时返回其他项，不使用无关同义词填充响应。
+闭合 lens 为 `meaning`、`contrast`、`usage`、`form`、`origin`、`domain`、`mechanism` 与 `application`。初始词汇翻译可以返回 `available_lenses`；follow-up 请求选择其中一个。Transnet 根据 lens 与 response level 推导关系族、边界与排序。调用方不提交原始关系 filter、graph depth、node limit、vector selector 或任意 traversal query。
 
-每项稳定包含 `text` 与 `language`。返回多项时由 `meaning` 区分。只有指定不可变发布中的已审核内容才包含 `canonical`。`details` 是按 `response_level` 选择的词义级投影，不是单独数据库记录。
+每个展示 item 要么是 root，要么包含到 root 的显式路径、精简 relevance reason、assertion 与证据引用，以及 `verified`、`inferred` 或 `exploratory` 状态。只有补全后的 `verified` assertion 可组成事实连接路径。Inferred 与 exploratory 材料属于请求级并单独展示。
 
-包含两个必要含义的 brief 单词响应：
+## POST /api/v1/capabilities
 
-```json
-{
-  "translation": {
-    "unit": "word",
-    "detected_source_language": "en",
-    "translations": [
-      {
-        "text": "热的",
-        "language": "zh-CN",
-        "meaning": "having a high temperature"
-      },
-      {
-        "text": "热门的",
-        "language": "zh-CN",
-        "meaning": "currently popular or receiving much attention"
-      }
-    ]
-  }
-}
-```
+返回已配置 BCP 47 语言对、输入类型、图片类型、purpose、annotation family、知识 lens、body 与语义限制、实时检索可用性和 schema 版本。它不暴露凭据、provider URL、socket 路径、并发状态或私有 feature flag。
 
-来自相同规范记录的 full 单词响应：
+请求：`{}`
 
 ```json
 {
-  "translation": {
-    "unit": "word",
-    "detected_source_language": "en",
-    "translations": [
-      {
-        "text": "酷热的",
-        "language": "zh-CN",
-        "meaning": "uncomfortably hot, especially because of the weather",
-        "canonical": {
-          "translation_id": "tr_sweltering_zh_cn_01",
-          "sense_id": "sense_sweltering_hot_01",
-          "release": "knowledge-2026-09"
-        },
-        "details": {
-          "type": "word",
-          "part_of_speech": "adjective",
-          "aliases": ["oppressively hot"],
-          "pronunciations": [{"dialect": "en-US", "ipa": "/ˈswɛltərɪŋ/"}],
-          "examples": [
-            {
-              "source_text": "It was a sweltering afternoon.",
-              "translated_text": "那是一个酷热难耐的下午。"
-            }
-          ],
-          "domain_assessment": {
-            "classification": "domain_specific",
-            "resolution": "existing",
-            "selected_domain_ids": ["domain_weather"]
-          },
-          "domain_facts": [
-            {
-              "fact_id": "fact_sweltering_degree_scorching_01",
-              "statement": "For environmental heat, scorching usually indicates greater intensity than sweltering.",
-              "evidence_ids": ["evidence_dictionary_1042"],
-              "evidence_state": "verified"
-            }
-          ],
-          "taxonomy": {
-            "hypernyms": ["hot"],
-            "hyponyms": []
-          },
-          "intensity_scales": [
-            {
-              "dimension": "temperature_intensity",
-              "items": ["warm", "hot", "sweltering", "scorching"],
-              "selected_index": 2
-            }
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
-Standard 短语响应：
-
-```json
-{
-  "translation": {
-    "unit": "phrase",
-    "detected_source_language": "en",
-    "translations": [
-      {
-        "text": "悬而未决",
-        "language": "zh-CN",
-        "meaning": "not yet decided or settled",
-        "details": {
-          "type": "phrase",
-          "phrase_type": "idiom",
-          "usage_notes": ["Used for plans or questions whose outcome is uncertain."],
-          "examples": [
-            {
-              "source_text": "Our travel dates are still up in the air.",
-              "translated_text": "我们的旅行日期仍未确定。"
-            }
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
-Standard 段落响应：
-
-```json
-{
-  "translation": {
-    "unit": "passage",
-    "detected_source_language": "en",
-    "translations": [
-      {
-        "text": "那个计划仍然悬而未决。",
-        "language": "zh-CN"
-      }
-    ]
-  }
-}
-```
-
-以上示例展示可复用内部 payload，未包含外层 `data` 与 `meta` 成功 envelope；下方 endpoint 示例均为完整响应 body。
-
-## 响应级别
-
-所有响应级别可使用相同 MySQL 卡片、规范翻译记录和同一组 Qdrant 合格事实。确定性响应投影器在词义解析后选择字段并应用大小上限；它不会要求模型发明更小的 schema。
-
-| 级别 | 始终返回 | 其他合格内容 |
-| --- | --- | --- |
-| `brief` | 单元、检测源语言、有序翻译，以及每个 lexical sense 的一个含义标签 | 不返回例句、提示或关系展开 |
-| `standard` | `brief` 的全部内容 | 精简定义或短语用法、每个含义最多一个例句，以及仅有实质价值的对比或关系 |
-| `full` | `standard` 的全部内容 | 发音、别名、形态、更多例句与用法、领域事实、来源、分类、上位词、下位词、强度尺度及其他有界关系组 |
-
-当省略会造成误导时，多含义优先于简短。每一级别都省略空字段与空关系组。较低级别不会改变有序含义及其译文，只投影更少的支持字段。
-
-段落提示与带标签备选属于计划中的 application 能力，不是 Milestone 1 HTTP 合同字段。后续 milestone 必须先定义其领域语义，transport 投影才能暴露它们。
-
-领域评估使用闭合 `resolution` 值 `existing`、`proposed_new`、`general` 和 `uncertain`。`proposed_new` 没有领域 ID，只可在 `full` 级别包含请求级名称、定义、候选上层领域和理由，且绝不表示为已验证知识。加载已有领域清单失败时必须返回 `uncertain`，不能返回 `proposed_new`。
-
-## 翻译持久化
-
-实时翻译结果是临时数据，不提供保存字段。Transnet 可以先从固定的 MySQL 发布中解析完全匹配的已审核规范翻译；否则调用 provider，并在有界请求结束后丢弃请求、响应和中间术语台账。它绝不把 provider 结果作为流量副作用存储，也不根据用户行为判断重要性。
-
-“重要”有两种含义，归属不同。终端用户保存、加星或标记重要的翻译属于私有产品数据，其关联由 island-port 在 Transnet 之外存储。对共享语言产品重要的翻译属于规范内容候选：经授权的发布工具携带来源与权利元数据暂存，审核者批准后，由后续不可变内容发布使其可供 Transnet 读取。[SQL 数据 endpoint 合同](mysql_cn.md)负责该存储和发布设计。
-
-## 关系评估元数据
-
-Island-port 可向 WebUI 开放评估的每条规范存储边都包含 `assessment` object。`allowed_judgments` 是仅含 `confirm` 与 `challenge` 的封闭集合：`confirm` 表示该关系按当前展示看来正确，`challenge` 表示该关系应接受复核。这些值是产品反馈判断，不是编辑批准状态、证据状态，也不是修改规范内容的指令。`relation_version` 固定被判断关系的准确修订版本。
-
-WebUI 到 island-port 的提交路由不属于本内部接口，但其语义请求必须严格包含以下目标与判断结构；公开 island-port 合同负责选择路由、认证 header、幂等机制与 envelope：
-
-```json
-{
-  "target": {
-    "edge_id": "edge_sweltering_scorching_01",
-    "relation_version": 3,
-    "content_release": "knowledge-2026-09"
+  "data": {
+    "source_languages": ["auto", "en", "zh-CN"],
+    "target_languages": ["en", "zh-CN"],
+    "input_types": ["text", "segments", "image_regions"],
+    "image_media_types": ["image/png", "image/jpeg", "image/webp"],
+    "knowledge_lenses": ["meaning", "contrast", "usage", "form", "origin", "domain", "mechanism", "application"],
+    "live_retrieval": {"available": false, "default": "offline"},
+    "schema_versions": ["translation-result-v1", "knowledge-view-v1"]
   },
-  "judgment": "challenge"
+  "meta": {"request_id": "req_example"}
 }
 ```
-
-Island-port 拒绝未知边、关系版本或发布不匹配、超出该边 `allowed_judgments` 的判断，以及使用相同幂等键提交不同语义请求。公开 endpoint、认证、防滥用、保留、聚合及任何用户关联均由 island-port 负责。它不得把单次判断或用户身份转发给 Transnet。后续发布流程可以使用经过独立复核的聚合或审核信号，但任何单次判断都不能直接验证、否定或重新发布一条边。
-
-Transnet 只能接收一条存储边达到 k-匿名门槛后的聚合快照。最低门槛为五个合格判断；低于门槛时省略聚合，调整值为零。令 `c` 为合格的 confirm 数，`h` 为合格的 challenge 数，且 `n = c + h`。版本化的 `relationship-distance-v1` 算法对两侧各使用四个判断的对称 Beta 先验，以二十个合格判断为饱和阈值，并将最大距离调整限制为 1,500 个基点：
-
-```text
-support = (c + 4) / (n + 8)
-weight = min(1, n / 20)
-adjustment = round((2 * support - 1) * weight * 1500)
-effective_distance = clamp(base_distance - adjustment, 0, 10000)
-```
-
-正 `adjustment` 表示净确认，使渲染或遍历距离缩短；负值表示净质疑，使距离变长。两侧相等时调整为零，数量较少时保持接近中性。`base_distance` 只能来自证据与关系类型 ranker。社区调整可以改变展示顺序和图布局，但不能使不合格边变为合格、改变类型或方向、修改证据或验证状态，也不能创建规范事实。凡排序使用有效距离的缓存键与 cursor 都必须包含 `aggregate_version` 和 `algorithm_version`。
-
-推断、探索、派生、仅用于可视化及其他非规范关系省略 `assessment` object。因此，WebUI 仅在该 object 存在时启用控件；不得根据 `verification_state`、置信度、关系类型或边 ID 的形状推断是否可评估。
 
 ## POST /api/v1/health
 
-返回进程健康，不探测依赖，也不泄露配置。
-
-请求：
-
-```json
-{}
-```
-
-响应 `200`：
-
-```json
-{
-  "data": {
-    "status": "ok"
-  },
-  "meta": {
-    "request_id": "req_01K4Z8P8Y7D3N5Q2F6M1J9T0VX"
-  }
-}
-```
+进程可应答时返回 `200`，不探测依赖。请求为 `{}`，响应 data 为 `{"status":"ok"}`。
 
 ## POST /api/v1/livez
 
-进程事件循环可响应时返回成功。
-
-请求：
-
-```json
-{}
-```
-
-响应 `200`：
-
-```json
-{
-  "data": {
-    "status": "ok"
-  },
-  "meta": {
-    "request_id": "req_01K4Z8Q8X2A6B7C4D9E0F3G5HJ"
-  }
-}
-```
+Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 `{}`，响应 data 为 `{"status":"alive"}`。
 
 ## POST /api/v1/readyz
 
-仅在已启用路由所需依赖就绪时返回 `200`。可选能力可降级而不使进程变为未就绪。
+仅当每个已配置必需依赖都能安全服务新请求时返回 `200`。可选规范、检索、embedding、vision、reasoning 或实时检索 capability 以闭合 component state 报告；只有配置要求时才成为必需依赖。
 
-请求：
-
-```json
-{}
-```
-
-响应 `200`：
+请求：`{}`
 
 ```json
 {
   "data": {
-    "status": "ok",
-    "dependencies": {
-      "mysql": "ready",
-      "qdrant": "ready",
-      "translation_provider": "ready"
-    },
-    "capabilities": {
-      "translation": "available",
-      "canonical_lookup": "available",
-      "relationship_pages": "available"
+    "status": "ready",
+    "components": {
+      "generation_fast": "available",
+      "generation_reasoning": "available",
+      "embedding": "available",
+      "canonical_data": "disabled",
+      "retrieval_data": "disabled",
+      "live_retrieval": "disabled"
     }
   },
-  "meta": {
-    "request_id": "req_01K4Z8R4CX7E2J6K1M9N3P5Q8S"
-  }
+  "meta": {"request_id": "req_example"}
 }
 ```
-
-`503` 使用标准错误 envelope，代码为 `not_ready`。它可说明依赖类别，但不得暴露主机、凭据、集合名称或 provider 响应。
 
 ## POST /api/v1/translations
 
-这是新翻译 turn 的唯一入口。它翻译单词、短语、句子或段落，并自动选择 lexical structured draft 或连续文本翻译。WebUI 和 island-port 都不选择该模式。请求使用上述简单字段；`history` 可省略，默认空数组。
+接受上述翻译 input、语言 tag、response level、可选 guidance 与可选 history。它自动选择词汇知识、连续文本、结构化 segment 或视觉 region 处理。调用方绝不选择模型、推理 profile、chunk policy、规范发布、检索策略或 repair policy。
 
-请求：
+成功 metadata 包含实际参与的 result、normalizer、projection、model 与 prompt 版本；可选 `content_release`、`retrieval_version`、`embedding_version` 与 `live_retrieval` 只在使用时出现。`inference_profiles` 有序且去重。`reasoning_escalated` 报告安全策略结果而不暴露 reasoning 内容。
 
-```json
-{
-  "text": "That plan is still up in the air.",
-  "source_language": "auto",
-  "target_language": "zh-CN",
-  "response_level": "standard",
-  "history": []
-}
-```
-
-响应 `200`：
-
-```json
-{
-  "data": {
-    "translation": {
-      "unit": "passage",
-      "detected_source_language": "en",
-      "translations": [
-        {
-          "text": "那个计划仍然悬而未决。",
-          "language": "zh-CN"
-        }
-      ]
-    }
-  },
-  "meta": {
-    "request_id": "req_01K4Z8S1AK6C8D2F0G4H7J9M3N",
-    "response_level": "standard",
-    "schema_version": "translation-result-v1",
-    "normalizer_version": "translation-lookup-nfc-v1",
-    "projection_version": "translation-projection-v1",
-    "model_versions": ["translate-2026-09"],
-    "prompt_versions": ["connected-text-prompt-v1"]
-  }
-}
-```
-
-Milestone 1 HTTP 合同只暴露已组合 translation application 实际生成的字段。纯模型 lexical details 可包含 `type`、`part_of_speech` 或 `phrase_type`、`aliases`、`examples`、`usage_notes`、`generated` 与 `evidence_state`。Passage tips、带标签备选、canonical ID、发音、形态、分类、领域事实、来源和关系分组属于后续 milestone 能力，本 handler 不会伪造。长文处理使用的分块计划或术语台账随请求丢弃。
-
-`meta.model_versions` 和 `meta.prompt_versions` 是有序去重数组，因为一次长文本请求可能包含多个实际模型操作。`schema_version`、`normalizer_version` 与 `projection_version` 分别标识结果、规范化和投影合同。`retrieval_version` 与 `content_release` 只在对应组件真实参与时返回；Milestone 1 的纯模型路径不会伪造它们。
-
-翻译特定失败使用：`invalid_json` 对应 `400`、`payload_too_large` 对应 `413`、`invalid_translation_request` 对应 `422`、`invalid_model_output` 对应 `502`、`translation_model_unavailable` 对应 `503`。容量、内部与 deadline 状态在相应闭合 application outcome 建立前保持预留。
+闭合路由错误还包括 `invalid_translation_request`、`constraint_conflict`、`unsupported_input_type`、`unsupported_language_pair`、`invalid_image`、`invalid_model_output`、`translation_model_unavailable` 与 `live_retrieval_unavailable`。
 
 ## POST /api/v1/basic-cards/lookup
 
-执行 MySQL-only、固定发布的规范查询。请求为闭合结构，不接受发布、派生形式、ranking、index 或 vector selector。`query` 最多 100 个 Unicode 字符；Transnet 在内部确定性派生最多四个查询形式。
+执行只使用规范数据、固定发布的词汇查询。请求接受 `query`、`source_language` 与 `target_language`，不接受 release、派生形式、ranker、index 或 vector selector。正常 outcome 为 `resolved`、`clarification_required` 与 `not_found`。Resolved 结果返回规范 root、合格翻译、证据支持定义、coverage、可用知识 lens 与不可变内容 pin。
 
-```json
-{
-  "query": "sweltering",
-  "source_language": "en",
-  "target_language": "zh-CN"
-}
-```
-
-`resolved`、`clarification_required` 与 `not_found` 均返回 HTTP 200，并通过 `data.resolution` 区分。`data` 同时包含稳定排序的 `matches` 和逐节 `coverage`；`meta` 包含 `request_id`、`content_release` 与 `canonical_schema_version`。歧义不会静默选择 sense，not found 返回空 `matches`。
-
-```json
-{
-  "data": {
-    "resolution": "resolved",
-    "matches": [{
-      "rank": 1,
-      "lexeme": {"id": "lexeme_sweltering", "lemma": "sweltering", "language": "en", "part_of_speech": "adjective"},
-      "sense": {"id": "sense_sweltering_hot", "sense_key": "weather-hot", "definition": {"text": "uncomfortably hot", "evidence": []}},
-      "translations": [], "forms": [],
-      "evidence": [{"id": "evidence_dictionary_1042", "kind": "definition", "confidence": "high", "text": "uncomfortably hot", "source": {"source_id": "source_dictionary", "attribution": "Dictionary publisher (2026)", "source_reference": "entry:1", "language": "en"}}]
-    }],
-    "coverage": {
-      "retrieval": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
-      "lexemes": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
-      "parts_of_speech": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
-      "senses": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
-      "definitions": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0},
-      "forms": {"state": "missing", "available_items": 0, "missing_items": 1, "filtered_items": 0, "truncated_items": 0},
-      "evidence": {"state": "available", "available_items": 1, "missing_items": 0, "filtered_items": 0, "truncated_items": 0}
-    }
-  },
-  "meta": {"request_id": "req_example", "content_release": "knowledge-2026-09", "canonical_schema_version": "canonical-v1"}
-}
-```
-
-Matches 最多 12；每 match 的 forms 最多 24、已审核 translations 最多 8；每 assertion 的 evidence 最多 8。Evidence text 最多 4096 字符，source reference 最多 256 字符，完整 JSON response 最多 1 MiB。Resolved card 至少具有许可支持的 definition 或已审核 translation。Attribution 是权威端提供的人类可读文字；内部 hash、permission bits、fingerprint、fusion score、ranking/index/vector version、socket path 与 transport metadata 均不公开。
+该路由保留为直接诊断与兼容性读取。新翻译 turn 使用 `/api/v1/translations`。
 
 ## POST /api/v1/senses/get
 
-在 BasicCard lookup 返回的同一不可变 pin 下读取一个规范词义。它不重新选择 active release，也绝不把 R1 请求升级到 R2。
+在先前结果返回的准确 `content_release` 与 `canonical_schema_version` 下读取一个规范 sense。它绝不重新选择活动内容或静默升级 pin。请求接受 `sense_id`、`target_language`、`content_release` 与 `canonical_schema_version`。
 
-请求：
+## POST /api/v1/knowledge/views
+
+为一个规范 root 返回一个引导式 tree-lens 投影。
 
 ```json
 {
-  "sense_id": "sense_sweltering_hot_01",
+  "root": {"kind": "sense", "id": "sense_sweltering_hot_01"},
+  "lens": "contrast",
   "target_language": "zh-CN",
+  "response_level": "full",
   "content_release": "knowledge-2026-09",
-  "canonical_schema_version": "canonical-v1"
+  "cursor": null
 }
 ```
 
-响应 `200`：
+响应包含 root、lens、有序 branch、稳定 node、显式 path、relevance reason、assertion 与证据引用、evidence state、截断状态及不透明 next cursor。Cursor 绑定 root、lens、语言、response level、release、projection version 与 ordering version，且不含请求文本。
+
+## POST /api/v1/knowledge/paths
+
+在两个规范 root 之间返回最多三条、每条最多三跳且独立验证的路径。Server 选择并强制关系资格，不执行任意深度或 shortest-path inference。
 
 ```json
 {
-  "data": {
-    "sense": {
-      "schema_version": "1.0",
-      "target": {"lexeme_id": "lexeme_sweltering", "sense_id": "sense_sweltering_hot_01", "release_id": "knowledge-2026-09", "language": "en"},
-      "localized_glosses": [], "pronunciations": [], "usage_labels": [], "grammar_patterns": [], "collocations": [], "examples": [], "pitfalls": [], "etymologies": [], "history": [],
-      "provenance": {"release_id": "knowledge-2026-09", "evidence_use": "api_redistribution", "evidence_backed": true}
-    }
-  },
-  "meta": {
-    "request_id": "req_01K4Z8V2DE5F7G9H1J3K6M8NPQ",
-    "content_release": "knowledge-2026-09",
-    "canonical_schema_version": "canonical-v1"
-  }
+  "from": {"kind": "concept", "id": "concept_coriolis_force"},
+  "to": {"kind": "concept", "id": "concept_weather_system"},
+  "target_language": "en",
+  "content_release": "knowledge-2026-09"
 }
 ```
 
-两个请求都拒绝 unknown fields。畸形 JSON 使用 `400 invalid_json`，超限请求 body 使用 `413 payload_too_large`，字段无效使用 `422 invalid_canonical_request`，固定发布不可用使用 `409 content_release_unavailable`，schema 不兼容与权威响应畸形分别使用 `502 canonical_schema_incompatible` 或 `502 invalid_canonical_response`，能力未启用/不可用及 deadline 超时分别使用 `503 canonical_dependency_unavailable` 或 `503 canonical_dependency_timeout`。`clarification_required` 与 `not_found` 从不返回 problem。响应沿用 request-ID header 与 `Cache-Control: no-store`。在外部 island-port server 完成对应内部合同前，该能力仍不可用。
+正常 outcome 为 `connected` 与 `no_verified_path`。每个 path step 命名一个已补全 assertion、方向、条件、relevance、证据引用与 release。只基于相似度的候选可以在独立 exploratory 分区返回，但绝不成为 path step。
 
-## POST /api/v1/graph/get
-
-读取以一个词义、概念节点或领域为根的有界规范子图。port 根据选定资源和响应级别派生其过滤条件；这些字段不是 WebUI 控件。`depth` 受配置的浅层最大值限制。结果保持有根、有类型且经过范围过滤；本端点不是通用图查询语言或无限制邻居倾倒接口。
-
-请求：
-
-```json
-{
-  "root_kind": "sense",
-  "root_id": "sense_sweltering_hot_01",
-  "depth": 1,
-  "relation_types": ["lower_degree", "higher_degree", "collocation"],
-  "verification_state": "verified",
-  "node_limit": 20,
-  "edge_limit": 30,
-  "release": "knowledge-2026-09"
-}
-```
-
-响应 `200`：
-
-```json
-{
-  "data": {
-    "root": {
-      "kind": "sense",
-      "id": "sense_sweltering_hot_01",
-      "node_id": "node_sweltering_hot_01"
-    },
-    "nodes": [
-      {
-        "node_id": "node_sweltering_hot_01",
-        "node_type": "lexical_sense",
-        "label": "sweltering"
-      },
-      {
-        "node_id": "node_scorching_heat_01",
-        "node_type": "lexical_sense",
-        "label": "scorching"
-      }
-    ],
-    "edges": [
-      {
-        "edge_id": "edge_sweltering_scorching_01",
-        "source_node_id": "node_sweltering_hot_01",
-        "target_node_id": "node_scorching_heat_01",
-        "relation_type": "higher_degree",
-        "explanation": "Scorching usually expresses a stronger degree of heat than sweltering.",
-        "restrictions": {"dimension": "temperature_intensity"},
-        "evidence_state": "verified",
-        "confidence": 0.96,
-        "provenance": ["evidence_dictionary_1042"],
-        "verification_state": "verified",
-        "assessment": {
-          "relation_version": 3,
-          "allowed_judgments": ["confirm", "challenge"],
-          "distance": {
-            "base_basis_points": 400,
-            "adjustment_basis_points": 120,
-            "effective_basis_points": 280,
-            "aggregate_version": "relationship-assessments-2026-09-13T08:00:00Z",
-            "algorithm_version": "relationship-distance-v1"
-          }
-        }
-      }
-    ],
-    "truncated": false
-  },
-  "meta": {
-    "request_id": "req_01K4Z8W9RS2T4V6X0Y1Z3A5BCD",
-    "content_release": "knowledge-2026-09"
-  }
-}
-```
-
-## POST /api/v1/graph/neighbors
-
-分页读取一个规范节点的直接入边和出边。cursor 绑定根、过滤条件和发布，且不得包含请求文本。
-
-请求：
-
-```json
-{
-  "kind": "knowledge_node",
-  "id": "node_sweltering_hot_01",
-  "direction": "both",
-  "relation_types": ["lower_degree", "higher_degree"],
-  "verification_state": "verified",
-  "limit": 10,
-  "cursor": null,
-  "release": "knowledge-2026-09"
-}
-```
-
-响应 `200`：
-
-```json
-{
-  "data": {
-    "root_node_id": "node_sweltering_hot_01",
-    "neighbors": [
-      {
-        "edge": {
-          "edge_id": "edge_hot_sweltering_01",
-          "source_node_id": "node_hot_temperature_01",
-          "target_node_id": "node_sweltering_hot_01",
-          "relation_type": "higher_degree",
-          "explanation": "Sweltering expresses a more uncomfortable degree of heat than hot.",
-          "restrictions": {"dimension": "temperature_intensity"},
-          "evidence_state": "verified",
-          "confidence": 0.96,
-          "provenance": ["evidence_dictionary_1042"],
-          "verification_state": "verified",
-          "assessment": {
-            "relation_version": 3,
-            "allowed_judgments": ["confirm", "challenge"],
-            "distance": {
-              "base_basis_points": 400,
-              "adjustment_basis_points": 120,
-              "effective_basis_points": 280,
-              "aggregate_version": "relationship-assessments-2026-09-13T08:00:00Z",
-              "algorithm_version": "relationship-distance-v1"
-            }
-          }
-        },
-        "node": {
-          "node_id": "node_hot_temperature_01",
-          "node_type": "lexical_sense",
-          "label": "hot"
-        }
-      }
-    ],
-    "next_cursor": null
-  },
-  "meta": {
-    "request_id": "req_01K4Z8X6FG1H3J5K7M9N2P4QRS",
-    "content_release": "knowledge-2026-09"
-  }
-}
-```
+旧目标草案 `POST /api/v1/graph/get` 与 `POST /api/v1/graph/neighbors` 已从修订目标合同移除。当前可执行文件中的过渡期 `GET /v1/graph...` handler 在迁移或移除前仍是实现兼容行为；它们的存在不使其成为目标 v1 路由。
 
 ## 相关文档
 
 - [系统设计](../transnet_cn.md)
-- [MySQL 接口](mysql_cn.md)
-- [Qdrant 接口](qdrant_cn.md)
+- [规范数据接口](canonical-data_cn.md)
+- [检索数据接口](retrieval-data_cn.md)
+- [模型运行时](../reference/model-runtime_cn.md)
+- [持久化边界](../reference/persistence_cn.md)
+- [质量保证](../guides/quality-assurance_cn.md)

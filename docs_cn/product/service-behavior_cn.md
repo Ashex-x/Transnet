@@ -2,33 +2,46 @@
 
 English: [Transnet service behavior](../../docs/product/service-behavior.md)
 
-本指南描述无状态 Transnet 服务对消费者可见的行为。产品应用拥有自己的用户体验与状态，可以发送当前文本及选定先前翻译 turn，但绝不发送用户身份或产品所属状态。
+本指南描述无状态目标服务的 consumer-visible 行为。产品 application 负责用户、文件接入、保存、文档状态与展示。当前运行时覆盖窄于该目标，并由[服务接口](../interfaces/transnet_cn.md)明确标识。
 
 ## 翻译
 
-`POST /api/v1/translations` 是新翻译 turn 的唯一入口。除文本外，用户只选择源语言、目标语言和 `brief`、`standard` 或 `full` 响应级别。Island-port 可添加按时间排序的最小先前源文/译文对；在通用 body 限制内没有独立历史条数上限。Transnet 自动选择词汇查询、领域展开或段落翻译，并推导其他全部选项。
+`POST /api/v1/translations` 是唯一新 turn 入口。简单路径只要求文本、源语言、目标语言及 `brief`、`standard` 或 `full`。专业调用方也可以提供有序文档/localization segment 或有界 image region，并附带可选 purpose、audience、register、术语、alternative、annotation 与 freshness guidance。每个高级值只属于请求，不创建画像或翻译记忆。
 
-响应包含有序翻译列表。当多个实质不同词义仍然合理时，单词或短语返回多个词义专属译文；历史影响其排序。句子或段落以自然译文为主，并保留含义、语气、术语和段落结构。响应级别从同一规范超集中选择字段：brief 保留必要译文与含义标签，standard 添加精简支持详情，full 添加有界词汇、领域、关系、证据、分类与强度详情。
+Transnet 自动选择词汇、连续文本、结构化 segment 或视觉 region 处理。规范精确结果可能完全不需要生成。普通工作使用唯一 Gemma4-27B VLM 的 fast profile；长内容在同一模型上使用有界 chunk。Reasoning 只可按闭合歧义、约束、已验证路径或无效结构策略升级一次。
+
+文本结果返回按含义区分的有序译文。Segment 与图片结果保留请求 ID、顺序、protected content 与格式约束。有类型 annotation 只解释实质歧义、术语、语域、文化、格式风险或 review 需求。Response level 改变支持详情广度，但不改变所选译文、证据状态、约束或 review outcome。
+
+## 视觉与文档
+
+Island-port 上传并校验文件、渲染 PDF、选择页面并重建输出文档。Transnet 只接收有界 inline PNG、JPEG 或 WebP 及归一化 region，或已提取的结构化 segment。它绝不下载调用方 URL，也不存储文件 byte、OCR-like 输出或 layout state。
+
+Protected range 必须原样 round-trip。互相矛盾的 required 术语、protected content 或格式规则显式失败，而非静默忽略。Island-port 把超大文档分成有界同步请求；请求级术语 guidance 提供连续性，而不创建持久任务。
+
+## 当前信息
+
+互联网检索默认禁用。`allowed` 与 `required` freshness 是显式 opt-in，因为派生 query 可能向外部搜索 provider 泄露请求材料。检索是一次有界 search/fetch 操作，具有严格公开网络、redirect、media type、byte 与 deadline 控制。
+
+实时页面是不可信数据，不能改变指令或成为规范事实。当前 claim 引用响应级 `live_external` source，并在请求后丢弃。实时结果绝不自动进入发布。
 
 ## 词汇与概念详情
 
-服务自动将单词、固定词汇短语和专业术语解析为规范词义或概念。同形异义词、不同词性、短语级含义和领域特定词义保持分离。直接词义与图读取支持从返回的规范 ID 继续导航；它们不是 WebUI 在首次翻译时要求用户选择的项目。
+单词、固定短语与专业术语解析为规范 sense 或 concept。同形词、词性、短语级含义与领域特定 sense 保持分离。初始结果公布相关知识 lens，而不是暴露 graph 控制。
 
-## 关系与领域探索
+`knowledge/views` 为 meaning、contrast、usage、form、origin、domain、mechanism 或 application 展示引导式 root-specific tree 投影。`knowledge/paths` 只返回规范 root 间短且独立验证的路径。调用方不选择原始关系 filter、depth、node limit、vector selector 或任意 traversal。
 
-规范卡片锚定有界 Qdrant 关系读取。页面提供按用途排序的有类型关系分组、解释、条件、来源、证据状态和发布元数据。对于普通词汇，邻域可包含分类、强度、对比、句法、搭配、语域、形态和文化延伸；对于领域概念，还可包含多语言术语、领域与子领域、机理、前置概念、现象、方程、技术、应用、测量、标准和专业用法惯例。
+规范来源是 assertion graph，而不是严格树。稳定节点可以出现在多个 lens 下，但每个 item 保留单一身份、到 root 的显式路径、relevance reason、适用条件、证据、来源和发布。Verified、inferred、exploratory 与 live-external 材料保持显式分离。
 
-Transnet 在领域评估前检索已有领域名称、范围与 RAG 覆盖。LLM 只能选择提供的领域 ID；若均不适用，可返回请求级新领域提案而不调用创建 endpoint。清单失败产生不确定性，而不是新领域。对已选领域，Qdrant 检索候选基本事实，MySQL 在组织前补全其精确证据与来源。
+## 内容与降级
 
-已验证关系、基于证据的请求内推断，以及探索性向量或模型关联必须在视觉上保持分离。分类父词/子词与 `warm → hot → sweltering → scorching` 等命名强度尺度保持不同。选定一个根节点可展开一个浅层邻域或有名关系的短路径；Transnet 不把相似链展示为事实路径。
+规范数据读取对事实、证据、翻译与发布具有权威性。检索数据读取通过 embedding 投影提名节点和关系。相似度绝不建立翻译、同义、分类、因果、机制、文化含义或真值。
 
-## 内容与安全
-
-相关答案均钉住规范内容发布。MySQL 提供精简规范卡片，Qdrant 提供关系；图检索不可用时服务会明确降级到基础卡。服务绝不存储实时请求文本、上下文、调用方身份或任何用户相关状态。只有内容发布工作流选定、已审核且权利明确的翻译才进入规范 MySQL 发布。用户保存的翻译仍是 island-port 所属的产品数据。
+检索不可用时可以显式降级为规范基础卡。权威内容缺失、发布不兼容或必需实时检索失败绝不伪装为空结果。实时请求不写入 alias、card、fact、domain、assertion、vector 或 release。
 
 ## 相关文档
 
 - [系统设计](../transnet_cn.md)
 - [Transnet 服务接口](../interfaces/transnet_cn.md)
-- [MySQL 接口](../interfaces/mysql_cn.md)
-- [Qdrant 接口](../interfaces/qdrant_cn.md)
+- [规范数据接口](../interfaces/canonical-data_cn.md)
+- [检索数据接口](../interfaces/retrieval-data_cn.md)
+- [模型运行时](../reference/model-runtime_cn.md)

@@ -6,7 +6,9 @@ The adapters module implements model and data ports. It owns external protocol m
 
 ## Model providers
 
-The shared OpenAI-compatible client owns HTTP construction, authentication, response-size bounds, strict structured-output decoding, safe error mapping, and resilience integration. Gemma 4 owns short-text and bounded structured-composition request policy. TranslateGemma owns longer connected-text policy. The current runtime selects between them at translation.long_text_chars.
+The target OpenAI-compatible generation adapter owns HTTP construction, authentication, response-size bounds, image encoding, strict structured-output decoding, safe error mapping, and resilience integration for one Gemma4-27B VLM. It maps the domain-neutral `fast` and `reasoning` profiles to provider settings without exposing provider-native reasoning fields. A separate embedding adapter serves offline canonical publication and ephemeral online candidate nomination.
+
+The current runtime still selects Gemma 4 or TranslateGemma at `translation.long_text_chars`. That is transitional implemented behavior, not the target provider topology. A later runtime slice removes the second generator and routes long input through application-owned chunking on the same VLM.
 
 Provider adapters never log prompts, source text, history, provider bodies, credentials, or generated content. Errors expose only closed dependency and operation categories.
 
@@ -24,11 +26,11 @@ The executable optionally constructs this outbound transport and canonical-only 
 
 The publication adapter is a separate outbound-only client over the same injectable transport. Private strict DTOs map `KnowledgePublicationPort` operations to `knowledge-publication-v1` begin, node/edge batch, freeze, reconcile, status, and abort calls. Its pure node/edge batch inspection and final send use one DTO/JSON/base64 serializer; inspection reserves the maximum legal request-ID/deadline representation without transport I/O, while send repeats the 1 MiB defensive check. It also enforces request/deadline/release echoing, the 256-point bound, 256 KiB control/response bounds, closed outcome/code combinations, exact execution receipts, and cross-artifact hashes. Fake transport tests exercise the contract without adding Qdrant/MySQL drivers, an island-port server, embedding execution, activation, or runtime handler wiring.
 
-The corresponding island-port server is maintained outside this repository and must implement the current delta in `interfaces/mysql.md`. Until that peer is upgraded, incompatible or incomplete responses fail closed and real island-port/MySQL end-to-end operation is not considered verified.
+The corresponding island-port server is maintained outside this repository and must implement the current delta in `interfaces/canonical-data.md`. Until that peer is upgraded, incompatible or incomplete responses fail closed and real island-port/MySQL end-to-end operation is not considered verified.
 
 Structured and vector mapping preserves release identifiers and closed outcomes. Island-port owns MySQL and Qdrant drivers, queries, pooling, transactions, collection selection, and credentials. Transnet does not expose SQL or Qdrant-native requests. Filesystem permissions authenticate processes; JSON never forwards end-user identity or credentials.
 
-Online adapters are read-only. A separately authorized publisher composition uses mutation-capable operations. Exact payloads remain in the [SQL](../interfaces/mysql.md) and [vector](../interfaces/qdrant.md) interfaces.
+Online adapters are read-only. A separately authorized publisher composition uses mutation-capable operations. Exact payloads remain in the [canonical-data](../interfaces/canonical-data.md) and [retrieval-data](../interfaces/retrieval-data.md) interfaces.
 
 ## Verification
 

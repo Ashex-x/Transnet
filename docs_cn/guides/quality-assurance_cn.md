@@ -14,6 +14,8 @@ English: [Quality assurance](../../docs/guides/quality-assurance.md)
 
 测量单一翻译 endpoint 后的词汇单元与句子/篇章路由，包括歧义短片段。路由错误必须选择最少干预的有用响应，且不创建持久状态。翻译评估覆盖含义、完整性、语气、语域、结构、名称、术语、数字、否定、习语和方言。多轮套件改变历史长度，验证指代解析与术语连续性，并确保已接受请求不会静默截断。歧义套件要求实质不同含义并拒绝填充式同义词列表。
 
+专业输入套件覆盖 segment ID 与顺序保留、保护范围、术语约束、有界备选、图像区域坐标与阅读顺序、视觉/文本混合内容及不支持媒体拒绝。它们按延迟预算测量零模型规范命中、普通 fast 调用、有界分块调用及最多一次 reasoning 升级。实时检索套件强制显式 opt-in、一次搜索轮次、结果/抓取上限、仅公网抓取、重定向与 DNS rebinding 检查、prompt 注入抵抗、引文覆盖，以及查询和页面丢弃。
+
 投影测试构建一个规范超集并比较 `brief`、`standard` 和 `full` 响应。除 envelope 元数据外，较低级别必须是严格字段/项目子集，同时保留相同有序含义、规范 ID、译文、证据状态和降级信号。只有实质提示才被接受，且检查两条上限。
 
 ## 规范检索评估
@@ -22,11 +24,19 @@ English: [Quality assurance](../../docs/guides/quality-assurance.md)
 
 关系测试检查端点、发布兼容性、方向、适用词义与领域、条件、证据、语言、地区、时期、置信度、来源和验证状态。分类套件校验 `is_a` 方向、`has_subtype` 逆关系、环拒绝和词义限定。语义尺度套件校验命名维度、顺序、条件、证据、不等位置间距及完整 `warm → hot → sweltering → scorching` 展示。对抗用例确保强度不冒充分类，向量接近不升格为翻译、同义、层级、因果、共同机理或文化事实。页面组织测试从一个选定根开始，省略弱分区，按用途排序分组，校验短连接路径的每一步，并在视觉上分离已验证、推断和探索结果。
 
+断言测试校验关系注册表版本、元数、参与者角色、字面值/实体互斥、二元投影资格，以及每条投影边到权威断言的无损关联。引导视图测试覆盖学习、术语、机理、对比与应用 lens，强制根、深度、项目、证据与循环边界，并证明树状展示绝不改变断言真实性或复制规范事实。
+
 ## 内容、隐私和注入安全
 
 发布测试校验确定性 ID、不可变集合、manifest 对账、隔离、激活和回滚。Bootstrap 测试证明生成候选在证据或批准编辑来源策略、权利检查、确定性校验及审核成功前保持隔离；模型输出本身绝不能成为已验证内容。隐私测试证明当前文本、翻译历史、调用方身份、生成 provider body 和用户相关状态不进入 MySQL、Qdrant、缓存、日志、trace、指标、备份、队列或向量。
 
+Migration 测试构建全新 schema，并从每个受支持起始版本升级，比较其逻辑结构，覆盖中断 DDL 恢复与 checksum drift，让新旧 binary 在声明兼容窗口内运行，验证可恢复有界 backfill，并证明在保留发布与 rollback binary 不再依赖旧结构前不能执行收缩 migration。
+
 把请求文本、检索文档、证据和模型输出当作不受信数据。注入套件尝试替换指令、泄漏凭据、绕过发布过滤、伪造证据或增加隐藏持久化。
+
+## 遥测验证
+
+为每类请求捕获日志、trace、指标与审计 sink，并在文本、分段、图像、历史、prompt、provider 响应、网络查询、页面、引文与错误中植入可识别 secret。任何 seed 或确定性 fingerprint 均不得出现。强制[可观测性合同](../reference/observability_cn.md)：闭合低基数 label、静态 span 名与路由、trace 连续性、每个请求恰好一条完成事件、有界队列、可见丢弃计数器、追加式审计顺序，以及 exporter 失败时业务响应不变。
 
 ## 可靠性与发布门禁
 
@@ -40,3 +50,5 @@ English: [Quality assurance](../../docs/guides/quality-assurance.md)
 - [服务行为](../product/service-behavior_cn.md)
 - [内容发布](content-publishing_cn.md)
 - [Transnet 服务接口](../interfaces/transnet_cn.md)
+- [可观测性合同](../reference/observability_cn.md)
+- [MySQL 迁移策略](../interfaces/tables/migrations_cn.md)

@@ -33,6 +33,8 @@ flowchart LR
 
 Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start OpenAI-compatible Gemma 4 and TranslateGemma servers at the endpoints in `config/transnet.toml`. **Gemma 4** is the general-purpose provider used for short-text translation and the current structured lookup; **TranslateGemma** is the translation-specialized provider selected for longer text. The Gemma 4 endpoint used by structured lookup must support OpenAI-compatible strict JSON Schema output.
 
+This two-provider setup describes the current executable only. The target architecture uses one Gemma4-27B vision-language model with fast and bounded reasoning profiles plus one embedding model; see the [model-runtime reference](docs/reference/model-runtime.md).
+
 ## Configure
 
 The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` currently sets the transitional loopback listener and log filter/format, `[http]` sets the body limit and transitional CORS policy, `[translation]` sets routing and legacy retry defaults, `[gemma4]` and `[translate_gemma]` identify those provider endpoints, and `[provider_resilience.*]` sets independent timeout, retry, concurrency, and circuit-breaker bounds. The target UDS settings are defined in the [configuration guide](docs/guides/configuration.md). Do not commit real provider credentials.
@@ -84,7 +86,7 @@ These commands show the target UDS interface. The current executable still uses 
 
 Verify the current transitional runtime with `curl http://127.0.0.1:35792/health`.
 
-See the [design](docs/transnet.md), [island-port-to-Transnet service interface and UDS transport](docs/interfaces/transnet.md), [Transnet-to-island-port SQL endpoints](docs/interfaces/mysql.md), [Transnet-to-island-port vector endpoints](docs/interfaces/qdrant.md), and [configuration reference](docs/guides/configuration.md).
+See the [design](docs/transnet.md), [island-port-to-Transnet service interface and UDS transport](docs/interfaces/transnet.md), [canonical-data endpoints](docs/interfaces/canonical-data.md), [retrieval-data endpoints](docs/interfaces/retrieval-data.md), and [configuration reference](docs/guides/configuration.md).
 
 ## License
 

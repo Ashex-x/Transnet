@@ -1,8 +1,8 @@
-# 目标向量 collection
+# 目标 Qdrant 实现
 
-English: [Target vector collections](../../../docs/interfaces/tables/vec.md)
+English: [Target Qdrant implementation](../../../docs/interfaces/tables/qdrant.md)
 
-本目录定义[向量数据 endpoint](../qdrant_cn.md)背后的目标 Qdrant collection。Qdrant 是可重建且绑定发布版本的投影；MySQL 规范修订和签名发布 artifact 仍是权威来源。
+本目录定义存储无关[检索数据 endpoint](../retrieval-data_cn.md)背后的目标 Qdrant 实现。Qdrant 是可重建且绑定发布版本的投影；规范数据修订和签名发布 artifact 仍是权威来源。
 
 状态：目标 schema；当前 Transnet 可执行文件不会创建或激活这些 collection。
 
@@ -27,9 +27,9 @@ English: [Target vector collections](../../../docs/interfaces/tables/vec.md)
 
 ## knowledge_edges payload
 
-必需索引字段为 `release_id`、`publication_state`、`verification_state`、`edge_id`、`relation_version`、`fact_id`、`fact_revision`、`source_node_id`、`target_node_id`、`relation_type`、`language`、`dialect`、`region`、`period`、`domain_ids`、`applicable_sense_ids` 和 `evidence_ids`。
+必需索引字段为 `release_id`、`publication_state`、`verification_state`、`edge_id`、`relation_version`、`fact_id`、`fact_revision`、`source_node_id`、`target_node_id`、`relation_type`、`relation_registry_version`、`language`、`dialect`、`region`、`period`、`domain_ids`、`applicable_sense_ids` 和 `evidence_ids`。
 
-Payload 还携带完整规范关系解释、方向、条件、限制、证据状态、来源引用、置信度及 `assessment_enabled`。`relation_version` 必须与 MySQL `release_member` 中的关系条目一致。`assessment_enabled` 只声明目标资格；Qdrant 不存储判断、计数、社区分数、距离调整、用户 ID 或聚合版本。
+Payload 还携带完整规范关系解释、方向、条件、限制、证据状态、来源引用、置信度及 `assessment_enabled`。`fact_id` 与 `fact_revision` 标识权威 assertion；`relation_registry_version` 固定校验其二元 traversal 投影所用语义。`relation_version` 必须与 MySQL `release_member` 中的关系条目一致。`assessment_enabled` 只声明目标资格；Qdrant 不存储判断、计数、社区分数、距离调整、用户 ID 或聚合版本。
 
 稠密向量嵌入完整的“源—关系—目标”解释。稀疏向量索引规范 endpoint 标签、关系术语和已审核别名。相似度只能提出候选，不能建立或否定关系。
 
@@ -47,7 +47,7 @@ Island-port 首先解析活动内容发布和不可变节点/边 alias。Qdrant 
 
 ## 相关文档
 
-- [向量 endpoint 合同](../qdrant_cn.md)
-- [MySQL schema](../../../docs/interfaces/tables/sql.sql)
-- [关系评估合同](../transnet_cn.md#关系评估元数据)
+- [检索数据 endpoint 合同](../retrieval-data_cn.md)
+- [MySQL 实现](../../../docs/interfaces/tables/mysql.sql)
+- [引导知识视图合同](../transnet_cn.md#知识视图)
 - [内容发布](../../guides/content-publishing_cn.md)

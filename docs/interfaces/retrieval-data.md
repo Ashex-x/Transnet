@@ -1,14 +1,14 @@
-# Vector data endpoint interface
+# Retrieval-data endpoint interface
 
-中文：[向量数据 endpoint 接口](../../docs_cn/interfaces/qdrant_cn.md)
+中文：[检索数据 endpoint 接口](../../docs_cn/interfaces/retrieval-data_cn.md)
 
-This contract defines island-port's vector and graph HTTP endpoints for versioned canonical nodes and edges. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. Point examples document island-port's internal projection.
+This contract defines island-port's storage-neutral candidate-retrieval and projection HTTP endpoints for versioned canonical nodes and relationships. Every operation is JSON over UDS. Endpoint request examples show the `input` object placed inside the common request envelope; response examples are complete bodies. Point examples describe the target Qdrant implementation without making it part of the wire contract.
 
 Status: target island-port contract with a checked-in Transnet publication client and application orchestrator, neither of which is composed into the online executable. Transnet contains the typed release-trio and relationship admission foundation plus deterministic pre-publication node/edge build artifacts. Preparation currently projects only authoritative active `Lexeme` and `Sense` records, resolves their embedding-authorized lexical evidence, freezes separate dense and lexical canonical inputs without generating vectors, and builds edges only after every endpoint resolves in the exact node artifact. Construction, scale, and the broader target catalog remain closed until publisher-owned canonical sources are frozen. The island-port publication server, production build/status and reconciliation persistence, embedding and lexical-encoder execution, Qdrant collection mutation and verification, activation, rollback, and production acceptance remain external work.
 
 ## Contents
 
-- [Vector data endpoint interface](#vector-data-endpoint-interface)
+- [Retrieval-data endpoint interface](#retrieval-data-endpoint-interface)
   - [Contents](#contents)
   - [Endpoint reference](#endpoint-reference)
   - [Storage boundary](#storage-boundary)
@@ -30,7 +30,7 @@ Island-port listens on `/run/island-port/island-port.sock` by default and follow
 
 Every route uses the shared `/api/v1` prefix. The island-port socket and the resource path identify this vector-data API; callers do not add `data`, `vec`, or a storage-vendor name to the path.
 
-Every exact request body has the shape `{"context": RequestContext, "input": EndpointInput}`. `RequestContext` contains `request_id`, `deadline_at`, `schema_version` set to `vector-data-v1`, and the pinned `content_release` when applicable. Endpoint examples below show only `EndpointInput`. Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`; publication may also return `conflict`.
+Every exact request body has the shape `{"context": RequestContext, "input": EndpointInput}`. `RequestContext` contains `request_id`, `deadline_at`, `schema_version` set to `retrieval-data-v1`, and the pinned `content_release` when applicable. Endpoint examples below show only `EndpointInput`. Closed outcomes are `ok`, `missing`, `invalid_payload`, `version_mismatch`, `unavailable`, and `timeout`; publication may also return `conflict`.
 
 ## Storage boundary
 
@@ -199,6 +199,7 @@ An edge is a typed, searchable connection whose embedding input is derived only 
   "payload": {
     "edge_id": "edge_sweltering_scorching_01",
     "relation_version": 3,
+    "relation_registry_version": 1,
     "fact_id": "fact_sweltering_degree_scorching_01",
     "fact_revision": 1,
     "source_node_id": "node_sweltering_hot_01",
@@ -406,6 +407,7 @@ Response:
         "source_node_id": "node_sweltering_hot_01",
         "target_node_id": "node_scorching_heat_01",
         "relation_type": "higher_degree",
+        "relation_registry_version": 1,
         "fact_id": "fact_sweltering_degree_scorching_01",
         "fact_revision": 2,
         "verification_state": "verified"
@@ -608,8 +610,8 @@ General closed outcomes remain `ok`, `missing`, `invalid_payload`, `version_mism
 ## Related documents
 
 - [Shared UDS JSON transport and Transnet interface](transnet.md)
-- [Target vector collection catalog](tables/vec.md)
+- [Target Qdrant implementation](tables/qdrant.md)
 - [Transnet design and external interface](../transnet.md)
-- [MySQL interface](mysql.md)
+- [Canonical-data interface](canonical-data.md)
 - [Content publishing](../guides/content-publishing.md)
 - [Quality assurance](../guides/quality-assurance.md)

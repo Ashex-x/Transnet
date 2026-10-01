@@ -1,8 +1,8 @@
-# Target vector collections
+# Target Qdrant implementation
 
-中文：[目标向量集合](../../../docs_cn/interfaces/tables/vec_cn.md)
+中文：[目标 Qdrant 实现](../../../docs_cn/interfaces/tables/qdrant_cn.md)
 
-This catalog defines the target Qdrant collections behind the [vector data endpoint](../qdrant.md). Qdrant is a rebuildable release-pinned projection; MySQL canonical revisions and signed release artifacts remain authoritative.
+This catalog defines the target Qdrant implementation behind the storage-neutral [retrieval-data endpoint](../retrieval-data.md). Qdrant is a rebuildable release-pinned projection; canonical-data revisions and signed release artifacts remain authoritative.
 
 Status: target schema; the current Transnet executable does not create or activate these collections.
 
@@ -27,9 +27,9 @@ Every point has a named dense `semantic` vector and named sparse `lexical` vecto
 
 ## knowledge_edges payload
 
-Required indexed fields are `release_id`, `publication_state`, `verification_state`, `edge_id`, `relation_version`, `fact_id`, `fact_revision`, `source_node_id`, `target_node_id`, `relation_type`, `language`, `dialect`, `region`, `period`, `domain_ids`, `applicable_sense_ids`, and `evidence_ids`.
+Required indexed fields are `release_id`, `publication_state`, `verification_state`, `edge_id`, `relation_version`, `fact_id`, `fact_revision`, `source_node_id`, `target_node_id`, `relation_type`, `relation_registry_version`, `language`, `dialect`, `region`, `period`, `domain_ids`, `applicable_sense_ids`, and `evidence_ids`.
 
-The payload also carries the complete canonical relationship explanation, direction, conditions, restrictions, evidence state, provenance references, confidence, and `assessment_enabled`. `relation_version` matches the relationship entry in MySQL `release_member`. `assessment_enabled` declares target eligibility only; no judgment, count, community score, distance adjustment, user identifier, or aggregate version is stored in Qdrant.
+The payload also carries the complete canonical relationship explanation, direction, conditions, restrictions, evidence state, provenance references, confidence, and `assessment_enabled`. `fact_id` and `fact_revision` identify the authoritative assertion; `relation_registry_version` pins the semantics used to validate its binary traversal projection. `relation_version` matches the relationship entry in MySQL `release_member`. `assessment_enabled` declares target eligibility only; no judgment, count, community score, distance adjustment, user identifier, or aggregate version is stored in Qdrant.
 
 The dense vector embeds the complete source–relation–target explanation. The sparse vector indexes canonical endpoint labels, relation terminology, and reviewed aliases. Similarity proposes candidates and cannot establish or invalidate a relationship.
 
@@ -47,7 +47,7 @@ Corrections build new physical collections. Rollback selects a retained immutabl
 
 ## Related documents
 
-- [Vector endpoint contract](../qdrant.md)
-- [MySQL schema](sql.sql)
-- [Relationship assessment contract](../transnet.md#relationship-assessment-metadata)
+- [Retrieval-data endpoint contract](../retrieval-data.md)
+- [MySQL implementation](mysql.sql)
+- [Guided knowledge-view contract](../transnet.md#knowledge-views)
 - [Content publishing](../../guides/content-publishing.md)
