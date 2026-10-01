@@ -17,6 +17,8 @@ English: [Canonical-data endpoint interface](../../docs/interfaces/canonical-dat
   - [精选翻译存储](#精选翻译存储)
   - [领域 assertion 与语义尺度](#领域-assertion-与语义尺度)
   - [通用操作 envelope](#通用操作-envelope)
+  - [POST /api/v1/releases/active](#post-apiv1releasesactive)
+  - [POST /api/v1/knowledge-releases/active](#post-apiv1knowledge-releasesactive)
   - [POST /api/v1/translations/resolve](#post-apiv1translationsresolve)
   - [POST /api/v1/translations/stage](#post-apiv1translationsstage)
   - [POST /api/v1/basic-cards/resolve](#post-apiv1basic-cardsresolve)
@@ -154,6 +156,41 @@ Stage 4 在 application 请求开始时只选择一次 active 不可变规范发
 闭合 outcome 为 `ok`、`not_found`（没有可安全服务的 active 发布）、`version_mismatch`、`unavailable` 与 `timeout`。错误沿用现有脱敏 `error` 对象，必须回显 request ID 和 schema，且不能携带成功值。未知、缺失、矛盾或超限响应全部 fail closed。`value` 不包含 `vector_collection_id` 或 `ranking_version`：向量组合属于后续工作，确定性排序策略由 Transnet 负责。发布 ID 和规范 schema 必须来自同一次原子 active 指针读取。同一请求后续所有规范读取都携带返回的 `content_release`；即使新发布激活，island-port 也必须能读取当前请求已固定的不可变旧发布，绝不能偷偷升级。若固定发布已无法安全服务，整个请求闭合失败。
 
 island-port server 不在当前仓库，仍需实现该 operation、原子选择、在途有界请求所需的旧发布保留，以及闭合错误 outcome。Transnet 的出站 client 和 fake-UDS 测试不代表真实 MySQL 端到端部署已完成。
+
+## POST /api/v1/knowledge-releases/active
+
+通过一个只读原子 operation 选择完整 active canonical、node-collection 与 edge-collection tuple。本 operation 是 online projection readiness 的权威来源；它绝不激活、回滚、构建或变更发布。Context 省略 `content_release`，因为返回 tuple 自身选择该 pin。Request 与 `releases/active` 使用相同的空 input。
+
+```json
+{
+  "context": {"request_id": "req_example", "deadline_at": "2099-01-01T00:00:00Z", "schema_version": "canonical-data-v1"},
+  "input": {}
+}
+```
+
+```json
+{
+  "request_id": "req_example",
+  "schema_version": "canonical-data-v1",
+  "outcome": "ok",
+  "value": {
+    "content_release": "knowledge-2026-09",
+    "canonical_schema_version": "canonical-v1",
+    "node_collection_id": "knowledge_nodes__knowledge_2026_09",
+    "node_collection_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "edge_collection_id": "knowledge_edges__knowledge_2026_09",
+    "edge_collection_content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "relationship_registry_version": 1,
+    "edge_dense_input_version": "edge-dense-input-v1",
+    "edge_lexical_input_version": "edge-lexical-input-v1"
+  },
+  "error": null
+}
+```
+
+两个 collection ID 必须不同。两个 hash 都是规范小写 SHA-256 值，registry revision 精确为 `1`，两个 edge input version 是冻结的 retrieval-data 值。只有当 active pointer 命名一个可安全读取的 canonical release、两个不可变 verified collection 且 endpoint reconciliation 完整时，island-port 才返回 `ok`。Code 为 `not_found` 的 `not_found` 表示没有完整 tuple 处于 active。其他精确组合为 `version_mismatch` 与 `schema_incompatible`、`unavailable` 与 `dependency_unavailable`、`timeout` 与 `timeout`。所有失败均无 value；所有成功均无 error。未知字段、部分 value、变化的 echo、发布成员不匹配、alias、未验证 collection、相同 collection ID、不兼容 version 或矛盾 outcome topology 全部闭合失败。
+
+已实现的 Transnet `ActiveKnowledgeReleasePort` 与严格 island-port adapter 会重建完整 `NeighborProjectionExecutionExpectation` 并在返回前验证。该能力目前只是 readiness foundation，尚未组合到 online `AppState`。外部 island-port server 及其原子 active-pointer read 仍是外部工作。
 
 对于下文有界的翻译及基础卡候选列表读取，合格的零命中搜索使用 `ok` 与空 `matches` 列表。Stage 4 组合不会把下游 `not_found` 悄悄转换为空结果；它仍是闭合错误，避免不可读取的固定发布被伪装成搜索未命中。
 

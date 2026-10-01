@@ -17,6 +17,8 @@ The checked-in M3 publication foundation models Qdrant build lifecycle, idempote
   - [Curated translation storage](#curated-translation-storage)
   - [Domain assertions and semantic scales](#domain-assertions-and-semantic-scales)
   - [Common operation envelope](#common-operation-envelope)
+  - [POST /api/v1/releases/active](#post-apiv1releasesactive)
+  - [POST /api/v1/knowledge-releases/active](#post-apiv1knowledge-releasesactive)
   - [POST /api/v1/translations/resolve](#post-apiv1translationsresolve)
   - [POST /api/v1/translations/stage](#post-apiv1translationsstage)
   - [POST /api/v1/basic-cards/resolve](#post-apiv1basic-cardsresolve)
@@ -162,6 +164,41 @@ Stage 4 selects the active immutable canonical release once at the start of an a
 The closed outcomes are `ok`, `not_found` (no safely servable active release), `version_mismatch`, `unavailable`, and `timeout`. Errors use the existing redacted `error` object, require the request and schema echoes, and must not carry a success value. Unknown, missing, contradictory, or oversized response data fails closed. The `value` has no `vector_collection_id` or `ranking_version`: vector composition is later work, and deterministic ranking policy belongs to Transnet. The release and canonical schema must come from one atomic active-pointer read. Every later canonical read within the request sends the returned `content_release`, and island-port must serve that immutable release even if a newer one becomes active; it must never silently upgrade a pinned read. If the pinned release can no longer be served safely, the entire request fails closed.
 
 The island-port server is not in this repository and still needs to implement this operation, atomic selection, old-release retention for bounded in-flight requests, and the closed error outcomes. Transnet's outbound client and fake-UDS tests alone are not a real MySQL end-to-end deployment.
+
+## POST /api/v1/knowledge-releases/active
+
+Selects the complete active canonical, node-collection, and edge-collection tuple in one read-only atomic operation. This operation is the authority for online projection readiness; it never activates, rolls back, builds, or mutates a release. Its context omits `content_release` because the returned tuple selects that pin. The request is the same empty input used by `releases/active`.
+
+```json
+{
+  "context": {"request_id": "req_example", "deadline_at": "2099-01-01T00:00:00Z", "schema_version": "canonical-data-v1"},
+  "input": {}
+}
+```
+
+```json
+{
+  "request_id": "req_example",
+  "schema_version": "canonical-data-v1",
+  "outcome": "ok",
+  "value": {
+    "content_release": "knowledge-2026-09",
+    "canonical_schema_version": "canonical-v1",
+    "node_collection_id": "knowledge_nodes__knowledge_2026_09",
+    "node_collection_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "edge_collection_id": "knowledge_edges__knowledge_2026_09",
+    "edge_collection_content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "relationship_registry_version": 1,
+    "edge_dense_input_version": "edge-dense-input-v1",
+    "edge_lexical_input_version": "edge-lexical-input-v1"
+  },
+  "error": null
+}
+```
+
+The collection IDs must be distinct. Both hashes are canonical lowercase SHA-256 values, the registry revision is exactly `1`, and both edge input versions are the frozen retrieval-data values. Island-port returns `ok` only when the active pointer names one safely readable canonical release and both immutable verified collections with complete endpoint reconciliation. `not_found` with code `not_found` means no complete tuple is active. The other exact pairs are `version_mismatch` with `schema_incompatible`, `unavailable` with `dependency_unavailable`, and `timeout` with `timeout`. Every failure has no value; every success has no error. Unknown fields, partial values, changed echoes, mismatched release members, aliases, unverified collections, equal collection IDs, incompatible versions, and contradictory outcome topology fail closed.
+
+The implemented Transnet `ActiveKnowledgeReleasePort` and strict Island-port adapter reconstruct the full `NeighborProjectionExecutionExpectation` and validate it before returning. This is a readiness foundation only and is not yet composed into online `AppState`. The external island-port server and its atomic active-pointer read remain external work.
 
 For the bounded translation and basic-card candidate-list reads below, an eligible zero-hit search is `ok` with an empty `matches` list. A downstream `not_found` is not silently converted into an empty result by the Stage 4 composition: it remains a closed error, so an unavailable pinned release cannot masquerade as a search miss.
 

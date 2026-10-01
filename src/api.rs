@@ -51,7 +51,9 @@ mod trace_context;
 mod v1;
 
 pub use envelope::{SuccessEnvelope, SuccessMeta};
-pub use readiness::{AlwaysReady, CanonicalDependencyReadiness, Readiness};
+pub use readiness::{
+  AlwaysReady, CanonicalDependencyReadiness, KnowledgeProjectionReadiness, Readiness,
+};
 
 use request_id::RequestId;
 
