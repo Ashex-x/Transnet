@@ -10,6 +10,8 @@ pub mod in_memory_retrieval;
 pub mod island_port;
 /// Strict outbound island-port knowledge-publication client.
 pub mod island_port_publication;
+/// Strict outbound island-port retrieval-data client.
+pub mod island_port_retrieval;
 /// OpenAI-compatible structured lexical-model client.
 pub mod learning_model;
 /// Provider-neutral OpenAI-compatible generation and ephemeral embedding adapters.

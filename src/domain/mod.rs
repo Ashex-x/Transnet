@@ -30,6 +30,8 @@ pub mod observability;
 pub mod request_context;
 /// Deterministic hybrid-retrieval values and candidate fusion.
 pub mod retrieval;
+/// Bounded storage-neutral requests and results for retrieval-data-v1.
+pub mod retrieval_data;
 /// Structured multilingual-to-English translation.
 pub mod translation;
 /// Request-local unified translation values, normalization, and response projection.
