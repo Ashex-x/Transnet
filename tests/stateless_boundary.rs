@@ -7,6 +7,38 @@ use axum::{
 use tower::ServiceExt;
 use transnet::{app_router, AppState, ProviderConfig, TranslationConfig, TranslationService};
 
+const REMOVED_PRIVATE_STATE_MODULES: &[&str] = &[
+  "src/adapters/in_memory/feedback.rs",
+  "src/adapters/in_memory/graph_view.rs",
+  "src/adapters/in_memory/idempotency.rs",
+  "src/adapters/in_memory/jobs.rs",
+  "src/adapters/in_memory/learner_state.rs",
+  "src/adapters/in_memory/lookup_jobs.rs",
+  "src/adapters/in_memory/practice_state.rs",
+  "src/adapters/in_memory/repository.rs",
+  "src/api/v1/lookup_job.rs",
+  "src/application/canonical_lookup_cache.rs",
+  "src/application/durable_worker.rs",
+  "src/application/feedback.rs",
+  "src/application/graph_view.rs",
+  "src/application/learner_state.rs",
+  "src/application/lookup_job.rs",
+  "src/application/practice_state.rs",
+  "src/domain/canonical_lookup_cache.rs",
+  "src/domain/feedback.rs",
+  "src/domain/graph_view.rs",
+  "src/domain/learner.rs",
+  "src/domain/practice.rs",
+  "src/ports/durable_job.rs",
+  "src/ports/graph_feedback.rs",
+  "src/ports/graph_view.rs",
+  "src/ports/idempotency.rs",
+  "src/ports/learner_state.rs",
+  "src/ports/lookup_job.rs",
+  "src/ports/practice_state.rs",
+  "src/ports/repository.rs",
+];
+
 fn router() -> axum::Router {
   let provider = ProviderConfig {
     base_url: "http://127.0.0.1:1/v1".into(),
@@ -26,6 +58,18 @@ fn router() -> axum::Router {
     )
     .unwrap(),
   ))
+}
+
+#[test]
+fn obsolete_private_state_modules_are_absent_from_the_source_surface() {
+  let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+
+  for relative_path in REMOVED_PRIVATE_STATE_MODULES {
+    assert!(
+      !manifest.join(relative_path).exists(),
+      "obsolete private-state module returned: {relative_path}"
+    );
+  }
 }
 
 #[tokio::test]
