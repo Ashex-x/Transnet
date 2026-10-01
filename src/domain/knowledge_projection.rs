@@ -520,7 +520,7 @@ pub fn build_edge_projection(
       identity,
       source_point,
       target_point,
-    ));
+    )?);
   }
   let point_count =
     u64::try_from(points.len()).map_err(|_| ProjectionValidationError::CountOverflow)?;
@@ -566,8 +566,8 @@ fn project_node(
         language: lexeme.language.as_str().to_string(),
         part_of_speech: lexeme.part_of_speech,
       };
-      let dense = material.dense_input(&node.id);
-      let lexical = material.lexical_input(&node.id);
+      let dense = material.dense_input(&node.id)?;
+      let lexical = material.lexical_input(&node.id)?;
       (node, payload, dense, lexical)
     }
     CanonicalNodeProjectionInput::Sense(material) => {
@@ -593,8 +593,8 @@ fn project_node(
         part_of_speech: lexeme.part_of_speech,
         definition_evidence_ids,
       };
-      let dense = material.dense_input(&node.id);
-      let lexical = material.lexical_input(&node.id);
+      let dense = material.dense_input(&node.id)?;
+      let lexical = material.lexical_input(&node.id)?;
       (node, payload, dense, lexical)
     }
     CanonicalNodeProjectionInput::Unresolved(_) => {
@@ -635,7 +635,7 @@ fn project_edge(
   identity: PublishedEdgeIdentity,
   source_point: &NodeProjection,
   target_point: &NodeProjection,
-) -> EdgeProjection {
+) -> Result<EdgeProjection, ProjectionValidationError> {
   let mut evidence = relationship
     .evidence_lineage
     .iter()
@@ -670,7 +670,7 @@ fn project_edge(
     &target_point.dense_input,
     &evidence,
     &verification,
-  );
+  )?;
   let lexical_input = edge_input(
     EmbeddingInputFamily::Lexical,
     EDGE_LEXICAL_INPUT_VERSION,
@@ -681,7 +681,7 @@ fn project_edge(
     &target_point.lexical_input,
     &evidence,
     &verification,
-  );
+  )?;
   let mut projection = EdgeProjection {
     point_id,
     identity,
@@ -697,7 +697,7 @@ fn project_edge(
     content_hash: String::new(),
   };
   projection.content_hash = hash_edge_point(embedding, &projection);
-  projection
+  Ok(projection)
 }
 
 fn require_active_release(
@@ -725,7 +725,7 @@ fn edge_input(
   target: &CanonicalEmbeddingInput,
   evidence: &[ProjectionEvidenceReference],
   verification: &EdgeVerificationMetadata,
-) -> CanonicalEmbeddingInput {
+) -> Result<CanonicalEmbeddingInput, ProjectionValidationError> {
   CanonicalEmbeddingInput::from_fields(family, version, |out| {
     out.field("release", identity.release_id.as_str());
     out.field("relationship_id", identity.relationship_id.as_str());
@@ -765,6 +765,7 @@ fn edge_input(
     );
     out.field("verification_state", "verified");
   })
+  .map_err(ProjectionValidationError::from)
 }
 
 fn validate_version(value: &str) -> Result<(), ProjectionValidationError> {

@@ -23,6 +23,8 @@ pub const NODE_LEXICAL_INPUT_VERSION: &str = "node-lexical-input-v1";
 pub const EDGE_DENSE_INPUT_VERSION: &str = "edge-dense-input-v1";
 /// Deterministic lexical edge input contract version.
 pub const EDGE_LEXICAL_INPUT_VERSION: &str = "edge-lexical-input-v1";
+/// Maximum serialized bytes accepted for one canonical embedding input.
+pub const MAX_CANONICAL_EMBEDDING_INPUT_BYTES: usize = 65_536;
 
 const MAX_FORMS: usize = 24;
 const MAX_GLOSSES: usize = 24;
@@ -69,7 +71,7 @@ impl CanonicalEmbeddingInput {
     family: EmbeddingInputFamily,
     version: &'static str,
     fields: impl FnOnce(&mut CanonicalWriter),
-  ) -> Self {
+  ) -> Result<Self, EmbeddingMaterialError> {
     let mut writer = CanonicalWriter::new();
     writer.field("input_spec", version);
     writer.field(
@@ -81,17 +83,20 @@ impl CanonicalEmbeddingInput {
     );
     fields(&mut writer);
     let canonical_bytes = writer.finish();
+    if canonical_bytes.len() > MAX_CANONICAL_EMBEDDING_INPUT_BYTES {
+      return Err(EmbeddingMaterialError::InputTooLarge);
+    }
     let mut digest = Sha256::new();
     digest.update(b"transnet-embedding-input\0");
     digest.update(version.as_bytes());
     digest.update([0]);
     digest.update(&canonical_bytes);
-    Self {
+    Ok(Self {
       family,
       specification_version: version,
       input_hash: format!("sha256:{:x}", digest.finalize()),
       canonical_bytes,
-    }
+    })
   }
 }
 
@@ -278,7 +283,10 @@ impl AuthoritativeEmbeddingMaterial {
     self.sense.as_ref()
   }
   /// Returns a canonical dense node input.
-  pub fn dense_input(&self, node_id: &CanonicalId) -> CanonicalEmbeddingInput {
+  pub fn dense_input(
+    &self,
+    node_id: &CanonicalId,
+  ) -> Result<CanonicalEmbeddingInput, EmbeddingMaterialError> {
     self.input(
       node_id,
       EmbeddingInputFamily::Dense,
@@ -286,7 +294,10 @@ impl AuthoritativeEmbeddingMaterial {
     )
   }
   /// Returns a canonical lexical node input.
-  pub fn lexical_input(&self, node_id: &CanonicalId) -> CanonicalEmbeddingInput {
+  pub fn lexical_input(
+    &self,
+    node_id: &CanonicalId,
+  ) -> Result<CanonicalEmbeddingInput, EmbeddingMaterialError> {
     self.input(
       node_id,
       EmbeddingInputFamily::Lexical,
@@ -299,7 +310,7 @@ impl AuthoritativeEmbeddingMaterial {
     node_id: &CanonicalId,
     family: EmbeddingInputFamily,
     version: &'static str,
-  ) -> CanonicalEmbeddingInput {
+  ) -> Result<CanonicalEmbeddingInput, EmbeddingMaterialError> {
     CanonicalEmbeddingInput::from_fields(family, version, |out| {
       out.field("release", self.lexeme.release_id.as_str());
       out.field("node_id", node_id.as_str());
@@ -421,6 +432,9 @@ pub enum EmbeddingMaterialError {
   /// Too much lexical material was supplied.
   #[error("embedding material exceeds its bound")]
   TooManyItems,
+  /// Final canonical serialization exceeded the per-input byte boundary.
+  #[error("canonical embedding input exceeds its serialized byte bound")]
+  InputTooLarge,
   /// A record is not active and publication eligible.
   #[error("embedding material is not publication eligible")]
   IneligibleRecord,
@@ -694,8 +708,8 @@ mod tests {
       vec![lineage("evidence-1", true)],
     )
     .unwrap();
-    let dense = material.dense_input(&id("lexeme-technical"));
-    let lexical = material.lexical_input(&id("lexeme-technical"));
+    let dense = material.dense_input(&id("lexeme-technical")).unwrap();
+    let lexical = material.lexical_input(&id("lexeme-technical")).unwrap();
     assert_eq!(dense.specification_version(), NODE_DENSE_INPUT_VERSION);
     assert_eq!(lexical.specification_version(), NODE_LEXICAL_INPUT_VERSION);
     assert_ne!(dense.input_hash(), lexical.input_hash());
@@ -728,8 +742,92 @@ mod tests {
     .unwrap();
     assert_eq!(first.lexeme().id, second.lexeme().id);
     assert_ne!(
-      first.dense_input(&first.lexeme().id).input_hash(),
-      second.dense_input(&second.lexeme().id).input_hash()
+      first.dense_input(&first.lexeme().id).unwrap().input_hash(),
+      second
+        .dense_input(&second.lexeme().id)
+        .unwrap()
+        .input_hash()
+    );
+  }
+
+  fn input_with_exact_bytes(
+    family: EmbeddingInputFamily,
+    version: &'static str,
+    target_bytes: usize,
+    unicode: bool,
+  ) -> Result<CanonicalEmbeddingInput, EmbeddingMaterialError> {
+    let baseline = CanonicalEmbeddingInput::from_fields(family, version, |out| {
+      out.field("payload", "");
+    })?
+    .canonical_bytes()
+    .len();
+    let payload_bytes = target_bytes.saturating_sub(baseline);
+    let payload = if unicode {
+      format!(
+        "{}{}",
+        "界".repeat(payload_bytes / "界".len()),
+        "x".repeat(payload_bytes % "界".len())
+      )
+    } else {
+      "x".repeat(payload_bytes)
+    };
+    CanonicalEmbeddingInput::from_fields(family, version, |out| {
+      out.field("payload", &payload);
+    })
+  }
+
+  #[test]
+  fn canonical_inputs_accept_exact_byte_limit_for_every_family_and_kind() {
+    for (family, version) in [
+      (EmbeddingInputFamily::Dense, NODE_DENSE_INPUT_VERSION),
+      (EmbeddingInputFamily::Lexical, NODE_LEXICAL_INPUT_VERSION),
+      (EmbeddingInputFamily::Dense, EDGE_DENSE_INPUT_VERSION),
+      (EmbeddingInputFamily::Lexical, EDGE_LEXICAL_INPUT_VERSION),
+    ] {
+      let input =
+        input_with_exact_bytes(family, version, MAX_CANONICAL_EMBEDDING_INPUT_BYTES, false)
+          .unwrap();
+      assert_eq!(
+        input.canonical_bytes().len(),
+        MAX_CANONICAL_EMBEDDING_INPUT_BYTES
+      );
+    }
+  }
+
+  #[test]
+  fn canonical_inputs_reject_one_byte_over_limit() {
+    assert_eq!(
+      input_with_exact_bytes(
+        EmbeddingInputFamily::Dense,
+        NODE_DENSE_INPUT_VERSION,
+        MAX_CANONICAL_EMBEDDING_INPUT_BYTES + 1,
+        false,
+      ),
+      Err(EmbeddingMaterialError::InputTooLarge)
+    );
+  }
+
+  #[test]
+  fn canonical_input_limit_counts_utf8_bytes_not_characters() {
+    let exact = input_with_exact_bytes(
+      EmbeddingInputFamily::Lexical,
+      EDGE_LEXICAL_INPUT_VERSION,
+      MAX_CANONICAL_EMBEDDING_INPUT_BYTES,
+      true,
+    )
+    .unwrap();
+    assert_eq!(
+      exact.canonical_bytes().len(),
+      MAX_CANONICAL_EMBEDDING_INPUT_BYTES
+    );
+    assert_eq!(
+      input_with_exact_bytes(
+        EmbeddingInputFamily::Lexical,
+        EDGE_LEXICAL_INPUT_VERSION,
+        MAX_CANONICAL_EMBEDDING_INPUT_BYTES + 1,
+        true,
+      ),
+      Err(EmbeddingMaterialError::InputTooLarge)
     );
   }
 }

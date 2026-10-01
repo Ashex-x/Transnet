@@ -30,15 +30,18 @@ use crate::{
   ports::knowledge_publication::{
     BeginPublication, EdgePublicationBatch, FreezeEdges, FreezeNodes, FrozenEdgePublication,
     FrozenNodePublication, KnowledgePublicationContext, KnowledgePublicationPort,
-    NodePublicationBatch, PublicationActivationCandidate, PublicationStatus, ReconcilePublication,
+    NodePublicationBatch, PublicationActivationCandidate, PublicationBatchWireAdmission,
+    PublicationStatus, ReconcilePublication, MAX_PUBLICATION_BATCH_POINTS,
+    MAX_PUBLICATION_BATCH_REQUEST_BYTES, MAX_PUBLICATION_DEADLINE_BYTES,
+    MAX_PUBLICATION_REQUEST_ID_BYTES,
   },
 };
 
 const SCHEMA_VERSION: &str = "knowledge-publication-v1";
-const MAX_BATCH_POINTS: usize = 256;
-const MAX_BATCH_REQUEST_BYTES: usize = 1024 * 1024;
 const MAX_CONTROL_REQUEST_BYTES: usize = 256 * 1024;
 const MAX_RESPONSE_BYTES: usize = 256 * 1024;
+const PLANNING_DEADLINE_AT: &str =
+  "9999-12-31T23:59:59.99999999999999999999999999999999999999+23:59";
 
 const BEGIN_PATH: &str = "/api/v1/knowledge-publications/begin";
 const NODE_BATCH_PATH: &str = "/api/v1/knowledge-publications/nodes/batch";
@@ -69,11 +72,7 @@ impl IslandPortPublicationClient {
     request_limit: usize,
   ) -> Result<PublicationResponseDto<R>, KnowledgeReleaseFailure> {
     let context_dto = PublicationContextDto::new(context, canonical)?;
-    let body = serde_json::to_vec(&PublicationRequestDto {
-      context: context_dto,
-      input,
-    })
-    .map_err(|_| KnowledgeReleaseFailure::SchemaIncompatible)?;
+    let body = serialize_request(context_dto, input)?;
     if body.len() > request_limit {
       return Err(KnowledgeReleaseFailure::SchemaIncompatible);
     }
@@ -101,6 +100,26 @@ impl fmt::Debug for IslandPortPublicationClient {
 
 #[async_trait]
 impl KnowledgePublicationPort for IslandPortPublicationClient {
+  fn inspect_node_batch(
+    &self,
+    canonical: &CanonicalReleasePin,
+    request: &NodePublicationBatch,
+  ) -> Result<PublicationBatchWireAdmission, KnowledgeReleaseFailure> {
+    validate_batch(&request.points)?;
+    validate_batch_identity(&request.identity, "nodes")?;
+    inspect_batch(canonical, BatchInputDto::nodes(request)?)
+  }
+
+  fn inspect_edge_batch(
+    &self,
+    canonical: &CanonicalReleasePin,
+    request: &EdgePublicationBatch,
+  ) -> Result<PublicationBatchWireAdmission, KnowledgeReleaseFailure> {
+    validate_batch(&request.points)?;
+    validate_batch_identity(&request.identity, "edges")?;
+    inspect_batch(canonical, BatchInputDto::edges(request)?)
+  }
+
   async fn begin(
     &self,
     context: &KnowledgePublicationContext,
@@ -135,7 +154,7 @@ impl KnowledgePublicationPort for IslandPortPublicationClient {
         context,
         canonical,
         input,
-        MAX_BATCH_REQUEST_BYTES,
+        MAX_PUBLICATION_BATCH_REQUEST_BYTES,
       )
       .await?;
     batch_value(response.value()?, &request.identity)
@@ -177,7 +196,7 @@ impl KnowledgePublicationPort for IslandPortPublicationClient {
         context,
         canonical,
         input,
-        MAX_BATCH_REQUEST_BYTES,
+        MAX_PUBLICATION_BATCH_REQUEST_BYTES,
       )
       .await?;
     batch_value(response.value()?, &request.identity)
@@ -270,11 +289,35 @@ impl KnowledgePublicationPort for IslandPortPublicationClient {
 }
 
 fn validate_batch<T>(points: &[T]) -> Result<(), KnowledgeReleaseFailure> {
-  if points.is_empty() || points.len() > MAX_BATCH_POINTS {
+  if points.is_empty() || points.len() > MAX_PUBLICATION_BATCH_POINTS {
     Err(KnowledgeReleaseFailure::SchemaIncompatible)
   } else {
     Ok(())
   }
+}
+
+fn inspect_batch<T: Serialize>(
+  canonical: &CanonicalReleasePin,
+  input: T,
+) -> Result<PublicationBatchWireAdmission, KnowledgeReleaseFailure> {
+  let bytes = serialize_request(PublicationContextDto::planning(canonical), input)?.len();
+  if bytes <= MAX_PUBLICATION_BATCH_REQUEST_BYTES {
+    Ok(PublicationBatchWireAdmission::Fits {
+      serialized_bytes: bytes,
+    })
+  } else {
+    Ok(PublicationBatchWireAdmission::TooLarge {
+      serialized_bytes: bytes,
+    })
+  }
+}
+
+fn serialize_request<T: Serialize>(
+  context: PublicationContextDto,
+  input: T,
+) -> Result<Vec<u8>, KnowledgeReleaseFailure> {
+  serde_json::to_vec(&PublicationRequestDto { context, input })
+    .map_err(|_| KnowledgeReleaseFailure::SchemaIncompatible)
 }
 
 fn validate_compatibility(
@@ -355,11 +398,12 @@ fn effective_timeout(
   context: &KnowledgePublicationContext,
 ) -> Result<Duration, KnowledgeReleaseFailure> {
   if context.request_id.is_empty()
-    || context.request_id.len() > 128
+    || context.request_id.len() > MAX_PUBLICATION_REQUEST_ID_BYTES
     || !context
       .request_id
       .bytes()
       .all(|byte| byte.is_ascii_graphic())
+    || context.deadline_at.len() > MAX_PUBLICATION_DEADLINE_BYTES
     || context.timeout.is_zero()
   {
     return Err(KnowledgeReleaseFailure::SchemaIncompatible);
@@ -413,6 +457,17 @@ impl PublicationContextDto {
       schema_version: SCHEMA_VERSION,
       content_release: canonical.release_id.as_str().to_string(),
     })
+  }
+
+  fn planning(canonical: &CanonicalReleasePin) -> Self {
+    Self {
+      // Backslash is a legal ASCII-graphic request-ID byte and has the largest JSON encoding.
+      request_id: "\\".repeat(MAX_PUBLICATION_REQUEST_ID_BYTES),
+      // Maximum contract length, using parser-accepted fractional seconds and a numeric offset.
+      deadline_at: PLANNING_DEADLINE_AT.into(),
+      schema_version: SCHEMA_VERSION,
+      content_release: canonical.release_id.as_str().to_string(),
+    }
   }
 }
 
@@ -530,7 +585,7 @@ impl<'a> CompatibilityDto<'a> {
   }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(deny_unknown_fields)]
 struct BatchInputDto {
   build_id: String,
@@ -1822,7 +1877,7 @@ mod tests {
         &context(),
         &pin(),
         node_input,
-        MAX_BATCH_REQUEST_BYTES,
+        MAX_PUBLICATION_BATCH_REQUEST_BYTES,
       )
       .await
       .unwrap();
@@ -1844,7 +1899,7 @@ mod tests {
         &context(),
         &pin(),
         edge_input,
-        MAX_BATCH_REQUEST_BYTES,
+        MAX_PUBLICATION_BATCH_REQUEST_BYTES,
       )
       .await
       .unwrap();
@@ -1867,7 +1922,7 @@ mod tests {
       ordinal: 0,
       request_fingerprint: hash('b'),
       content_hash: hash('c'),
-      points: vec![json!({"payload":"x".repeat(MAX_BATCH_REQUEST_BYTES)})],
+      points: vec![json!({"payload":"x".repeat(MAX_PUBLICATION_BATCH_REQUEST_BYTES)})],
     };
     let result: Result<PublicationResponseDto<StatusValueDto>, _> = client
       .call(
@@ -1875,7 +1930,7 @@ mod tests {
         &context(),
         &pin(),
         input,
-        MAX_BATCH_REQUEST_BYTES,
+        MAX_PUBLICATION_BATCH_REQUEST_BYTES,
       )
       .await;
     assert!(matches!(
@@ -1883,6 +1938,139 @@ mod tests {
       Err(KnowledgeReleaseFailure::SchemaIncompatible)
     ));
     assert!(transport.requests.lock().unwrap().is_empty());
+  }
+
+  #[test]
+  fn batch_inspection_is_io_free_and_uses_the_send_serializer() {
+    let transport = Arc::new(FakeTransport::default());
+    let _client = IslandPortPublicationClient::new(transport.clone());
+    let input = BatchInputDto {
+      build_id: hash('a'),
+      ordinal: 17,
+      request_fingerprint: hash('b'),
+      content_hash: hash('c'),
+      points: vec![json!({"point_id":"node-1","dense_input":"Qysr"})],
+    };
+    let admission = inspect_batch(&pin(), input.clone()).unwrap();
+    let planning_bytes = serialize_request(PublicationContextDto::planning(&pin()), input).unwrap();
+    assert_eq!(admission.serialized_bytes(), planning_bytes.len());
+    assert!(admission.fits());
+    assert!(transport.requests.lock().unwrap().is_empty());
+  }
+
+  #[test]
+  fn wire_admission_rejects_a_large_batch_below_the_point_limit() {
+    let point = json!({"payload":"x".repeat(140_000)});
+    let fitting = BatchInputDto {
+      build_id: hash('a'),
+      ordinal: 0,
+      request_fingerprint: hash('b'),
+      content_hash: hash('c'),
+      points: vec![point.clone(); 7],
+    };
+    let oversized = BatchInputDto {
+      points: vec![point; 8],
+      ..fitting.clone()
+    };
+
+    let fitting_admission = inspect_batch(&pin(), fitting).unwrap();
+    let oversized_admission = inspect_batch(&pin(), oversized).unwrap();
+
+    assert!(fitting_admission.fits());
+    assert!(matches!(
+      oversized_admission,
+      PublicationBatchWireAdmission::TooLarge { .. }
+    ));
+  }
+
+  #[test]
+  fn planning_context_is_the_maximum_legal_serialized_context() {
+    let input = BatchInputDto {
+      build_id: hash('a'),
+      ordinal: u32::MAX,
+      request_fingerprint: hash('b'),
+      content_hash: hash('c'),
+      points: vec![json!({"point_id":"node-1"})],
+    };
+    let planned = serialize_request(PublicationContextDto::planning(&pin()), input.clone())
+      .unwrap()
+      .len();
+    for request_id in [
+      "x".repeat(MAX_PUBLICATION_REQUEST_ID_BYTES),
+      "\\".repeat(MAX_PUBLICATION_REQUEST_ID_BYTES),
+      "\"".repeat(MAX_PUBLICATION_REQUEST_ID_BYTES),
+    ] {
+      for deadline_at in [
+        PLANNING_DEADLINE_AT,
+        "9999-12-31T23:59:59.999999999Z",
+        "9999-12-31T23:59:59+00:00",
+      ] {
+        assert!(deadline_at.len() <= MAX_PUBLICATION_DEADLINE_BYTES);
+        time::OffsetDateTime::parse(deadline_at, &time::format_description::well_known::Rfc3339)
+          .unwrap();
+        let actual = serialize_request(
+          PublicationContextDto {
+            request_id: request_id.clone(),
+            deadline_at: deadline_at.into(),
+            schema_version: SCHEMA_VERSION,
+            content_release: pin().release_id.as_str().to_string(),
+          },
+          input.clone(),
+        )
+        .unwrap()
+        .len();
+        assert!(actual <= planned);
+      }
+    }
+  }
+
+  #[test]
+  fn planning_fit_remains_within_the_limit_at_the_runtime_deadline_boundary() {
+    assert_eq!(PLANNING_DEADLINE_AT.len(), MAX_PUBLICATION_DEADLINE_BYTES);
+    time::OffsetDateTime::parse(
+      PLANNING_DEADLINE_AT,
+      &time::format_description::well_known::Rfc3339,
+    )
+    .unwrap();
+
+    let input_for = |payload_bytes| BatchInputDto {
+      build_id: hash('a'),
+      ordinal: u32::MAX,
+      request_fingerprint: hash('b'),
+      content_hash: hash('c'),
+      points: vec![json!({"payload":"x".repeat(payload_bytes)})],
+    };
+    let mut low = 0;
+    let mut high = MAX_PUBLICATION_BATCH_REQUEST_BYTES;
+    while low < high {
+      let midpoint = low + (high - low).div_ceil(2);
+      if inspect_batch(&pin(), input_for(midpoint)).unwrap().fits() {
+        low = midpoint;
+      } else {
+        high = midpoint - 1;
+      }
+    }
+
+    let input = input_for(low);
+    let planning_bytes = inspect_batch(&pin(), input.clone())
+      .unwrap()
+      .serialized_bytes();
+    let runtime_bytes = serialize_request(
+      PublicationContextDto {
+        request_id: "\\".repeat(MAX_PUBLICATION_REQUEST_ID_BYTES),
+        deadline_at: PLANNING_DEADLINE_AT.into(),
+        schema_version: SCHEMA_VERSION,
+        content_release: pin().release_id.as_str().to_string(),
+      },
+      input,
+    )
+    .unwrap()
+    .len();
+
+    assert!(planning_bytes >= runtime_bytes);
+    assert!(runtime_bytes <= MAX_PUBLICATION_BATCH_REQUEST_BYTES);
+    assert!(MAX_PUBLICATION_BATCH_REQUEST_BYTES - planning_bytes < 8);
+    assert!(!inspect_batch(&pin(), input_for(low + 1)).unwrap().fits());
   }
 
   #[tokio::test]

@@ -20,11 +20,10 @@ use crate::{
   ports::knowledge_publication::{
     BeginPublication, EdgePublicationBatch, FreezeEdges, FreezeNodes, KnowledgePublicationContext,
     KnowledgePublicationPort, NodePublicationBatch, PublicationActivationCandidate,
-    PublicationStatus, ReconcilePublication,
+    PublicationBatchWireAdmission, PublicationStatus, ReconcilePublication,
+    MAX_PUBLICATION_BATCH_POINTS,
   },
 };
-
-const MAX_BATCH_POINTS: usize = 256;
 
 /// Immutable inputs needed to execute or resume one publication build.
 pub struct KnowledgePublicationPlan {
@@ -78,6 +77,8 @@ impl KnowledgePublicationService {
       &plan.compatibility.entry_id,
     )
     .map_err(KnowledgeReleaseFailure::from)?;
+    let node_batches = self.plan_node_batches(plan, &build_id)?;
+    let edge_batches = self.plan_edge_batches(plan, &build_id)?;
     let begin = begin_request(plan, build_id.clone())?;
     let begin_status = self.publication.begin(context, &begin).await?;
     if begin_status.build_id != build_id {
@@ -87,7 +88,12 @@ impl KnowledgePublicationService {
       .publication
       .status(context, &plan.canonical, &build_id)
       .await?;
-    validate_status(&initial, &build_id, plan)?;
+    validate_status(
+      &initial,
+      &build_id,
+      batch_count(&node_batches)?,
+      batch_count(&edge_batches)?,
+    )?;
 
     if terminal_failure(initial.state) {
       return Err(KnowledgeReleaseFailure::InvalidLifecycleTransition);
@@ -95,7 +101,14 @@ impl KnowledgePublicationService {
 
     if initial.state == PublicationBuildState::AcceptingNodes {
       self
-        .submit_node_batches(context, plan, &build_id, initial.next_node_ordinal)
+        .submit_node_batches(
+          context,
+          plan,
+          &build_id,
+          &node_batches,
+          batch_count(&edge_batches)?,
+          initial.next_node_ordinal,
+        )
         .await?;
     }
 
@@ -131,7 +144,14 @@ impl KnowledgePublicationService {
         | PublicationBuildState::AcceptingEdges
     ) {
       self
-        .submit_edge_batches(context, plan, &build_id, initial.next_edge_ordinal)
+        .submit_edge_batches(
+          context,
+          plan,
+          &build_id,
+          &edge_batches,
+          batch_count(&node_batches)?,
+          initial.next_edge_ordinal,
+        )
         .await?;
     }
 
@@ -194,17 +214,17 @@ impl KnowledgePublicationService {
     context: &KnowledgePublicationContext,
     plan: &KnowledgePublicationPlan,
     build_id: &PublicationBuildId,
+    batches: &[PlannedBatch<NodeProjection>],
+    edge_batch_count: u32,
     next_ordinal: u32,
   ) -> Result<(), KnowledgeReleaseFailure> {
-    let node_batches = batch_count(plan.nodes.points.len())?;
-    let edge_batches = batch_count(plan.edges.points.len())?;
-    submit_batches(
-      &plan.nodes.points,
+    submit_planned_batches(
+      batches,
       next_ordinal,
       PublicationCollectionFamily::Nodes,
       build_id,
-      node_batches,
-      edge_batches,
+      batch_count(batches)?,
+      edge_batch_count,
       |identity, points| async move {
         self
           .publication
@@ -224,17 +244,17 @@ impl KnowledgePublicationService {
     context: &KnowledgePublicationContext,
     plan: &KnowledgePublicationPlan,
     build_id: &PublicationBuildId,
+    batches: &[PlannedBatch<EdgeProjection>],
+    node_batch_count: u32,
     next_ordinal: u32,
   ) -> Result<(), KnowledgeReleaseFailure> {
-    let node_batches = batch_count(plan.nodes.points.len())?;
-    let edge_batches = batch_count(plan.edges.points.len())?;
-    submit_batches(
-      &plan.edges.points,
+    submit_planned_batches(
+      batches,
       next_ordinal,
       PublicationCollectionFamily::Edges,
       build_id,
-      node_batches,
-      edge_batches,
+      node_batch_count,
+      batch_count(batches)?,
       |identity, points| async move {
         self
           .publication
@@ -247,6 +267,40 @@ impl KnowledgePublicationService {
       },
     )
     .await
+  }
+
+  fn plan_node_batches(
+    &self,
+    plan: &KnowledgePublicationPlan,
+    build_id: &PublicationBuildId,
+  ) -> Result<Vec<PlannedBatch<NodeProjection>>, KnowledgeReleaseFailure> {
+    plan_batches(
+      &plan.nodes.points,
+      PublicationCollectionFamily::Nodes,
+      build_id,
+      |identity, points| {
+        self
+          .publication
+          .inspect_node_batch(&plan.canonical, &NodePublicationBatch { identity, points })
+      },
+    )
+  }
+
+  fn plan_edge_batches(
+    &self,
+    plan: &KnowledgePublicationPlan,
+    build_id: &PublicationBuildId,
+  ) -> Result<Vec<PlannedBatch<EdgeProjection>>, KnowledgeReleaseFailure> {
+    plan_batches(
+      &plan.edges.points,
+      PublicationCollectionFamily::Edges,
+      build_id,
+      |identity, points| {
+        self
+          .publication
+          .inspect_edge_batch(&plan.canonical, &EdgePublicationBatch { identity, points })
+      },
+    )
   }
 }
 
@@ -322,10 +376,9 @@ fn begin_request(
 fn validate_status(
   status: &PublicationStatus,
   build_id: &PublicationBuildId,
-  plan: &KnowledgePublicationPlan,
+  node_batches: u32,
+  edge_batches: u32,
 ) -> Result<(), KnowledgeReleaseFailure> {
-  let node_batches = batch_count(plan.nodes.points.len())?;
-  let edge_batches = batch_count(plan.edges.points.len())?;
   validate_status_progress(status, build_id, node_batches, edge_batches)
 }
 
@@ -366,9 +419,8 @@ fn validate_status_progress(
   }
 }
 
-fn batch_count(point_count: usize) -> Result<u32, KnowledgeReleaseFailure> {
-  let value = point_count.div_ceil(MAX_BATCH_POINTS);
-  u32::try_from(value).map_err(|_| KnowledgeReleaseFailure::IncompleteTrio)
+fn batch_count<T>(batches: &[PlannedBatch<T>]) -> Result<u32, KnowledgeReleaseFailure> {
+  u32::try_from(batches.len()).map_err(|_| KnowledgeReleaseFailure::IncompleteTrio)
 }
 
 fn terminal_failure(state: PublicationBuildState) -> bool {
@@ -381,8 +433,89 @@ fn terminal_failure(state: PublicationBuildState) -> bool {
   )
 }
 
-async fn submit_batches<T, Fut, Submit>(
+#[derive(Clone)]
+struct PlannedBatch<T> {
+  identity: PublicationBatchIdentity,
+  points: Vec<T>,
+}
+
+fn plan_batches<T, Inspect>(
   points: &[T],
+  family: PublicationCollectionFamily,
+  build_id: &PublicationBuildId,
+  mut inspect: Inspect,
+) -> Result<Vec<PlannedBatch<T>>, KnowledgeReleaseFailure>
+where
+  T: Clone + PointContentHash,
+  Inspect: FnMut(
+    PublicationBatchIdentity,
+    Vec<T>,
+  ) -> Result<PublicationBatchWireAdmission, KnowledgeReleaseFailure>,
+{
+  let mut batches = Vec::new();
+  let mut start = 0;
+  while start < points.len() {
+    let ordinal =
+      u32::try_from(batches.len()).map_err(|_| KnowledgeReleaseFailure::IncompleteTrio)?;
+    let max_end = (start + MAX_PUBLICATION_BATCH_POINTS).min(points.len());
+    let mut accepted = None;
+    for end in (start + 1)..=max_end {
+      let candidate = points[start..end].to_vec();
+      let identity = batch_identity(build_id, family, ordinal, &candidate)?;
+      match inspect(identity.clone(), candidate.clone())? {
+        PublicationBatchWireAdmission::Fits { .. } => accepted = Some((end, identity, candidate)),
+        PublicationBatchWireAdmission::TooLarge { .. } => break,
+      }
+    }
+    let Some((end, identity, batch_points)) = accepted else {
+      return Err(KnowledgeReleaseFailure::SchemaIncompatible);
+    };
+    batches.push(PlannedBatch {
+      identity,
+      points: batch_points,
+    });
+    start = end;
+  }
+  Ok(batches)
+}
+
+fn batch_identity<T: PointContentHash>(
+  build_id: &PublicationBuildId,
+  family: PublicationCollectionFamily,
+  ordinal: u32,
+  points: &[T],
+) -> Result<PublicationBatchIdentity, KnowledgeReleaseFailure> {
+  let point_hashes = points
+    .iter()
+    .map(PointContentHash::content_hash)
+    .collect::<Vec<_>>();
+  let content_hash = PublicationBatchContentHash::derive(family, &point_hashes)
+    .map_err(KnowledgeReleaseFailure::from)?;
+  let ordinal_value = ordinal.to_string();
+  let family_name = match family {
+    PublicationCollectionFamily::Nodes => "nodes",
+    PublicationCollectionFamily::Edges => "edges",
+  };
+  let fingerprint = PublicationRequestFingerprint::derive(
+    "batch",
+    &[
+      build_id.as_str(),
+      family_name,
+      &ordinal_value,
+      content_hash.as_str(),
+    ],
+  )
+  .map_err(KnowledgeReleaseFailure::from)?;
+  Ok(PublicationBatchIdentity {
+    build_id: build_id.clone(),
+    ordinal: PublicationBatchOrdinal::new(ordinal),
+    request_fingerprint: fingerprint,
+    content_hash,
+  })
+}
+
+async fn submit_planned_batches<T, Fut, Submit>(
+  batches: &[PlannedBatch<T>],
   next_ordinal: u32,
   family: PublicationCollectionFamily,
   build_id: &PublicationBuildId,
@@ -395,45 +528,13 @@ where
   Submit: FnMut(PublicationBatchIdentity, Vec<T>) -> Fut,
   Fut: Future<Output = Result<PublicationStatus, KnowledgeReleaseFailure>>,
 {
-  let total = batch_count(points.len())?;
+  let total = batch_count(batches)?;
   if next_ordinal > total {
     return Err(KnowledgeReleaseFailure::IdempotencyConflict);
   }
-  for ordinal in next_ordinal..total {
-    let start = ordinal as usize * MAX_BATCH_POINTS;
-    let end = (start + MAX_BATCH_POINTS).min(points.len());
-    let batch = points[start..end].to_vec();
-    let point_hashes = batch
-      .iter()
-      .map(PointContentHash::content_hash)
-      .collect::<Vec<_>>();
-    let content_hash = PublicationBatchContentHash::derive(family, &point_hashes)
-      .map_err(KnowledgeReleaseFailure::from)?;
-    let ordinal_value = ordinal.to_string();
-    let family_name = match family {
-      PublicationCollectionFamily::Nodes => "nodes",
-      PublicationCollectionFamily::Edges => "edges",
-    };
-    let fingerprint = PublicationRequestFingerprint::derive(
-      "batch",
-      &[
-        build_id.as_str(),
-        family_name,
-        &ordinal_value,
-        content_hash.as_str(),
-      ],
-    )
-    .map_err(KnowledgeReleaseFailure::from)?;
-    let status = submit(
-      PublicationBatchIdentity {
-        build_id: build_id.clone(),
-        ordinal: PublicationBatchOrdinal::new(ordinal),
-        request_fingerprint: fingerprint,
-        content_hash,
-      },
-      batch,
-    )
-    .await?;
+  for planned in batches.iter().skip(next_ordinal as usize) {
+    let ordinal = planned.identity.ordinal.get();
+    let status = submit(planned.identity.clone(), planned.points.clone()).await?;
     validate_status_progress(&status, build_id, node_batches, edge_batches)?;
     let observed = match family {
       PublicationCollectionFamily::Nodes => status.next_node_ordinal,
@@ -519,6 +620,12 @@ mod tests {
     status_state_override: Option<PublicationBuildState>,
     node_response_edge_ordinal_override: Option<u32>,
     edge_response_node_ordinal_override: Option<u32>,
+    node_inspection_point_limit: Option<usize>,
+    edge_inspection_point_limit: Option<usize>,
+    node_inspections: usize,
+    edge_inspections: usize,
+    node_batches: Vec<(u32, String, String, usize)>,
+    edge_batches: Vec<(u32, String, String, usize)>,
   }
 
   struct FakePublicationPort {
@@ -552,12 +659,48 @@ mod tests {
         status_state_override: state.status_state_override,
         node_response_edge_ordinal_override: state.node_response_edge_ordinal_override,
         edge_response_node_ordinal_override: state.edge_response_node_ordinal_override,
+        node_inspection_point_limit: state.node_inspection_point_limit,
+        edge_inspection_point_limit: state.edge_inspection_point_limit,
+        node_inspections: state.node_inspections,
+        edge_inspections: state.edge_inspections,
+        node_batches: state.node_batches.clone(),
+        edge_batches: state.edge_batches.clone(),
       }
     }
   }
 
   #[async_trait]
   impl KnowledgePublicationPort for FakePublicationPort {
+    fn inspect_node_batch(
+      &self,
+      _canonical: &CanonicalReleasePin,
+      request: &NodePublicationBatch,
+    ) -> Result<PublicationBatchWireAdmission, KnowledgeReleaseFailure> {
+      let mut state = self.state.lock().unwrap();
+      state.node_inspections += 1;
+      let serialized_bytes = request.points.len();
+      if request.points.len() <= state.node_inspection_point_limit.unwrap_or(256) {
+        Ok(PublicationBatchWireAdmission::Fits { serialized_bytes })
+      } else {
+        Ok(PublicationBatchWireAdmission::TooLarge { serialized_bytes })
+      }
+    }
+
+    fn inspect_edge_batch(
+      &self,
+      _canonical: &CanonicalReleasePin,
+      request: &EdgePublicationBatch,
+    ) -> Result<PublicationBatchWireAdmission, KnowledgeReleaseFailure> {
+      let mut state = self.state.lock().unwrap();
+      state.edge_inspections += 1;
+      let serialized_bytes = request.points.len();
+      if request.points.len() <= state.edge_inspection_point_limit.unwrap_or(256) {
+        Ok(PublicationBatchWireAdmission::Fits { serialized_bytes })
+      } else {
+        Ok(PublicationBatchWireAdmission::TooLarge { serialized_bytes })
+      }
+    }
+
     async fn begin(
       &self,
       _context: &KnowledgePublicationContext,
@@ -591,6 +734,12 @@ mod tests {
       }
       let ordinal = state.next_node;
       state.events.push(format!("nodes:{ordinal}"));
+      state.node_batches.push((
+        request.identity.ordinal.get(),
+        request.identity.content_hash.as_str().to_string(),
+        request.identity.request_fingerprint.as_str().to_string(),
+        request.points.len(),
+      ));
       state.next_node += 1;
       Ok(PublicationStatus {
         build_id: request.identity.build_id.clone(),
@@ -646,6 +795,12 @@ mod tests {
       assert_eq!(request.identity.ordinal.get(), state.next_edge);
       let ordinal = state.next_edge;
       state.events.push(format!("edges:{ordinal}"));
+      state.edge_batches.push((
+        request.identity.ordinal.get(),
+        request.identity.content_hash.as_str().to_string(),
+        request.identity.request_fingerprint.as_str().to_string(),
+        request.points.len(),
+      ));
       state.next_edge += 1;
       Ok(PublicationStatus {
         build_id: request.identity.build_id.clone(),
@@ -915,17 +1070,21 @@ mod tests {
   }
 
   fn relationship() -> PublishedRelationship {
+    relationship_to(1)
+  }
+
+  fn relationship_to(target_index: usize) -> PublishedRelationship {
     let release = id("release-r1");
-    let evidence_id = id("edge-evidence");
-    let source_id = id("edge-source");
+    let evidence_id = id(format!("edge-evidence-{target_index}"));
+    let source_id = id(format!("edge-source-{target_index}"));
     let relation_type = GraphRelationType::Hypernym;
     let rule = relation_type.rule();
     PublishedRelationship {
       relation: StoredGraphRelation {
-        edge_id: GraphEdgeId::stored(id("edge-1")),
+        edge_id: GraphEdgeId::stored(id(format!("edge-{target_index}"))),
         relation_version: RelationVersion::new(1).unwrap(),
         source: GraphNodeKey::new(GraphNodeKind::Sense, id("sense-0")),
-        target: GraphNodeKey::new(GraphNodeKind::Sense, id("sense-1")),
+        target: GraphNodeKey::new(GraphNodeKind::Sense, id(format!("sense-{target_index}"))),
         relation_type,
         evidence: GraphEvidence::new(vec![evidence_id.clone()], EvidenceConfidence::High).unwrap(),
         scope: GraphScope::default(),
@@ -957,7 +1116,7 @@ mod tests {
         EvidenceFragment {
           id: evidence_id,
           source_id,
-          source_reference: "edge".into(),
+          source_reference: format!("edge-{target_index}"),
           release_id: release,
           language: LanguageTag::parse("en").unwrap(),
           kind: EvidenceKind::Definition,
@@ -994,6 +1153,17 @@ mod tests {
       edge_dictionary: LexicalDictionaryManifest::new(vec![]).unwrap(),
       idempotency_key: PublicationIdempotencyKey::parse("publication-r1").unwrap(),
     }
+  }
+
+  fn plan_with_edge_count(node_count: usize, edge_count: usize) -> KnowledgePublicationPlan {
+    let mut plan = plan(node_count.max(edge_count + 1));
+    plan.edges = build_edge_projection(
+      &plan.nodes,
+      embedding(),
+      (1..=edge_count).map(relationship_to).collect(),
+    )
+    .unwrap();
+    plan
   }
 
   fn context() -> KnowledgePublicationContext {
@@ -1075,6 +1245,14 @@ mod tests {
     service.publish(&context(), &plan(257)).await.unwrap();
     let state = port.snapshot();
     assert_eq!(state.next_node, 2);
+    assert_eq!(
+      state
+        .node_batches
+        .iter()
+        .map(|batch| batch.3)
+        .collect::<Vec<_>>(),
+      [256, 1]
+    );
     assert!(
       state
         .events
@@ -1087,6 +1265,121 @@ mod tests {
           .position(|event| event == "edges:0")
           .unwrap()
     );
+  }
+
+  #[tokio::test]
+  async fn exactly_256_small_points_form_one_batch() {
+    let port = Arc::new(FakePublicationPort::new(FakeState::default()));
+    let service = KnowledgePublicationService::new(port.clone());
+    service.publish(&context(), &plan(256)).await.unwrap();
+    assert_eq!(port.snapshot().node_batches[0].3, 256);
+    assert_eq!(port.snapshot().node_batches.len(), 1);
+  }
+
+  #[tokio::test]
+  async fn wire_size_admission_splits_node_and_edge_families() {
+    let port = Arc::new(FakePublicationPort::new(FakeState {
+      node_inspection_point_limit: Some(2),
+      edge_inspection_point_limit: Some(2),
+      ..FakeState::default()
+    }));
+    let service = KnowledgePublicationService::new(port.clone());
+    service
+      .publish(&context(), &plan_with_edge_count(5, 5))
+      .await
+      .unwrap();
+    let state = port.snapshot();
+    assert_eq!(
+      state
+        .node_batches
+        .iter()
+        .map(|batch| batch.3)
+        .collect::<Vec<_>>(),
+      [2, 2, 2]
+    );
+    assert_eq!(
+      state
+        .edge_batches
+        .iter()
+        .map(|batch| batch.3)
+        .collect::<Vec<_>>(),
+      [2, 2, 1]
+    );
+  }
+
+  #[tokio::test]
+  async fn repeated_size_aware_planning_preserves_boundaries_and_identities() {
+    let plan = plan_with_edge_count(5, 5);
+    let first = Arc::new(FakePublicationPort::new(FakeState {
+      node_inspection_point_limit: Some(2),
+      edge_inspection_point_limit: Some(2),
+      ..FakeState::default()
+    }));
+    let second = Arc::new(FakePublicationPort::new(FakeState {
+      node_inspection_point_limit: Some(2),
+      edge_inspection_point_limit: Some(2),
+      ..FakeState::default()
+    }));
+    KnowledgePublicationService::new(first.clone())
+      .publish(&context(), &plan)
+      .await
+      .unwrap();
+    KnowledgePublicationService::new(second.clone())
+      .publish(&context(), &plan)
+      .await
+      .unwrap();
+    assert_eq!(
+      first.snapshot().node_batches,
+      second.snapshot().node_batches
+    );
+    assert_eq!(
+      first.snapshot().edge_batches,
+      second.snapshot().edge_batches
+    );
+  }
+
+  #[tokio::test]
+  async fn size_aware_resume_uses_the_final_plan_ordinal() {
+    let port = Arc::new(FakePublicationPort::new(FakeState {
+      next_node: 1,
+      node_inspection_point_limit: Some(2),
+      ..FakeState::default()
+    }));
+    let service = KnowledgePublicationService::new(port.clone());
+    service.publish(&context(), &plan(5)).await.unwrap();
+    assert_eq!(
+      port
+        .snapshot()
+        .node_batches
+        .iter()
+        .map(|batch| batch.0)
+        .collect::<Vec<_>>(),
+      [1, 2]
+    );
+  }
+
+  #[tokio::test]
+  async fn one_point_too_large_fails_before_any_mutation() {
+    for state in [
+      FakeState {
+        node_inspection_point_limit: Some(0),
+        ..FakeState::default()
+      },
+      FakeState {
+        edge_inspection_point_limit: Some(0),
+        ..FakeState::default()
+      },
+    ] {
+      let port = Arc::new(FakePublicationPort::new(state));
+      let service = KnowledgePublicationService::new(port.clone());
+      assert_publish_error(
+        &service,
+        &plan(2),
+        KnowledgeReleaseFailure::SchemaIncompatible,
+      )
+      .await;
+      assert!(port.snapshot().events.is_empty());
+    }
   }
 
   #[tokio::test]

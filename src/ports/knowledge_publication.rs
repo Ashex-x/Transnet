@@ -18,6 +18,44 @@ use crate::domain::{
   },
 };
 
+/// Maximum number of points admitted to one publication batch.
+pub const MAX_PUBLICATION_BATCH_POINTS: usize = 256;
+/// Maximum serialized bytes admitted for one publication batch request.
+pub const MAX_PUBLICATION_BATCH_REQUEST_BYTES: usize = 1_048_576;
+/// Maximum request-correlation identifier bytes accepted by publication transport.
+pub const MAX_PUBLICATION_REQUEST_ID_BYTES: usize = 128;
+/// Maximum RFC 3339 deadline bytes accepted by publication transport.
+pub const MAX_PUBLICATION_DEADLINE_BYTES: usize = 64;
+
+/// Pure wire-boundary inspection result for one prospective publication batch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PublicationBatchWireAdmission {
+  /// The batch fits the frozen worst-case transport context budget.
+  Fits {
+    /// Exact serialized request bytes under the deterministic planning envelope.
+    serialized_bytes: usize,
+  },
+  /// The batch exceeds the frozen worst-case transport context budget.
+  TooLarge {
+    /// Exact serialized request bytes under the deterministic planning envelope.
+    serialized_bytes: usize,
+  },
+}
+
+impl PublicationBatchWireAdmission {
+  /// Returns the exact deterministic planning-envelope byte count.
+  pub const fn serialized_bytes(self) -> usize {
+    match self {
+      Self::Fits { serialized_bytes } | Self::TooLarge { serialized_bytes } => serialized_bytes,
+    }
+  }
+
+  /// Returns whether the prospective request fits the frozen body limit.
+  pub const fn fits(self) -> bool {
+    matches!(self, Self::Fits { .. })
+  }
+}
+
 /// Request-scoped correlation and deadline propagated to every publication operation.
 #[derive(Clone)]
 pub struct KnowledgePublicationContext {
@@ -189,6 +227,20 @@ pub struct PublicationStatus {
 /// Outbound-only publication capability independent of HTTP, UDS, Qdrant, and provider details.
 #[async_trait]
 pub trait KnowledgePublicationPort: Send + Sync {
+  /// Inspects one node batch under the deterministic worst-case transport context without I/O.
+  fn inspect_node_batch(
+    &self,
+    canonical: &CanonicalReleasePin,
+    request: &NodePublicationBatch,
+  ) -> Result<PublicationBatchWireAdmission, KnowledgeReleaseFailure>;
+
+  /// Inspects one edge batch under the deterministic worst-case transport context without I/O.
+  fn inspect_edge_batch(
+    &self,
+    canonical: &CanonicalReleasePin,
+    request: &EdgePublicationBatch,
+  ) -> Result<PublicationBatchWireAdmission, KnowledgeReleaseFailure>;
+
   /// Begins or safely replays one immutable publication build.
   async fn begin(
     &self,
