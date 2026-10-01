@@ -79,6 +79,13 @@ impl DomainAssessmentService {
         if !inventory.catalog_complete() {
           return Ok(DomainAssessment::Uncertain);
         }
+        if inventory.domains().iter().any(|domain| {
+          domain.labels().iter().chain(domain.aliases()).any(|term| {
+            term.language() == proposal.label().language() && term.text() == proposal.label().text()
+          })
+        }) {
+          return Err(DomainAssessmentError::InvalidNomination);
+        }
         if proposal
           .broader_domain_ids()
           .iter()
@@ -248,7 +255,10 @@ mod tests {
       DomainId::new("domain_weather").unwrap(),
       CanonicalRevision::new(1).unwrap(),
       vec![LocalizedDomainTerm::new(LanguageTag::parse("en").unwrap(), "weather").unwrap()],
-      vec![],
+      vec![
+        LocalizedDomainTerm::new(LanguageTag::parse("en").unwrap(), "meteorological weather")
+          .unwrap(),
+      ],
       vec![LocalizedDomainDefinition::new(
         LanguageTag::parse("en").unwrap(),
         "Atmospheric conditions.",
@@ -375,6 +385,52 @@ mod tests {
       "A narrow atmospheric scope.",
       vec![DomainId::new("domain_weather").unwrap()],
       "The supplied scope is broader than the resolved sense.",
+    )
+    .unwrap();
+    let outcome = service(Ok(DomainInventory::new(vec![domain()], true).unwrap()))
+      .assess(
+        &context(),
+        &pin(),
+        query(),
+        DomainNomination::ProposedNew(proposal),
+      )
+      .await
+      .unwrap();
+    assert!(matches!(outcome, DomainAssessment::ProposedNew(_)));
+  }
+
+  #[tokio::test]
+  async fn proposal_cannot_collide_with_canonical_label_or_alias() {
+    for colliding_text in ["weather", "meteorological weather"] {
+      let proposal = ProposedDomain::new(
+        LocalizedDomainTerm::new(LanguageTag::parse("en").unwrap(), colliding_text).unwrap(),
+        "A supposedly new atmospheric scope.",
+        vec![],
+        "The supplied scopes supposedly do not fit.",
+      )
+      .unwrap();
+      let result = service(Ok(DomainInventory::new(vec![domain()], true).unwrap()))
+        .assess(
+          &context(),
+          &pin(),
+          query(),
+          DomainNomination::ProposedNew(proposal),
+        )
+        .await;
+      assert!(matches!(
+        result,
+        Err(DomainAssessmentError::InvalidNomination)
+      ));
+    }
+  }
+
+  #[tokio::test]
+  async fn same_text_in_different_language_is_not_an_exact_collision() {
+    let proposal = ProposedDomain::new(
+      LocalizedDomainTerm::new(LanguageTag::parse("fr").unwrap(), "weather").unwrap(),
+      "A language-specific proposed scope.",
+      vec![],
+      "No supplied French label or alias fits.",
     )
     .unwrap();
     let outcome = service(Ok(DomainInventory::new(vec![domain()], true).unwrap()))

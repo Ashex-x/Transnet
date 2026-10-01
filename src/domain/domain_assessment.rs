@@ -1,7 +1,5 @@
 //! Bounded canonical-domain inventory and request-local assessment values.
 
-use std::collections::BTreeSet;
-
 use thiserror::Error;
 
 use super::{
@@ -228,9 +226,9 @@ impl CanonicalDomain {
     {
       return Err(DomainAssessmentError::TooManyValues);
     }
-    ensure_terms_unique(&labels)?;
-    ensure_terms_unique(&aliases)?;
-    ensure_definitions_unique(&definitions)?;
+    ensure_terms_sorted_unique(&labels)?;
+    ensure_terms_sorted_unique(&aliases)?;
+    ensure_definitions_sorted_unique(&definitions)?;
     let inclusion_scope = validate_sorted_texts(inclusion_scope, MAX_DOMAIN_TERM_CHARS)?;
     let exclusion_scope = validate_sorted_texts(exclusion_scope, MAX_DOMAIN_TERM_CHARS)?;
     ensure_sorted_unique(&broader_domain_ids)?;
@@ -322,11 +320,10 @@ impl DomainInventory {
     if domains.len() > MAX_DOMAIN_INVENTORY {
       return Err(DomainAssessmentError::TooManyValues);
     }
-    let ids = domains
-      .iter()
-      .map(CanonicalDomain::domain_id)
-      .collect::<BTreeSet<_>>();
-    if ids.len() != domains.len() {
+    if domains
+      .windows(2)
+      .any(|pair| pair[0].domain_id() >= pair[1].domain_id())
+    {
       return Err(DomainAssessmentError::InconsistentInventory);
     }
     Ok(Self {
@@ -474,26 +471,134 @@ fn ensure_sorted_unique<T: Ord>(values: &[T]) -> Result<(), DomainAssessmentErro
   Ok(())
 }
 
-fn ensure_terms_unique(values: &[LocalizedDomainTerm]) -> Result<(), DomainAssessmentError> {
-  let unique = values
-    .iter()
-    .map(|value| (value.language(), value.text()))
-    .collect::<BTreeSet<_>>();
-  if unique.len() != values.len() {
+fn ensure_terms_sorted_unique(values: &[LocalizedDomainTerm]) -> Result<(), DomainAssessmentError> {
+  if values
+    .windows(2)
+    .any(|pair| (pair[0].language(), pair[0].text()) >= (pair[1].language(), pair[1].text()))
+  {
     return Err(DomainAssessmentError::InvalidValue);
   }
   Ok(())
 }
 
-fn ensure_definitions_unique(
+fn ensure_definitions_sorted_unique(
   values: &[LocalizedDomainDefinition],
 ) -> Result<(), DomainAssessmentError> {
-  let unique = values
-    .iter()
-    .map(|value| (value.language(), value.text()))
-    .collect::<BTreeSet<_>>();
-  if unique.len() != values.len() {
+  if values
+    .windows(2)
+    .any(|pair| (pair[0].language(), pair[0].text()) >= (pair[1].language(), pair[1].text()))
+  {
     return Err(DomainAssessmentError::InvalidValue);
   }
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::domain::canonical::CanonicalId;
+
+  fn language(value: &str) -> LanguageTag {
+    LanguageTag::parse(value).unwrap()
+  }
+
+  fn term(language_tag: &str, text: &str) -> LocalizedDomainTerm {
+    LocalizedDomainTerm::new(language(language_tag), text).unwrap()
+  }
+
+  fn definition(language_tag: &str, text: &str) -> LocalizedDomainDefinition {
+    LocalizedDomainDefinition::new(language(language_tag), text).unwrap()
+  }
+
+  fn profile() -> DomainKnowledgeProfile {
+    DomainKnowledgeProfile::new(
+      vec!["definition".to_string()],
+      vec![language("en")],
+      1,
+      DomainCoverageState::Seed,
+    )
+    .unwrap()
+  }
+
+  fn domain_with_lists(
+    id: &str,
+    labels: Vec<LocalizedDomainTerm>,
+    aliases: Vec<LocalizedDomainTerm>,
+    definitions: Vec<LocalizedDomainDefinition>,
+  ) -> Result<CanonicalDomain, DomainAssessmentError> {
+    CanonicalDomain::new(
+      CanonicalId::new("release-1").unwrap(),
+      DomainId::new(id).unwrap(),
+      CanonicalRevision::new(1).unwrap(),
+      labels,
+      aliases,
+      definitions,
+      vec![],
+      vec![],
+      vec![],
+      profile(),
+    )
+  }
+
+  fn domain(id: &str) -> CanonicalDomain {
+    domain_with_lists(
+      id,
+      vec![term("en", id)],
+      vec![],
+      vec![definition("en", "A definition.")],
+    )
+    .unwrap()
+  }
+
+  #[test]
+  fn localized_catalog_fields_require_strict_language_then_text_order() {
+    let cases = [
+      domain_with_lists(
+        "domain_test",
+        vec![term("en", "zeta"), term("en", "alpha")],
+        vec![],
+        vec![definition("en", "A definition.")],
+      ),
+      domain_with_lists(
+        "domain_test",
+        vec![term("en", "label")],
+        vec![term("zh-CN", "别名"), term("en", "alias")],
+        vec![definition("en", "A definition.")],
+      ),
+      domain_with_lists(
+        "domain_test",
+        vec![term("en", "label")],
+        vec![],
+        vec![
+          definition("zh-CN", "定义。"),
+          definition("en", "A definition."),
+        ],
+      ),
+      domain_with_lists(
+        "domain_test",
+        vec![term("en", "label"), term("en", "label")],
+        vec![],
+        vec![definition("en", "A definition.")],
+      ),
+    ];
+    for result in cases {
+      assert!(matches!(result, Err(DomainAssessmentError::InvalidValue)));
+    }
+  }
+
+  #[test]
+  fn inventory_candidates_require_strict_domain_id_order() {
+    let reversed = DomainInventory::new(vec![domain("domain_zeta"), domain("domain_alpha")], true);
+    assert!(matches!(
+      reversed,
+      Err(DomainAssessmentError::InconsistentInventory)
+    ));
+
+    let duplicated =
+      DomainInventory::new(vec![domain("domain_alpha"), domain("domain_alpha")], true);
+    assert!(matches!(
+      duplicated,
+      Err(DomainAssessmentError::InconsistentInventory)
+    ));
+  }
 }

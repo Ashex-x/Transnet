@@ -20,7 +20,7 @@ canonical-only 服务从权威端选择一次发布 pin，再通过读取 port �
 
 领域评估在调用方单一不可变发布 pin 下使用有界已发布清单，并返回 `existing`、`proposed_new`、`general` 或 `uncertain`。权威端提供多语言 label、alias 与 definition、inclusion/exclusion scope、规范 broader ID，以及包含 fact family、language、verified count 和 `seed`、`partial` 或 `curated` coverage 的 knowledge profile。确定性校验只接受该精确 allowlist 中的稳定 ID。
 
-任何 inventory 调用失败都产生 `uncertain`，不能证明领域是新的。成功但不完整的 catalog 同样不能产生 `proposed_new`。只有明确 complete 的 catalog 才允许结构化提案，且其 broader ID 必须属于所提供 allowlist。提案没有稳定 identity，仅在请求内存在，不由该流程持久化，且只在后续 full 响应允许的位置出现。Application 不暴露 live domain-creation capability。
+任何 inventory 调用失败都产生 `uncertain`，不能证明领域是新的。成功但不完整的 catalog 同样不能产生 `proposed_new`。只有明确 complete 且严格排序的 catalog 才允许结构化提案；其 broader ID 必须属于所提供 allowlist，且精确的规范 language-plus-label pair 不得与所提供 label 或 alias 冲突。提案没有稳定 identity，仅在请求内存在，不由该流程持久化，且只在后续 full 响应允许的位置出现。Application 不暴露 live domain-creation capability。
 
 ## 检索与组织
 

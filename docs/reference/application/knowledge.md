@@ -20,7 +20,7 @@ Every non-semantic authority match is verified against the release-pinned candid
 
 Domain assessment uses a bounded published inventory under the caller's single immutable release pin and returns `existing`, `proposed_new`, `general`, or `uncertain`. The authority supplies multilingual labels, aliases and definitions, inclusion and exclusion scope, canonical broader IDs, and a knowledge profile with fact families, languages, verified count, and `seed`, `partial`, or `curated` coverage. Deterministic validation accepts selected stable IDs only from that exact allowlist.
 
-Any inventory call failure produces `uncertain`; it cannot prove that a domain is new. A successful but incomplete catalog also cannot produce `proposed_new`. Only an explicitly complete catalog permits a structured proposal, and its broader IDs must belong to the supplied allowlist. The proposal has no stable identity, remains request-local, is never persisted by this flow, and appears only where a later full response permits it. The application exposes no live domain-creation capability.
+Any inventory call failure produces `uncertain`; it cannot prove that a domain is new. A successful but incomplete catalog also cannot produce `proposed_new`. Only an explicitly complete, strictly ordered catalog permits a structured proposal; its broader IDs must belong to the supplied allowlist, and its exact canonical language-plus-label pair must not collide with a supplied label or alias. The proposal has no stable identity, remains request-local, is never persisted by this flow, and appears only where a later full response permits it. The application exposes no live domain-creation capability.
 
 ## Retrieval and composition
 

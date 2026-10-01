@@ -418,9 +418,9 @@ Stage 4 canonical-only 调用方以 `unicode-nfc-lookup-v1` 标识其实际的�
 }
 ```
 
-每条记录的 request 与 response 上限分别为 32 个 candidate、8 个 label、16 个 alias、8 个 definition、16 个 inclusion item、16 个 exclusion item、8 个 broader domain、16 个 fact family 与 8 个 profile language。参与 identity 或确定性比较的 list 必须排序且唯一。每个 candidate 均属于回显的不可变发布，`domain_id` 与 `broader_domain_ids` 使用规范 `DomainId`，绝不使用 label 充当 identity。
+每条记录的 request 与 response 上限分别为 32 个 candidate、8 个 label、16 个 alias、8 个 definition、16 个 inclusion item、16 个 exclusion item、8 个 broader domain、16 个 fact family 与 8 个 profile language。Candidate 必须按 `domain_id` 严格排序且唯一；label、alias 与 definition 必须先按规范 language tag、再按精确 text 严格排序且唯一。Inclusion scope、exclusion scope、broader-domain ID、fact family 与 profile language 也必须排序且唯一。每个 candidate 均属于回显的不可变发布，`domain_id` 与 `broader_domain_ids` 使用规范 `DomainId`，绝不使用 label 充当 identity。
 
-`catalog_complete` 表示 island-port 已检查本次有界查询下完整的合格已发布 catalog；它不声称人类知识完整。Transnet 仅依据这份精确返回的 allowlist 校验全部所选 ID。清单不可用、畸形、跨发布或以其他方式失败时，application 结果必须为 `uncertain`。只有 `catalog_complete` 为 true 时才允许请求级 `proposed_new`，其可选 broader ID 也必须来自该 allowlist。两个操作均不写入领域。
+`catalog_complete` 表示 island-port 已检查本次有界查询下完整的合格已发布 catalog；它不声称人类知识完整。Transnet 仅依据这份精确返回的 allowlist 校验全部所选 ID。清单不可用、畸形、跨发布或以其他方式失败时，application 结果必须为 `uncertain`。只有 `catalog_complete` 为 true、可选 broader ID 来自该 allowlist，且规范 language-plus-label pair 不与所提供的任何 label 或 alias 精确冲突时，才允许请求级 `proposed_new`。两个操作均不写入领域。
 
 ## POST /api/v1/knowledge-facts/get
 

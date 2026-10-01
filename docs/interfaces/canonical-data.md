@@ -426,9 +426,9 @@ Response:
 }
 ```
 
-The request and response are bounded to 32 candidates, 8 labels, 16 aliases, 8 definitions, 16 inclusion items, 16 exclusion items, 8 broader domains, 16 fact families, and 8 profile languages per record. Lists that participate in identity or deterministic comparison are sorted and unique. Every candidate belongs to the echoed immutable release, and `domain_id` plus `broader_domain_ids` use canonical `DomainId` values rather than labels.
+The request and response are bounded to 32 candidates, 8 labels, 16 aliases, 8 definitions, 16 inclusion items, 16 exclusion items, 8 broader domains, 16 fact families, and 8 profile languages per record. Candidates are strictly sorted and unique by `domain_id`; labels, aliases, and definitions are strictly sorted and unique by canonical language tag and then exact text. Inclusion scope, exclusion scope, broader-domain IDs, fact families, and profile languages are also sorted and unique. Every candidate belongs to the echoed immutable release, and `domain_id` plus `broader_domain_ids` use canonical `DomainId` values rather than labels.
 
-`catalog_complete` means island-port examined the complete eligible published catalog for this bounded query; it does not claim that human knowledge is complete. Transnet validates all selected IDs against exactly this returned allowlist. An unavailable, malformed, cross-release, or otherwise failed inventory produces the application outcome `uncertain`. A request-local `proposed_new` outcome is permitted only when `catalog_complete` is true, and its optional broader IDs must also come from this allowlist. Neither operation writes a domain.
+`catalog_complete` means island-port examined the complete eligible published catalog for this bounded query; it does not claim that human knowledge is complete. Transnet validates all selected IDs against exactly this returned allowlist. An unavailable, malformed, cross-release, or otherwise failed inventory produces the application outcome `uncertain`. A request-local `proposed_new` outcome is permitted only when `catalog_complete` is true, its optional broader IDs come from this allowlist, and its canonical language-plus-label pair does not exactly collide with any supplied label or alias. Neither operation writes a domain.
 
 ## POST /api/v1/knowledge-facts/get
 
