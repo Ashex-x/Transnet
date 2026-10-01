@@ -151,7 +151,10 @@ impl RelationshipPageRuntime {
     else {
       return Ok(translation);
     };
-    if inputs.request.max_alternatives != turn.guidance().max_alternatives {
+    if inputs.request.max_alternatives != turn.guidance().max_alternatives
+      || inputs.request.response_level != turn.response_level()
+      || inputs.request.target_language.as_str() != turn.target_language().as_str()
+    {
       return Err(RelationshipPageMaterialError::Inconsistent);
     }
     let composed = RelationshipPageComposer::compose(translation, inputs.request, inputs.material)
@@ -258,7 +261,9 @@ impl RelationshipPageComposer {
       gap_proposals: Vec::new(),
       versions: RelationshipPageVersionMetadata::default(),
     };
-    let degraded = superset.groups.is_empty();
+    let degraded = superset.groups.is_empty()
+      && superset.paths.is_empty()
+      && superset.inferred_explanations.is_empty();
     let page = superset.project()?;
     Ok(LexicalRelationshipResult {
       translation,
@@ -334,7 +339,7 @@ mod tests {
         CanonicalNodeFamily::LexicalSense,
         CanonicalId::new("sense-1").unwrap(),
       ),
-      target_language: LanguageTag::parse("en").unwrap(),
+      target_language: LanguageTag::parse("zh-CN").unwrap(),
       response_level: ResponseLevel::Standard,
       release: pin(),
       max_alternatives: 0,

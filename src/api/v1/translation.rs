@@ -10,7 +10,9 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::{
-  application::translation::TranslationOrchestrationError,
+  application::{
+    relationship_page::RelationshipPageMaterialError, translation::TranslationOrchestrationError,
+  },
   domain::request_context::RequestContext,
   domain::translation_turn::{
     ProjectedTranslationResult, ResponseLevel, TranslationInputKind, TranslationTurn,
@@ -68,6 +70,9 @@ pub(crate) async fn translate(
   if turn.guidance().max_alternatives != 0 && state.relationship_page_runtime().is_none() {
     return unsupported_capability("guidance.max_alternatives", &request_id);
   }
+  if turn.guidance().max_alternatives != 0 && turn.input_kind() != TranslationInputKind::Text {
+    return unsupported_capability("guidance.max_alternatives", &request_id);
+  }
 
   let cancellation = cancellations.start();
   match orchestrator
@@ -79,7 +84,14 @@ pub(crate) async fn translate(
         let signal = cancellation.signal_arc();
         match runtime.enrich(&context, &signal, &turn, result).await {
           Ok(result) => result,
-          Err(_) => return relationship_page_unavailable(&request_id),
+          Err(RelationshipPageMaterialError::DeadlineExceeded) => {
+            return deadline_exceeded(&request_id)
+          }
+          Err(RelationshipPageMaterialError::Cancelled) => return request_cancelled(&request_id),
+          Err(
+            RelationshipPageMaterialError::Unavailable
+            | RelationshipPageMaterialError::Inconsistent,
+          ) => return relationship_page_unavailable(&request_id),
         }
       } else {
         result
@@ -164,6 +176,30 @@ fn relationship_page_unavailable(request_id: &RequestId) -> Response {
     "relationship_page_unavailable",
     "Relationship page unavailable",
     "The release-pinned relationship-page authority could not complete this request.",
+    request_id,
+    true,
+    Vec::new(),
+  )
+}
+
+fn deadline_exceeded(request_id: &RequestId) -> Response {
+  problem::response(
+    StatusCode::GATEWAY_TIMEOUT,
+    "deadline_exceeded",
+    "Deadline exceeded",
+    "The request deadline elapsed before relationship-page composition completed.",
+    request_id,
+    true,
+    Vec::new(),
+  )
+}
+
+fn request_cancelled(request_id: &RequestId) -> Response {
+  problem::response(
+    StatusCode::SERVICE_UNAVAILABLE,
+    "request_cancelled",
+    "Request cancelled",
+    "The translation request was cancelled before completion.",
     request_id,
     true,
     Vec::new(),

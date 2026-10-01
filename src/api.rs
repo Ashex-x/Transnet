@@ -104,13 +104,18 @@ impl AppState {
     self.capabilities = self
       .capabilities
       .with_live_retrieval(live_retrieval_available);
+    self.capabilities = self.capabilities.with_relationship_pages(
+      self.relationship_page_runtime.is_some() && self.translation_orchestrator.is_some(),
+    );
     self
   }
 
   /// Enables embedded lexical relationship pages from one complete request-local authority.
   pub fn with_relationship_page_runtime(mut self, runtime: Arc<RelationshipPageRuntime>) -> Self {
     self.relationship_page_runtime = Some(runtime);
-    self.capabilities = self.capabilities.with_relationship_pages(true);
+    self.capabilities = self.capabilities.with_relationship_pages(
+      self.relationship_page_runtime.is_some() && self.translation_orchestrator.is_some(),
+    );
     self
   }
 
@@ -160,9 +165,9 @@ impl AppState {
         .as_ref()
         .is_some_and(|orchestrator| orchestrator.live_retrieval_available()),
     );
-    self.capabilities = self
-      .capabilities
-      .with_relationship_pages(self.relationship_page_runtime.is_some());
+    self.capabilities = self.capabilities.with_relationship_pages(
+      self.relationship_page_runtime.is_some() && self.translation_orchestrator.is_some(),
+    );
     self
   }
 
