@@ -84,9 +84,9 @@ curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/a
 
 These commands show the target UDS interface. The current executable still uses the transitional loopback listener and legacy paths until the transport migration is implemented. MySQL canonical cards and releases plus Qdrant knowledge nodes and edges remain target capabilities until their status is advanced in the interface and guide documents. The process handles Ctrl-C and Unix termination signals for graceful shutdown.
 
-Verify the current transitional runtime with `curl http://127.0.0.1:35792/health`.
+Verify the current transitional runtime with `curl http://127.0.0.1:16002/health`.
 
-See the [design](docs/transnet.md), [island-port-to-Transnet service interface and UDS transport](docs/interfaces/transnet.md), [canonical-data endpoints](docs/interfaces/canonical-data.md), [retrieval-data endpoints](docs/interfaces/retrieval-data.md), and [configuration reference](docs/guides/configuration.md).
+See the [design](docs/transnet.md), [island-port-to-Transnet service interface and UDS transport](docs/interfaces/transnet.md), [canonical-data endpoints](docs/interfaces/canonical-data.md), [retrieval-data endpoints](docs/interfaces/retrieval-data.md), [configuration reference](docs/guides/configuration.md), and [deployment guide](docs/guides/deployment.md).
 
 ## License
 

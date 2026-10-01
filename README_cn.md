@@ -84,9 +84,9 @@ curl --unix-socket /run/transnet/transnet.sock --request POST http://localhost/a
 
 这些命令展示目标 UDS 接口。当前可执行文件在传输迁移实现前仍使用过渡性回环 listener 和旧版路径。MySQL 规范卡片与发布，以及 Qdrant 知识节点与边，仍属于目标能力，直至接口和指南文档推进其状态。进程会处理 Ctrl-C 和 Unix 终止信号以优雅停机。
 
-使用 `curl http://127.0.0.1:35792/health` 验证当前过渡性运行时。
+使用 `curl http://127.0.0.1:16002/health` 验证当前过渡性运行时。
 
-参阅[系统设计](docs_cn/transnet_cn.md)、[island-port 到 Transnet 的服务接口与 UDS 传输](docs_cn/interfaces/transnet_cn.md)、[规范数据 endpoint](docs_cn/interfaces/canonical-data_cn.md)、[检索数据 endpoint](docs_cn/interfaces/retrieval-data_cn.md)和[配置参考](docs_cn/guides/configuration_cn.md)。
+参阅[系统设计](docs_cn/transnet_cn.md)、[island-port 到 Transnet 的服务接口与 UDS 传输](docs_cn/interfaces/transnet_cn.md)、[规范数据 endpoint](docs_cn/interfaces/canonical-data_cn.md)、[检索数据 endpoint](docs_cn/interfaces/retrieval-data_cn.md)、[配置参考](docs_cn/guides/configuration_cn.md)和[部署指南](docs_cn/guides/deployment_cn.md)。
 
 ## 许可证
 

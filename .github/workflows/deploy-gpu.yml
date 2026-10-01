@@ -1,0 +1,65 @@
+name: Test and deploy Transnet
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: transnet-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Lint all targets
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+      - name: Run tests
+        run: cargo test --all-targets --locked
+      - name: Build documentation
+        run: cargo doc --no-deps --locked
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Configure the deployment SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh-keygen -F '[139.224.103.112]:16004' -f ~/.ssh/known_hosts >/dev/null
+
+      - name: Build and restart Transnet on the GPU server
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -p 16004 \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            ashex@139.224.103.112 'bash -se' <<'REMOTE'
+              set -euo pipefail
+              cd /home/ashex/projects/Transnet
+              git fetch --prune origin
+              git checkout master
+              git reset --hard origin/master
+              cargo build --release --locked
+              sudo systemctl restart transnet
+              sudo systemctl is-active --quiet transnet
+          REMOTE

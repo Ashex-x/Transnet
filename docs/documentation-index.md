@@ -25,6 +25,7 @@
 
 - [Configuration](guides/configuration.md): current listener, routing, and provider settings plus expected infrastructure configuration boundaries.
 - [Development](guides/development.md): operational notes supplementing the root README.
+- [Deployment](guides/deployment.md): GitHub Actions, GPU-server systemd setup, secrets, and release checks.
 - [Content publishing](guides/content-publishing.md): proposed MySQL and Qdrant ingestion, validation, publication, removal, and rollback workflow.
 - [Quality assurance](guides/quality-assurance.md): proposed benchmarks, failure tests, release gates, and monitoring.
 
