@@ -107,11 +107,11 @@ impl GemmaGenerationProvider {
       },
       reasoning_effort: match profile {
         GenerationProfile::Fast => "none",
-        GenerationProfile::Reasoning => "medium",
+        GenerationProfile::Reasoning => "minimal",
       },
       reasoning_budget_tokens: match profile {
         GenerationProfile::Fast => 0,
-        GenerationProfile::Reasoning => 512,
+        GenerationProfile::Reasoning => 128,
       },
       max_tokens: match profile {
         GenerationProfile::Fast | GenerationProfile::Reasoning => 256,
@@ -186,11 +186,11 @@ impl GemmaGenerationProvider {
       },
       reasoning_effort: match profile {
         GenerationProfile::Fast => "none",
-        GenerationProfile::Reasoning => "medium",
+        GenerationProfile::Reasoning => "minimal",
       },
       reasoning_budget_tokens: match profile {
         GenerationProfile::Fast => 0,
-        GenerationProfile::Reasoning => 512,
+        GenerationProfile::Reasoning => 128,
       },
       max_tokens: match profile {
         GenerationProfile::Fast | GenerationProfile::Reasoning => 256,
@@ -459,8 +459,8 @@ mod tests {
       },
       reasoning: "on",
       reasoning_format: "auto",
-      reasoning_effort: "medium",
-      reasoning_budget_tokens: 512,
+      reasoning_effort: "minimal",
+      reasoning_budget_tokens: 128,
       max_tokens: 256,
     };
     let value = serde_json::to_value(request).unwrap();
@@ -469,8 +469,8 @@ mod tests {
     assert_eq!(value["chat_template_kwargs"]["enable_thinking"], true);
     assert_eq!(value["reasoning"], "on");
     assert_eq!(value["reasoning_format"], "auto");
-    assert_eq!(value["reasoning_effort"], "medium");
-    assert_eq!(value["reasoning_budget_tokens"], 512);
+    assert_eq!(value["reasoning_effort"], "minimal");
+    assert_eq!(value["reasoning_budget_tokens"], 128);
     assert_eq!(value["max_tokens"], 256);
   }
 }
