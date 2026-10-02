@@ -1,7 +1,7 @@
 [Unit]
 Description=Island Transnet private translation and relationship-knowledge service
-After=network-online.target
-Wants=network-online.target
+After=network-online.target island-port.service
+Wants=network-online.target island-port.service
 
 [Service]
 Type=simple
@@ -13,6 +13,7 @@ UMask=0007
 WorkingDirectory=/home/ashex/services/island.transnet/current
 Environment=RUST_LOG=info
 Environment=TRANSNET_CONFIG=/home/ashex/services/island.transnet/current/transnet.toml
+EnvironmentFile=/etc/island/transnet.env
 ExecStart=/home/ashex/services/island.transnet/current/transnet
 Restart=always
 RestartSec=5
