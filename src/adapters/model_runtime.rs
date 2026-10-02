@@ -60,7 +60,7 @@ impl GenerationPort for OpenAiGenerationAdapter {
           .await
       }
     };
-    let (output, model) = tokio::select! {
+    let (output, _reasoning, model) = tokio::select! {
       _ = context.cancellation.cancelled() => return Err(ModelOperationError::Cancelled),
       result = tokio::time::timeout(remaining, operation) => result
         .map_err(|_| ModelOperationError::DeadlineExceeded)?

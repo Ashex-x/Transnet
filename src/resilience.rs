@@ -591,14 +591,6 @@ pub(crate) fn transport_failure(error: &reqwest::Error) -> ProviderAttemptError 
   }
 }
 
-pub(crate) fn response_failure(error: &reqwest::Error) -> ProviderAttemptError {
-  if error.is_timeout() {
-    ProviderAttemptError::Timeout
-  } else {
-    ProviderAttemptError::InvalidEnvelope
-  }
-}
-
 fn retry_after(headers: &HeaderMap) -> Option<Duration> {
   let value = headers.get(RETRY_AFTER)?.to_str().ok()?.trim();
   if let Ok(seconds) = value.parse::<u64>() {

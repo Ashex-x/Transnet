@@ -113,8 +113,46 @@ fn request(body: Value) -> Request<Body> {
     .unwrap()
 }
 
+fn stream_request(body: Value) -> Request<Body> {
+  Request::post("/api/v1/translations/stream")
+    .header(header::CONTENT_TYPE, "application/json")
+    .header(header::ACCEPT, "text/event-stream")
+    .header("x-request-id", "frontend-stream-17")
+    .body(Body::from(body.to_string()))
+    .unwrap()
+}
+
 async fn body(response: axum::response::Response) -> Value {
   serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn streaming_translation_emits_validated_result_and_done() {
+  let response = app(Ok(connected_output()), Ok(lexical_output()))
+    .oneshot(stream_request(json!({
+      "input":{"type":"text","text":"That plan is still up in the air."},
+      "source_language":"en","target_language":"zh-CN","response_level":"brief"
+    })))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::OK);
+  assert_eq!(
+    response.headers()[header::CONTENT_TYPE],
+    "text/event-stream"
+  );
+  assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+  let wire = String::from_utf8(
+    to_bytes(response.into_body(), usize::MAX)
+      .await
+      .unwrap()
+      .to_vec(),
+  )
+  .unwrap();
+  assert!(wire.contains("event: progress"));
+  assert!(wire.contains("event: translation"), "{wire}");
+  assert!(wire.contains("event: result"));
+  assert!(wire.contains("event: done"));
+  assert!(!wire.contains("event: thinking"));
 }
 
 #[tokio::test]

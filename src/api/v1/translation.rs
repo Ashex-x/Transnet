@@ -1,13 +1,15 @@
 //! `POST /api/v1/translations` unified translation transport contract.
 
 use axum::{
+  body::to_bytes,
   extract::{rejection::JsonRejection, Extension, State},
   http::StatusCode,
-  response::{IntoResponse, Response},
+  response::{sse::Event, IntoResponse, Response, Sse},
   Json,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::convert::Infallible;
 
 use crate::{
   application::{
@@ -22,6 +24,90 @@ use crate::{
 
 use super::super::{problem, problem::FieldError, request_id::RequestId, AppState};
 use super::knowledge_paths::RequestCancellationFactory;
+
+/// Streams lifecycle events while preserving the existing translation operation and envelope.
+pub(crate) async fn translate_stream(
+  State(state): State<AppState>,
+  Extension(request_id): Extension<RequestId>,
+  Extension(context): Extension<RequestContext>,
+  Extension(cancellations): Extension<RequestCancellationFactory>,
+  payload: Result<Json<TranslationTurnRequest>, JsonRejection>,
+) -> Response {
+  let (events_tx, events_rx) = tokio::sync::mpsc::unbounded_channel::<Event>();
+  let request_id_for_task = request_id.clone();
+  tokio::spawn(async move {
+    send_event(&events_tx, "progress", json!({"phase":"admitted"}));
+    send_event(&events_tx, "progress", json!({"phase":"generating"}));
+    let (provider_tx, mut provider_rx) = tokio::sync::mpsc::unbounded_channel();
+    let operation = crate::provider::with_stream_events(
+      provider_tx,
+      translate(
+        State(state),
+        Extension(request_id_for_task),
+        Extension(context),
+        Extension(cancellations),
+        payload,
+      ),
+    );
+    tokio::pin!(operation);
+    let response = loop {
+      tokio::select! {
+        event = provider_rx.recv() => match event {
+          Some(crate::provider::ProviderStreamEvent::ReasoningDelta(delta)) => {
+            send_event(&events_tx, "thinking", json!({"delta":delta}));
+          }
+          None => {}
+        },
+        response = &mut operation => break response,
+      }
+    };
+    send_event(&events_tx, "progress", json!({"phase":"validating"}));
+    let status = response.status();
+    let bytes = match to_bytes(response.into_body(), 2 * 1024 * 1024).await {
+      Ok(bytes) => bytes,
+      Err(_) => {
+        send_event(
+          &events_tx,
+          "error",
+          json!({"code":"stream_response_invalid"}),
+        );
+        send_event(&events_tx, "done", json!({}));
+        return;
+      }
+    };
+    let value: Value =
+      serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({"code":"stream_response_invalid"}));
+    if status.is_success() {
+      send_event(&events_tx, "progress", json!({"phase":"enriching"}));
+      if let Some(translation) = value.pointer("/data/translation") {
+        send_event(&events_tx, "translation", json!({"delta":translation}));
+      }
+      send_event(&events_tx, "result", value);
+    } else {
+      send_event(&events_tx, "error", value);
+    }
+    send_event(&events_tx, "done", json!({}));
+  });
+
+  let stream = futures_util::stream::unfold(events_rx, |mut receiver| async move {
+    receiver
+      .recv()
+      .await
+      .map(|event| (Ok::<_, Infallible>(event), receiver))
+  });
+  let mut response = Sse::new(stream).into_response();
+  response.headers_mut().insert(
+    axum::http::header::CACHE_CONTROL,
+    axum::http::HeaderValue::from_static("no-store"),
+  );
+  response
+}
+
+fn send_event(sender: &tokio::sync::mpsc::UnboundedSender<Event>, name: &'static str, data: Value) {
+  if let Ok(encoded) = serde_json::to_string(&data) {
+    let _ = sender.send(Event::default().event(name).data(encoded));
+  }
+}
 
 pub(crate) async fn translate(
   State(state): State<AppState>,

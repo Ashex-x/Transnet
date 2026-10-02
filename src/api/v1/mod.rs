@@ -25,6 +25,7 @@ pub(crate) fn target_router(
     .route("/livez", post(probe::livez))
     .route("/readyz", post(probe::readyz))
     .route("/translations", post(translation::translate))
+    .route("/translations/stream", post(translation::translate_stream))
     .route("/basic-cards/lookup", post(basic_card::lookup))
     .route("/senses/get", post(basic_card::sense));
   let router = match knowledge {
