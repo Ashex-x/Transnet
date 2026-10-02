@@ -106,6 +106,10 @@ impl GemmaGenerationProvider {
         GenerationProfile::Fast => 0,
         GenerationProfile::Reasoning => 512,
       },
+      max_tokens: match profile {
+        GenerationProfile::Fast => 1_024,
+        GenerationProfile::Reasoning => 768,
+      },
     };
     let output = self
       .gemma4
@@ -174,6 +178,10 @@ impl GemmaGenerationProvider {
       reasoning_budget: match profile {
         GenerationProfile::Fast => 0,
         GenerationProfile::Reasoning => 512,
+      },
+      max_tokens: match profile {
+        GenerationProfile::Fast => 1_024,
+        GenerationProfile::Reasoning => 768,
       },
     };
     let output = self
@@ -320,6 +328,7 @@ struct ChatCompletionRequest {
   reasoning_format: &'static str,
   reasoning_effort: &'static str,
   reasoning_budget: u32,
+  max_tokens: u32,
 }
 
 #[derive(Serialize)]
@@ -429,6 +438,7 @@ mod tests {
       reasoning_format: "auto",
       reasoning_effort: "medium",
       reasoning_budget: 512,
+      max_tokens: 768,
     };
     let value = serde_json::to_value(request).unwrap();
     assert_eq!(value["stream"], true);
@@ -436,5 +446,6 @@ mod tests {
     assert_eq!(value["reasoning_format"], "auto");
     assert_eq!(value["reasoning_effort"], "medium");
     assert_eq!(value["reasoning_budget"], 512);
+    assert_eq!(value["max_tokens"], 768);
   }
 }
