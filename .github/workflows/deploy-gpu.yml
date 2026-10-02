@@ -109,13 +109,21 @@ jobs:
               previous="$(readlink -f "$root/current" 2>/dev/null || true)"
               ln -sfn "$release" "$root/current.next"
               mv -Tf "$root/current.next" "$root/current"
-              if systemctl --user restart island-transnet.service \
-                && systemctl --user is-active --quiet island-transnet.service \
-                && curl --fail --silent --show-error \
-                --unix-socket "$root/transnet.sock" \
-                --request POST http://localhost/api/v1/health \
-                --header 'content-type: application/json' \
-                --data '{}' >/dev/null; then
+              systemctl --user restart island-transnet.service
+              healthy=false
+              for _ in $(seq 1 30); do
+                if systemctl --user is-active --quiet island-transnet.service \
+                  && curl --fail --silent --show-error \
+                    --unix-socket "$root/transnet.sock" \
+                    --request POST http://localhost/api/v1/health \
+                    --header 'content-type: application/json' \
+                    --data '{}' >/dev/null; then
+                  healthy=true
+                  break
+                fi
+                sleep 1
+              done
+              if [ "$healthy" = true ]; then
                 find "$root/releases" -mindepth 1 -maxdepth 1 -type d \
                   ! -path "$release" ! -path "$previous" -mtime +7 -exec rm -rf -- {} +
                 exit 0
