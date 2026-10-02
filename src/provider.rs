@@ -40,6 +40,9 @@ pub enum GenerationProviderError {
   /// The selected model could not produce a translation.
   #[error("translation provider unavailable")]
   Provider,
+  /// The selected model returned no usable structured answer.
+  #[error("translation provider returned invalid output")]
+  InvalidOutput,
 }
 
 /// Generation service backed by one Gemma4-27B endpoint.
@@ -94,35 +97,30 @@ impl GemmaGenerationProvider {
       response_format: ResponseFormat {
         kind: "json_object",
       },
+      // llama.cpp's native thinking can consume the complete output budget
+      // without emitting the strict JSON content required by this endpoint.
+      // Reasoning remains an application-level repair profile; its wire
+      // contract is still JSON-only.
       chat_template_kwargs: ChatTemplateKwargs {
-        enable_thinking: matches!(profile, GenerationProfile::Reasoning),
+        enable_thinking: false,
       },
-      reasoning: match profile {
-        GenerationProfile::Fast => "off",
-        GenerationProfile::Reasoning => "on",
-      },
-      reasoning_format: match profile {
-        GenerationProfile::Fast => "auto",
-        GenerationProfile::Reasoning => "auto",
-      },
-      reasoning_effort: match profile {
-        GenerationProfile::Fast => "none",
-        GenerationProfile::Reasoning => "minimal",
-      },
-      reasoning_budget_tokens: match profile {
-        GenerationProfile::Fast => 0,
-        GenerationProfile::Reasoning => 128,
-      },
-      max_tokens: match profile {
-        GenerationProfile::Fast | GenerationProfile::Reasoning => 256,
-      },
+      reasoning: "off",
+      reasoning_format: "auto",
+      reasoning_effort: "none",
+      reasoning_budget_tokens: 0,
+      max_tokens: 768,
     };
     let output = self
       .gemma4
       .resilience
       .execute("generate", || self.gemma4.send(&body))
       .await
-      .map_err(|_| GenerationProviderError::Provider)?;
+      .map_err(|error| match error {
+        crate::resilience::ProviderCallError::InvalidResponse => {
+          GenerationProviderError::InvalidOutput
+        }
+        _ => GenerationProviderError::Provider,
+      })?;
     Ok((
       output.content,
       output.reasoning,
@@ -174,34 +172,25 @@ impl GemmaGenerationProvider {
         kind: "json_object",
       },
       chat_template_kwargs: ChatTemplateKwargs {
-        enable_thinking: matches!(profile, GenerationProfile::Reasoning),
+        enable_thinking: false,
       },
-      reasoning: match profile {
-        GenerationProfile::Fast => "off",
-        GenerationProfile::Reasoning => "on",
-      },
-      reasoning_format: match profile {
-        GenerationProfile::Fast => "auto",
-        GenerationProfile::Reasoning => "auto",
-      },
-      reasoning_effort: match profile {
-        GenerationProfile::Fast => "none",
-        GenerationProfile::Reasoning => "minimal",
-      },
-      reasoning_budget_tokens: match profile {
-        GenerationProfile::Fast => 0,
-        GenerationProfile::Reasoning => 128,
-      },
-      max_tokens: match profile {
-        GenerationProfile::Fast | GenerationProfile::Reasoning => 256,
-      },
+      reasoning: "off",
+      reasoning_format: "auto",
+      reasoning_effort: "none",
+      reasoning_budget_tokens: 0,
+      max_tokens: 768,
     };
     let output = self
       .gemma4
       .resilience
       .execute("generate", || self.gemma4.send(&body))
       .await
-      .map_err(|_| GenerationProviderError::Provider)?;
+      .map_err(|error| match error {
+        crate::resilience::ProviderCallError::InvalidResponse => {
+          GenerationProviderError::InvalidOutput
+        }
+        _ => GenerationProviderError::Provider,
+      })?;
     Ok((
       output.content,
       output.reasoning,
@@ -445,7 +434,7 @@ mod tests {
   }
 
   #[test]
-  fn profiles_use_llama_cpp_reasoning_controls() {
+  fn structured_generation_disables_native_thinking_and_has_json_headroom() {
     let request = ChatCompletionRequest {
       model: "model".into(),
       messages: Vec::new(),
@@ -455,22 +444,22 @@ mod tests {
         kind: "json_object",
       },
       chat_template_kwargs: ChatTemplateKwargs {
-        enable_thinking: true,
+        enable_thinking: false,
       },
-      reasoning: "on",
+      reasoning: "off",
       reasoning_format: "auto",
-      reasoning_effort: "minimal",
-      reasoning_budget_tokens: 128,
-      max_tokens: 256,
+      reasoning_effort: "none",
+      reasoning_budget_tokens: 0,
+      max_tokens: 768,
     };
     let value = serde_json::to_value(request).unwrap();
     assert_eq!(value["stream"], true);
     assert_eq!(value["response_format"]["type"], "json_object");
-    assert_eq!(value["chat_template_kwargs"]["enable_thinking"], true);
-    assert_eq!(value["reasoning"], "on");
+    assert_eq!(value["chat_template_kwargs"]["enable_thinking"], false);
+    assert_eq!(value["reasoning"], "off");
     assert_eq!(value["reasoning_format"], "auto");
-    assert_eq!(value["reasoning_effort"], "minimal");
-    assert_eq!(value["reasoning_budget_tokens"], 128);
-    assert_eq!(value["max_tokens"], 256);
+    assert_eq!(value["reasoning_effort"], "none");
+    assert_eq!(value["reasoning_budget_tokens"], 0);
+    assert_eq!(value["max_tokens"], 768);
   }
 }

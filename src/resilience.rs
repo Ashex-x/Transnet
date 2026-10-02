@@ -204,11 +204,7 @@ impl ProviderAttemptError {
   fn is_retryable(self) -> bool {
     matches!(
       self,
-      Self::Timeout
-        | Self::RateLimited { .. }
-        | Self::ServerError { .. }
-        | Self::InvalidEnvelope
-        | Self::Connect
+      Self::Timeout | Self::RateLimited { .. } | Self::ServerError { .. } | Self::Connect
     )
   }
 
@@ -263,6 +259,9 @@ pub(crate) enum ProviderCallError {
   /// The provider did not produce a usable response.
   #[error("provider request failed")]
   RequestFailed,
+  /// The provider succeeded at the transport layer but returned no usable envelope.
+  #[error("provider returned an invalid response")]
+  InvalidResponse,
 }
 
 /// Shared circuit, bulkhead, retry, trace, and counter state for one provider.
@@ -427,7 +426,11 @@ impl ProviderResilience {
             elapsed_ms,
             "provider call failed"
           );
-          return Err(ProviderCallError::RequestFailed);
+          return Err(if matches!(error, ProviderAttemptError::InvalidEnvelope) {
+            ProviderCallError::InvalidResponse
+          } else {
+            ProviderCallError::RequestFailed
+          });
         }
       }
     }
@@ -643,6 +646,23 @@ mod tests {
     assert!(status_failure(StatusCode::GATEWAY_TIMEOUT, &headers).is_retryable());
     assert!(!status_failure(StatusCode::BAD_REQUEST, &headers).is_retryable());
     assert!(!status_failure(StatusCode::NOT_IMPLEMENTED, &headers).is_retryable());
+    assert!(!ProviderAttemptError::InvalidEnvelope.is_retryable());
+  }
+
+  #[tokio::test]
+  async fn invalid_envelope_is_not_retried_or_counted_as_an_outage() {
+    let resilience = ProviderResilience::new("test_provider", policy());
+    let attempts = AtomicU64::new(0);
+    let result = resilience
+      .execute("test", || async {
+        attempts.fetch_add(1, Ordering::Relaxed);
+        Err::<(), _>(ProviderAttemptError::InvalidEnvelope)
+      })
+      .await;
+
+    assert_eq!(result, Err(ProviderCallError::InvalidResponse));
+    assert_eq!(attempts.load(Ordering::Relaxed), 1);
+    assert_eq!(resilience.metrics().snapshot().retried, 0);
   }
 
   #[test]

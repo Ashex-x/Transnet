@@ -64,7 +64,10 @@ impl GenerationPort for OpenAiGenerationAdapter {
       _ = context.cancellation.cancelled() => return Err(ModelOperationError::Cancelled),
       result = tokio::time::timeout(remaining, operation) => result
         .map_err(|_| ModelOperationError::DeadlineExceeded)?
-        .map_err(|_| ModelOperationError::Unavailable)?,
+        .map_err(|error| match error {
+          crate::provider::GenerationProviderError::Provider => ModelOperationError::Unavailable,
+          crate::provider::GenerationProviderError::InvalidOutput => ModelOperationError::InvalidOutput,
+        })?,
     };
     context.ensure_active()?;
     Ok(GenerationResponse {
