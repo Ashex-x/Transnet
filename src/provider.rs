@@ -94,6 +94,9 @@ impl GemmaGenerationProvider {
       response_format: ResponseFormat {
         kind: "json_object",
       },
+      chat_template_kwargs: ChatTemplateKwargs {
+        enable_thinking: matches!(profile, GenerationProfile::Reasoning),
+      },
       reasoning: match profile {
         GenerationProfile::Fast => "off",
         GenerationProfile::Reasoning => "on",
@@ -169,6 +172,9 @@ impl GemmaGenerationProvider {
       stream: true,
       response_format: ResponseFormat {
         kind: "json_object",
+      },
+      chat_template_kwargs: ChatTemplateKwargs {
+        enable_thinking: matches!(profile, GenerationProfile::Reasoning),
       },
       reasoning: match profile {
         GenerationProfile::Fast => "off",
@@ -331,6 +337,7 @@ struct ChatCompletionRequest {
   temperature: f32,
   stream: bool,
   response_format: ResponseFormat,
+  chat_template_kwargs: ChatTemplateKwargs,
   reasoning: &'static str,
   reasoning_format: &'static str,
   reasoning_effort: &'static str,
@@ -342,6 +349,11 @@ struct ChatCompletionRequest {
 struct ResponseFormat {
   #[serde(rename = "type")]
   kind: &'static str,
+}
+
+#[derive(Serialize)]
+struct ChatTemplateKwargs {
+  enable_thinking: bool,
 }
 
 #[derive(Serialize)]
@@ -442,6 +454,9 @@ mod tests {
       response_format: ResponseFormat {
         kind: "json_object",
       },
+      chat_template_kwargs: ChatTemplateKwargs {
+        enable_thinking: true,
+      },
       reasoning: "on",
       reasoning_format: "auto",
       reasoning_effort: "medium",
@@ -451,6 +466,7 @@ mod tests {
     let value = serde_json::to_value(request).unwrap();
     assert_eq!(value["stream"], true);
     assert_eq!(value["response_format"]["type"], "json_object");
+    assert_eq!(value["chat_template_kwargs"]["enable_thinking"], true);
     assert_eq!(value["reasoning"], "on");
     assert_eq!(value["reasoning_format"], "auto");
     assert_eq!(value["reasoning_effort"], "medium");
