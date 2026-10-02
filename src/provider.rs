@@ -91,13 +91,30 @@ impl GemmaGenerationProvider {
       ],
       temperature: 0.0,
       stream: true,
+      response_format: ResponseFormat {
+        kind: "json_object",
+      },
+      chat_template_kwargs: ChatTemplateKwargs {
+        enable_thinking: matches!(profile, GenerationProfile::Reasoning),
+      },
+      reasoning: match profile {
+        GenerationProfile::Fast => "off",
+        GenerationProfile::Reasoning => "on",
+      },
       reasoning_format: match profile {
-        GenerationProfile::Fast => "none",
+        GenerationProfile::Fast => "auto",
         GenerationProfile::Reasoning => "auto",
       },
       reasoning_effort: match profile {
         GenerationProfile::Fast => "none",
-        GenerationProfile::Reasoning => "high",
+        GenerationProfile::Reasoning => "minimal",
+      },
+      reasoning_budget_tokens: match profile {
+        GenerationProfile::Fast => 0,
+        GenerationProfile::Reasoning => 128,
+      },
+      max_tokens: match profile {
+        GenerationProfile::Fast | GenerationProfile::Reasoning => 256,
       },
     };
     let output = self
@@ -153,13 +170,30 @@ impl GemmaGenerationProvider {
       ],
       temperature: 0.0,
       stream: true,
+      response_format: ResponseFormat {
+        kind: "json_object",
+      },
+      chat_template_kwargs: ChatTemplateKwargs {
+        enable_thinking: matches!(profile, GenerationProfile::Reasoning),
+      },
+      reasoning: match profile {
+        GenerationProfile::Fast => "off",
+        GenerationProfile::Reasoning => "on",
+      },
       reasoning_format: match profile {
-        GenerationProfile::Fast => "none",
+        GenerationProfile::Fast => "auto",
         GenerationProfile::Reasoning => "auto",
       },
       reasoning_effort: match profile {
         GenerationProfile::Fast => "none",
-        GenerationProfile::Reasoning => "high",
+        GenerationProfile::Reasoning => "minimal",
+      },
+      reasoning_budget_tokens: match profile {
+        GenerationProfile::Fast => 0,
+        GenerationProfile::Reasoning => 128,
+      },
+      max_tokens: match profile {
+        GenerationProfile::Fast | GenerationProfile::Reasoning => 256,
       },
     };
     let output = self
@@ -215,7 +249,7 @@ impl TranslationProvider {
     &self,
     body: &ChatCompletionRequest,
   ) -> Result<StreamedGeneration, ProviderAttemptError> {
-    let allow_reasoning = body.reasoning_effort == "high";
+    let allow_reasoning = body.reasoning == "on";
     let endpoint = format!(
       "{}/chat/completions",
       self.config.base_url.trim_end_matches('/')
@@ -302,8 +336,24 @@ struct ChatCompletionRequest {
   messages: Vec<ChatMessage>,
   temperature: f32,
   stream: bool,
+  response_format: ResponseFormat,
+  chat_template_kwargs: ChatTemplateKwargs,
+  reasoning: &'static str,
   reasoning_format: &'static str,
   reasoning_effort: &'static str,
+  reasoning_budget_tokens: u32,
+  max_tokens: u32,
+}
+
+#[derive(Serialize)]
+struct ResponseFormat {
+  #[serde(rename = "type")]
+  kind: &'static str,
+}
+
+#[derive(Serialize)]
+struct ChatTemplateKwargs {
+  enable_thinking: bool,
 }
 
 #[derive(Serialize)]
@@ -401,12 +451,26 @@ mod tests {
       messages: Vec::new(),
       temperature: 0.0,
       stream: true,
+      response_format: ResponseFormat {
+        kind: "json_object",
+      },
+      chat_template_kwargs: ChatTemplateKwargs {
+        enable_thinking: true,
+      },
+      reasoning: "on",
       reasoning_format: "auto",
-      reasoning_effort: "high",
+      reasoning_effort: "minimal",
+      reasoning_budget_tokens: 128,
+      max_tokens: 256,
     };
     let value = serde_json::to_value(request).unwrap();
     assert_eq!(value["stream"], true);
+    assert_eq!(value["response_format"]["type"], "json_object");
+    assert_eq!(value["chat_template_kwargs"]["enable_thinking"], true);
+    assert_eq!(value["reasoning"], "on");
     assert_eq!(value["reasoning_format"], "auto");
-    assert_eq!(value["reasoning_effort"], "high");
+    assert_eq!(value["reasoning_effort"], "minimal");
+    assert_eq!(value["reasoning_budget_tokens"], 128);
+    assert_eq!(value["max_tokens"], 256);
   }
 }

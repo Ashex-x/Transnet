@@ -18,7 +18,7 @@ required = false
 cursor_secret_env = "TRANSNET_KNOWLEDGE_CURSOR_SECRET"
 
 [translation]
-timeout_seconds = 60
+timeout_seconds = 105
 max_retries = 3
 retry_delay_ms = 250
 
