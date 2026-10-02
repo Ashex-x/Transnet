@@ -1,5 +1,6 @@
 //! Resilient OpenAI-compatible Gemma4-27B generation provider.
 
+use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -7,12 +8,31 @@ use thiserror::Error;
 use crate::{
   config::ProviderConfig,
   resilience::{
-    response_failure, status_failure, transport_failure, ProviderAttemptError,
-    ProviderMetricsSnapshot, ProviderPolicy, ProviderResilience,
+    status_failure, transport_failure, ProviderAttemptError, ProviderMetricsSnapshot,
+    ProviderPolicy, ProviderResilience,
   },
 };
 
 use crate::domain::model_runtime::GenerationProfile;
+
+tokio::task_local! {
+  static STREAM_EVENTS: tokio::sync::mpsc::UnboundedSender<ProviderStreamEvent>;
+}
+
+/// Provider deltas that may be forwarded by an explicitly streaming transport.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderStreamEvent {
+  /// A reasoning delta returned in llama.cpp's separate `reasoning_content` field.
+  ReasoningDelta(String),
+}
+
+/// Runs one operation with a request-local provider event sink.
+pub async fn with_stream_events<F: std::future::Future>(
+  sender: tokio::sync::mpsc::UnboundedSender<ProviderStreamEvent>,
+  future: F,
+) -> F::Output {
+  STREAM_EVENTS.scope(sender, future).await
+}
 
 /// Failure returned by translation validation or model communication.
 #[derive(Debug, Error)]
@@ -50,7 +70,7 @@ impl GemmaGenerationProvider {
     &self,
     profile: GenerationProfile,
     input: &str,
-  ) -> Result<(String, String), GenerationProviderError> {
+  ) -> Result<(String, Option<String>, String), GenerationProviderError> {
     let instruction = match profile {
       GenerationProfile::Fast => "Complete the requested operation accurately and concisely.",
       GenerationProfile::Reasoning => {
@@ -70,6 +90,15 @@ impl GemmaGenerationProvider {
         },
       ],
       temperature: 0.0,
+      stream: true,
+      reasoning_format: match profile {
+        GenerationProfile::Fast => "none",
+        GenerationProfile::Reasoning => "auto",
+      },
+      reasoning_effort: match profile {
+        GenerationProfile::Fast => "none",
+        GenerationProfile::Reasoning => "high",
+      },
     };
     let output = self
       .gemma4
@@ -77,7 +106,11 @@ impl GemmaGenerationProvider {
       .execute("generate", || self.gemma4.send(&body))
       .await
       .map_err(|_| GenerationProviderError::Provider)?;
-    Ok((output, self.gemma4.config.model.clone()))
+    Ok((
+      output.content,
+      output.reasoning,
+      self.gemma4.config.model.clone(),
+    ))
   }
 
   /// Runs one provider-neutral multimodal operation against the Gemma 4 endpoint.
@@ -86,7 +119,7 @@ impl GemmaGenerationProvider {
     profile: GenerationProfile,
     input: &str,
     images: &[(String, String)],
-  ) -> Result<(String, String), GenerationProviderError> {
+  ) -> Result<(String, Option<String>, String), GenerationProviderError> {
     let instruction = match profile {
       GenerationProfile::Fast => "Complete the requested operation accurately and concisely.",
       GenerationProfile::Reasoning => {
@@ -119,6 +152,15 @@ impl GemmaGenerationProvider {
         },
       ],
       temperature: 0.0,
+      stream: true,
+      reasoning_format: match profile {
+        GenerationProfile::Fast => "none",
+        GenerationProfile::Reasoning => "auto",
+      },
+      reasoning_effort: match profile {
+        GenerationProfile::Fast => "none",
+        GenerationProfile::Reasoning => "high",
+      },
     };
     let output = self
       .gemma4
@@ -126,7 +168,11 @@ impl GemmaGenerationProvider {
       .execute("generate", || self.gemma4.send(&body))
       .await
       .map_err(|_| GenerationProviderError::Provider)?;
-    Ok((output, self.gemma4.config.model.clone()))
+    Ok((
+      output.content,
+      output.reasoning,
+      self.gemma4.config.model.clone(),
+    ))
   }
 
   /// Creates a reusable generation service with one resilience policy.
@@ -165,7 +211,10 @@ impl TranslationProvider {
     })
   }
 
-  async fn send(&self, body: &ChatCompletionRequest) -> Result<String, ProviderAttemptError> {
+  async fn send(
+    &self,
+    body: &ChatCompletionRequest,
+  ) -> Result<StreamedGeneration, ProviderAttemptError> {
     let endpoint = format!(
       "{}/chat/completions",
       self.config.base_url.trim_end_matches('/')
@@ -181,19 +230,68 @@ impl TranslationProvider {
     if !response.status().is_success() {
       return Err(status_failure(response.status(), response.headers()));
     }
-    let payload: ChatCompletionResponse = response
-      .json()
-      .await
-      .map_err(|error| response_failure(&error))?;
-    payload
-      .choices
-      .into_iter()
-      .next()
-      .and_then(|choice| choice.message.content)
-      .map(|content| content.trim().to_string())
-      .filter(|content| !content.is_empty())
-      .ok_or(ProviderAttemptError::InvalidEnvelope)
+    let mut bytes = response.bytes_stream();
+    let mut pending = String::new();
+    let mut output = StreamedGeneration::default();
+    while let Some(chunk) = bytes.next().await {
+      let chunk = chunk.map_err(|error| transport_failure(&error))?;
+      let text = std::str::from_utf8(&chunk).map_err(|_| ProviderAttemptError::InvalidEnvelope)?;
+      pending.push_str(text);
+      while let Some(end) = pending.find('\n') {
+        let line = pending[..end].trim_end_matches('\r').to_string();
+        pending.drain(..=end);
+        consume_stream_line(&line, &mut output)?;
+      }
+    }
+    if !pending.is_empty() {
+      consume_stream_line(pending.trim_end_matches('\r'), &mut output)?;
+    }
+    output.content = output.content.trim().to_string();
+    output.reasoning = output
+      .reasoning
+      .map(|value| value.trim().to_string())
+      .filter(|value| !value.is_empty());
+    if output.content.is_empty() {
+      return Err(ProviderAttemptError::InvalidEnvelope);
+    }
+    Ok(output)
   }
+}
+
+#[derive(Default)]
+struct StreamedGeneration {
+  content: String,
+  reasoning: Option<String>,
+}
+
+fn consume_stream_line(
+  line: &str,
+  output: &mut StreamedGeneration,
+) -> Result<(), ProviderAttemptError> {
+  let Some(data) = line.strip_prefix("data:").map(str::trim) else {
+    return Ok(());
+  };
+  if data.is_empty() || data == "[DONE]" {
+    return Ok(());
+  }
+  let payload: ChatCompletionChunk =
+    serde_json::from_str(data).map_err(|_| ProviderAttemptError::InvalidEnvelope)?;
+  for choice in payload.choices {
+    if let Some(content) = choice.delta.content {
+      output.content.push_str(&content);
+    }
+    if let Some(reasoning) = choice.delta.reasoning_content {
+      if !reasoning.is_empty() {
+        let _ = STREAM_EVENTS
+          .try_with(|sender| sender.send(ProviderStreamEvent::ReasoningDelta(reasoning.clone())));
+      }
+      output
+        .reasoning
+        .get_or_insert_with(String::new)
+        .push_str(&reasoning);
+    }
+  }
+  Ok(())
 }
 
 #[derive(Serialize)]
@@ -201,6 +299,9 @@ struct ChatCompletionRequest {
   model: String,
   messages: Vec<ChatMessage>,
   temperature: f32,
+  stream: bool,
+  reasoning_format: &'static str,
+  reasoning_effort: &'static str,
 }
 
 #[derive(Serialize)]
@@ -229,18 +330,20 @@ struct ImageUrl {
 }
 
 #[derive(Debug, Deserialize)]
-struct ChatCompletionResponse {
+struct ChatCompletionChunk {
   choices: Vec<ChatChoice>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ChatChoice {
-  message: ChatResponseMessage,
+  delta: ChatResponseMessage,
 }
 
 #[derive(Debug, Deserialize)]
 struct ChatResponseMessage {
   content: Option<String>,
+  #[serde(default)]
+  reasoning_content: Option<String>,
 }
 
 #[cfg(test)]
@@ -268,5 +371,38 @@ mod tests {
       value[1]["image_url"]["url"],
       "data:image/png;base64,cHJpdmF0ZQ=="
     );
+  }
+
+  #[test]
+  fn streamed_answer_and_reasoning_stay_separate() {
+    let mut output = StreamedGeneration::default();
+    consume_stream_line(
+      r#"data: {"choices":[{"delta":{"reasoning_content":"check "}}]}"#,
+      &mut output,
+    )
+    .unwrap();
+    consume_stream_line(
+      r#"data: {"choices":[{"delta":{"content":"answer"}}]}"#,
+      &mut output,
+    )
+    .unwrap();
+    assert_eq!(output.reasoning.as_deref(), Some("check "));
+    assert_eq!(output.content, "answer");
+  }
+
+  #[test]
+  fn profiles_use_llama_cpp_reasoning_controls() {
+    let request = ChatCompletionRequest {
+      model: "model".into(),
+      messages: Vec::new(),
+      temperature: 0.0,
+      stream: true,
+      reasoning_format: "auto",
+      reasoning_effort: "high",
+    };
+    let value = serde_json::to_value(request).unwrap();
+    assert_eq!(value["stream"], true);
+    assert_eq!(value["reasoning_format"], "auto");
+    assert_eq!(value["reasoning_effort"], "high");
   }
 }
