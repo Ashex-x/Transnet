@@ -185,6 +185,18 @@ impl TranslationOrchestrator {
     let source_language = classification
       .detected_source_language
       .ok_or(TranslationOrchestrationError::UnsupportedSourceLanguage)?;
+    if source_language == turn.target_language() {
+      let result = project_outcome(
+        TranslationTurnResult::passage(text.to_string(), source_language, turn.target_language()),
+        turn.response_level(),
+        [],
+        false,
+      );
+      result
+        .validate_for_turn(turn)
+        .map_err(|_| TranslationOrchestrationError::InvalidModelOutput)?;
+      return Ok(result);
+    }
     let live = self
       .retrieve_live(context, cancellation.clone(), turn, text)
       .await?;

@@ -206,6 +206,20 @@ fn turn(text: &str) -> TranslationTurn {
   .unwrap()
 }
 
+fn same_language_turn(text: &str) -> TranslationTurn {
+  TranslationTurn::new(TranslationTurnRequest {
+    input: TranslationInput::Text {
+      text: text.to_string(),
+    },
+    source_language: "auto".to_string(),
+    target_language: "en".to_string(),
+    response_level: "full".to_string(),
+    history: Vec::new(),
+    guidance: None,
+  })
+  .unwrap()
+}
+
 fn image_turn() -> TranslationTurn {
   let request: TranslationTurnRequest = serde_json::from_value(serde_json::json!({
     "input":{"type":"image_regions","images":[{"image_id":"page",
@@ -330,6 +344,28 @@ async fn routing_uses_one_fast_profile_and_no_provider_selector() {
   assert!(fake.calls()[0].input.contains("lexical_translation"));
   assert!(fake.calls()[1].input.contains("connected_translation"));
   assert!(!fake.calls()[0].input.contains("provider"));
+}
+
+#[tokio::test]
+async fn same_language_text_is_returned_without_generation() {
+  let fake = Arc::new(FakeGeneration::new([]));
+  let orchestrator = TranslationOrchestrator::new(fake.clone());
+  let result = orchestrator
+    .translate(
+      &context(30),
+      Arc::new(CancellationSignal::default()),
+      &same_language_turn("hot"),
+    )
+    .await
+    .unwrap();
+  let value = serde_json::to_value(result).unwrap();
+  assert_eq!(value["translation"]["translations"][0]["text"], "hot");
+  assert_eq!(value["translation"]["detected_source_language"], "en");
+  assert_eq!(
+    value["metadata"]["inference_profiles"],
+    serde_json::json!([])
+  );
+  assert!(fake.calls().is_empty());
 }
 
 #[tokio::test]
