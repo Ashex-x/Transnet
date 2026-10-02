@@ -87,6 +87,11 @@ jobs:
             -o StrictHostKeyChecking=yes \
             release/transnet release/transnet.toml \
             "ashex@139.224.103.112:/home/ashex/services/island.transnet/releases/$RELEASE_ID/"
+          ssh -i ~/.ssh/id_ed25519 -p 16004 \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            ashex@139.224.103.112 \
+            "chmod 0755 /home/ashex/services/island.transnet/releases/$RELEASE_ID/transnet"
 
       - name: Activate, restart, and verify Island Transnet
         env:
