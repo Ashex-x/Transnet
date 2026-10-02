@@ -106,7 +106,7 @@ impl GemmaGenerationProvider {
         GenerationProfile::Fast => "none",
         GenerationProfile::Reasoning => "medium",
       },
-      reasoning_budget: match profile {
+      reasoning_budget_tokens: match profile {
         GenerationProfile::Fast => 0,
         GenerationProfile::Reasoning => 512,
       },
@@ -183,7 +183,7 @@ impl GemmaGenerationProvider {
         GenerationProfile::Fast => "none",
         GenerationProfile::Reasoning => "medium",
       },
-      reasoning_budget: match profile {
+      reasoning_budget_tokens: match profile {
         GenerationProfile::Fast => 0,
         GenerationProfile::Reasoning => 512,
       },
@@ -245,7 +245,7 @@ impl TranslationProvider {
     &self,
     body: &ChatCompletionRequest,
   ) -> Result<StreamedGeneration, ProviderAttemptError> {
-    let allow_reasoning = body.reasoning_effort == "high";
+    let allow_reasoning = body.reasoning == "on";
     let endpoint = format!(
       "{}/chat/completions",
       self.config.base_url.trim_end_matches('/')
@@ -336,7 +336,7 @@ struct ChatCompletionRequest {
   reasoning: &'static str,
   reasoning_format: &'static str,
   reasoning_effort: &'static str,
-  reasoning_budget: u32,
+  reasoning_budget_tokens: u32,
   max_tokens: u32,
 }
 
@@ -447,7 +447,7 @@ mod tests {
       reasoning: "on",
       reasoning_format: "auto",
       reasoning_effort: "medium",
-      reasoning_budget: 512,
+      reasoning_budget_tokens: 512,
       max_tokens: 768,
     };
     let value = serde_json::to_value(request).unwrap();
@@ -456,7 +456,7 @@ mod tests {
     assert_eq!(value["reasoning"], "on");
     assert_eq!(value["reasoning_format"], "auto");
     assert_eq!(value["reasoning_effort"], "medium");
-    assert_eq!(value["reasoning_budget"], 512);
+    assert_eq!(value["reasoning_budget_tokens"], 512);
     assert_eq!(value["max_tokens"], 768);
   }
 }
