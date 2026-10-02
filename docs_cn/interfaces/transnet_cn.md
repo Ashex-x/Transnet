@@ -22,6 +22,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 - [POST /api/v1/livez](#post-apiv1livez)
 - [POST /api/v1/readyz](#post-apiv1readyz)
 - [POST /api/v1/translations](#post-apiv1translations)
+- [POST /api/v1/translations/stream](#post-apiv1translationsstream)
 - [POST /api/v1/basic-cards/lookup](#post-apiv1basic-cardslookup)
 - [POST /api/v1/senses/get](#post-apiv1sensesget)
 - [POST /api/v1/knowledge/views](#post-apiv1knowledgeviews)
@@ -314,6 +315,10 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 只有已解析的 word 与 established-phrase 结果可以嵌入 relationship-page object。Passage、segment 与 image-region 结果绝不包含它。页面先给出绑定完整 release pin 的 BasicCard 或 concept-summary authority receipt，再对受支持 direct group、完整 semantic scale、可选 verified short path、带标签的 generated example 与 inferred explanation，以及视觉上独立的 exploratory section 应用确定性 progressive disclosure。Verified group 保留精确的第一步 hydration proof，且只接纳闭合 grouping policy 声明的 relation；不受支持的 mechanism 与 application claim 会 fail closed。完整 semantic scale 与被接纳的 taxonomy group 原子化包含。显式请求的 labeled alternative 每个 lexical unit 最多两个，绑定 stable translation ID 与 order，并说明改变的维度、实际后果与 usefulness reason；它们不是 alias 或 normalized lookup form。request-local relationship-gap nomination 不携带规范 endpoint、relation 或 evidence authority，不进入在线 response，只作为独立 offline review workflow 的输入。系统不新增公开 relationship-page route。只有原子配置的 material authority 提供匹配 root、目标语言、response level、完整 release pin 与已校验 material 时，response 才嵌入页面。存在 verified group、path 或 evidence-grounded explanation 时状态为 `complete`；只有这些 relationship section 均为空时才是 `canonical_only`。仅在 translation orchestrator 与该 authority 都已安装时，capabilities 才包含 `relationship-page-v1`，builder 顺序不能公布部分 runtime。Authority deadline 与 cancellation 保留标准闭合 problem 语义；请求 labeled alternative 的结构化输入在 generation 前失败。默认 executable 因生产 root-resolution 与 canonical/retrieval composition 尚未完成而省略 material authority。
 
 闭合路由错误还包括 `invalid_translation_request`、`constraint_conflict`、`unsupported_input_type`、`unsupported_language_pair`、`invalid_image`、`invalid_model_output`、`translation_model_unavailable` 与 `live_retrieval_unavailable`。
+
+## POST /api/v1/translations/stream
+
+接受与 `/translations` 相同的严格 JSON body，并返回 `text/event-stream`。事件包括：携带闭合阶段 `admitted`、`generating`、`validating`、`enriching` 的 `progress`；可选、携带 `delta` 的 `thinking`；携带已校验翻译增量的 `translation`；携带完整既有成功 envelope 的 `result`；携带既有 problem envelope 的 `error`；以及终止事件 `done`。翻译内容只在常规校验完成后发送。只有实际选择 reasoning profile 时才可发送 `thinking`，且内容只能来自 llama.cpp 独立的 `reasoning_content` 字段；Transnet 绝不从答案文本推断隐藏推理。Provider 请求对 fast 调用使用 `reasoning_format: none` 与 `reasoning_effort: none`，对 reasoning 调用使用 `reasoning_format: auto` 与 `reasoning_effort: high`，并始终启用 streaming。非流式路由保持不变。
 
 ## POST /api/v1/basic-cards/lookup
 

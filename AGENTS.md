@@ -37,6 +37,8 @@ For contract changes, trace the shape through the owning Markdown contract, Rust
 
 ## Verification
 
+Create every topic branch from the current `origin/master`. Before the final push, fetch and rebase onto `origin/master`, verify the exact branch/PR head and `master` base, and preserve a linear history with no merge commits. Use squash merge only after all required checks pass.
+
 Run the narrowest relevant tests while iterating, then run the repository checks from the root before handoff:
 
 ```bash
