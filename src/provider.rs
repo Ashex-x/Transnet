@@ -100,7 +100,11 @@ impl GemmaGenerationProvider {
       },
       reasoning_effort: match profile {
         GenerationProfile::Fast => "none",
-        GenerationProfile::Reasoning => "high",
+        GenerationProfile::Reasoning => "medium",
+      },
+      reasoning_budget: match profile {
+        GenerationProfile::Fast => 0,
+        GenerationProfile::Reasoning => 512,
       },
     };
     let output = self
@@ -165,7 +169,11 @@ impl GemmaGenerationProvider {
       },
       reasoning_effort: match profile {
         GenerationProfile::Fast => "none",
-        GenerationProfile::Reasoning => "high",
+        GenerationProfile::Reasoning => "medium",
+      },
+      reasoning_budget: match profile {
+        GenerationProfile::Fast => 0,
+        GenerationProfile::Reasoning => 512,
       },
     };
     let output = self
@@ -311,6 +319,7 @@ struct ChatCompletionRequest {
   response_format: ResponseFormat,
   reasoning_format: &'static str,
   reasoning_effort: &'static str,
+  reasoning_budget: u32,
 }
 
 #[derive(Serialize)]
@@ -418,12 +427,14 @@ mod tests {
         kind: "json_object",
       },
       reasoning_format: "auto",
-      reasoning_effort: "high",
+      reasoning_effort: "medium",
+      reasoning_budget: 512,
     };
     let value = serde_json::to_value(request).unwrap();
     assert_eq!(value["stream"], true);
     assert_eq!(value["response_format"]["type"], "json_object");
     assert_eq!(value["reasoning_format"], "auto");
-    assert_eq!(value["reasoning_effort"], "high");
+    assert_eq!(value["reasoning_effort"], "medium");
+    assert_eq!(value["reasoning_budget"], 512);
   }
 }
