@@ -18,3 +18,5 @@ English: [Interface catalog](../../docs/interfaces/README.md)
 3. 阅读[检索数据](retrieval-data_cn.md)，了解候选如何检索；检索结果是指针，不是规范事实。
 
 三份文档均使用 [Transnet](transnet_cn.md) 中定义的共享 UDS JSON 传输。MySQL 是权威来源；Qdrant 是可重建、按发布版本固定的检索投影。实时请求文本和请求级历史绝不会发送给这些数据合同。
+
+机器可读 fixture `tests/fixtures/island_port_active_knowledge_release_v1.json` 固定了原子活动 trio 选择的请求与成功响应。Transnet 测试会直接使用它；island-port 应在其合同测试套件中使用同一 artifact 或完全一致的副本，防止 schema、release、collection、hash 与 input-version 字段独立漂移。

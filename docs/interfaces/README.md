@@ -18,3 +18,5 @@ This directory defines the target contracts between Transnet and island-port. Th
 3. Read [retrieval data](retrieval-data.md) for how candidates are retrieved; retrieval results are pointers, not canonical facts.
 
 All three use the shared UDS JSON transport described in [Transnet](transnet.md). MySQL is authoritative; Qdrant is a rebuildable, release-pinned retrieval projection. Live request text and request-scoped history are never sent to these data contracts.
+
+The machine-readable fixture at `tests/fixtures/island_port_active_knowledge_release_v1.json` freezes the request and successful response for atomic active-trio selection. Transnet tests consume it directly; island-port should consume the same artifact or an exact copy in its contract suite so schema, release, collection, hash, and input-version fields cannot drift independently.

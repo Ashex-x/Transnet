@@ -1,0 +1,27 @@
+{
+  "request": {
+    "context": {
+      "request_id": "request-1",
+      "deadline_at": "2099-01-01T00:00:00Z",
+      "schema_version": "canonical-data-v1"
+    },
+    "input": {}
+  },
+  "response": {
+    "request_id": "request-1",
+    "schema_version": "canonical-data-v1",
+    "outcome": "ok",
+    "value": {
+      "content_release": "release-1",
+      "canonical_schema_version": "canonical-v1",
+      "node_collection_id": "nodes-1",
+      "node_collection_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "edge_collection_id": "edges-1",
+      "edge_collection_content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "relationship_registry_version": 1,
+      "edge_dense_input_version": "edge-dense-input-v1",
+      "edge_lexical_input_version": "edge-lexical-input-v1"
+    },
+    "error": null
+  }
+}

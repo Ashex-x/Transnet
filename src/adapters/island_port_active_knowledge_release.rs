@@ -276,19 +276,17 @@ mod tests {
     }
   }
 
-  fn response(overrides: &str) -> Vec<u8> {
-    format!(
-      r#"{{"request_id":"request-1","schema_version":"canonical-data-v1","outcome":"ok","value":{{"content_release":"release-1","canonical_schema_version":"canonical-v1","node_collection_id":"nodes-1","node_collection_content_hash":"sha256:{}","edge_collection_id":"edges-1","edge_collection_content_hash":"sha256:{}","relationship_registry_version":1,"edge_dense_input_version":"edge-dense-input-v1","edge_lexical_input_version":"edge-lexical-input-v1"}},"error":null{overrides}}}"#,
-      "a".repeat(64),
-      "b".repeat(64),
-    )
-    .into_bytes()
+  fn golden_fixture() -> serde_json::Value {
+    serde_json::from_str(include_str!(
+      "../../tests/fixtures/island_port_active_knowledge_release_v1.json"
+    ))
+    .unwrap()
   }
 
   #[tokio::test]
   async fn returns_one_exact_validated_active_tuple_without_a_release_pin() {
     let transport = Arc::new(FakeTransport {
-      response: response(""),
+      response: serde_json::to_vec(&golden_fixture()["response"]).unwrap(),
       calls: Mutex::new(Vec::new()),
     });
     let client = IslandPortActiveKnowledgeReleaseClient::new(transport.clone());
@@ -307,8 +305,7 @@ mod tests {
     assert_eq!(calls[0].0, ACTIVE_KNOWLEDGE_RELEASE_PATH);
     assert_eq!(calls[0].2, Duration::from_secs(2));
     let request: serde_json::Value = serde_json::from_slice(&calls[0].1).unwrap();
-    assert_eq!(request["input"], serde_json::json!({}));
-    assert_eq!(request["context"]["schema_version"], "canonical-data-v1");
+    assert_eq!(request, golden_fixture()["request"]);
     assert!(request["context"].get("content_release").is_none());
   }
 
