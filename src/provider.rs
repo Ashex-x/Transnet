@@ -94,6 +94,10 @@ impl GemmaGenerationProvider {
       response_format: ResponseFormat {
         kind: "json_object",
       },
+      reasoning: match profile {
+        GenerationProfile::Fast => "off",
+        GenerationProfile::Reasoning => "on",
+      },
       reasoning_format: match profile {
         GenerationProfile::Fast => "none",
         GenerationProfile::Reasoning => "auto",
@@ -166,6 +170,10 @@ impl GemmaGenerationProvider {
       stream: true,
       response_format: ResponseFormat {
         kind: "json_object",
+      },
+      reasoning: match profile {
+        GenerationProfile::Fast => "off",
+        GenerationProfile::Reasoning => "on",
       },
       reasoning_format: match profile {
         GenerationProfile::Fast => "none",
@@ -325,6 +333,7 @@ struct ChatCompletionRequest {
   temperature: f32,
   stream: bool,
   response_format: ResponseFormat,
+  reasoning: &'static str,
   reasoning_format: &'static str,
   reasoning_effort: &'static str,
   reasoning_budget: u32,
@@ -435,6 +444,7 @@ mod tests {
       response_format: ResponseFormat {
         kind: "json_object",
       },
+      reasoning: "on",
       reasoning_format: "auto",
       reasoning_effort: "medium",
       reasoning_budget: 512,
@@ -443,6 +453,7 @@ mod tests {
     let value = serde_json::to_value(request).unwrap();
     assert_eq!(value["stream"], true);
     assert_eq!(value["response_format"]["type"], "json_object");
+    assert_eq!(value["reasoning"], "on");
     assert_eq!(value["reasoning_format"], "auto");
     assert_eq!(value["reasoning_effort"], "medium");
     assert_eq!(value["reasoning_budget"], 512);
