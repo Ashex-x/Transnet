@@ -215,6 +215,7 @@ impl TranslationProvider {
     &self,
     body: &ChatCompletionRequest,
   ) -> Result<StreamedGeneration, ProviderAttemptError> {
+    let allow_reasoning = body.reasoning_effort == "high";
     let endpoint = format!(
       "{}/chat/completions",
       self.config.base_url.trim_end_matches('/')
@@ -240,11 +241,11 @@ impl TranslationProvider {
       while let Some(end) = pending.find('\n') {
         let line = pending[..end].trim_end_matches('\r').to_string();
         pending.drain(..=end);
-        consume_stream_line(&line, &mut output)?;
+        consume_stream_line(&line, &mut output, allow_reasoning)?;
       }
     }
     if !pending.is_empty() {
-      consume_stream_line(pending.trim_end_matches('\r'), &mut output)?;
+      consume_stream_line(pending.trim_end_matches('\r'), &mut output, allow_reasoning)?;
     }
     output.content = output.content.trim().to_string();
     output.reasoning = output
@@ -267,6 +268,7 @@ struct StreamedGeneration {
 fn consume_stream_line(
   line: &str,
   output: &mut StreamedGeneration,
+  allow_reasoning: bool,
 ) -> Result<(), ProviderAttemptError> {
   let Some(data) = line.strip_prefix("data:").map(str::trim) else {
     return Ok(());
@@ -280,7 +282,7 @@ fn consume_stream_line(
     if let Some(content) = choice.delta.content {
       output.content.push_str(&content);
     }
-    if let Some(reasoning) = choice.delta.reasoning_content {
+    if let Some(reasoning) = choice.delta.reasoning_content.filter(|_| allow_reasoning) {
       if !reasoning.is_empty() {
         let _ = STREAM_EVENTS
           .try_with(|sender| sender.send(ProviderStreamEvent::ReasoningDelta(reasoning.clone())));
@@ -379,11 +381,13 @@ mod tests {
     consume_stream_line(
       r#"data: {"choices":[{"delta":{"reasoning_content":"check "}}]}"#,
       &mut output,
+      true,
     )
     .unwrap();
     consume_stream_line(
       r#"data: {"choices":[{"delta":{"content":"answer"}}]}"#,
       &mut output,
+      true,
     )
     .unwrap();
     assert_eq!(output.reasoning.as_deref(), Some("check "));
