@@ -99,7 +99,7 @@ impl GemmaGenerationProvider {
         GenerationProfile::Reasoning => "on",
       },
       reasoning_format: match profile {
-        GenerationProfile::Fast => "none",
+        GenerationProfile::Fast => "auto",
         GenerationProfile::Reasoning => "auto",
       },
       reasoning_effort: match profile {
@@ -175,7 +175,7 @@ impl GemmaGenerationProvider {
         GenerationProfile::Reasoning => "on",
       },
       reasoning_format: match profile {
-        GenerationProfile::Fast => "none",
+        GenerationProfile::Fast => "auto",
         GenerationProfile::Reasoning => "auto",
       },
       reasoning_effort: match profile {
