@@ -106,6 +106,14 @@ jobs:
               release="$root/releases/$RELEASE_ID"
               test -x "$release/transnet"
               test -r "$release/transnet.toml"
+              sed -i \
+                -e 's#/run/transnet/transnet.sock#/home/ashex/services/island.transnet/transnet.sock#' \
+                -e 's#/run/island-port/island-port.sock#/home/ashex/services/island-port/island-port.sock#' \
+                "$release/transnet.toml"
+              grep -Fq 'socket_path = "/home/ashex/services/island.transnet/transnet.sock"' \
+                "$release/transnet.toml"
+              grep -Fq 'socket_path = "/home/ashex/services/island-port/island-port.sock"' \
+                "$release/transnet.toml"
               previous="$(readlink -f "$root/current" 2>/dev/null || true)"
               ln -sfn "$release" "$root/current.next"
               mv -Tf "$root/current.next" "$root/current"
