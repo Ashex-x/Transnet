@@ -44,6 +44,11 @@ ashex ALL=(root) NOPASSWD: /usr/bin/systemctl restart island.transnet, /usr/bin/
 
 生产配置使用 GPU 主机实际提供的 OpenAI-compatible model identifier `Gemma4-26B`。`TRANSNET_CONFIG` 在运行时选择已部署配置，因此上传的 binary 不依赖 CI runner checkout 路径。
 
+生产 provider timeout 为 105 秒。Streaming caller 最多可准入 120 秒；较短的 provider
+上限为严格验证、enrichment 与终止 SSE result 留出时间，同时避免退回旧的 30 秒
+buffered 限制。Generation request 使用 llama.cpp JSON-object response format，防止严格
+translation contract 被 Markdown prose 包裹。
+
 首次针对空 canonical authority 部署时，knowledge 刻意保持 optional。Transnet 仍要求 canonical readiness，但当 island-port 尚无完整的活动 canonical/node/edge release tuple 时，会在不安装 knowledge route 的情况下启动。发布并 reconcile 两个不可变 collection，通过 island-port 提交 activation candidate，并验证 `POST /api/v1/knowledge-releases/active`。随后把已部署 TOML 复制为 operator-owned 配置，将 `[knowledge].required` 改为 `true`，通过 systemd drop-in 令 `TRANSNET_CONFIG` 指向该文件，再重启 Transnet。Required 模式会在活动 tuple 缺失或不兼容时拒绝启动，并使 projection drift 导致 readiness 失败。不要通过编辑不可变 release directory 启用 required 模式。
 
 ## 发布检查

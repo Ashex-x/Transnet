@@ -44,6 +44,11 @@ The test job checks formatting, runs Clippy for all targets and features, runs a
 
 The production configuration uses the GPU host's actual OpenAI-compatible model identifier `Gemma4-26B`. `TRANSNET_CONFIG` selects the deployed configuration at runtime, so an uploaded binary never depends on the CI runner's checkout path.
 
+The production provider timeout is 105 seconds. Streaming callers may admit up to 120 seconds;
+the shorter provider bound leaves time for validation, enrichment, and the terminal SSE result
+without reverting to the legacy 30-second buffered limit. Generation requests use llama.cpp's
+JSON-object response format so the strict translation contract is not wrapped in Markdown prose.
+
 Knowledge is intentionally optional during the first deployment against an empty canonical authority. Transnet still requires canonical readiness, but starts without knowledge routes when island-port has no complete active canonical/node/edge release tuple. Publish and reconcile both immutable collections, submit the activation candidate through island-port, and verify `POST /api/v1/knowledge-releases/active`. Then copy the deployed TOML to an operator-owned configuration, change `[knowledge].required` to `true`, point `TRANSNET_CONFIG` at that file with a systemd drop-in, and restart Transnet. Required mode rejects startup if the active tuple is absent or incompatible and makes projection drift fail readiness. Do not enable required mode by editing an immutable release directory.
 
 ## Release check
