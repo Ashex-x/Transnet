@@ -10,14 +10,16 @@ English: [GPU-server deployment](../../docs/guides/deployment.md)
 
 ```bash
 sudo install -d -o ashex -g ashex -m 0755 /home/ashex/services/island.transnet/releases
+sudo install -d -o root -g root -m 0755 /etc/island
+sudo install -o root -g root -m 0600 /dev/null /etc/island/transnet.env
 sudo install -m 0644 deploy/island.transnet.service /etc/systemd/system/island.transnet.service
 sudo systemctl daemon-reload
 sudo systemctl enable island.transnet
 ```
 
-该 unit 以 `0770` 模式创建 `/run/transnet`，并将进程 umask 设为 `0007`。运行时只在其中绑定 `/run/transnet/transnet.sock`；应仅通过配置的组向 island-port 运行时授予访问权。
+该 unit 在 `island-port.service` 之后启动，并对它使用弱 `Wants` 依赖。这保留独立重启行为：停止或重启 island-port 不会自动停止 Transnet，而正常启动会先排序 canonical authority。该 unit 以 `0770` 模式创建 `/run/transnet`，并将进程 umask 设为 `0007`。运行时只在其中绑定 `/run/transnet/transnet.sock`；应仅通过配置的组向 island-port 运行时授予访问权。
 
-生产配置和所有 provider 凭据都必须留在版本控制之外。不得向本仓库加入凭据、请求文本、生成输出、日志或运行时状态。当前及目标设置见[配置指南](configuration_cn.md)。
+部署的生产配置通过 `/run/island-port/island-port.sock` 启用 canonical 读取，并以可选 bootstrap 模式启用 knowledge。在 root-owned environment 文件中放置一个稳定的 32 至 4,096 byte cursor key，不要使用 shell interpolation，例如 `TRANSNET_KNOWLEDGE_CURSOR_SECRET=<random-value>`。该文件由 systemd 加载，不会被 Transnet 当作 TOML 解析，也绝不能进入 release artifact 或 Git。Provider credential 与其他生产 override 同样留在版本控制之外。不得向本仓库加入凭据、请求文本、生成输出、日志或运行时状态。当前及目标设置见[配置指南](configuration_cn.md)。
 
 `ashex` 用户需要仅限重启和检查该服务的免密码权限。先运行 `sudo visudo -cf deploy/island.transnet.sudoers`，再运行 `sudo install -m 0440 deploy/island.transnet.sudoers /etc/sudoers.d/island-transnet` 来安装仓库中的规则。安装文件名刻意不含点号，因为 sudoers 会忽略该目录中的 dotted file。其精确内容是：
 
@@ -42,6 +44,8 @@ ashex ALL=(root) NOPASSWD: /usr/bin/systemctl restart island.transnet, /usr/bin/
 
 生产配置使用 GPU 主机实际提供的 OpenAI-compatible model identifier `Gemma4-26B`。`TRANSNET_CONFIG` 在运行时选择已部署配置，因此上传的 binary 不依赖 CI runner checkout 路径。
 
+首次针对空 canonical authority 部署时，knowledge 刻意保持 optional。Transnet 仍要求 canonical readiness，但当 island-port 尚无完整的活动 canonical/node/edge release tuple 时，会在不安装 knowledge route 的情况下启动。发布并 reconcile 两个不可变 collection，通过 island-port 提交 activation candidate，并验证 `POST /api/v1/knowledge-releases/active`。随后把已部署 TOML 复制为 operator-owned 配置，将 `[knowledge].required` 改为 `true`，通过 systemd drop-in 令 `TRANSNET_CONFIG` 指向该文件，再重启 Transnet。Required 模式会在活动 tuple 缺失或不兼容时拒绝启动，并使 projection drift 导致 readiness 失败。不要通过编辑不可变 release directory 启用 required 模式。
+
 ## 发布检查
 
 检查目标 UDS 探针和服务状态：
@@ -49,6 +53,11 @@ ashex ALL=(root) NOPASSWD: /usr/bin/systemctl restart island.transnet, /usr/bin/
 ```bash
 curl --fail --unix-socket /run/transnet/transnet.sock \
   --request POST http://localhost/api/v1/health \
+  --header 'content-type: application/json' \
+  --data '{}'
+
+curl --fail --unix-socket /run/transnet/transnet.sock \
+  --request POST http://localhost/api/v1/readyz \
   --header 'content-type: application/json' \
   --data '{}'
 ```

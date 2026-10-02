@@ -10,14 +10,16 @@ Run these commands once on the GPU server as a sudo-capable administrator. The s
 
 ```bash
 sudo install -d -o ashex -g ashex -m 0755 /home/ashex/services/island.transnet/releases
+sudo install -d -o root -g root -m 0755 /etc/island
+sudo install -o root -g root -m 0600 /dev/null /etc/island/transnet.env
 sudo install -m 0644 deploy/island.transnet.service /etc/systemd/system/island.transnet.service
 sudo systemctl daemon-reload
 sudo systemctl enable island.transnet
 ```
 
-The unit creates `/run/transnet` with mode `0770` and a process umask of `0007`. The runtime binds only `/run/transnet/transnet.sock` inside that directory; grant only the island-port runtime access through the configured group.
+The unit starts after and weakly wants `island-port.service`. This preserves independent restart behavior: stopping or restarting island-port does not automatically stop Transnet, while a normal boot orders the canonical authority first. The unit creates `/run/transnet` with mode `0770` and a process umask of `0007`. The runtime binds only `/run/transnet/transnet.sock` inside that directory; grant only the island-port runtime access through the configured group.
 
-Production configuration and any provider credentials remain outside version control. Never add credentials, request text, generated output, logs, or runtime state to this repository. See the [configuration guide](configuration.md) for the current and target settings.
+The deployed production configuration enables canonical reads over `/run/island-port/island-port.sock` and enables knowledge in optional bootstrap mode. Put a stable 32-to-4,096-byte cursor key in the root-owned environment file without shell interpolation, for example `TRANSNET_KNOWLEDGE_CURSOR_SECRET=<random-value>`. The file is loaded by systemd, not parsed by Transnet as TOML, and must never enter a release artifact or Git. Provider credentials and any other production overrides also remain outside version control. Never add credentials, request text, generated output, logs, or runtime state to this repository. See the [configuration guide](configuration.md) for the current and target settings.
 
 The `ashex` user needs narrowly scoped passwordless permission to restart and inspect this service. Install the checked-in rule with `sudo visudo -cf deploy/island.transnet.sudoers` followed by `sudo install -m 0440 deploy/island.transnet.sudoers /etc/sudoers.d/island-transnet`. The installed filename deliberately contains no dot because sudoers ignores dotted files in that directory. Its exact content is:
 
@@ -42,6 +44,8 @@ The test job checks formatting, runs Clippy for all targets and features, runs a
 
 The production configuration uses the GPU host's actual OpenAI-compatible model identifier `Gemma4-26B`. `TRANSNET_CONFIG` selects the deployed configuration at runtime, so an uploaded binary never depends on the CI runner's checkout path.
 
+Knowledge is intentionally optional during the first deployment against an empty canonical authority. Transnet still requires canonical readiness, but starts without knowledge routes when island-port has no complete active canonical/node/edge release tuple. Publish and reconcile both immutable collections, submit the activation candidate through island-port, and verify `POST /api/v1/knowledge-releases/active`. Then copy the deployed TOML to an operator-owned configuration, change `[knowledge].required` to `true`, point `TRANSNET_CONFIG` at that file with a systemd drop-in, and restart Transnet. Required mode rejects startup if the active tuple is absent or incompatible and makes projection drift fail readiness. Do not enable required mode by editing an immutable release directory.
+
 ## Release check
 
 Verify the target UDS probe and inspect the service:
@@ -49,6 +53,11 @@ Verify the target UDS probe and inspect the service:
 ```bash
 curl --fail --unix-socket /run/transnet/transnet.sock \
   --request POST http://localhost/api/v1/health \
+  --header 'content-type: application/json' \
+  --data '{}'
+
+curl --fail --unix-socket /run/transnet/transnet.sock \
+  --request POST http://localhost/api/v1/readyz \
   --header 'content-type: application/json' \
   --data '{}'
 ```
