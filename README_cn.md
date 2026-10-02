@@ -34,7 +34,7 @@ flowchart LR
 
 ## 配置
 
-进程始终相对于 Cargo manifest 读取 `config/transnet.toml`。`[server]` 要求 Unix `socket_path` 与 `socket_mode`；`[http]` 设置请求体限制。`[translation]`、`[gemma4]` 与 `[provider_resilience.gemma4]` 定义单一 generation boundary。详见[配置指南](docs_cn/guides/configuration_cn.md)。不得提交真实的 provider 凭据。
+除非可信部署环境通过 `TRANSNET_CONFIG` 指定其他文件，否则进程相对于 Cargo manifest 读取 `config/transnet.toml`。`[server]` 要求 Unix `socket_path` 与 `socket_mode`；`[http]` 设置请求体限制。`[translation]`、`[gemma4]` 与 `[provider_resilience.gemma4]` 定义单一 generation boundary。详见[配置指南](docs_cn/guides/configuration_cn.md)。不得提交真实的 provider 凭据。
 
 `RUST_LOG` 覆盖 `server.log_level`。`server.log_format = "json"` 写入以换行分隔的 JSON；其他值写入紧凑文本。调试构建写入 `logs/debug/transnet.log`，发布构建写入 `logs/release/transnet.log`；每个文件在启动时替换。
 

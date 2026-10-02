@@ -34,7 +34,7 @@ Install a current stable Rust toolchain with Cargo, rustfmt, and Clippy. Start t
 
 ## Configure
 
-The process always reads `config/transnet.toml` relative to the Cargo manifest. `[server]` requires the Unix `socket_path` and `socket_mode`; `[http]` sets the body limit. `[translation]`, `[gemma4]`, and `[provider_resilience.gemma4]` define the single generation boundary. See the [configuration guide](docs/guides/configuration.md). Do not commit real provider credentials.
+The process reads `config/transnet.toml` relative to the Cargo manifest unless the trusted deployment environment sets `TRANSNET_CONFIG` to another file. `[server]` requires the Unix `socket_path` and `socket_mode`; `[http]` sets the body limit. `[translation]`, `[gemma4]`, and `[provider_resilience.gemma4]` define the single generation boundary. See the [configuration guide](docs/guides/configuration.md). Do not commit real provider credentials.
 
 `RUST_LOG` overrides `server.log_level`. `server.log_format = "json"` writes newline-delimited JSON; any other value writes compact text. Debug builds log to `logs/debug/transnet.log`, release builds log to `logs/release/transnet.log`; each file is replaced on startup.
 

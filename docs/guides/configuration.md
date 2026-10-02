@@ -2,7 +2,7 @@
 
 中文：[配置](../../docs_cn/guides/configuration_cn.md)
 
-The process reads `config/transnet.toml` relative to the Cargo manifest, independent of the shell working directory.
+The process reads `config/transnet.toml` relative to the Cargo manifest, independent of the shell working directory. A trusted deployment may set `TRANSNET_CONFIG` to select another file; the production systemd unit uses this mechanism so an immutable uploaded binary does not depend on its build checkout path.
 
 The implemented target listener configuration uses `socket_path = "/run/transnet/transnet.sock"`, `socket_mode = "0660"`, and an operator-managed socket group. The path must be absolute, at most 107 bytes, and contain neither whitespace nor a `..` component; the mode must be four-digit octal from `0600` through `0770`. The supervisor must create the parent as a real directory with the intended owner and group. Transnet refuses non-socket entries and active sockets, removes an existing socket only after a refused connection proves it stale, applies the configured mode after binding, and removes only the socket inode it owns during shutdown. Structured and vector data clients use island-port at `/run/island-port/island-port.sock`. Socket paths are deployment settings; API namespaces are fixed.
 

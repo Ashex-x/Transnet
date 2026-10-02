@@ -32,6 +32,23 @@ jobs:
         run: cargo test --all-targets --locked
       - name: Build documentation
         run: cargo doc --no-deps --locked
+      - name: Build production binary
+        if: github.event_name != 'pull_request'
+        run: cargo build --release --locked
+      - name: Package production release
+        if: github.event_name != 'pull_request'
+        run: |
+          install -d release
+          install -m 0755 target/release/transnet release/transnet
+          install -m 0644 deploy/transnet.production.toml release/transnet.toml
+      - name: Upload production release
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: transnet-${{ github.sha }}
+          path: release
+          if-no-files-found: error
+          retention-days: 7
 
   deploy:
     if: github.event_name != 'pull_request'
@@ -39,6 +56,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: Download production release
+        uses: actions/download-artifact@v4
+        with:
+          name: transnet-${{ github.sha }}
+          path: release
+
       - name: Configure the deployment SSH key
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -50,23 +73,52 @@ jobs:
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           ssh-keygen -F '[139.224.103.112]:16004' -f ~/.ssh/known_hosts >/dev/null
 
-      - name: Build and restart Transnet on the GPU server
+      - name: Stage immutable release on the GPU server
+        env:
+          RELEASE_ID: ${{ github.sha }}
         run: |
           ssh -i ~/.ssh/id_ed25519 -p 16004 \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
-            ashex@139.224.103.112 'bash -se' <<'REMOTE'
+            ashex@139.224.103.112 \
+            "install -d -m 0755 /home/ashex/services/island.transnet/releases/$RELEASE_ID"
+          scp -i ~/.ssh/id_ed25519 -P 16004 \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            release/transnet release/transnet.toml \
+            "ashex@139.224.103.112:/home/ashex/services/island.transnet/releases/$RELEASE_ID/"
+
+      - name: Activate, restart, and verify Island Transnet
+        env:
+          RELEASE_ID: ${{ github.sha }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -p 16004 \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            ashex@139.224.103.112 "RELEASE_ID='$RELEASE_ID' bash -se" <<'REMOTE'
               set -euo pipefail
-              cd /home/ashex/projects/Transnet
-              git fetch --prune origin
-              git checkout master
-              git reset --hard origin/master
-              cargo build --release --locked
-              sudo systemctl restart transnet
-              sudo systemctl is-active --quiet transnet
-              curl --fail --silent --show-error \
+              root=/home/ashex/services/island.transnet
+              release="$root/releases/$RELEASE_ID"
+              test -x "$release/transnet"
+              test -r "$release/transnet.toml"
+              previous="$(readlink -f "$root/current" 2>/dev/null || true)"
+              ln -sfn "$release" "$root/current.next"
+              mv -Tf "$root/current.next" "$root/current"
+              if sudo systemctl restart island.transnet \
+                && sudo systemctl is-active --quiet island.transnet \
+                && curl --fail --silent --show-error \
                 --unix-socket /run/transnet/transnet.sock \
                 --request POST http://localhost/api/v1/health \
                 --header 'content-type: application/json' \
-                --data '{}'
+                --data '{}' >/dev/null; then
+                find "$root/releases" -mindepth 1 -maxdepth 1 -type d \
+                  ! -path "$release" ! -path "$previous" -mtime +7 -exec rm -rf -- {} +
+                exit 0
+              fi
+              if [ -n "$previous" ] && [ -d "$previous" ]; then
+                ln -sfn "$previous" "$root/current.next"
+                mv -Tf "$root/current.next" "$root/current"
+                sudo systemctl restart island.transnet || true
+              fi
+              exit 1
           REMOTE

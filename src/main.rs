@@ -1,6 +1,6 @@
 //! Transnet process entry point.
 
-use std::{path::Path, sync::Arc};
+use std::{env, path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Result};
 #[cfg(unix)]
@@ -37,7 +37,7 @@ use transnet::{
 
 #[tokio::main]
 async fn main() -> Result<()> {
-  let config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("config/transnet.toml");
+  let config_path = runtime_config_path();
   let config = AppConfig::load(&config_path).context("failed to load application configuration")?;
 
   logger::init(&config.server.log_level, &config.server.log_format)?;
@@ -47,6 +47,13 @@ async fn main() -> Result<()> {
   }
   tracing::info!("transnet stopped");
   Ok(())
+}
+
+fn runtime_config_path() -> PathBuf {
+  env::var_os("TRANSNET_CONFIG")
+    .filter(|value| !value.is_empty())
+    .map(PathBuf::from)
+    .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config/transnet.toml"))
 }
 
 async fn run(config: AppConfig) -> Result<()> {
