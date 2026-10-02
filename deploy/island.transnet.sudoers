@@ -1,0 +1,1 @@
+ashex ALL=(root) NOPASSWD: /usr/bin/systemctl restart island.transnet, /usr/bin/systemctl is-active --quiet island.transnet

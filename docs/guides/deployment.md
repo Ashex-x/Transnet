@@ -2,32 +2,30 @@
 
 中文：[GPU 服务器部署](../../docs_cn/guides/deployment_cn.md)
 
-This guide deploys Transnet from GitHub Actions to the GPU server through the existing FRP SSH endpoint at `139.224.103.112:16004`. The workflow tests pull requests without deploying them. A push to `master` or a reviewed manual dispatch must pass every repository check before the production job updates and restarts the service.
+This guide deploys Transnet from GitHub Actions to the GPU server through the existing FRP SSH endpoint at `139.224.103.112:16004`. The workflow tests pull requests without deploying them. A push to `master` or a reviewed manual dispatch must pass every repository check before the production job atomically activates an immutable release and restarts `island.transnet.service`.
 
 ## One-time GPU-server setup
 
-Run these commands on the GPU server as a sudo-capable administrator. Replace `<repository-ssh-url>` with the GitHub SSH clone URL. Do not overwrite another checkout or copy secrets into the repository.
+Run these commands once on the GPU server as a sudo-capable administrator. The service deploys under `/home/ashex/services/island.transnet`; it does not require a production Git checkout.
 
 ```bash
-sudo -u ashex git clone <repository-ssh-url> /home/ashex/projects/Transnet
-sudo cp /home/ashex/projects/Transnet/deploy/transnet.service /etc/systemd/system/transnet.service
+sudo install -d -o ashex -g ashex -m 0755 /home/ashex/services/island.transnet/releases
+sudo install -m 0644 deploy/island.transnet.service /etc/systemd/system/island.transnet.service
 sudo systemctl daemon-reload
-sudo -u ashex bash -lc 'cd /home/ashex/projects/Transnet && cargo build --release --locked'
-sudo systemctl enable transnet
-sudo systemctl restart transnet
+sudo systemctl enable island.transnet
 ```
 
 The unit creates `/run/transnet` with mode `0770` and a process umask of `0007`. The runtime binds only `/run/transnet/transnet.sock` inside that directory; grant only the island-port runtime access through the configured group.
 
 Production configuration and any provider credentials remain outside version control. Never add credentials, request text, generated output, logs, or runtime state to this repository. See the [configuration guide](configuration.md) for the current and target settings.
 
-The `ashex` user needs narrowly scoped passwordless permission to restart and inspect this service. Add it with `sudo visudo -f /etc/sudoers.d/transnet`:
+The `ashex` user needs narrowly scoped passwordless permission to restart and inspect this service. Install the checked-in rule with `sudo visudo -cf deploy/island.transnet.sudoers` followed by `sudo install -m 0440 deploy/island.transnet.sudoers /etc/sudoers.d/island-transnet`. The installed filename deliberately contains no dot because sudoers ignores dotted files in that directory. Its exact content is:
 
 ```sudoers
-ashex ALL=(root) NOPASSWD: /bin/systemctl restart transnet, /bin/systemctl is-active --quiet transnet
+ashex ALL=(root) NOPASSWD: /usr/bin/systemctl restart island.transnet, /usr/bin/systemctl is-active --quiet island.transnet
 ```
 
-Adjust `/bin/systemctl` if `command -v systemctl` reports another path.
+Adjust `/usr/bin/systemctl` if `command -v systemctl` reports another path.
 
 ## GitHub configuration
 
@@ -40,9 +38,9 @@ Obtain the host-key line through a trusted administrative connection, not an unv
 
 ## Deployment behavior
 
-The test job checks formatting, runs Clippy for all targets and features, runs all-target tests, and builds rustdoc with the lockfile enforced. Pull requests stop after that job. A successful non-pull-request run connects to the GPU server, resets only `/home/ashex/projects/Transnet` to `origin/master`, builds the locked release, restarts `transnet`, and verifies that systemd reports it active.
+The test job checks formatting, runs Clippy for all targets and features, runs all-target tests, builds rustdoc, and produces the locked release binary. Pull requests stop after that job. A successful non-pull-request run downloads that exact artifact, uploads it with the production configuration into a commit-SHA directory, atomically switches `/home/ashex/services/island.transnet/current`, restarts `island.transnet`, and probes the target UDS. A failed restart or probe restores the previous release when one exists. Releases older than seven days are removed only after successful activation and never include the current or rollback target.
 
-The remote hard reset intentionally makes the dedicated production checkout match the reviewed `master` branch. Do not use that checkout for development or uncommitted operational changes.
+The production configuration uses the GPU host's actual OpenAI-compatible model identifier `Gemma4-26B`. `TRANSNET_CONFIG` selects the deployed configuration at runtime, so an uploaded binary never depends on the CI runner's checkout path.
 
 ## Release check
 

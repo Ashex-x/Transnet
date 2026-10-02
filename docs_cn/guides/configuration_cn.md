@@ -2,7 +2,7 @@
 
 English: [Configuration](../../docs/guides/configuration.md)
 
-进程始终相对于 Cargo Manifest 读取 `config/transnet.toml`，不受 Shell 工作目录影响。
+进程始终相对于 Cargo Manifest 读取 `config/transnet.toml`，不受 Shell 工作目录影响。可信部署可通过 `TRANSNET_CONFIG` 选择其他文件；生产 systemd unit 使用该机制，使不可变上传 binary 不依赖构建 checkout 路径。
 
 已实现的目标 listener 配置使用 `socket_path = "/run/transnet/transnet.sock"`、`socket_mode = "0660"` 和由运维管理的套接字用户组。路径必须为绝对路径、至多 107 byte，且不得包含空白或 `..` component；mode 必须是 `0600` 至 `0770` 的四位八进制值。Supervisor 必须以预期 owner 与 group 创建真实的父目录。Transnet 拒绝非 socket entry 与活动 socket，仅在连接被拒绝证明旧 socket 已失效后移除它，绑定后应用配置 mode，并在关闭时只移除自己拥有的 socket inode。结构化与向量数据客户端通过 `/run/island-port/island-port.sock` 使用 island-port。Socket 路径是部署设置，API namespace 固定不变。
 

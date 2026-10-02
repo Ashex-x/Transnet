@@ -1,0 +1,31 @@
+[server]
+socket_path = "/run/transnet/transnet.sock"
+socket_mode = "0660"
+log_level = "info"
+log_format = "json"
+
+[http]
+max_request_body_bytes = 1048576
+
+[canonical]
+enabled = false
+
+[knowledge]
+enabled = false
+required = false
+
+[translation]
+timeout_seconds = 60
+max_retries = 3
+retry_delay_ms = 250
+
+[gemma4]
+base_url = "http://127.0.0.1:18011/v1"
+model = "Gemma4-26B"
+api_key = "local-model-server"
+
+[provider_resilience.gemma4]
+max_retry_delay_ms = 5000
+max_concurrent_requests = 8
+circuit_failure_threshold = 5
+circuit_open_ms = 30000

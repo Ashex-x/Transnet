@@ -10,7 +10,7 @@ English: [Runtime module](../../docs/reference/runtime.md)
 
 ## 配置
 
-进程相对 Cargo manifest 读取 config/transnet.toml。RUST_LOG 可覆盖配置 filter。解析拒绝未知字段；创建 client 或 listener 前，校验检查单项边界与不兼容组合。
+除非可信部署环境提供 `TRANSNET_CONFIG`，进程相对 Cargo manifest 读取 `config/transnet.toml`。`RUST_LOG` 可覆盖配置 filter。解析拒绝未知字段；创建 client 或 listener 前，校验检查单项边界与不兼容组合。
 
 Provider 凭据是 secret，绝不能出现在已提交文件、Debug 输出、日志、指标、trace 或错误中。配置与 bootstrap 之外的代码接收有类型设置，不重新读取文件或环境变量。精确字段、默认值与目标基础设施设置由[配置指南](../guides/configuration_cn.md)负责。
 
