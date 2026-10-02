@@ -104,10 +104,10 @@ jobs:
               previous="$(readlink -f "$root/current" 2>/dev/null || true)"
               ln -sfn "$release" "$root/current.next"
               mv -Tf "$root/current.next" "$root/current"
-              if sudo systemctl restart island.transnet \
-                && sudo systemctl is-active --quiet island.transnet \
+              if systemctl --user restart island-transnet.service \
+                && systemctl --user is-active --quiet island-transnet.service \
                 && curl --fail --silent --show-error \
-                --unix-socket /run/transnet/transnet.sock \
+                --unix-socket "$root/transnet.sock" \
                 --request POST http://localhost/api/v1/health \
                 --header 'content-type: application/json' \
                 --data '{}' >/dev/null; then
@@ -118,7 +118,7 @@ jobs:
               if [ -n "$previous" ] && [ -d "$previous" ]; then
                 ln -sfn "$previous" "$root/current.next"
                 mv -Tf "$root/current.next" "$root/current"
-                sudo systemctl restart island.transnet || true
+                systemctl --user restart island-transnet.service || true
               fi
               exit 1
           REMOTE
