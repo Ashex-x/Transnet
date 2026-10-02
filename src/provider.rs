@@ -111,8 +111,7 @@ impl GemmaGenerationProvider {
         GenerationProfile::Reasoning => 512,
       },
       max_tokens: match profile {
-        GenerationProfile::Fast => 1_024,
-        GenerationProfile::Reasoning => 768,
+        GenerationProfile::Fast | GenerationProfile::Reasoning => 256,
       },
     };
     let output = self
@@ -188,8 +187,7 @@ impl GemmaGenerationProvider {
         GenerationProfile::Reasoning => 512,
       },
       max_tokens: match profile {
-        GenerationProfile::Fast => 1_024,
-        GenerationProfile::Reasoning => 768,
+        GenerationProfile::Fast | GenerationProfile::Reasoning => 256,
       },
     };
     let output = self
@@ -448,7 +446,7 @@ mod tests {
       reasoning_format: "auto",
       reasoning_effort: "medium",
       reasoning_budget_tokens: 512,
-      max_tokens: 768,
+      max_tokens: 256,
     };
     let value = serde_json::to_value(request).unwrap();
     assert_eq!(value["stream"], true);
@@ -457,6 +455,6 @@ mod tests {
     assert_eq!(value["reasoning_format"], "auto");
     assert_eq!(value["reasoning_effort"], "medium");
     assert_eq!(value["reasoning_budget_tokens"], 512);
-    assert_eq!(value["max_tokens"], 768);
+    assert_eq!(value["max_tokens"], 256);
   }
 }
