@@ -28,7 +28,7 @@ English: [Quality assurance](../../docs/guides/quality-assurance.md)
 
 ## 内容、隐私和注入安全
 
-Transnet 发布测试校验确定性 ID、不可变 projection payload、manifest 对账、activation-candidate 提交、显式 rollback selection 与失败关闭的 control receipt。隔离状态转换、候选保留和 direct-predecessor rollback eligibility 属于 island-port authority 验收要求，在针对生产边界执行前保持开放。Bootstrap policy 仍要求生成候选在证据或批准编辑来源策略、权利检查、确定性校验及审核成功前保持隔离；模型输出本身绝不能成为已验证内容。隐私测试证明当前文本、翻译历史、调用方身份、生成 provider body 和用户相关状态不进入 Transnet persistence、缓存、日志、trace、指标、队列或向量；生产范围的存储与备份证明仍是外部验收项。
+Transnet 发布测试校验确定性 ID、不可变 projection payload、manifest 对账、activation-candidate 提交、显式 rollback selection 与失败关闭的 control receipt。隔离状态转换、候选保留和 direct-predecessor rollback eligibility 属于 island-port authority 验收要求，在针对生产边界执行前保持开放。Bootstrap policy 仍要求生成候选在证据或批准编辑来源策略、权利检查、确定性校验及审核成功前保持隔离；模型输出本身绝不能成为已验证内容。仓库隐私测试在当前文本、翻译历史、专业 guidance、结构化输入、provider 输出、隐藏 reasoning 与请求级 live material 中植入合成 sentinel，并证明 Transnet 自有 trace/log 输出、闭合指标、错误与 Debug 诊断保持无内容；同时保留线上 route 不暴露私有状态或 durable-job surface 的结构检查。Provider 侧遥测、collector 与基础设施 retention、备份、外部 MySQL/Qdrant 行为及生产 vector retention 仍属外部验收，因此仓库证据不会关闭 production-wide non-persistence requirement。
 
 Migration 测试构建全新 schema，并从每个受支持起始版本升级，比较其逻辑结构，覆盖中断 DDL 恢复与 checksum drift，让新旧 binary 在声明兼容窗口内运行，验证可恢复有界 backfill，并证明在保留发布与 rollback binary 不再依赖旧结构前不能执行收缩 migration。
 

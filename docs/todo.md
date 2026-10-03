@@ -124,6 +124,8 @@ Exit criteria: general vocabulary, compounds, ambiguous technical senses, and mu
 
 Exit criteria: a user can translate connected text or deeply understand one selected lexical sense or domain concept through concise, accurate relationships without irrelevant graph expansion or unsupported model claims.
 
+Repository-side synthetic-sentinel tests cover Transnet-owned HTTP tracing, diagnostics, closed metrics, provider-reasoning Debug output, private-state admission, and the absence of request-local material from the enumerated repository-owned diagnostic and telemetry surfaces. The item remains open because provider telemetry, collectors, infrastructure retention, backups, external MySQL/Qdrant behavior, and production derived-vector retention require deployment acceptance.
+
 ## Definition of done
 
 - A sentence or passage receives translation first; a confidently resolved lexical unit receives a relationship-centered page rooted in one applicable sense or concept.
