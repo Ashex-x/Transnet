@@ -57,22 +57,81 @@ pub enum EventName {
 pub enum StaticRoute {
   /// A route not represented by the current closed catalog.
   Unmatched,
-  /// Transitional health probe.
+  /// Service capability discovery.
+  Capabilities,
+  /// Health probe.
   Health,
-  /// Transitional liveness probe.
+  /// Liveness probe.
   Livez,
-  /// Transitional readiness probe.
+  /// Readiness probe.
   Readyz,
   /// Target translation operation.
   Translations,
+  /// Target streaming translation operation.
+  TranslationsStream,
   /// Target BasicCard lookup operation.
   BasicCardLookup,
   /// Target canonical sense read operation.
   SenseRead,
-  /// Transitional graph node read.
+  /// Guided knowledge-view read.
+  KnowledgeViews,
+  /// Evidence-backed knowledge-path read.
+  KnowledgePaths,
+  /// Compatibility identity for the removed transitional graph-node read.
+  ///
+  /// The current HTTP classifier never produces this value.
   GraphNodeRead,
-  /// Transitional graph-neighbor read.
+  /// Compatibility identity for the removed transitional graph-neighbor read.
+  ///
+  /// The current HTTP classifier never produces this value.
   GraphNeighbors,
+}
+
+impl StaticRoute {
+  /// Classifies one Axum matched-path template into the closed route catalog.
+  ///
+  /// Unknown templates fail closed to [`Self::Unmatched`]. Callers must never substitute a raw
+  /// URI, path, or query when classification fails.
+  pub fn from_matched_path(path: &str) -> Self {
+    match path {
+      "/api/v1/capabilities" => Self::Capabilities,
+      "/api/v1/health" => Self::Health,
+      "/api/v1/livez" => Self::Livez,
+      "/api/v1/readyz" => Self::Readyz,
+      "/api/v1/translations" => Self::Translations,
+      "/api/v1/translations/stream" => Self::TranslationsStream,
+      "/api/v1/basic-cards/lookup" => Self::BasicCardLookup,
+      "/api/v1/senses/get" => Self::SenseRead,
+      "/api/v1/knowledge/views" => Self::KnowledgeViews,
+      "/api/v1/knowledge/paths" => Self::KnowledgePaths,
+      _ => Self::Unmatched,
+    }
+  }
+
+  /// Returns the stable low-cardinality route identity used by tracing.
+  pub const fn as_str(self) -> &'static str {
+    match self {
+      Self::Unmatched => "unmatched",
+      Self::Capabilities => "/api/v1/capabilities",
+      Self::Health => "/api/v1/health",
+      Self::Livez => "/api/v1/livez",
+      Self::Readyz => "/api/v1/readyz",
+      Self::Translations => "/api/v1/translations",
+      Self::TranslationsStream => "/api/v1/translations/stream",
+      Self::BasicCardLookup => "/api/v1/basic-cards/lookup",
+      Self::SenseRead => "/api/v1/senses/get",
+      Self::KnowledgeViews => "/api/v1/knowledge/views",
+      Self::KnowledgePaths => "/api/v1/knowledge/paths",
+      Self::GraphNodeRead => "legacy.graph_node_read",
+      Self::GraphNeighbors => "legacy.graph_neighbors",
+    }
+  }
+}
+
+impl fmt::Display for StaticRoute {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter.write_str(self.as_str())
+  }
 }
 
 /// A closed dependency dimension.
@@ -560,6 +619,66 @@ impl MetricLabel {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn current_http_routes_have_distinct_closed_identities() {
+    let routes = [
+      ("/api/v1/capabilities", StaticRoute::Capabilities),
+      ("/api/v1/health", StaticRoute::Health),
+      ("/api/v1/livez", StaticRoute::Livez),
+      ("/api/v1/readyz", StaticRoute::Readyz),
+      ("/api/v1/translations", StaticRoute::Translations),
+      (
+        "/api/v1/translations/stream",
+        StaticRoute::TranslationsStream,
+      ),
+      ("/api/v1/basic-cards/lookup", StaticRoute::BasicCardLookup),
+      ("/api/v1/senses/get", StaticRoute::SenseRead),
+      ("/api/v1/knowledge/views", StaticRoute::KnowledgeViews),
+      ("/api/v1/knowledge/paths", StaticRoute::KnowledgePaths),
+    ];
+
+    let identities = routes
+      .iter()
+      .map(|(path, expected)| {
+        let route = StaticRoute::from_matched_path(path);
+        assert_eq!(route, *expected);
+        assert_eq!(route.as_str(), *path);
+        route.as_str()
+      })
+      .collect::<std::collections::BTreeSet<_>>();
+
+    assert_eq!(identities.len(), routes.len());
+    assert_eq!(
+      StaticRoute::from_matched_path("/api/v1/translations"),
+      StaticRoute::Translations
+    );
+    assert_eq!(
+      StaticRoute::from_matched_path("/api/v1/translations/stream"),
+      StaticRoute::TranslationsStream
+    );
+    assert_eq!(
+      StaticRoute::from_matched_path("/api/v1/knowledge/views"),
+      StaticRoute::KnowledgeViews
+    );
+    assert_eq!(
+      StaticRoute::from_matched_path("/api/v1/knowledge/paths"),
+      StaticRoute::KnowledgePaths
+    );
+  }
+
+  #[test]
+  fn unknown_and_removed_routes_fail_closed() {
+    for path in [
+      "/api/v1/private/request-content",
+      "/api/v1/translations?query=private",
+      "/v1/graph/nodes/:node_kind/:node_id",
+      "/v1/graph/nodes/:node_kind/:node_id/neighbors",
+    ] {
+      assert_eq!(StaticRoute::from_matched_path(path), StaticRoute::Unmatched);
+    }
+    assert_eq!(StaticRoute::Unmatched.as_str(), "unmatched");
+  }
 
   fn all_metric_events() -> Vec<MetricEvent> {
     vec![

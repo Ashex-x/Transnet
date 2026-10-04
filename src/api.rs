@@ -21,7 +21,10 @@ use crate::{
     translation::TranslationOrchestrator,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
-  domain::capabilities::{KnowledgeCapabilityBundle, ServiceCapabilities},
+  domain::{
+    capabilities::{KnowledgeCapabilityBundle, ServiceCapabilities},
+    observability::StaticRoute,
+  },
 };
 
 mod envelope;
@@ -264,11 +267,13 @@ fn build_router(mut state: AppState, max_request_body_bytes: usize) -> Router {
     .layer(middleware::from_fn(request_id::propagate_request_id))
 }
 
-fn trace_route<B>(request: &Request<B>) -> &str {
+fn trace_route<B>(request: &Request<B>) -> StaticRoute {
   request
     .extensions()
     .get::<MatchedPath>()
-    .map_or("unmatched", MatchedPath::as_str)
+    .map_or(StaticRoute::Unmatched, |path| {
+      StaticRoute::from_matched_path(path.as_str())
+    })
 }
 
 async fn payload_limit_response(request: Request, next: middleware::Next) -> Response {
@@ -303,6 +308,7 @@ mod tests {
   use tower::ServiceExt;
 
   use super::trace_route;
+  use crate::domain::observability::StaticRoute;
 
   #[test]
   fn trace_route_never_falls_back_to_a_raw_unmatched_path() {
@@ -311,11 +317,11 @@ mod tests {
         .body(())
         .unwrap();
 
-    assert_eq!(trace_route(&request), "unmatched");
+    assert_eq!(trace_route(&request), StaticRoute::Unmatched);
   }
 
   #[tokio::test]
-  async fn trace_route_uses_the_matched_template_for_dynamic_graph_identifiers() {
+  async fn unknown_matched_template_fails_closed_without_affecting_response() {
     let recorded = Arc::new(Mutex::new(None));
     let router = Router::new()
       .route(
@@ -337,17 +343,14 @@ mod tests {
       .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(
-      recorded.lock().unwrap().as_deref(),
-      Some("/v1/graph/nodes/:node_kind/:node_id/neighbors")
-    );
+    assert_eq!(recorded.lock().unwrap().as_deref(), Some("unmatched"));
   }
 
   #[tokio::test]
-  async fn trace_route_uses_the_matched_template_for_dynamic_sense_identifiers() {
+  async fn current_matched_template_uses_the_closed_route_identity() {
     let recorded = Arc::new(Mutex::new(None));
     let router = Router::new()
-      .route("/v1/senses/:sense_id", get(|| async { StatusCode::OK }))
+      .route("/api/v1/capabilities", get(|| async { StatusCode::OK }))
       .layer(middleware::from_fn_with_state(
         recorded.clone(),
         capture_route,
@@ -355,7 +358,7 @@ mod tests {
 
     let response = router
       .oneshot(
-        Request::get("/v1/senses/sense-source-text-that-must-not-be-logged")
+        Request::get("/api/v1/capabilities?query=source-text-that-must-not-be-logged")
           .body(Body::empty())
           .unwrap(),
       )
@@ -365,7 +368,7 @@ mod tests {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
       recorded.lock().unwrap().as_deref(),
-      Some("/v1/senses/:sense_id")
+      Some("/api/v1/capabilities")
     );
   }
 

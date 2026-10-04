@@ -259,6 +259,21 @@ fn http_traces_and_failure_diagnostics_exclude_request_and_provider_material() {
           let raw_path_body = to_bytes(raw_path.into_body(), 16_384).await.unwrap();
           assert_content_free(&String::from_utf8_lossy(&raw_path_body));
 
+          let matched_capabilities = app_router(AppState::new())
+            .oneshot(
+              Request::post("/api/v1/capabilities")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+          let matched_capabilities_status = matched_capabilities.status();
+          let matched_capabilities_body = to_bytes(matched_capabilities.into_body(), 16_384)
+            .await
+            .unwrap();
+          assert_content_free(&String::from_utf8_lossy(&matched_capabilities_body));
+
           [
             success.status(),
             invalid_provider_status,
@@ -266,6 +281,7 @@ fn http_traces_and_failure_diagnostics_exclude_request_and_provider_material() {
             segments_status,
             image_status,
             raw_path_status,
+            matched_capabilities_status,
           ]
         })
     })
@@ -279,10 +295,12 @@ fn http_traces_and_failure_diagnostics_exclude_request_and_provider_material() {
   assert_eq!(statuses[3], StatusCode::SERVICE_UNAVAILABLE);
   assert_eq!(statuses[4], StatusCode::SERVICE_UNAVAILABLE);
   assert!(statuses[5].is_client_error());
+  assert_eq!(statuses[6], StatusCode::OK);
 
   let trace = captured.contents();
   assert!(trace.contains("http.request"));
   assert!(trace.contains("/api/v1/translations"));
+  assert!(trace.contains("/api/v1/capabilities"));
   assert_content_free(&trace);
 }
 
