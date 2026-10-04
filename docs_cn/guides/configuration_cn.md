@@ -26,7 +26,7 @@ Provider Trace 只包含静态 Provider 边界、操作名、尝试次数、结�
 
 目标遥测还只记录闭合推理 profile（`fast` 或 `reasoning`）、输入类型分类及是否发生 reasoning 升级。它绝不记录图片数据、prompt、隐藏 reasoning、embedding、实时搜索 query、抓取内容或生成输出。
 
-目标 `[telemetry]` 设置选择 NDJSON 标准输出或本地 collector、有界队列容量、导出 timeout、固定成功/失败采样分类及可选的仅开发滚动文件。指标 label 与事件 attribute 是代码编译的闭合集合，而不是任意配置。审计 sink 设置属于离线 publisher 组合，不得使在线翻译 readiness 依赖 exporter。详见[可观测性合同](../reference/observability_cn.md)；在对应类型化实现存在前，不向仓库配置增加这些目标 key。
+仓库拥有的逻辑 telemetry policy 现已冻结闭合 mode `disabled` 与 `configured`、1 至 4,096 条记录的 queue capacity、1 毫秒至 5 秒的 export timeout，以及 0 至 10,000 basis point 的独立确定性 success/failure sampling rate。Sampling 在 queue admission 前执行且绝不检查内容；metric 与 telemetry-drop record 绝不 sampling。这些类型尚不是 active runtime setting：当前严格配置仍拒绝 `[telemetry]` table、不构造 exporter，也不依赖 collector。Collector transport、endpoint、认证、framing、acknowledgement 与 retry 行为需要单独的 deployment-owned contract，之后才能加入配置 key 或 adapter。Runtime exporter failure 仍将保持 best effort，不得影响 readiness 或业务响应；未来无效配置则必须阻止启动。审计 sink 设置属于离线 publisher 组合。详见[可观测性合同](../reference/observability_cn.md)。
 
 翻译操作使用由 `[gemma4]` 与 `[provider_resilience.gemma4]` 支持的单一中立 generation boundary。TranslateGemma、按长度路由及 provider 专属兼容配置节都会作为未知配置被拒绝。
 

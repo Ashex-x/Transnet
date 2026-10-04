@@ -5,7 +5,7 @@
 //! fixed enum dimensions. They cannot carry raw queries, contexts, answers, credentials or other
 //! tokens, identities, or free-form attribute keys and values.
 
-use std::fmt;
+use std::{fmt, str::FromStr, time::Duration};
 
 use time::OffsetDateTime;
 
@@ -14,6 +14,214 @@ pub const EVENT_SCHEMA_VERSION: &str = "transnet-observability-event-v1";
 
 /// Service name emitted by every Transnet event.
 pub const SERVICE_NAME: &str = "transnet";
+
+/// Minimum bounded telemetry queue capacity accepted by the export contract.
+pub const MIN_TELEMETRY_QUEUE_CAPACITY: usize = 1;
+
+/// Maximum bounded telemetry queue capacity accepted by the export contract.
+pub const MAX_TELEMETRY_QUEUE_CAPACITY: usize = 4_096;
+
+/// Minimum exporter operation timeout accepted by the export contract.
+pub const MIN_TELEMETRY_EXPORT_TIMEOUT: Duration = Duration::from_millis(1);
+
+/// Maximum exporter operation timeout accepted by the export contract.
+pub const MAX_TELEMETRY_EXPORT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Denominator used by deterministic telemetry sampling rates.
+pub const TELEMETRY_SAMPLING_BASIS_POINTS: u16 = 10_000;
+
+/// Closed selection of whether a production export boundary is installed.
+///
+/// `Configured` deliberately does not name a transport. Collector transport and framing remain a
+/// deployment-owned contract that must be frozen before an adapter is implemented.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TelemetryExportMode {
+  /// No exporter is installed and no export queue is created.
+  Disabled,
+  /// A separately composed production exporter must consume this repository-owned contract.
+  Configured,
+}
+
+impl FromStr for TelemetryExportMode {
+  type Err = TelemetryExportModeParseError;
+
+  fn from_str(value: &str) -> Result<Self, Self::Err> {
+    match value {
+      "disabled" => Ok(Self::Disabled),
+      "configured" => Ok(Self::Configured),
+      _ => Err(TelemetryExportModeParseError),
+    }
+  }
+}
+
+/// Closed failure to parse a telemetry export mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("telemetry export mode is invalid")]
+pub struct TelemetryExportModeParseError;
+
+/// A validated deterministic sampling rate in basis points.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TelemetrySamplingRate(u16);
+
+impl TelemetrySamplingRate {
+  /// Creates a rate from zero through 10,000 basis points inclusive.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed validation error when `basis_points` exceeds 10,000.
+  pub const fn new(basis_points: u16) -> Result<Self, TelemetryExportValidationError> {
+    if basis_points > TELEMETRY_SAMPLING_BASIS_POINTS {
+      Err(TelemetryExportValidationError::InvalidSamplingRate)
+    } else {
+      Ok(Self(basis_points))
+    }
+  }
+
+  /// Returns the validated rate in basis points.
+  pub const fn basis_points(self) -> u16 {
+    self.0
+  }
+}
+
+/// Sampling policy for content-free structured events.
+///
+/// A future exporter must make a content-independent decision before bounded queue admission.
+/// Metric records and telemetry-drop records are never sampled so counters and failure accounting
+/// remain complete. The selection algorithm remains an exporter implementation contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TelemetrySamplingPolicy {
+  success: TelemetrySamplingRate,
+  failure: TelemetrySamplingRate,
+}
+
+impl TelemetrySamplingPolicy {
+  /// Creates separate deterministic rates for successful and non-successful structured events.
+  pub const fn new(success: TelemetrySamplingRate, failure: TelemetrySamplingRate) -> Self {
+    Self { success, failure }
+  }
+
+  /// Returns the successful-event sampling rate.
+  pub const fn success(self) -> TelemetrySamplingRate {
+    self.success
+  }
+
+  /// Returns the failure-event sampling rate.
+  pub const fn failure(self) -> TelemetrySamplingRate {
+    self.failure
+  }
+
+  /// Returns the sampling rate for a structured record.
+  ///
+  /// `None` means the record is required and must bypass sampling. The future exporter owns the
+  /// deterministic, content-independent selection algorithm and must apply it before queue
+  /// admission.
+  pub const fn rate_for(self, record: &TelemetryExportRecord) -> Option<TelemetrySamplingRate> {
+    match record.sampling_class() {
+      TelemetrySamplingClass::Success => Some(self.success),
+      TelemetrySamplingClass::Failure => Some(self.failure),
+      TelemetrySamplingClass::Required => None,
+    }
+  }
+}
+
+/// Validated repository-owned settings for a configured exporter boundary.
+///
+/// This policy is not runtime configuration by itself. A later adapter PR must freeze collector
+/// transport and then map strict configuration into this type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TelemetryExportPolicy {
+  queue_capacity: usize,
+  export_timeout: Duration,
+  sampling: TelemetrySamplingPolicy,
+}
+
+impl TelemetryExportPolicy {
+  /// Validates queue, timeout, and sampling bounds without selecting a collector transport.
+  ///
+  /// # Errors
+  ///
+  /// Returns a closed error when queue capacity is outside 1 through 4,096 or the timeout is
+  /// outside 1 millisecond through 5 seconds.
+  pub const fn new(
+    queue_capacity: usize,
+    export_timeout: Duration,
+    sampling: TelemetrySamplingPolicy,
+  ) -> Result<Self, TelemetryExportValidationError> {
+    if queue_capacity < MIN_TELEMETRY_QUEUE_CAPACITY
+      || queue_capacity > MAX_TELEMETRY_QUEUE_CAPACITY
+    {
+      return Err(TelemetryExportValidationError::InvalidQueueCapacity);
+    }
+    if export_timeout.as_nanos() < MIN_TELEMETRY_EXPORT_TIMEOUT.as_nanos()
+      || export_timeout.as_nanos() > MAX_TELEMETRY_EXPORT_TIMEOUT.as_nanos()
+    {
+      return Err(TelemetryExportValidationError::InvalidExportTimeout);
+    }
+    Ok(Self {
+      queue_capacity,
+      export_timeout,
+      sampling,
+    })
+  }
+
+  /// Returns the maximum records admitted to the future bounded exporter queue.
+  pub const fn queue_capacity(self) -> usize {
+    self.queue_capacity
+  }
+
+  /// Returns the maximum duration of one future exporter operation.
+  pub const fn export_timeout(self) -> Duration {
+    self.export_timeout
+  }
+
+  /// Returns the structured-event sampling policy.
+  pub const fn sampling(self) -> TelemetrySamplingPolicy {
+    self.sampling
+  }
+}
+
+/// Closed telemetry export policy validation failures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum TelemetryExportValidationError {
+  /// Queue capacity was zero or exceeded the fixed in-memory bound.
+  #[error("telemetry queue capacity is invalid")]
+  InvalidQueueCapacity,
+  /// Export timeout was zero or exceeded the best-effort isolation bound.
+  #[error("telemetry export timeout is invalid")]
+  InvalidExportTimeout,
+  /// A sampling rate exceeded 10,000 basis points.
+  #[error("telemetry sampling rate is invalid")]
+  InvalidSamplingRate,
+}
+
+/// Closed exporter failures that must never change a business result or readiness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum TelemetryExportFailure {
+  /// The configured exporter or collector could not accept work.
+  #[error("telemetry exporter is unavailable")]
+  Unavailable,
+  /// One bounded export operation exceeded its timeout.
+  #[error("telemetry export timed out")]
+  Timeout,
+  /// A logical content-free record could not be serialized by the future adapter.
+  #[error("telemetry export serialization failed")]
+  Serialization,
+  /// The exporter was already shutting down and accepted no new work.
+  #[error("telemetry exporter is shutting down")]
+  ShuttingDown,
+}
+
+impl TelemetryExportFailure {
+  /// Returns the closed drop reason recorded by an exporter after this failure.
+  pub const fn drop_reason(self) -> TelemetryDropReason {
+    match self {
+      Self::Unavailable => TelemetryDropReason::ExporterUnavailable,
+      Self::Timeout => TelemetryDropReason::ExportTimeout,
+      Self::Serialization => TelemetryDropReason::Serialization,
+      Self::ShuttingDown => TelemetryDropReason::ShuttingDown,
+    }
+  }
+}
 
 /// A deployment environment with bounded cardinality.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -154,17 +362,32 @@ pub enum DependencyKind {
 /// A bounded reason why best-effort telemetry was dropped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TelemetryDropReason {
+  /// A structured event was excluded by the deterministic pre-queue sampling policy.
+  SampledOut,
   /// The bounded in-flight capacity was exhausted.
   Capacity,
   /// No asynchronous runtime was available for non-blocking delivery.
   RuntimeUnavailable,
+  /// The configured exporter or collector was unavailable.
+  ExporterUnavailable,
+  /// A bounded export operation exceeded its timeout.
+  ExportTimeout,
+  /// The future adapter could not serialize a logical content-free record.
+  Serialization,
+  /// Exporter shutdown rejected a new best-effort record.
+  ShuttingDown,
 }
 
 impl TelemetryDropReason {
   const fn as_label(self) -> &'static str {
     match self {
+      Self::SampledOut => "sampled_out",
       Self::Capacity => "capacity",
       Self::RuntimeUnavailable => "runtime_unavailable",
+      Self::ExporterUnavailable => "exporter_unavailable",
+      Self::ExportTimeout => "export_timeout",
+      Self::Serialization => "serialization",
+      Self::ShuttingDown => "shutting_down",
     }
   }
 }
@@ -326,6 +549,93 @@ impl ObservabilityEvent {
   /// Returns the closed dependency dimension.
   pub const fn dependency(&self) -> DependencyKind {
     self.dependency
+  }
+}
+
+/// One content-free metric observation prepared for a future exporter adapter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MetricExportRecord {
+  timestamp: OffsetDateTime,
+  environment: DeploymentEnvironment,
+  event: MetricEvent,
+}
+
+impl MetricExportRecord {
+  /// Creates one timestamped metric record without accepting arbitrary labels or payloads.
+  pub const fn new(
+    timestamp: OffsetDateTime,
+    environment: DeploymentEnvironment,
+    event: MetricEvent,
+  ) -> Self {
+    Self {
+      timestamp,
+      environment,
+      event,
+    }
+  }
+
+  /// Returns the fixed logical envelope schema version.
+  pub const fn event_schema(&self) -> &'static str {
+    EVENT_SCHEMA_VERSION
+  }
+
+  /// Returns the fixed emitting service name.
+  pub const fn service(&self) -> &'static str {
+    SERVICE_NAME
+  }
+
+  /// Returns the package version of the emitting service.
+  pub const fn service_version(&self) -> &'static str {
+    env!("CARGO_PKG_VERSION")
+  }
+
+  /// Returns the event timestamp.
+  pub const fn timestamp(&self) -> OffsetDateTime {
+    self.timestamp
+  }
+
+  /// Returns the closed deployment environment.
+  pub const fn environment(&self) -> DeploymentEnvironment {
+    self.environment
+  }
+
+  /// Returns the closed metric observation.
+  pub const fn event(&self) -> MetricEvent {
+    self.event
+  }
+}
+
+/// Logical content-free record accepted by a future telemetry exporter.
+///
+/// This enum freezes repository-owned data semantics without selecting collector transport,
+/// network framing, authentication, batching, or retention.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TelemetryExportRecord {
+  /// One closed structured operational event.
+  Event(ObservabilityEvent),
+  /// One closed metric observation.
+  Metric(MetricExportRecord),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TelemetrySamplingClass {
+  Success,
+  Failure,
+  Required,
+}
+
+impl TelemetryExportRecord {
+  const fn sampling_class(&self) -> TelemetrySamplingClass {
+    match self {
+      Self::Metric(_) => TelemetrySamplingClass::Required,
+      Self::Event(event) if matches!(event.event_name, EventName::TelemetryDropped) => {
+        TelemetrySamplingClass::Required
+      }
+      Self::Event(event) if matches!(event.outcome, MetricOutcome::Succeeded) => {
+        TelemetrySamplingClass::Success
+      }
+      Self::Event(_) => TelemetrySamplingClass::Failure,
+    }
   }
 }
 
@@ -620,6 +930,154 @@ impl MetricLabel {
 mod tests {
   use super::*;
 
+  fn sampling() -> TelemetrySamplingPolicy {
+    TelemetrySamplingPolicy::new(
+      TelemetrySamplingRate::new(2_500).unwrap(),
+      TelemetrySamplingRate::new(10_000).unwrap(),
+    )
+  }
+
+  fn structured_event(outcome: MetricOutcome, name: EventName) -> TelemetryExportRecord {
+    TelemetryExportRecord::Event(ObservabilityEvent::new(
+      OffsetDateTime::UNIX_EPOCH,
+      EventSeverity::Info,
+      DeploymentEnvironment::Test,
+      name,
+      StaticRoute::Translations,
+      outcome,
+      DependencyKind::Model,
+    ))
+  }
+
+  #[test]
+  fn export_contract_is_closed_and_strictly_bounded() {
+    assert_eq!("disabled".parse(), Ok(TelemetryExportMode::Disabled));
+    assert_eq!("configured".parse(), Ok(TelemetryExportMode::Configured));
+    assert_eq!(
+      "stdout".parse::<TelemetryExportMode>(),
+      Err(TelemetryExportModeParseError)
+    );
+
+    let policy = TelemetryExportPolicy::new(
+      MIN_TELEMETRY_QUEUE_CAPACITY,
+      MIN_TELEMETRY_EXPORT_TIMEOUT,
+      sampling(),
+    )
+    .unwrap();
+    assert_eq!(policy.queue_capacity(), 1);
+    assert_eq!(policy.export_timeout(), Duration::from_millis(1));
+    assert_eq!(policy.sampling(), sampling());
+    assert!(TelemetryExportPolicy::new(
+      MAX_TELEMETRY_QUEUE_CAPACITY,
+      MAX_TELEMETRY_EXPORT_TIMEOUT,
+      sampling(),
+    )
+    .is_ok());
+    assert_eq!(
+      TelemetryExportPolicy::new(0, Duration::from_millis(1), sampling()),
+      Err(TelemetryExportValidationError::InvalidQueueCapacity)
+    );
+    assert_eq!(
+      TelemetryExportPolicy::new(4_097, Duration::from_millis(1), sampling()),
+      Err(TelemetryExportValidationError::InvalidQueueCapacity)
+    );
+    assert_eq!(
+      TelemetryExportPolicy::new(1, Duration::ZERO, sampling()),
+      Err(TelemetryExportValidationError::InvalidExportTimeout)
+    );
+    assert_eq!(
+      TelemetryExportPolicy::new(1, Duration::from_millis(5_001), sampling()),
+      Err(TelemetryExportValidationError::InvalidExportTimeout)
+    );
+    assert_eq!(
+      TelemetrySamplingRate::new(10_001),
+      Err(TelemetryExportValidationError::InvalidSamplingRate)
+    );
+  }
+
+  #[test]
+  fn sampling_classification_never_samples_metrics_or_drops() {
+    let success = structured_event(MetricOutcome::Succeeded, EventName::RequestCompleted);
+    let failure = structured_event(MetricOutcome::Failed, EventName::DependencyCompleted);
+    let dropped = structured_event(MetricOutcome::Failed, EventName::TelemetryDropped);
+    let metric = TelemetryExportRecord::Metric(MetricExportRecord::new(
+      OffsetDateTime::UNIX_EPOCH,
+      DeploymentEnvironment::Test,
+      MetricEvent::LookupStage {
+        stage: LookupStage::RequestValidation,
+        outcome: MetricOutcome::Succeeded,
+      },
+    ));
+
+    assert_eq!(
+      sampling().rate_for(&success),
+      Some(TelemetrySamplingRate::new(2_500).unwrap())
+    );
+    assert_eq!(
+      sampling().rate_for(&failure),
+      Some(TelemetrySamplingRate::new(10_000).unwrap())
+    );
+    assert_eq!(sampling().rate_for(&dropped), None);
+    assert_eq!(sampling().rate_for(&metric), None);
+
+    let none = TelemetrySamplingPolicy::new(
+      TelemetrySamplingRate::new(0).unwrap(),
+      TelemetrySamplingRate::new(0).unwrap(),
+    );
+    assert_eq!(
+      none.rate_for(&success),
+      Some(TelemetrySamplingRate::new(0).unwrap())
+    );
+    assert_eq!(
+      none.rate_for(&failure),
+      Some(TelemetrySamplingRate::new(0).unwrap())
+    );
+    assert_eq!(none.rate_for(&dropped), None);
+    assert_eq!(none.rate_for(&metric), None);
+  }
+
+  #[test]
+  fn logical_export_records_expose_only_closed_fields() {
+    let record = MetricExportRecord::new(
+      OffsetDateTime::UNIX_EPOCH,
+      DeploymentEnvironment::Production,
+      MetricEvent::TelemetryDropped {
+        reason: TelemetryDropReason::Serialization,
+      },
+    );
+    assert_eq!(record.event_schema(), EVENT_SCHEMA_VERSION);
+    assert_eq!(record.service(), SERVICE_NAME);
+    assert_eq!(record.service_version(), env!("CARGO_PKG_VERSION"));
+    assert_eq!(record.timestamp(), OffsetDateTime::UNIX_EPOCH);
+    assert_eq!(record.environment(), DeploymentEnvironment::Production);
+    assert_eq!(
+      record.event(),
+      MetricEvent::TelemetryDropped {
+        reason: TelemetryDropReason::Serialization
+      }
+    );
+  }
+
+  #[test]
+  fn exporter_failures_map_to_distinct_closed_drop_reasons() {
+    assert_eq!(
+      TelemetryExportFailure::Unavailable.drop_reason(),
+      TelemetryDropReason::ExporterUnavailable
+    );
+    assert_eq!(
+      TelemetryExportFailure::Timeout.drop_reason(),
+      TelemetryDropReason::ExportTimeout
+    );
+    assert_eq!(
+      TelemetryExportFailure::Serialization.drop_reason(),
+      TelemetryDropReason::Serialization
+    );
+    assert_eq!(
+      TelemetryExportFailure::ShuttingDown.drop_reason(),
+      TelemetryDropReason::ShuttingDown
+    );
+  }
+
   #[test]
   fn current_http_routes_have_distinct_closed_identities() {
     let routes = [
@@ -735,10 +1193,25 @@ mod tests {
         outcome: MetricOutcome::Failed,
       },
       MetricEvent::TelemetryDropped {
+        reason: TelemetryDropReason::SampledOut,
+      },
+      MetricEvent::TelemetryDropped {
         reason: TelemetryDropReason::Capacity,
       },
       MetricEvent::TelemetryDropped {
         reason: TelemetryDropReason::RuntimeUnavailable,
+      },
+      MetricEvent::TelemetryDropped {
+        reason: TelemetryDropReason::ExporterUnavailable,
+      },
+      MetricEvent::TelemetryDropped {
+        reason: TelemetryDropReason::ExportTimeout,
+      },
+      MetricEvent::TelemetryDropped {
+        reason: TelemetryDropReason::Serialization,
+      },
+      MetricEvent::TelemetryDropped {
+        reason: TelemetryDropReason::ShuttingDown,
       },
     ]
   }

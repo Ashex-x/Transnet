@@ -15,6 +15,7 @@ pub const DEFAULT_MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
 
 /// Complete application configuration loaded from `config/transnet.toml`.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppConfig {
   /// Listener and logging settings.
   pub server: ServerConfig,
@@ -825,6 +826,19 @@ cursor_secret = "INLINE_SECRET_MUST_NEVER_BE_ACCEPTED"
     assert_eq!(error, AppConfigLoadError::Invalid);
     assert!(!diagnostics.contains("INLINE_SECRET_MUST_NEVER_BE_ECHOED"));
     assert!(!diagnostics.contains("cursor_secret"));
+  }
+
+  #[test]
+  fn application_config_rejects_unwired_telemetry_settings() {
+    let source = format!(
+      "{}\n[telemetry]\nmode = \"configured\"\nqueue_capacity = 16\n",
+      include_str!("../config/transnet.toml")
+    );
+
+    assert!(matches!(
+      AppConfig::parse_toml(&source),
+      Err(AppConfigLoadError::Invalid)
+    ));
   }
 
   #[test]

@@ -2,7 +2,7 @@
 
 中文：[可观测性合同](../../docs_cn/reference/observability_cn.md)
 
-This document defines the target whole-system telemetry contract for the Transnet process, its adapters, and the offline publisher. It governs structured logs, traces, metrics, and audit events. The current Rust foundation implements a closed content-free event envelope, strict internal `traceparent` admission and HTTP propagation, typed classification of current matched HTTP routes, closed metric dimensions, bounded non-blocking metric dispatch, and local drop counters. Broader operation instrumentation, event export, collectors, audit persistence, retention, and deployment policy remain target work.
+This document defines the target whole-system telemetry contract for the Transnet process, its adapters, and the offline publisher. It governs structured logs, traces, metrics, and audit events. The current Rust foundation implements a closed content-free event envelope, strict internal `traceparent` admission and HTTP propagation, typed classification of current matched HTTP routes, closed metric dimensions, bounded non-blocking metric dispatch, local drop counters, and the repository-owned logical export policy. Broader operation instrumentation, exporter adapters, collector transport, audit persistence, retention, and deployment policy remain target work.
 
 ## Goals and failure rule
 
@@ -10,7 +10,19 @@ Telemetry answers whether a request was admitted, which bounded path ran, where 
 
 Online telemetry is non-blocking and best effort. A full buffer, unavailable collector, serialization error, or export timeout increments a local dropped-event counter and cannot fail, delay, retry, or change a business response. Only an explicitly configured mandatory audit sink may block an offline publication transition; it never affects online translation readiness.
 
-The current dispatcher accounts locally for capacity exhaustion and an unavailable asynchronous runtime. Exporter-side serialization, timeout, and collector-failure accounting will be added with the production exporter; no external collector is configured by this foundation.
+The current dispatcher accounts locally for capacity exhaustion and an unavailable asynchronous runtime. The logical export contract separately classifies deterministic sampling, exporter unavailability, export timeout, serialization failure, and exporter shutdown. A future exporter owns those counters because the current dispatcher cannot observe adapter failures. No external collector is configured by this foundation.
+
+## Logical export contract
+
+The repository-owned mode is closed: `disabled` creates no exporter boundary, while `configured` requires a separately composed production exporter. `configured` deliberately does not identify a socket, HTTP, gRPC, stdout, or other transport. Collector endpoint naming, authentication, framing, batching, acknowledgement, and retry rules require agreement with the deployment or collector owner before an adapter is implemented.
+
+One configured policy accepts a queue capacity from 1 through 4,096 records and a per-export timeout from 1 millisecond through 5 seconds. These limits are repository-owned isolation bounds, not active TOML settings. The current runtime does not parse a `[telemetry]` table, construct an exporter, or claim that configuration is available. A later adapter PR must freeze the external transport and then map strict configuration into the validated policy in one vertical slice.
+
+Sampling applies only to structured success and failure events. Separate rates use integer basis points from 0 through 10,000 inclusive, where 0 means never and 10,000 means always. The selection algorithm remains part of the future exporter contract; it must be deterministic, must not inspect request content or identifiers, and must run before bounded queue admission, so sampled-out events never count as capacity exhaustion. Metric records and telemetry-drop records are required observations and are never sampled, so metric counters and failure accounting are not silently reduced. There is no adaptive or content-dependent sampling.
+
+The logical export record is either the existing closed `ObservabilityEvent` or a timestamped `MetricEvent` with the same fixed schema, service identity, package version, and closed deployment environment. This freezes repository-owned data semantics without freezing JSON or network framing. It cannot contain free-form attributes, messages, URLs, paths, queries, bodies, model output, reasoning, canonical material, credentials, tokens, or arbitrary error and Debug payloads.
+
+Invalid policy values are startup configuration errors once configuration wiring exists. Runtime exporter unavailability, timeout, serialization failure, queue exhaustion, or shutdown remain best-effort telemetry failures: they cannot change a business result, HTTP response, liveness, readiness, or dependency availability. The bounded queue is the isolation boundary and no collector outage may introduce unbounded request backpressure.
 
 ## Signal ownership
 
