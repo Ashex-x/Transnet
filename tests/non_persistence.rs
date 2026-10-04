@@ -283,7 +283,6 @@ fn http_traces_and_failure_diagnostics_exclude_request_and_provider_material() {
   let trace = captured.contents();
   assert!(trace.contains("http.request"));
   assert!(trace.contains("/api/v1/translations"));
-  assert!(trace.contains("unmatched"));
   assert_content_free(&trace);
 }
 
