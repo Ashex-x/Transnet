@@ -24,6 +24,7 @@ use crate::{
       CanonicalLookupCardCoverageState, CanonicalLookupCardEvidence, CanonicalLookupCardForm,
       CanonicalLookupCardSectionCoverage,
     },
+    observability::{LookupStage, MetricEvent, MetricOutcome},
     retrieval::RetrievalRequest,
   },
   ports::canonical_read::{CanonicalReadContext, CanonicalReadError},
@@ -63,11 +64,16 @@ pub(super) async fn lookup(
   let Json(request) = match payload {
     Ok(value) => value,
     Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
-      return problem::payload_too_large(&request_id)
+      record_lookup_validation(&state, MetricOutcome::Rejected);
+      return problem::payload_too_large(&request_id);
     }
-    Err(_) => return invalid_json(&request_id, "BasicCard lookup"),
+    Err(_) => {
+      record_lookup_validation(&state, MetricOutcome::Rejected);
+      return invalid_json(&request_id, "BasicCard lookup");
+    }
   };
   if request.query.trim().is_empty() || request.query.chars().count() > MAX_QUERY_CHARS {
+    record_lookup_validation(&state, MetricOutcome::Rejected);
     return invalid_field(
       &request_id,
       "query",
@@ -77,33 +83,37 @@ pub(super) async fn lookup(
   let source_language = match LanguageTag::parse(&request.source_language) {
     Ok(value) => value,
     Err(_) => {
+      record_lookup_validation(&state, MetricOutcome::Rejected);
       return invalid_field(
         &request_id,
         "source_language",
         "must be a valid BCP-47 language tag.",
-      )
+      );
     }
   };
   let target_language = match LanguageTag::parse(&request.target_language) {
     Ok(value) => value,
     Err(_) => {
+      record_lookup_validation(&state, MetricOutcome::Rejected);
       return invalid_field(
         &request_id,
         "target_language",
         "must be a valid BCP-47 language tag.",
-      )
+      );
     }
   };
   let retrieval = match RetrievalRequest::for_public_api(&request.query, source_language) {
     Ok(value) => value,
     Err(_) => {
+      record_lookup_validation(&state, MetricOutcome::Rejected);
       return invalid_field(
         &request_id,
         "query",
         "must contain a valid canonical lookup value.",
-      )
+      );
     }
   };
+  record_lookup_validation(&state, MetricOutcome::Succeeded);
   let Some((service, context)) = canonical_dependency(&state, &request_id) else {
     return dependency_unavailable(&request_id);
   };
@@ -116,6 +126,15 @@ pub(super) async fn lookup(
       &request_id,
     ),
     Err(error) => map_read_error(error, &request_id, false),
+  }
+}
+
+fn record_lookup_validation(state: &AppState, outcome: MetricOutcome) {
+  if let Some(metrics) = state.canonical_lookup_metrics() {
+    metrics.dispatch(MetricEvent::LookupStage {
+      stage: LookupStage::RequestValidation,
+      outcome,
+    });
   }
 }
 

@@ -6,7 +6,9 @@
 use std::{collections::BTreeSet, sync::Arc};
 
 use crate::{
-  application::canonical_lookup_card::CanonicalLookupCardMapper,
+  application::{
+    canonical_lookup_card::CanonicalLookupCardMapper, observability::ClosedMetricsDispatcher,
+  },
   domain::{
     canonical::{
       normalize_lookup_key, CanonicalReleasePin, LanguageTag, CANONICAL_LOOKUP_NORMALIZER_VERSION,
@@ -16,6 +18,7 @@ use crate::{
       CanonicalTranslationRevision, SourceFingerprint, MAX_CANONICAL_SOURCE_CHARS,
     },
     lookup_card::CanonicalLookupCard,
+    observability::{LookupStage, MetricEvent, MetricOutcome},
     retrieval::{rank_lexical_candidates, LexicalMatchKind, RetrievalRequest},
   },
   ports::canonical_read::{
@@ -45,12 +48,27 @@ pub const MAX_CANONICAL_TRANSLATIONS: usize = 8;
 #[derive(Clone)]
 pub struct CanonicalReadService {
   authority: Arc<dyn CanonicalReadPort>,
+  metrics: Option<ClosedMetricsDispatcher>,
 }
 
 impl CanonicalReadService {
   /// Creates a request-local composition over a canonical authority port.
   pub fn new(authority: Arc<dyn CanonicalReadPort>) -> Self {
-    Self { authority }
+    Self {
+      authority,
+      metrics: None,
+    }
+  }
+
+  /// Adds best-effort closed metrics for the BasicCard lookup stages owned by this service.
+  pub fn with_lookup_metrics(mut self, metrics: ClosedMetricsDispatcher) -> Self {
+    self.metrics = Some(metrics);
+    self
+  }
+
+  /// Returns the optional dispatcher shared with the BasicCard HTTP validation boundary.
+  pub(crate) fn lookup_metrics(&self) -> Option<&ClosedMetricsDispatcher> {
+    self.metrics.as_ref()
   }
 
   /// Resolves reviewed translations, a basic card, and unambiguous sense details under one pin.
@@ -74,13 +92,22 @@ impl CanonicalReadService {
     {
       return Err(CanonicalReadError::InvalidRequest);
     }
-    let pin = self
-      .authority
-      .active_release(context)
-      .await?
-      .ok_or(CanonicalReadError::NotFound)?;
+    let pin = match self.authority.active_release(context).await {
+      Ok(Some(pin)) => {
+        self.record_stage(LookupStage::ContentResolution, MetricOutcome::Succeeded);
+        pin
+      }
+      Ok(None) => {
+        self.record_stage(LookupStage::ContentResolution, MetricOutcome::Failed);
+        return Err(CanonicalReadError::NotFound);
+      }
+      Err(error) => {
+        self.record_stage(LookupStage::ContentResolution, outcome_for(error));
+        return Err(error);
+      }
+    };
 
-    let translation_candidates = self
+    let translation_candidates = match self
       .authority
       .translations(
         context,
@@ -96,14 +123,23 @@ impl CanonicalReadService {
           limit: request.limit.min(MAX_CANONICAL_TRANSLATIONS),
         },
       )
-      .await?;
+      .await
+    {
+      Ok(candidates) => candidates,
+      Err(error) => {
+        self.record_stage(LookupStage::CandidateRetrieval, outcome_for(error));
+        return Err(error);
+      }
+    };
     if translation_candidates.len() > request.limit.min(MAX_CANONICAL_TRANSLATIONS) {
+      self.record_stage(LookupStage::CandidateRetrieval, MetricOutcome::Failed);
       return Err(CanonicalReadError::InconsistentData);
     }
     if translation_candidates
       .iter()
       .any(|candidate| candidate.release_id() != &pin.release_id)
     {
+      self.record_stage(LookupStage::CandidateRetrieval, MetricOutcome::Failed);
       return Err(CanonicalReadError::InconsistentData);
     }
     let translations = translation_candidates
@@ -116,7 +152,7 @@ impl CanonicalReadService {
       })
       .collect();
 
-    let lexical_matches = self
+    let lexical_matches = match self
       .authority
       .candidates(
         context,
@@ -131,8 +167,16 @@ impl CanonicalReadService {
           limit: request.limit,
         },
       )
-      .await?;
+      .await
+    {
+      Ok(matches) => matches,
+      Err(error) => {
+        self.record_stage(LookupStage::CandidateRetrieval, outcome_for(error));
+        return Err(error);
+      }
+    };
     if lexical_matches.len() > request.limit {
+      self.record_stage(LookupStage::CandidateRetrieval, MetricOutcome::Failed);
       return Err(CanonicalReadError::InconsistentData);
     }
     if lexical_matches.iter().any(|matched| {
@@ -150,26 +194,34 @@ impl CanonicalReadService {
           .iter()
           .any(|evidence| evidence.release_id != pin.release_id)
     }) {
+      self.record_stage(LookupStage::CandidateRetrieval, MetricOutcome::Failed);
       return Err(CanonicalReadError::InconsistentData);
     }
     let ranked = rank_lexical_candidates(&pin.release_id, request.evidence_use, lexical_matches);
+    self.record_stage(LookupStage::CandidateRetrieval, MetricOutcome::Succeeded);
     let card = CanonicalLookupCardMapper::assemble_canonical(&request, pin.clone(), ranked);
     let sense_details = if card.candidates.len() == 1 {
       let sense_id = card.candidates[0].sense.id.clone();
-      Some(
-        self
-          .read_pinned_sense(
-            context,
-            &pin,
-            sense_id,
-            request.language.clone(),
-            request.evidence_use,
-          )
-          .await?,
-      )
+      match self
+        .read_pinned_sense(
+          context,
+          &pin,
+          sense_id,
+          request.language.clone(),
+          request.evidence_use,
+        )
+        .await
+      {
+        Ok(details) => Some(details),
+        Err(error) => {
+          self.record_stage(LookupStage::ResponseAssembly, outcome_for(error));
+          return Err(error);
+        }
+      }
     } else {
       None
     };
+    self.record_stage(LookupStage::ResponseAssembly, MetricOutcome::Succeeded);
 
     Ok(CanonicalReadOutcome {
       pin,
@@ -218,6 +270,24 @@ impl CanonicalReadService {
       return Err(CanonicalReadError::InconsistentData);
     }
     Ok(details)
+  }
+
+  fn record_stage(&self, stage: LookupStage, outcome: MetricOutcome) {
+    if let Some(metrics) = &self.metrics {
+      metrics.dispatch(MetricEvent::LookupStage { stage, outcome });
+    }
+  }
+}
+
+const fn outcome_for(error: CanonicalReadError) -> MetricOutcome {
+  match error {
+    CanonicalReadError::InvalidRequest => MetricOutcome::Rejected,
+    CanonicalReadError::NotFound
+    | CanonicalReadError::ContentReleaseUnavailable
+    | CanonicalReadError::SchemaIncompatible
+    | CanonicalReadError::Unavailable
+    | CanonicalReadError::Timeout
+    | CanonicalReadError::InconsistentData => MetricOutcome::Failed,
   }
 }
 

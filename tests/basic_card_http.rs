@@ -1,7 +1,10 @@
 //! Frozen public BasicCard and release-pinned sense HTTP contract tests.
 
 use std::{
-  sync::{Arc, Mutex},
+  sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
+  },
   time::Duration,
 };
 
@@ -12,10 +15,18 @@ use axum::{
   response::Response,
 };
 use serde_json::{json, Value};
+use tokio::{
+  sync::{Notify, Semaphore},
+  time::timeout,
+};
 use tower::ServiceExt;
 use transnet::{
+  adapters::in_memory::InMemoryMetricsRecorder,
   app_router,
-  application::canonical_read::CanonicalReadService,
+  application::{
+    canonical_read::CanonicalReadService,
+    observability::{ClosedMetricsDispatcher, MAX_IN_FLIGHT_METRIC_RECORDS},
+  },
   domain::{
     canonical::{
       CanonicalId, CanonicalReleasePin, CanonicalStatus, EvidenceConfidence, EvidenceFragment,
@@ -24,12 +35,14 @@ use transnet::{
     },
     canonical_content::{CanonicalSenseDetails, CanonicalSenseDetailsInput, SenseContentTarget},
     canonical_translation::CanonicalTranslationRevision,
+    observability::{LookupStage, MetricEvent, MetricOutcome},
     retrieval::{CanonicalCandidate, LexicalMatchKind, RepositoryMatch, RetrievalScore},
   },
   ports::canonical_read::{
     CanonicalCandidateQuery, CanonicalReadContext, CanonicalReadError, CanonicalReadPort,
     CanonicalSenseQuery, CanonicalTranslationQuery,
   },
+  ports::metrics::MetricsRecorder,
   AppState,
 };
 
@@ -45,6 +58,51 @@ struct Authority {
   mode: Mode,
   active: Mutex<usize>,
   sensed: Mutex<Vec<String>>,
+}
+
+#[derive(Clone)]
+struct BlockingMetricsRecorder {
+  started: Arc<AtomicUsize>,
+  notify: Arc<Notify>,
+  gate: Arc<Semaphore>,
+}
+
+impl BlockingMetricsRecorder {
+  fn new() -> Self {
+    Self {
+      started: Arc::new(AtomicUsize::new(0)),
+      notify: Arc::new(Notify::new()),
+      gate: Arc::new(Semaphore::new(0)),
+    }
+  }
+
+  async fn wait_until_saturated(&self) {
+    timeout(Duration::from_secs(1), async {
+      loop {
+        let notified = self.notify.notified();
+        if self.started.load(Ordering::SeqCst) == MAX_IN_FLIGHT_METRIC_RECORDS {
+          return;
+        }
+        notified.await;
+      }
+    })
+    .await
+    .expect("blocking recorder should occupy every dispatcher permit");
+  }
+}
+
+#[async_trait]
+impl MetricsRecorder for BlockingMetricsRecorder {
+  async fn record(&self, _: MetricEvent) {
+    self.started.fetch_add(1, Ordering::SeqCst);
+    self.notify.notify_waiters();
+    let permit = self
+      .gate
+      .acquire()
+      .await
+      .expect("blocking recorder remains open");
+    drop(permit);
+  }
 }
 
 fn id(value: &str) -> CanonicalId {
@@ -227,6 +285,41 @@ fn router(mode: Mode) -> axum::Router {
     Duration::from_secs(1),
   ))
 }
+
+fn instrumented_router(
+  mode: Mode,
+) -> (
+  axum::Router,
+  InMemoryMetricsRecorder,
+  ClosedMetricsDispatcher,
+) {
+  let authority = Arc::new(Authority {
+    mode,
+    active: Mutex::new(0),
+    sensed: Mutex::new(Vec::new()),
+  });
+  let recorder = InMemoryMetricsRecorder::new();
+  let metrics = ClosedMetricsDispatcher::new(Arc::new(recorder.clone()));
+  let service = CanonicalReadService::new(authority).with_lookup_metrics(metrics.clone());
+  let router = app_router(
+    AppState::new().with_canonical_read_service_timeout(Arc::new(service), Duration::from_secs(1)),
+  );
+  (router, recorder, metrics)
+}
+
+async fn recorded_events(recorder: &InMemoryMetricsRecorder, expected: usize) -> Vec<MetricEvent> {
+  timeout(Duration::from_secs(1), async {
+    loop {
+      let events = recorder.events().await;
+      if events.len() >= expected {
+        return events;
+      }
+      tokio::task::yield_now().await;
+    }
+  })
+  .await
+  .expect("closed metrics should be delivered without blocking the request")
+}
 async fn body(response: Response) -> Value {
   serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
 }
@@ -237,6 +330,19 @@ fn lookup_request(extra: &str) -> Request<Body> {
       r#"{{"query":"sweltering","source_language":"en","target_language":"zh-CN"{extra}}}"#
     )))
     .unwrap()
+}
+
+fn lookup_request_for(query: &str) -> Request<Body> {
+  Request::post("/api/v1/basic-cards/lookup")
+    .header("content-type", "application/json")
+    .body(Body::from(
+      json!({"query":query,"source_language":"en","target_language":"zh-CN"}).to_string(),
+    ))
+    .unwrap()
+}
+
+fn lookup_event(stage: LookupStage, outcome: MetricOutcome) -> MetricEvent {
+  MetricEvent::LookupStage { stage, outcome }
 }
 
 #[tokio::test]
@@ -261,6 +367,116 @@ async fn lookup_returns_frozen_three_state_contract_and_safe_attribution() {
       );
     }
   }
+}
+
+#[tokio::test]
+async fn instrumented_lookup_emits_each_completed_stage_once() {
+  for mode in [Mode::Resolved, Mode::Ambiguous, Mode::Missing] {
+    let (router, recorder, _) = instrumented_router(mode);
+    let response = router.oneshot(lookup_request("")).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    assert_eq!(
+      recorded_events(&recorder, 4).await,
+      vec![
+        lookup_event(LookupStage::RequestValidation, MetricOutcome::Succeeded),
+        lookup_event(LookupStage::ContentResolution, MetricOutcome::Succeeded),
+        lookup_event(LookupStage::CandidateRetrieval, MetricOutcome::Succeeded),
+        lookup_event(LookupStage::ResponseAssembly, MetricOutcome::Succeeded),
+      ]
+    );
+  }
+}
+
+#[tokio::test]
+async fn rejected_lookup_emits_only_request_validation() {
+  let (router, recorder, _) = instrumented_router(Mode::Missing);
+  let response = router
+    .oneshot(lookup_request(",\"derived_forms\":[]"))
+    .await
+    .unwrap();
+  assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+  assert_eq!(
+    recorded_events(&recorder, 1).await,
+    vec![lookup_event(
+      LookupStage::RequestValidation,
+      MetricOutcome::Rejected,
+    )]
+  );
+}
+
+#[tokio::test]
+async fn authority_failure_stops_metrics_at_content_resolution() {
+  let (router, recorder, _) = instrumented_router(Mode::Error(CanonicalReadError::Unavailable));
+  let response = router.oneshot(lookup_request("")).await.unwrap();
+  assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+  assert_eq!(
+    recorded_events(&recorder, 2).await,
+    vec![
+      lookup_event(LookupStage::RequestValidation, MetricOutcome::Succeeded),
+      lookup_event(LookupStage::ContentResolution, MetricOutcome::Failed),
+    ]
+  );
+}
+
+#[tokio::test]
+async fn emitted_lookup_metrics_exclude_request_content() {
+  const SENTINEL: &str = "private-basic-card-query-sentinel";
+  let (router, recorder, _) = instrumented_router(Mode::Missing);
+  let response = router.oneshot(lookup_request_for(SENTINEL)).await.unwrap();
+  assert_eq!(response.status(), StatusCode::OK);
+
+  let events = recorded_events(&recorder, 4).await;
+  let diagnostics = format!("{events:?}");
+  assert!(!diagnostics.contains(SENTINEL));
+  for event in events {
+    assert!(event
+      .attributes()
+      .labels()
+      .iter()
+      .all(|label| label.key() != SENTINEL && label.value() != SENTINEL));
+  }
+}
+
+#[tokio::test]
+async fn saturated_metrics_do_not_change_the_basic_card_response() {
+  let authority = Arc::new(Authority {
+    mode: Mode::Missing,
+    active: Mutex::new(0),
+    sensed: Mutex::new(Vec::new()),
+  });
+  let recorder = BlockingMetricsRecorder::new();
+  let metrics = ClosedMetricsDispatcher::new(Arc::new(recorder.clone()));
+  for _ in 0..MAX_IN_FLIGHT_METRIC_RECORDS {
+    metrics.dispatch(lookup_event(
+      LookupStage::RequestValidation,
+      MetricOutcome::Succeeded,
+    ));
+  }
+  recorder.wait_until_saturated().await;
+
+  let service = CanonicalReadService::new(authority).with_lookup_metrics(metrics.clone());
+  let router = app_router(
+    AppState::new().with_canonical_read_service_timeout(Arc::new(service), Duration::from_secs(1)),
+  );
+  let response = router.oneshot(lookup_request("")).await.unwrap();
+
+  assert_eq!(response.status(), StatusCode::OK);
+  assert_eq!(body(response).await["data"]["resolution"], "not_found");
+  assert_eq!(metrics.drop_snapshot().capacity, 4);
+}
+
+#[tokio::test]
+async fn lookup_without_instrumentation_keeps_the_existing_behavior() {
+  let response = router(Mode::Missing)
+    .oneshot(lookup_request(""))
+    .await
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::OK);
+  assert_eq!(body(response).await["data"]["resolution"], "not_found");
 }
 
 #[tokio::test]

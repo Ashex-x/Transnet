@@ -17,8 +17,8 @@ use tracing::Level;
 
 use crate::{
   application::{
-    canonical_read::CanonicalReadService, relationship_page::RelationshipPageRuntime,
-    translation::TranslationOrchestrator,
+    canonical_read::CanonicalReadService, observability::ClosedMetricsDispatcher,
+    relationship_page::RelationshipPageRuntime, translation::TranslationOrchestrator,
   },
   config::{HttpConfig, HttpConfigError, DEFAULT_MAX_REQUEST_BODY_BYTES},
   domain::{
@@ -58,6 +58,7 @@ pub struct AppState {
   relationship_page_runtime: Option<Arc<RelationshipPageRuntime>>,
   canonical_read: Option<Arc<CanonicalReadService>>,
   canonical_read_timeout: Option<Duration>,
+  canonical_lookup_metrics: Option<ClosedMetricsDispatcher>,
   readiness: Arc<dyn Readiness>,
   capabilities: ServiceCapabilities,
   knowledge_routes: Option<KnowledgeRouteDependencies>,
@@ -78,6 +79,7 @@ impl AppState {
       relationship_page_runtime: None,
       canonical_read: None,
       canonical_read_timeout: None,
+      canonical_lookup_metrics: None,
       readiness: Arc::new(AlwaysReady),
       capabilities: ServiceCapabilities::current(DEFAULT_MAX_REQUEST_BODY_BYTES),
       knowledge_routes: None,
@@ -126,6 +128,7 @@ impl AppState {
 
   /// Retains the opt-in canonical-only application dependency for BasicCard delivery.
   pub fn with_canonical_read_service(mut self, service: Arc<CanonicalReadService>) -> Self {
+    self.canonical_lookup_metrics = service.lookup_metrics().cloned();
     self.canonical_read = Some(service);
     self.canonical_read_timeout = Some(Duration::from_secs(2));
     self
@@ -137,6 +140,7 @@ impl AppState {
     service: Arc<CanonicalReadService>,
     timeout: Duration,
   ) -> Self {
+    self.canonical_lookup_metrics = service.lookup_metrics().cloned();
     self.canonical_read = Some(service);
     self.canonical_read_timeout = Some(timeout);
     self
@@ -150,6 +154,11 @@ impl AppState {
   /// Returns the configured deadline bound for canonical HTTP requests.
   pub(crate) fn canonical_read_timeout(&self) -> Option<Duration> {
     self.canonical_read_timeout
+  }
+
+  /// Returns BasicCard lookup metrics only when the canonical service installed them.
+  pub(crate) fn canonical_lookup_metrics(&self) -> Option<&ClosedMetricsDispatcher> {
+    self.canonical_lookup_metrics.as_ref()
   }
 
   /// Adds the dependency probe used by `POST /api/v1/readyz` when no knowledge bundle owns readiness.
