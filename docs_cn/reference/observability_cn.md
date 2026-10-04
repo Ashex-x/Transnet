@@ -2,7 +2,7 @@
 
 English: [Observability contract](../../docs/reference/observability.md)
 
-本文定义 Transnet 进程、其 adapter 与离线 publisher 的目标全系统遥测合同，覆盖结构化日志、trace、指标和审计事件。当前 Rust 基础已实现闭合的无内容事件 envelope、严格的内部 `traceparent` 准入与 HTTP 传播、当前 matched HTTP route 的类型化分类、闭合指标维度、有界非阻塞指标分发和本地丢弃计数。更广的 operation instrumentation、事件导出、collector、审计持久化、保留与部署策略仍属目标工作。
+本文定义 Transnet 进程、其 adapter 与离线 publisher 的目标全系统遥测合同，覆盖结构化日志、trace、指标和审计事件。当前 Rust 基础已实现闭合的无内容事件 envelope、严格的内部 `traceparent` 准入与 HTTP 传播、当前 matched HTTP route 的类型化分类、闭合指标维度、有界非阻塞指标分发、本地丢弃计数，以及仓库拥有的逻辑导出策略。更广的 operation instrumentation、exporter adapter、collector transport、审计持久化、保留与部署策略仍属目标工作。
 
 ## 目标与失败规则
 
@@ -10,7 +10,19 @@ English: [Observability contract](../../docs/reference/observability.md)
 
 在线遥测采用非阻塞、尽力而为策略。缓冲区满、collector 不可用、序列化错误或导出超时只增加本地丢弃事件计数，不得使业务响应失败、延迟、重试或改变。只有显式配置的强制审计 sink 可以阻止离线发布状态转换；它绝不影响在线翻译 readiness。
 
-当前 dispatcher 会在容量耗尽或异步 runtime 不可用时执行本地计数。Exporter 侧序列化、超时和 collector 失败计数将在生产 exporter 中补充；本基础不配置外部 collector。
+当前 dispatcher 会在容量耗尽或异步 runtime 不可用时执行本地计数。逻辑导出合同另行区分确定性 sampling、exporter 不可用、导出 timeout、serialization 失败与 exporter shutdown。当前 dispatcher 无法观察 adapter failure，因此这些计数归未来 exporter 所有。本基础不配置外部 collector。
+
+## 逻辑导出合同
+
+仓库拥有的 mode 是闭合的：`disabled` 不创建 exporter boundary，`configured` 则要求单独组合 production exporter。`configured` 刻意不指定 socket、HTTP、gRPC、stdout 或其他 transport。Collector endpoint 命名、认证、framing、batching、acknowledgement 与 retry 规则必须在实现 adapter 前由 deployment 或 collector owner 确认。
+
+一个 configured policy 接受 1 至 4,096 条记录的 queue capacity，以及 1 毫秒至 5 秒的单次 export timeout。这些是仓库拥有的隔离边界，而不是已经启用的 TOML 设置。当前 runtime 不解析 `[telemetry]` table、不构造 exporter，也不声称这项配置已经可用。后续 adapter PR 必须先冻结外部 transport，再在一个纵向切片中把严格配置映射为经过校验的 policy。
+
+Sampling 只应用于结构化 success 与 failure event。两个独立 rate 使用 0 至 10,000（含边界）的整数 basis point，其中 0 表示永不选中，10,000 表示总是选中。选择算法仍属于未来 exporter contract；它必须是确定性的，不得检查请求内容或 identifier，并必须在有界 queue admission 前执行，因此 sampled-out 不计为 capacity exhaustion。Metric record 与 telemetry-drop record 是必需 observation，绝不 sampling，因此 metric counter 与 failure accounting 不会被静默缩减。不采用 adaptive 或 content-dependent sampling。
+
+逻辑 export record 要么是现有闭合 `ObservabilityEvent`，要么是带 timestamp 的 `MetricEvent`；两者使用相同的固定 schema、service identity、package version与闭合 deployment environment。该合同只冻结仓库拥有的数据语义，不冻结 JSON 或网络 framing。它无法携带自由 attribute、message、URL、path、query、body、模型输出、reasoning、canonical material、credential、token 或任意 error/Debug payload。
+
+配置接线存在后，无效 policy value 属于启动配置错误。Runtime exporter 不可用、timeout、serialization failure、queue exhaustion 或 shutdown 仍是 best-effort telemetry failure：它们不得改变业务结果、HTTP response、liveness、readiness 或 dependency availability。有界 queue 是隔离边界，collector outage 不得把无界 backpressure 传播到请求。
 
 ## 信号归属
 

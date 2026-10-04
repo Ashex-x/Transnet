@@ -12,10 +12,7 @@ use std::sync::{
 
 use tokio::sync::Semaphore;
 
-use crate::{
-  domain::observability::{MetricEvent, TelemetryDropReason},
-  ports::metrics::MetricsRecorder,
-};
+use crate::{domain::observability::MetricEvent, ports::metrics::MetricsRecorder};
 
 /// Maximum metric records allowed to be in flight through one dispatcher.
 ///
@@ -73,11 +70,13 @@ impl ClosedMetricsDispatcher {
   /// categorical observations rather than an audit log.
   pub fn dispatch(&self, event: MetricEvent) {
     let Ok(runtime) = tokio::runtime::Handle::try_current() else {
-      self.record_drop(TelemetryDropReason::RuntimeUnavailable);
+      self
+        .dropped_runtime_unavailable
+        .fetch_add(1, Ordering::Relaxed);
       return;
     };
     let Ok(permit) = self.permits.clone().try_acquire_owned() else {
-      self.record_drop(TelemetryDropReason::Capacity);
+      self.dropped_capacity.fetch_add(1, Ordering::Relaxed);
       return;
     };
     let recorder = self.recorder.clone();
@@ -92,19 +91,6 @@ impl ClosedMetricsDispatcher {
     TelemetryDropSnapshot {
       capacity: self.dropped_capacity.load(Ordering::Relaxed),
       runtime_unavailable: self.dropped_runtime_unavailable.load(Ordering::Relaxed),
-    }
-  }
-
-  fn record_drop(&self, reason: TelemetryDropReason) {
-    match reason {
-      TelemetryDropReason::Capacity => {
-        self.dropped_capacity.fetch_add(1, Ordering::Relaxed);
-      }
-      TelemetryDropReason::RuntimeUnavailable => {
-        self
-          .dropped_runtime_unavailable
-          .fetch_add(1, Ordering::Relaxed);
-      }
     }
   }
 }
