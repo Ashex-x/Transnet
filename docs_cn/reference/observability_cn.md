@@ -2,7 +2,7 @@
 
 English: [Observability contract](../../docs/reference/observability.md)
 
-本文定义 Transnet 进程、其 adapter 与离线 publisher 的目标全系统遥测合同，覆盖结构化日志、trace、指标和审计事件。当前 Rust 基础已实现闭合的无内容事件 envelope、严格的内部 `traceparent` 准入与 HTTP 传播、闭合指标维度、有界非阻塞指标分发和本地丢弃计数。完整路由 instrumentation、事件导出、collector、审计持久化、保留与部署策略仍属目标工作。
+本文定义 Transnet 进程、其 adapter 与离线 publisher 的目标全系统遥测合同，覆盖结构化日志、trace、指标和审计事件。当前 Rust 基础已实现闭合的无内容事件 envelope、严格的内部 `traceparent` 准入与 HTTP 传播、当前 matched HTTP route 的类型化分类、闭合指标维度、有界非阻塞指标分发和本地丢弃计数。更广的 operation instrumentation、事件导出、collector、审计持久化、保留与部署策略仍属目标工作。
 
 ## 目标与失败规则
 
@@ -45,7 +45,7 @@ Island-port 创建或校验内部请求与 trace 标识符。Transnet 不接受�
 
 生产日志采用换行分隔 JSON，写入标准输出或配置的本地 collector。紧凑文本与有界滚动文件仅用于开发。导出使用有界内存队列，绝不使用无界 channel 或请求内容 spool。轮转、压缩、保留与访问控制由部署负责，且必须在生产前验证。
 
-Span 名是 `translation.execute`、`model.generate`、`embedding.search`、`live_retrieval.search`、`canonical.read` 与 `publication.activate` 等静态操作；路径使用匹配模板，绝不使用原始 URL。成功 trace 按已配置低比例采样。失败、reasoning 升级、实时检索与降级可采用更高但有界的采样率，但采样不得检查内容。采样决定与丢弃事件计数作为指标。
+Span 名是 `translation.execute`、`model.generate`、`embedding.search`、`live_retrieval.search`、`canonical.read` 与 `publication.activate` 等静态操作。HTTP request span 通过闭合 `StaticRoute` catalog 分类 Axum matched route template，并且只发出该稳定 identity。未知、已移除或未安装的 optional template 统一成为 `unmatched`；原始 URI、path、query 与请求内容绝不作为 fallback。成功 trace 按已配置低比例采样。失败、reasoning 升级、实时检索与降级可采用更高但有界的采样率，但采样不得检查内容。采样决定与丢弃事件计数作为指标。
 
 隐藏模型 reasoning 是不透明的 provider 执行。遥测可记录选择了 reasoning profile 及其总耗时；不得请求、解码、保留或导出思维链。
 
@@ -65,7 +65,7 @@ Span 名是 `translation.execute`、`model.generate`、`embedding.search`、`liv
 
 合同测试捕获每个信号 sink，并在成功、校验失败、依赖失败、timeout、取消、reasoning、视觉、实时检索与 panic-safe 路径中搜索植入的 secret 和请求片段。测试还强制闭合指标 label、静态 span 名、单一完成事件、trace parent 连续性、队列边界、丢弃行为、审计/状态顺序，以及遥测失败不得改变在线响应。
 
-当前仓库测试证明严格的 trace-parent 解析与传播、静态 matched-route 日志、trace-context 与 provider reasoning Debug 脱敏、无内容 envelope 构造、闭合指标 label、有界分发，以及单调的容量/runtime 丢弃计数。一个 scoped 合成 sentinel harness 在不安装全局 subscriber 的前提下覆盖成功与拒绝的 HTTP 工作、结构化文本与图像输入、provider 输出失败、私有 header 拒绝、原始 unmatched path、请求级 live value，以及测试中植入 sentinel 的精确 SHA-256 指纹。Provider 遥测、collector、基础设施日志、retention、备份、数据库与 vector store 无法由仓库测试观察，仍属于更广的生产验收目标。
+当前仓库测试证明严格的 trace-parent 解析与传播、每条当前 matched route 的闭合分类、unmatched 闭合处理、trace-context 与 provider reasoning Debug 脱敏、无内容 envelope 构造、闭合指标 label、有界分发，以及单调的容量/runtime 丢弃计数。一个 scoped 合成 sentinel harness 在不安装全局 subscriber 的前提下覆盖成功与拒绝的 HTTP 工作、结构化文本与图像输入、provider 输出失败、私有 header 拒绝、原始 unmatched path 与 query、请求级 live value，以及测试中植入 sentinel 的精确 SHA-256 指纹。Provider 遥测、collector、基础设施日志、retention、备份、数据库与 vector store 无法由仓库测试观察，仍属于更广的生产验收目标。
 
 部署验收验证 collector 传输、访问控制、轮转、保留、备份行为、provider 侧遥测与删除策略。仅靠仓库测试无法证明这些外部控制。
 
