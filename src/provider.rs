@@ -20,10 +20,18 @@ tokio::task_local! {
 }
 
 /// Provider deltas that may be forwarded by an explicitly streaming transport.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum ProviderStreamEvent {
   /// A reasoning delta returned in llama.cpp's separate `reasoning_content` field.
   ReasoningDelta(String),
+}
+
+impl std::fmt::Debug for ProviderStreamEvent {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::ReasoningDelta(_) => formatter.write_str("ReasoningDelta(REDACTED)"),
+    }
+  }
 }
 
 /// Runs one operation with a request-local provider event sink.
@@ -461,5 +469,14 @@ mod tests {
     assert_eq!(value["reasoning_effort"], "none");
     assert_eq!(value["reasoning_budget_tokens"], 0);
     assert_eq!(value["max_tokens"], 768);
+  }
+
+  #[test]
+  fn provider_stream_event_debug_redacts_hidden_reasoning() {
+    let secret = "synthetic-hidden-reasoning-sentinel-7741";
+    let event = ProviderStreamEvent::ReasoningDelta(secret.into());
+
+    assert_eq!(format!("{event:?}"), "ReasoningDelta(REDACTED)");
+    assert!(!format!("{event:?}").contains(secret));
   }
 }

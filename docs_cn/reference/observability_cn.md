@@ -65,7 +65,7 @@ Span 名是 `translation.execute`、`model.generate`、`embedding.search`、`liv
 
 合同测试捕获每个信号 sink，并在成功、校验失败、依赖失败、timeout、取消、reasoning、视觉、实时检索与 panic-safe 路径中搜索植入的 secret 和请求片段。测试还强制闭合指标 label、静态 span 名、单一完成事件、trace parent 连续性、队列边界、丢弃行为、审计/状态顺序，以及遥测失败不得改变在线响应。
 
-当前仓库测试证明严格的 trace-parent 解析与传播、trace-context Debug 脱敏、无内容 envelope 构造与 Debug 输出、闭合指标 label、有界分发，以及单调的容量/runtime 丢弃计数。上述更广场景矩阵仍是尚未实现组件的验收目标。
+当前仓库测试证明严格的 trace-parent 解析与传播、静态 matched-route 日志、trace-context 与 provider reasoning Debug 脱敏、无内容 envelope 构造、闭合指标 label、有界分发，以及单调的容量/runtime 丢弃计数。一个 scoped 合成 sentinel harness 在不安装全局 subscriber 的前提下覆盖成功与拒绝的 HTTP 工作、结构化文本与图像输入、provider 输出失败、私有 header 拒绝、原始 unmatched path、请求级 live value，以及测试中植入 sentinel 的精确 SHA-256 指纹。Provider 遥测、collector、基础设施日志、retention、备份、数据库与 vector store 无法由仓库测试观察，仍属于更广的生产验收目标。
 
 部署验收验证 collector 传输、访问控制、轮转、保留、备份行为、provider 侧遥测与删除策略。仅靠仓库测试无法证明这些外部控制。
 

@@ -124,6 +124,8 @@ English: [Transnet delivery plan](../docs/todo.md)
 
 退出标准：用户可翻译连续文本，或通过精简准确的关系深入理解一个选定词义/领域概念，且不会遇到无关图展开或无支持模型断言。
 
+仓库侧合成 sentinel 测试覆盖 Transnet 自有 HTTP tracing、诊断、闭合指标、provider reasoning Debug 输出、私有状态准入，并证明请求级 material 不会出现在当前已枚举且由仓库控制的诊断与遥测输出面中。由于 provider 遥测、collector、基础设施 retention、备份、外部 MySQL/Qdrant 行为及生产派生向量 retention 仍需部署验收，该项保持未完成。
+
 ## 完成定义
 
 - 句子或篇章优先翻译；高置信词汇单元获得以一个适用词义或概念为根的关系型页面。
