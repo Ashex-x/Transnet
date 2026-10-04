@@ -40,7 +40,7 @@ ashex ALL=(root) NOPASSWD: /usr/bin/systemctl restart island.transnet, /usr/bin/
 
 ## 部署行为
 
-测试 job 会检查格式、对全部 target 与 feature 运行 Clippy、运行 all-target 测试、构建 rustdoc，并生成锁定依赖的 release binary。Pull request 在该 job 后结束。成功的非 pull-request 运行会下载该精确 artifact，把它和生产配置上传到 commit-SHA 目录，原子切换 `/home/ashex/services/island.transnet/current`，重启 `island.transnet`，再探测目标 UDS。重启或探测失败时，只要存在先前 release，就会恢复它。只有成功激活后才删除七天以前的 release，且绝不删除 current 或 rollback target。
+Linux 测试 job 会检查格式、对全部 target 与 feature 运行 Clippy、运行 all-target 测试、构建 rustdoc，并生成锁定依赖的 release binary。独立的 Windows job 会运行 `cargo check --bin transnet --locked`，以守护 non-Unix fail-closed 编译边界；它既不会启动生产 runtime，也不会生成部署 artifact。Pull request 在这些检查后结束。成功的非 pull-request 运行会下载该精确 Linux artifact，把它和生产配置上传到 commit-SHA 目录，原子切换 `/home/ashex/services/island.transnet/current`，重启 `island.transnet`，再探测目标 UDS。重启或探测失败时，只要存在先前 release，就会恢复它。只有成功激活后才删除七天以前的 release，且绝不删除 current 或 rollback target。
 
 生产配置使用 GPU 主机实际提供的 OpenAI-compatible model identifier `Gemma4-26B`。`TRANSNET_CONFIG` 在运行时选择已部署配置，因此上传的 binary 不依赖 CI runner checkout 路径。
 

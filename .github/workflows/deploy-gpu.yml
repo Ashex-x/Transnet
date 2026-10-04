@@ -15,6 +15,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  windows-binary-check:
+    name: Check Windows binary boundary
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check non-Unix binary boundary
+        run: cargo check --bin transnet --locked
+
   test:
     runs-on: ubuntu-latest
     steps:

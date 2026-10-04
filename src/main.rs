@@ -7,7 +7,8 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use transnet::{
   app_router_with_http_config, application::translation::TranslationOrchestrator, logger,
-  AppConfig, AppState, CancellationSignal, GemmaGenerationProvider, OpenAiGenerationAdapter,
+  AppConfig, AppState, CancellationSignal, EnabledCanonicalRuntimeConfig,
+  EnabledKnowledgeRuntimeConfig, GemmaGenerationProvider, OpenAiGenerationAdapter,
 };
 
 #[cfg(unix)]
@@ -31,8 +32,8 @@ use transnet::{
     canonical_read::{CanonicalReadContext, CanonicalReadPort},
     retrieval_data::RetrievalDataPort,
   },
-  CompositeKnowledgeReadiness, EnabledCanonicalRuntimeConfig, EnabledKnowledgeRuntimeConfig,
-  KnowledgeReadinessComponents, Readiness, ReadinessComponentState, ReadinessReport,
+  CompositeKnowledgeReadiness, KnowledgeReadinessComponents, Readiness, ReadinessComponentState,
+  ReadinessReport,
 };
 
 #[tokio::main]
@@ -102,10 +103,13 @@ async fn run(config: AppConfig) -> Result<()> {
     listener
       .serve(router, shutdown_and_cancel(runtime_cancellation.clone()))
       .await?;
+    Ok(())
   }
   #[cfg(not(unix))]
-  anyhow::bail!("Transnet requires Unix domain socket support");
-  Ok(())
+  {
+    let _ = (router, runtime_cancellation);
+    anyhow::bail!("Transnet requires Unix domain socket support")
+  }
 }
 
 #[cfg(unix)]
@@ -358,12 +362,12 @@ mod tests {
   }
 }
 
+#[cfg(unix)]
 async fn shutdown_signal() {
   let ctrl_c = async {
     let _ = tokio::signal::ctrl_c().await;
   };
 
-  #[cfg(unix)]
   let terminate = async {
     if let Ok(mut signal) =
       tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
@@ -372,15 +376,13 @@ async fn shutdown_signal() {
     }
   };
 
-  #[cfg(not(unix))]
-  let terminate = std::future::pending::<()>();
-
   tokio::select! {
     _ = ctrl_c => tracing::info!(signal = "ctrl_c", "graceful shutdown requested"),
     _ = terminate => tracing::info!(signal = "terminate", "graceful shutdown requested"),
   }
 }
 
+#[cfg(unix)]
 async fn shutdown_and_cancel(runtime: Arc<CancellationSignal>) {
   shutdown_signal().await;
   runtime.cancel();
