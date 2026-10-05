@@ -10,7 +10,10 @@ use tokio::task::JoinSet;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::{
-  application::live_retrieval::{LiveRetrievalDecision, LiveRetrievalService},
+  application::{
+    live_retrieval::{LiveRetrievalDecision, LiveRetrievalService},
+    observability::ClosedMetricsDispatcher,
+  },
   domain::live_retrieval::{LiveRetrievalError, LiveRetrievalMaterial, LiveSearchQuery},
   domain::translation_turn::{
     AnnotationFamily, CitationReference, ExternalEvidenceState, ExternalSourceReference,
@@ -27,6 +30,7 @@ use crate::{
       CancellationSignal, GenerationImage, GenerationImageMediaType, GenerationInput,
       GenerationProfile, ReasoningBudget,
     },
+    observability::{MetricEvent, ModelValidationOutcome},
     request_context::RequestContext,
   },
   ports::model_runtime::{
@@ -115,6 +119,7 @@ impl From<ModelOperationError> for TranslationOrchestrationError {
 pub struct TranslationOrchestrator {
   generation: Arc<dyn GenerationPort>,
   live_retrieval: Option<Arc<LiveRetrievalService>>,
+  metrics: Option<ClosedMetricsDispatcher>,
   normalizer: TranslationNormalizer,
   classifier: TranslationIntentClassifier,
 }
@@ -131,6 +136,7 @@ impl TranslationOrchestrator {
     Self {
       generation,
       live_retrieval: None,
+      metrics: None,
       normalizer: TranslationNormalizer::new(),
       classifier: TranslationIntentClassifier::new(),
     }
@@ -139,6 +145,12 @@ impl TranslationOrchestrator {
   /// Adds the complete one-round search-and-fetch service used by freshness-aware text turns.
   pub fn with_live_retrieval(mut self, service: Arc<LiveRetrievalService>) -> Self {
     self.live_retrieval = Some(service);
+    self
+  }
+
+  /// Adds best-effort closed metrics for terminal lexical model-response validation outcomes.
+  pub fn with_model_validation_metrics(mut self, metrics: ClosedMetricsDispatcher) -> Self {
+    self.metrics = Some(metrics);
     self
   }
 
@@ -218,12 +230,13 @@ impl TranslationOrchestrator {
           prompt.clone(),
         )
         .await?;
-      let (draft, cited, mut versions) =
+      let (draft, cited, mut versions, validation_outcome) =
         match parse_lexical(&fast, classification.unit, live.material()) {
           Ok(draft) if lexical_guidance_satisfied(turn, &draft.0) => (
             draft.0,
             draft.1,
             vec![operation_version(&fast, GenerationProfile::Fast)],
+            ModelValidationOutcome::Accepted,
           ),
           Ok(_) | Err(RepairableOutput::Invalid | RepairableOutput::Ambiguous) => {
             let repaired = self
@@ -235,9 +248,15 @@ impl TranslationOrchestrator {
                 repair_prompt(&prompt)?,
               )
               .await?;
-            let draft = parse_lexical(&repaired, classification.unit, live.material())
-              .map_err(|_| TranslationOrchestrationError::InvalidModelOutput)?;
+            let draft = match parse_lexical(&repaired, classification.unit, live.material()) {
+              Ok(draft) => draft,
+              Err(_) => {
+                self.record_model_validation(ModelValidationOutcome::Rejected);
+                return Err(TranslationOrchestrationError::InvalidModelOutput);
+              }
+            };
             if !lexical_guidance_satisfied(turn, &draft.0) {
+              self.record_model_validation(ModelValidationOutcome::Rejected);
               return Err(TranslationOrchestrationError::GuidanceViolation);
             }
             (
@@ -247,9 +266,11 @@ impl TranslationOrchestrator {
                 operation_version(&fast, GenerationProfile::Fast),
                 operation_version(&repaired, GenerationProfile::Reasoning),
               ],
+              ModelValidationOutcome::Repaired,
             )
           }
         };
+      self.record_model_validation(validation_outcome);
       let mut superset = TranslationTurnResult::lexical(
         draft,
         classification.unit,
@@ -360,6 +381,12 @@ impl TranslationOrchestrator {
       }
       Err(LiveRetrievalError::Cancelled) => Err(TranslationOrchestrationError::Cancelled),
       Err(_) => Err(TranslationOrchestrationError::LiveRetrievalUnavailable),
+    }
+  }
+
+  fn record_model_validation(&self, outcome: ModelValidationOutcome) {
+    if let Some(metrics) = &self.metrics {
+      metrics.dispatch(MetricEvent::ModelValidation { outcome });
     }
   }
 
