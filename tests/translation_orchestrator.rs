@@ -12,16 +12,24 @@ use std::{
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use time::OffsetDateTime;
+use tokio::{
+  sync::{Notify, Semaphore},
+  time::timeout,
+};
 use transnet::{
+  adapters::in_memory::InMemoryMetricsRecorder,
+  application::observability::{ClosedMetricsDispatcher, MAX_IN_FLIGHT_METRIC_RECORDS},
   application::translation::{
     TranslationOrchestrationError, TranslationOrchestrator, MAX_CONNECTED_CHUNK_CHARS,
     MAX_PARALLEL_GENERATIONS,
   },
+  domain::observability::{MetricEvent, ModelValidationOutcome},
   domain::translation_turn::{
     GuidanceAudience, GuidancePurpose, GuidanceRegister, TerminologyConstraint, TerminologyPolicy,
     TranslationGuidance, TranslationHistory, TranslationInput, TranslationResultKind,
     TranslationSegment, TranslationTurn, TranslationTurnRequest,
   },
+  ports::metrics::MetricsRecorder,
   CancellationSignal, GenerationInput, GenerationOutput, GenerationPort, GenerationProfile,
   GenerationRequest, GenerationResponse, ModelOperationContext, ModelOperationError, ModelVersion,
   RequestContext, RequestId,
@@ -49,6 +57,51 @@ struct VersionedChunkGeneration;
 struct SegmentGeneration {
   invalidate_fast: bool,
   reasoning_calls: AtomicUsize,
+}
+
+#[derive(Clone)]
+struct BlockingMetricsRecorder {
+  started: Arc<AtomicUsize>,
+  notify: Arc<Notify>,
+  gate: Arc<Semaphore>,
+}
+
+impl BlockingMetricsRecorder {
+  fn new() -> Self {
+    Self {
+      started: Arc::new(AtomicUsize::new(0)),
+      notify: Arc::new(Notify::new()),
+      gate: Arc::new(Semaphore::new(0)),
+    }
+  }
+
+  async fn wait_until_saturated(&self) {
+    timeout(Duration::from_secs(1), async {
+      loop {
+        let notified = self.notify.notified();
+        if self.started.load(Ordering::SeqCst) == MAX_IN_FLIGHT_METRIC_RECORDS {
+          return;
+        }
+        notified.await;
+      }
+    })
+    .await
+    .expect("blocking recorder should occupy every dispatcher permit");
+  }
+}
+
+#[async_trait]
+impl MetricsRecorder for BlockingMetricsRecorder {
+  async fn record(&self, _event: MetricEvent) {
+    self.started.fetch_add(1, Ordering::SeqCst);
+    self.notify.notify_waiters();
+    let permit = self
+      .gate
+      .acquire()
+      .await
+      .expect("blocking recorder remains open");
+    drop(permit);
+  }
 }
 
 #[async_trait]
@@ -316,6 +369,195 @@ fn lexical(value: &str) -> String {
     "phrase_type":"established expression", "aliases":[], "examples":[],
     "usage_notes":[]}]})
   .to_string()
+}
+
+async fn recorded_model_validation(recorder: &InMemoryMetricsRecorder) -> ModelValidationOutcome {
+  timeout(Duration::from_secs(1), async {
+    loop {
+      let events = recorder.events().await;
+      if let [MetricEvent::ModelValidation { outcome }] = events.as_slice() {
+        return *outcome;
+      }
+      tokio::task::yield_now().await;
+    }
+  })
+  .await
+  .expect("model validation metric should be delivered")
+}
+
+fn instrumented_orchestrator(
+  fake: Arc<FakeGeneration>,
+) -> (TranslationOrchestrator, InMemoryMetricsRecorder) {
+  let recorder = InMemoryMetricsRecorder::new();
+  let dispatcher = ClosedMetricsDispatcher::new(Arc::new(recorder.clone()));
+  let orchestrator = TranslationOrchestrator::new(fake).with_model_validation_metrics(dispatcher);
+  (orchestrator, recorder)
+}
+
+#[tokio::test]
+async fn lexical_validation_emits_one_accepted_terminal_event() {
+  let fake = Arc::new(FakeGeneration::new([Ok(lexical("译文"))]));
+  let (orchestrator, recorder) = instrumented_orchestrator(fake);
+  orchestrator
+    .translate(
+      &context(30),
+      Arc::new(CancellationSignal::default()),
+      &turn("hot"),
+    )
+    .await
+    .unwrap();
+  assert_eq!(
+    recorded_model_validation(&recorder).await,
+    ModelValidationOutcome::Accepted
+  );
+}
+
+#[tokio::test]
+async fn lexical_repair_emits_one_repaired_without_intermediate_rejection() {
+  let fake = Arc::new(FakeGeneration::new([
+    Ok("not-json".into()),
+    Ok(lexical("修复译文")),
+  ]));
+  let (orchestrator, recorder) = instrumented_orchestrator(fake);
+  orchestrator
+    .translate(
+      &context(30),
+      Arc::new(CancellationSignal::default()),
+      &turn("hot"),
+    )
+    .await
+    .unwrap();
+  assert_eq!(
+    recorded_model_validation(&recorder).await,
+    ModelValidationOutcome::Repaired
+  );
+}
+
+#[tokio::test]
+async fn exhausted_lexical_repair_emits_one_rejected_event() {
+  let fake = Arc::new(FakeGeneration::new([
+    Ok("not-json".into()),
+    Ok("still-not-json".into()),
+  ]));
+  let (orchestrator, recorder) = instrumented_orchestrator(fake);
+  assert_eq!(
+    orchestrator
+      .translate(
+        &context(30),
+        Arc::new(CancellationSignal::default()),
+        &turn("hot"),
+      )
+      .await
+      .unwrap_err(),
+    TranslationOrchestrationError::InvalidModelOutput
+  );
+  assert_eq!(
+    recorded_model_validation(&recorder).await,
+    ModelValidationOutcome::Rejected
+  );
+}
+
+#[tokio::test]
+async fn provider_failure_and_deadline_emit_no_model_validation_event() {
+  let unavailable = Arc::new(FakeGeneration::new([Err(ModelOperationError::Unavailable)]));
+  let (orchestrator, recorder) = instrumented_orchestrator(unavailable);
+  assert_eq!(
+    orchestrator
+      .translate(
+        &context(30),
+        Arc::new(CancellationSignal::default()),
+        &turn("hot"),
+      )
+      .await
+      .unwrap_err(),
+    TranslationOrchestrationError::ModelUnavailable
+  );
+  tokio::task::yield_now().await;
+  assert!(recorder.events().await.is_empty());
+
+  let expired = Arc::new(FakeGeneration::new([Ok(lexical("unused"))]));
+  let (orchestrator, recorder) = instrumented_orchestrator(expired);
+  assert_eq!(
+    orchestrator
+      .translate(
+        &context(-1),
+        Arc::new(CancellationSignal::default()),
+        &turn("hot"),
+      )
+      .await
+      .unwrap_err(),
+    TranslationOrchestrationError::DeadlineExceeded
+  );
+  assert!(recorder.events().await.is_empty());
+
+  let cancelled = Arc::new(FakeGeneration::new([Ok(lexical("unused"))]));
+  let (orchestrator, recorder) = instrumented_orchestrator(cancelled);
+  let cancellation = Arc::new(CancellationSignal::default());
+  cancellation.cancel();
+  assert_eq!(
+    orchestrator
+      .translate(&context(30), cancellation, &turn("hot"))
+      .await
+      .unwrap_err(),
+    TranslationOrchestrationError::Cancelled
+  );
+  assert!(recorder.events().await.is_empty());
+}
+
+#[tokio::test]
+async fn model_validation_metrics_are_content_free() {
+  let request_sentinel = "lexical-request-sentinel";
+  let provider_sentinel = "lexical-provider-sentinel";
+  let fake = Arc::new(FakeGeneration::new([Ok(lexical(provider_sentinel))]));
+  let (orchestrator, recorder) = instrumented_orchestrator(fake);
+  orchestrator
+    .translate(
+      &context(30),
+      Arc::new(CancellationSignal::default()),
+      &turn(request_sentinel),
+    )
+    .await
+    .unwrap();
+  let events = timeout(Duration::from_secs(1), async {
+    loop {
+      let events = recorder.events().await;
+      if events.len() == 1 {
+        return events;
+      }
+      tokio::task::yield_now().await;
+    }
+  })
+  .await
+  .expect("model validation metric should be delivered");
+  let debug = format!("{events:?}");
+  assert!(!debug.contains(request_sentinel));
+  assert!(!debug.contains(provider_sentinel));
+}
+
+#[tokio::test]
+async fn saturated_model_validation_metrics_do_not_change_translation() {
+  let recorder = BlockingMetricsRecorder::new();
+  let dispatcher = ClosedMetricsDispatcher::new(Arc::new(recorder.clone()));
+  for _ in 0..MAX_IN_FLIGHT_METRIC_RECORDS {
+    dispatcher.dispatch(MetricEvent::ModelValidation {
+      outcome: ModelValidationOutcome::Accepted,
+    });
+  }
+  recorder.wait_until_saturated().await;
+
+  let fake = Arc::new(FakeGeneration::new([Ok(lexical("译文"))]));
+  let orchestrator =
+    TranslationOrchestrator::new(fake).with_model_validation_metrics(dispatcher.clone());
+  let result = orchestrator
+    .translate(
+      &context(30),
+      Arc::new(CancellationSignal::default()),
+      &turn("hot"),
+    )
+    .await
+    .unwrap();
+  assert_eq!(result.translation.kind(), TranslationResultKind::Word);
+  assert_eq!(dispatcher.drop_snapshot().capacity, 1);
 }
 
 #[tokio::test]
