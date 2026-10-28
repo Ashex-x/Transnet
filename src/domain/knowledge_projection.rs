@@ -2179,6 +2179,67 @@ mod tests {
   }
 
   #[test]
+  fn condition_parameter_nfc_admission_protects_both_edge_inputs() {
+    let nodes = build_node_projection(
+      id("release-1"),
+      embedding("knowledge-graph-v1"),
+      node_inputs("release-1"),
+    )
+    .unwrap();
+    let build = |parameters: Vec<CanonicalId>| {
+      let mut admitted = asserted_relationship("edge-1", "alpha", "beta");
+      admitted.assertion.conditions = vec![AssertionCondition {
+        condition_id: id("condition-weather"),
+        condition_type: id("usage-context"),
+        parameter_ids: parameters.clone(),
+      }];
+      admitted.registry.resolved_conditions =
+        vec![super::super::assertion::ResolvedConditionReference {
+          condition_id: id("condition-weather"),
+          condition_type: id("usage-context"),
+          parameter_ids: parameters,
+          release_id: id("release-1"),
+        }];
+      build_assertion_edge_projection(&nodes, embedding("knowledge-graph-v1"), vec![admitted])
+    };
+    assert_eq!(
+      build(vec![id("param-e\u{301}")]),
+      Err(ProjectionValidationError::AssertionAdmission(
+        AssertionValidationError::UnsupportedCondition
+      ))
+    );
+    let composed = build(vec![id("param-\u{e9}")]).unwrap();
+    let separated = build(vec![id("a"), id("\u{301}")]).unwrap();
+    let combined = build(vec![id("\u{e1}")]).unwrap();
+    for lexical in [false, true] {
+      let input = |build: &EdgeProjectionBuild| {
+        let point = &build.points[0];
+        if lexical {
+          point.lexical_input.clone()
+        } else {
+          point.dense_input.clone()
+        }
+      };
+      for (artifact, expected) in [(&composed, "param-\u{e9}"), (&separated, "a\u{1f}\u{301}")] {
+        let mut field = (expected.len() as u64).to_be_bytes().to_vec();
+        field.extend_from_slice(expected.as_bytes());
+        assert!(input(artifact)
+          .canonical_bytes()
+          .windows(field.len())
+          .any(|w| w == field));
+      }
+      assert_ne!(
+        input(&separated).canonical_bytes(),
+        input(&combined).canonical_bytes()
+      );
+      assert_ne!(
+        input(&separated).input_hash(),
+        input(&combined).input_hash()
+      );
+    }
+  }
+
+  #[test]
   fn condition_parameter_encoding_preserves_v1_dense_and_lexical_hashes() {
     let nodes = build_node_projection(
       id("release-1"),
