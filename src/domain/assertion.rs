@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 use thiserror::Error;
+use unicode_normalization::UnicodeNormalization;
 
 use super::{
   canonical::{CanonicalId, EvidenceId, EvidenceUse, ReleaseId},
@@ -187,7 +188,7 @@ pub struct AssertionCondition {
   pub condition_id: CanonicalId,
   /// Closed condition type registered for the assertion relation.
   pub condition_type: CanonicalId,
-  /// Sorted unique canonical parameter identities; U+001F is reserved by edge input v1.
+  /// Sorted unique NFC parameter identities; U+001F is reserved by edge input v1.
   pub parameter_ids: Vec<CanonicalId>,
 }
 
@@ -726,11 +727,14 @@ impl CanonicalAssertion {
   }
 }
 
-// Dense and lexical edge input v1 join each parameter list with this reserved separator.
+// Edge input v1 joins with U+001F, then applies NFC. Reject identity loss before encoding.
 fn valid_condition_parameters(parameters: &[CanonicalId]) -> bool {
   parameters.len() <= MAX_CONDITION_PARAMETERS
     && !parameters.windows(2).any(|pair| pair[0] >= pair[1])
     && parameters.iter().all(|id| !id.as_str().contains('\u{1f}'))
+    && parameters
+      .iter()
+      .all(|id| id.as_str().chars().eq(id.as_str().nfc()))
 }
 
 fn validate_participant_value(
@@ -1201,6 +1205,30 @@ mod tests {
       unscoped.validate_binary_projection(&registry(), projection),
       Err(AssertionValidationError::ProjectionMismatch)
     );
+  }
+
+  #[test]
+  fn condition_parameters_require_nfc_without_rewriting_identity() {
+    let composed = id("param-\u{e9}");
+    let decomposed = id("param-e\u{301}");
+    assert_ne!(composed, decomposed);
+    let mut registry = registry();
+    let mut assertion = assertion();
+    for (parameter, expected) in [
+      (composed, Ok(())),
+      (
+        decomposed.clone(),
+        Err(AssertionValidationError::UnsupportedCondition),
+      ),
+    ] {
+      registry.resolved_conditions[0].parameter_ids = vec![parameter.clone()];
+      assertion.conditions[0].parameter_ids = vec![parameter];
+      // Matching records ensure equality mismatch cannot hide a missing scope check.
+      assert_eq!(assertion.validate_scope(&registry), expected);
+      assert_eq!(registry.validate(), expected);
+      assert_eq!(assertion.validate(&registry), expected);
+    }
+    assert_eq!(assertion.conditions[0].parameter_ids, vec![decomposed]);
   }
 
   #[test]

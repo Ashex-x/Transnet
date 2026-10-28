@@ -44,7 +44,7 @@ Qdrant 存储规范 Transnet 概念之间的关系。它是可重建的只读投
 
 ## 规范 embedding 输入
 
-Condition parameter ID 不得包含 U+001F。Assertion 与 registry admission 将其保留为 `edge-dense-input-v1` 和 `edge-lexical-input-v1` 共用的参数列表分隔符。此限制仅适用于 condition parameter，不改变通用 canonical identifier domain。v1 serialization、hash domain 与 input-spec version 均保持不变。
+Condition parameter ID 不得包含 U+001F，且必须已经是 NFC。Assertion 与 registry admission 将 U+001F 保留为 `edge-dense-input-v1` 和 `edge-lexical-input-v1` 共用的参数列表分隔符，并拒绝非 NFC identity，而不是将其规范化后接受。这些限制仅适用于 condition parameter，不改变通用 canonical identifier domain。v1 serialization、hash domain 与 input-spec version 均保持不变。此前已发布的非 NFC identity 需要独立的数据与引用审计；本 admission 规则不会改写历史发布，也不证明其安全性。
 
 冻结的输入合同为 `node-dense-input-v1`、`node-lexical-input-v1`、`edge-dense-input-v1` 与 `edge-lexical-input-v1`。每种合同使用结构化 UTF-8 规范字节、NFC（不使用 NFKC）、保留大小写与技术符号、固定字段 tag/顺序、无符号大端字节长度前缀、显式单字节 optional presence marker，以及确定性排序的有界列表。Release、typed identity、input family 与 input-spec version 都进入序列化。Dense 与 lexical 使用独立的带版本 hash domain；二者都不是 Stage 3 projection content hash，也不是未来 persisted collection hash。
 
