@@ -46,6 +46,8 @@ Qdrant contains no user, learner, account, profile, preference, query, context, 
 
 ## Canonical embedding inputs
 
+Condition parameter IDs must not contain U+001F. Assertion and registry admission reserve it as the parameter-list separator used by both `edge-dense-input-v1` and `edge-lexical-input-v1`. This restriction applies only to condition parameters, not to the general canonical identifier domain. The v1 serialization, hash domains, and input-spec versions are unchanged.
+
 The frozen input contracts are `node-dense-input-v1`, `node-lexical-input-v1`, `edge-dense-input-v1`, and `edge-lexical-input-v1`. Each uses structured UTF-8 canonical bytes, NFC normalization without NFKC, preserved case and technical symbols, fixed field tags and order, unsigned big-endian byte-length prefixes, explicit one-byte optional presence markers, and deterministically sorted bounded lists. Release, typed identity, input family, and input-spec version are serialized. Dense and lexical hashes use separate versioned domains; neither is the Stage 3 projection content hash or a future persisted collection hash.
 
 Node material is limited to an active release-owned lexeme, its dedicated lemma evidence, an optional active owned sense and definition evidence, active word forms, source-backed localized glosses, reviewed non-passage translations whose meaning scope matches the node, and the exact source/evidence lineage permitting `embedding`. Empty optional lists encode explicit absence. Query-derived aliases, heuristic forms, model output, and unreviewed translations are forbidden.

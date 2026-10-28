@@ -2179,6 +2179,71 @@ mod tests {
   }
 
   #[test]
+  fn condition_parameter_encoding_preserves_v1_dense_and_lexical_hashes() {
+    let nodes = build_node_projection(
+      id("release-1"),
+      embedding("knowledge-graph-v1"),
+      node_inputs("release-1"),
+    )
+    .unwrap();
+    let mut admitted = asserted_relationship("edge-1", "alpha", "beta");
+    let condition = AssertionCondition {
+      condition_id: id("condition-weather"),
+      condition_type: id("usage-context"),
+      parameter_ids: vec![id("param-a"), id("param-b")],
+    };
+    admitted.assertion.conditions = vec![condition.clone()];
+    admitted.registry.resolved_conditions =
+      vec![super::super::assertion::ResolvedConditionReference {
+        condition_id: condition.condition_id.clone(),
+        condition_type: condition.condition_type.clone(),
+        parameter_ids: condition.parameter_ids.clone(),
+        release_id: id("release-1"),
+      }];
+    let build = build_assertion_edge_projection(
+      &nodes,
+      embedding("knowledge-graph-v1"),
+      vec![admitted.clone()],
+    )
+    .unwrap();
+    let point = &build.points[0];
+    for input in [&point.dense_input, &point.lexical_input] {
+      let mut encoded = 15_u64.to_be_bytes().to_vec();
+      encoded.extend_from_slice(b"param-a\x1fparam-b");
+      assert!(input
+        .canonical_bytes()
+        .windows(encoded.len())
+        .any(|w| w == encoded));
+    }
+    assert_eq!(
+      point.dense_input.specification_version(),
+      "edge-dense-input-v1"
+    );
+    assert_eq!(
+      point.lexical_input.specification_version(),
+      "edge-lexical-input-v1"
+    );
+    // Captured from the unchanged v1 encoders before adding admission validation.
+    assert_eq!(
+      point.dense_input.input_hash(),
+      "sha256:038fd7fc5a695586cdb32edaac369f69dc3807eff552dfa42848d5a15d1ba029"
+    );
+    assert_eq!(
+      point.lexical_input.input_hash(),
+      "sha256:a2ee669ef012a99b363a9e52584053aa19a7427b5a6f646e5a21072d5a24fad3"
+    );
+    let invalid = vec![id("param-a\u{1f}param-b")];
+    admitted.assertion.conditions[0].parameter_ids = invalid.clone();
+    admitted.registry.resolved_conditions[0].parameter_ids = invalid;
+    assert_eq!(
+      build_assertion_edge_projection(&nodes, embedding("knowledge-graph-v1"), vec![admitted]),
+      Err(ProjectionValidationError::AssertionAdmission(
+        AssertionValidationError::UnsupportedCondition
+      ))
+    );
+  }
+
+  #[test]
   fn edge_inputs_are_structured_and_bound_to_frozen_endpoint_inputs() {
     let nodes = build_node_projection(
       id("release-1"),

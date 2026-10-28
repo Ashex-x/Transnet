@@ -187,7 +187,7 @@ pub struct AssertionCondition {
   pub condition_id: CanonicalId,
   /// Closed condition type registered for the assertion relation.
   pub condition_type: CanonicalId,
-  /// Sorted unique canonical parameter identities.
+  /// Sorted unique canonical parameter identities; U+001F is reserved by edge input v1.
   pub parameter_ids: Vec<CanonicalId>,
 }
 
@@ -432,12 +432,7 @@ impl AssertionRegistryEntry {
       return Err(AssertionValidationError::UnknownRegistryEntry);
     }
     for condition in &self.resolved_conditions {
-      if condition.parameter_ids.len() > MAX_CONDITION_PARAMETERS
-        || condition
-          .parameter_ids
-          .windows(2)
-          .any(|pair| pair[0] >= pair[1])
-      {
+      if !valid_condition_parameters(&condition.parameter_ids) {
         return Err(AssertionValidationError::UnsupportedCondition);
       }
     }
@@ -661,11 +656,7 @@ impl CanonicalAssertion {
     let mut condition_ids = BTreeSet::new();
     for condition in &self.conditions {
       if !condition_ids.insert(&condition.condition_id)
-        || condition.parameter_ids.len() > MAX_CONDITION_PARAMETERS
-        || condition
-          .parameter_ids
-          .windows(2)
-          .any(|pair| pair[0] >= pair[1])
+        || !valid_condition_parameters(&condition.parameter_ids)
       {
         return Err(AssertionValidationError::UnsupportedCondition);
       }
@@ -733,6 +724,13 @@ impl CanonicalAssertion {
     }
     Ok(value)
   }
+}
+
+// Dense and lexical edge input v1 join each parameter list with this reserved separator.
+fn valid_condition_parameters(parameters: &[CanonicalId]) -> bool {
+  parameters.len() <= MAX_CONDITION_PARAMETERS
+    && !parameters.windows(2).any(|pair| pair[0] >= pair[1])
+    && parameters.iter().all(|id| !id.as_str().contains('\u{1f}'))
 }
 
 fn validate_participant_value(
@@ -1202,6 +1200,35 @@ mod tests {
     assert_eq!(
       unscoped.validate_binary_projection(&registry(), projection),
       Err(AssertionValidationError::ProjectionMismatch)
+    );
+  }
+
+  #[test]
+  fn condition_parameters_reject_reserved_edge_input_separator() {
+    for parameters in [vec![id("param-a")], vec![id("param-a"), id("param-b")]] {
+      let mut registry = registry();
+      let mut assertion = assertion();
+      registry.resolved_conditions[0].parameter_ids = parameters.clone();
+      assertion.conditions[0].parameter_ids = parameters;
+      assert_eq!(registry.validate(), Ok(()));
+      assert_eq!(assertion.validate(&registry), Ok(()));
+    }
+    let invalid = vec![id("param-a\u{1f}param-b")];
+    let mut registry = registry();
+    let mut assertion = assertion();
+    assertion.conditions[0].parameter_ids = invalid.clone();
+    assert_eq!(
+      assertion.validate_scope(&registry),
+      Err(AssertionValidationError::UnsupportedCondition)
+    );
+    registry.resolved_conditions[0].parameter_ids = invalid;
+    assert_eq!(
+      registry.validate(),
+      Err(AssertionValidationError::UnsupportedCondition)
+    );
+    assert_eq!(
+      assertion.validate(&registry),
+      Err(AssertionValidationError::UnsupportedCondition)
     );
   }
 
