@@ -148,11 +148,38 @@ async fn streaming_translation_emits_validated_result_and_done() {
       .to_vec(),
   )
   .unwrap();
-  assert!(wire.contains("event: progress"));
-  assert!(wire.contains("event: translation"), "{wire}");
-  assert!(wire.contains("event: result"));
-  assert!(wire.contains("event: done"));
-  assert!(!wire.contains("event: thinking"));
+  let events: Vec<(&str, Value)> = wire
+    .split("\n\n")
+    .filter_map(|frame| {
+      let name = frame
+        .lines()
+        .find_map(|line| line.strip_prefix("event: "))?;
+      let data = frame.lines().find_map(|line| line.strip_prefix("data: "))?;
+      Some((name, serde_json::from_str(data).unwrap()))
+    })
+    .collect();
+  assert_eq!(
+    events.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
+    [
+      "progress",
+      "progress",
+      "progress",
+      "progress",
+      "translation",
+      "result",
+      "done"
+    ]
+  );
+  assert_eq!(events[0].1["phase"], "admitted");
+  assert_eq!(events[1].1["phase"], "generating");
+  assert_eq!(events[2].1["phase"], "validating");
+  assert_eq!(events[3].1["phase"], "enriching");
+  assert_eq!(events[4].1["delta"], events[5].1["data"]["translation"]);
+  assert_eq!(events[5].1["meta"]["request_id"], "frontend-stream-17");
+  assert_eq!(
+    events[5].1["meta"]["schema_version"],
+    "translation-result-v1"
+  );
 }
 
 #[tokio::test]

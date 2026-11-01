@@ -33,11 +33,15 @@ pub(crate) async fn translate_stream(
   Extension(cancellations): Extension<RequestCancellationFactory>,
   payload: Result<Json<TranslationTurnRequest>, JsonRejection>,
 ) -> Response {
-  let (events_tx, events_rx) = tokio::sync::mpsc::unbounded_channel::<Event>();
+  let (events_tx, events_rx) = tokio::sync::mpsc::channel::<Event>(8);
   let request_id_for_task = request_id.clone();
-  tokio::spawn(async move {
-    send_event(&events_tx, "progress", json!({"phase":"admitted"}));
-    send_event(&events_tx, "progress", json!({"phase":"generating"}));
+  let task = tokio::spawn(async move {
+    if !send_event(&events_tx, "progress", json!({"phase":"admitted"})).await {
+      return;
+    }
+    if !send_event(&events_tx, "progress", json!({"phase":"generating"})).await {
+      return;
+    }
     let (provider_tx, mut provider_rx) = tokio::sync::mpsc::unbounded_channel();
     let operation = crate::provider::with_stream_events(
       provider_tx,
@@ -52,49 +56,64 @@ pub(crate) async fn translate_stream(
     tokio::pin!(operation);
     let response = loop {
       tokio::select! {
-        event = provider_rx.recv() => match event {
-          Some(crate::provider::ProviderStreamEvent::ReasoningDelta(delta)) => {
-            send_event(&events_tx, "thinking", json!({"delta":delta}));
-          }
-          None => {}
+        Some(crate::provider::ProviderStreamEvent::ReasoningDelta(delta)) = provider_rx.recv() => {
+          if !send_event(&events_tx, "thinking", json!({"delta":delta})).await { return; }
         },
         response = &mut operation => break response,
       }
     };
-    send_event(&events_tx, "progress", json!({"phase":"validating"}));
+    if !send_event(&events_tx, "progress", json!({"phase":"validating"})).await {
+      return;
+    }
     let status = response.status();
     let bytes = match to_bytes(response.into_body(), 2 * 1024 * 1024).await {
       Ok(bytes) => bytes,
       Err(_) => {
-        send_event(
+        let _ = send_event(
           &events_tx,
           "error",
           json!({"code":"stream_response_invalid"}),
-        );
-        send_event(&events_tx, "done", json!({}));
+        )
+        .await;
+        let _ = send_event(&events_tx, "done", json!({})).await;
         return;
       }
     };
     let value: Value =
       serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({"code":"stream_response_invalid"}));
     if status.is_success() {
-      send_event(&events_tx, "progress", json!({"phase":"enriching"}));
-      if let Some(translation) = value.pointer("/data/translation") {
-        send_event(&events_tx, "translation", json!({"delta":translation}));
+      if !send_event(&events_tx, "progress", json!({"phase":"enriching"})).await {
+        return;
       }
-      send_event(&events_tx, "result", value);
+      if let Some(translation) = value.pointer("/data/translation") {
+        if !send_event(&events_tx, "translation", json!({"delta":translation})).await {
+          return;
+        }
+      }
+      if !send_event(&events_tx, "result", value).await {
+        return;
+      }
     } else {
-      send_event(&events_tx, "error", value);
+      if !send_event(&events_tx, "error", value).await {
+        return;
+      }
     }
-    send_event(&events_tx, "done", json!({}));
+    let _ = send_event(&events_tx, "done", json!({})).await;
   });
 
-  let stream = futures_util::stream::unfold(events_rx, |mut receiver| async move {
-    receiver
-      .recv()
-      .await
-      .map(|event| (Ok::<_, Infallible>(event), receiver))
-  });
+  let stream = futures_util::stream::unfold(
+    StreamState {
+      receiver: events_rx,
+      task,
+    },
+    |mut state| async move {
+      state
+        .receiver
+        .recv()
+        .await
+        .map(|event| (Ok::<_, Infallible>(event), state))
+    },
+  );
   let mut response = Sse::new(stream).into_response();
   response.headers_mut().insert(
     axum::http::header::CACHE_CONTROL,
@@ -103,9 +122,28 @@ pub(crate) async fn translate_stream(
   response
 }
 
-fn send_event(sender: &tokio::sync::mpsc::UnboundedSender<Event>, name: &'static str, data: Value) {
-  if let Ok(encoded) = serde_json::to_string(&data) {
-    let _ = sender.send(Event::default().event(name).data(encoded));
+struct StreamState {
+  receiver: tokio::sync::mpsc::Receiver<Event>,
+  task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for StreamState {
+  fn drop(&mut self) {
+    self.task.abort();
+  }
+}
+
+async fn send_event(
+  sender: &tokio::sync::mpsc::Sender<Event>,
+  name: &'static str,
+  data: Value,
+) -> bool {
+  match serde_json::to_string(&data) {
+    Ok(encoded) => sender
+      .send(Event::default().event(name).data(encoded))
+      .await
+      .is_ok(),
+    Err(_) => false,
   }
 }
 
