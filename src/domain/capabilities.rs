@@ -4,7 +4,11 @@ use serde::Serialize;
 
 use crate::{
   application::translation::{MAX_CONNECTED_CHUNKS, MAX_CONNECTED_CHUNK_CHARS},
-  domain::translation_turn::{MAX_GENERATION_CONTEXT_BYTES, MAX_LEXICAL_CHARS, MAX_TURN_BYTES},
+  domain::translation_turn::{
+    MAX_GENERATION_CONTEXT_BYTES, MAX_IMAGES, MAX_IMAGE_BYTES, MAX_IMAGE_DIMENSION,
+    MAX_IMAGE_REGIONS, MAX_INPUT_SCALARS, MAX_LEXICAL_CHARS, MAX_PROTECTED_RANGES, MAX_SEGMENTS,
+    MAX_SEGMENT_SCALARS, MAX_TERMINOLOGY, MAX_TURN_BYTES,
+  },
 };
 
 /// Current runtime capabilities safe to expose to an internal caller.
@@ -59,6 +63,16 @@ impl ServiceCapabilities {
         max_lexical_chars: MAX_LEXICAL_CHARS,
         max_connected_chunk_chars: MAX_CONNECTED_CHUNK_CHARS,
         max_connected_chunks: MAX_CONNECTED_CHUNKS,
+        max_text_scalars: MAX_INPUT_SCALARS,
+        max_segments: MAX_SEGMENTS,
+        max_segment_scalars: MAX_SEGMENT_SCALARS,
+        max_protected_ranges_per_segment: MAX_PROTECTED_RANGES,
+        max_images: MAX_IMAGES,
+        max_image_bytes: MAX_IMAGE_BYTES,
+        max_image_width: MAX_IMAGE_DIMENSION,
+        max_image_height: MAX_IMAGE_DIMENSION,
+        max_regions: MAX_IMAGE_REGIONS,
+        max_terminology_entries: MAX_TERMINOLOGY,
       },
       live_retrieval: LiveRetrievalCapability {
         available: false,
@@ -347,6 +361,26 @@ pub struct CapabilityLimits {
   pub max_connected_chunk_chars: usize,
   /// Maximum number of connected-text chunks.
   pub max_connected_chunks: usize,
+  /// Maximum Unicode scalar values across text or all segments.
+  pub max_text_scalars: usize,
+  /// Maximum structured segments in one request.
+  pub max_segments: usize,
+  /// Maximum Unicode scalar values in one segment.
+  pub max_segment_scalars: usize,
+  /// Maximum protected ranges in one segment.
+  pub max_protected_ranges_per_segment: usize,
+  /// Maximum inline images in one request.
+  pub max_images: usize,
+  /// Maximum decoded bytes in one inline image.
+  pub max_image_bytes: usize,
+  /// Maximum image width in pixels.
+  pub max_image_width: u32,
+  /// Maximum image height in pixels.
+  pub max_image_height: u32,
+  /// Maximum image regions across the request.
+  pub max_regions: usize,
+  /// Maximum request-scoped terminology entries.
+  pub max_terminology_entries: usize,
 }
 
 /// Live-retrieval declaration.

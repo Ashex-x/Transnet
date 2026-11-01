@@ -57,6 +57,23 @@ async fn refuses_manually_advertised_knowledge_without_the_atomic_route_bundle()
 
   assert_eq!(json["data"]["knowledge_lenses"], serde_json::json!([]));
   assert_eq!(json["data"]["limits"]["max_request_body_bytes"], 8_192);
+  assert_eq!(
+    json["data"]["limits"]["max_translation_bytes"],
+    12 * 1_048_576
+  );
+  assert_eq!(json["data"]["limits"]["max_text_scalars"], 131_072);
+  assert_eq!(json["data"]["limits"]["max_segments"], 256);
+  assert_eq!(json["data"]["limits"]["max_segment_scalars"], 8_192);
+  assert_eq!(
+    json["data"]["limits"]["max_protected_ranges_per_segment"],
+    128
+  );
+  assert_eq!(json["data"]["limits"]["max_images"], 4);
+  assert_eq!(json["data"]["limits"]["max_image_bytes"], 2 * 1_048_576);
+  assert_eq!(json["data"]["limits"]["max_image_width"], 4_096);
+  assert_eq!(json["data"]["limits"]["max_image_height"], 4_096);
+  assert_eq!(json["data"]["limits"]["max_regions"], 16);
+  assert_eq!(json["data"]["limits"]["max_terminology_entries"], 128);
 }
 
 async fn body(response: axum::response::Response) -> (String, Value) {

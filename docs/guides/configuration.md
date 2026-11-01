@@ -8,7 +8,7 @@ The implemented target listener configuration uses `socket_path = "/run/transnet
 
 Transnet serves HTTP/1.1 only on the required absolute `socket_path` and drains accepted connections for up to 30 seconds during shutdown. `host` and `port` are rejected legacy keys. `RUST_LOG` overrides `log_level`; `log_format = "json"` selects newline-delimited JSON and other values select compact text. Debug builds write `logs/debug/transnet.log`; release builds write `logs/release/transnet.log`.
 
-`[http]` configures only `max_request_body_bytes`. The body limit applies before JSON is buffered and defaults to 1,048,576 bytes. CORS keys are rejected because browsers call a product gateway, not Transnet; end-user authentication remains owned by island-port.
+`[http]` configures only `max_request_body_bytes`. The body limit applies before JSON is buffered and defaults to 1,048,576 bytes; production sets 12,582,912 bytes so four bounded inline images fit in a translation request. The product gateway retains its lower limit on non-translation routes. CORS keys are rejected because browsers call a product gateway, not Transnet; end-user authentication remains owned by island-port.
 
 `[translation]` configures default per-attempt timeout, retry count after the first attempt, and retry delay for generation. Provider-specific overrides take precedence.
 

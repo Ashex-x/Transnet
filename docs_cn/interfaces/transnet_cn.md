@@ -35,7 +35,7 @@ Transnet 监听 `/run/transnet/transnet.sock`；Transnet 数据 adapter 调用 `
 
 每个操作使用 HTTP/1.1、origin-form `/api/v1/...` 路径、`Host: localhost`、UTF-8 JSON 与 `POST`。空输入为 `{}`。Client 发送 `Content-Type: application/json`、`Accept: application/json`、有界 `Content-Length` 和可选 `X-Request-Id`、`X-Deadline-At`。拒绝 query string、chunked request body、multipart body、upgrade；仅翻译 stream 路由允许响应 streaming。Server 拒绝未知 JSON 字段，并返回 `X-Request-Id` 与 `Cache-Control: no-store`。
 
-默认 body 上限为 1 MiB。含 inline 图片的翻译请求可使用该路由专属 12 MiB 编码 body 上限。最多接受四张解码图片，每张不超过 2 MiB 或 4096 × 4096 像素；整个请求最多十六个 region。支持 `image/png`、`image/jpeg` 与 `image/webp`。
+Transnet listener 默认 body 上限为 1 MiB；生产配置将 listener 上限提高至 12 MiB 以支持 inline 图片。Island-port 对其他路由仍限制 1 MiB，对翻译路由允许 12 MiB 编码 body。最多接受四张解码图片，每张不超过 2 MiB 或 4096 × 4096 像素；整个请求最多十六个 region。支持 `image/png`、`image/jpeg` 与 `image/webp`。
 
 ID 是不透明 URL-safe 字符串。时间戳为 UTC RFC 3339 微秒精度。语言值是 capability 公布的规范 BCP 47 tag；`auto` 只允许用于源语言。
 
@@ -269,7 +269,7 @@ Capabilities 遵循整个 interface 的响应策略：每个响应都携带 `Cac
     "purposes": [],
     "annotation_families": ["format"],
     "knowledge_lenses": [],
-    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_generation_context_bytes": 8192, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
+    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 12582912, "max_generation_context_bytes": 8192, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128, "max_text_scalars": 131072, "max_segments": 256, "max_segment_scalars": 8192, "max_protected_ranges_per_segment": 128, "max_images": 4, "max_image_bytes": 2097152, "max_image_width": 4096, "max_image_height": 4096, "max_regions": 16, "max_terminology_entries": 128},
     "live_retrieval": {"available": false, "default": "offline", "input_types": []},
     "generation_profiles": ["fast", "reasoning"],
     "schema_versions": ["translation-result-v1"]

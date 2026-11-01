@@ -35,7 +35,7 @@ Transnet listens on `/run/transnet/transnet.sock`; Transnet data adapters call `
 
 Every operation uses HTTP/1.1, an origin-form `/api/v1/...` path, `Host: localhost`, UTF-8 JSON, and `POST`. Empty input is `{}`. Clients send `Content-Type: application/json`, `Accept: application/json`, a bounded `Content-Length`, and optionally `X-Request-Id` and `X-Deadline-At`. Query strings, chunked request bodies, multipart bodies, upgrades, and response streaming outside the translation stream route are rejected. Servers reject unknown JSON fields and return `X-Request-Id` plus `Cache-Control: no-store`.
 
-The default body limit is 1 MiB. A translation request containing inline images may use the route-specific 12 MiB encoded-body limit. At most four decoded images are accepted, each no larger than 2 MiB or 4096 by 4096 pixels, with at most sixteen regions across the request. Supported image media types are `image/png`, `image/jpeg`, and `image/webp`.
+The default Transnet listener body limit is 1 MiB; production raises the listener limit to 12 MiB for inline images. Island-port retains a 1 MiB gateway limit for other routes and allows 12 MiB encoded bodies on translation routes. At most four decoded images are accepted, each no larger than 2 MiB or 4096 by 4096 pixels, with at most sixteen regions across the request. Supported image media types are `image/png`, `image/jpeg`, and `image/webp`.
 
 IDs are opaque URL-safe strings. Timestamps are UTC RFC 3339 with microsecond precision. Language values are canonical BCP 47 tags advertised by capabilities; `auto` is accepted only for the source language.
 
@@ -269,7 +269,7 @@ Request: `{}`
     "purposes": [],
     "annotation_families": ["format"],
     "knowledge_lenses": [],
-    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 1048576, "max_generation_context_bytes": 8192, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128},
+    "limits": {"max_request_body_bytes": 1048576, "max_translation_bytes": 12582912, "max_generation_context_bytes": 8192, "max_lexical_chars": 128, "max_connected_chunk_chars": 8192, "max_connected_chunks": 128, "max_text_scalars": 131072, "max_segments": 256, "max_segment_scalars": 8192, "max_protected_ranges_per_segment": 128, "max_images": 4, "max_image_bytes": 2097152, "max_image_width": 4096, "max_image_height": 4096, "max_regions": 16, "max_terminology_entries": 128},
     "live_retrieval": {"available": false, "default": "offline", "input_types": []},
     "generation_profiles": ["fast", "reasoning"],
     "schema_versions": ["translation-result-v1"]

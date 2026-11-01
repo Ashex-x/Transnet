@@ -9,6 +9,7 @@ fn production_config_runs_model_only_without_unpublished_canonical_data() {
   let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("deploy/transnet.production.toml");
   let config = AppConfig::load(&path).expect("production configuration must parse");
 
+  assert_eq!(config.http.max_request_body_bytes, 12 * 1_048_576);
   assert!(!config.canonical.enabled);
   assert!(config.canonical.resolve().unwrap().is_none());
   assert!(!config.knowledge.enabled);
