@@ -1,6 +1,6 @@
 # Agent instructions
 
-Read the repository before writing code. Start with `README.md`, `conventions.v1.0.1.md`, and `docs/documentation-index.md`; then read the authoritative design or interface document for the area you will change and its Chinese mirror under `docs_cn`. Inspect `git status` and the relevant diff before editing because the worktree may contain user changes.
+Read the repository before writing code. Start with `README.md`, `conventions.v1.3.0.md`, and `docs/documentation-index.md`; then read the authoritative design or interface document for the area you will change and its Chinese mirror under `docs_cn`. Inspect `git status` and the relevant diff before editing because the worktree may contain user changes.
 
 ## Repository map
 
@@ -25,9 +25,9 @@ MySQL is authoritative for canonical structured content and immutable releases. 
 
 ## Change rules
 
-Follow `conventions.v1.0.1.md` in full. In particular:
+Follow `conventions.v1.3.0.md` in full. In particular:
 
-- begin every Rust source file with a module comment and document every public item and field;
+- add concise Rust documentation for non-obvious contracts, ownership, safety, and failure behavior;
 - reject unknown wire fields and keep request/response examples valid JSON;
 - update an English API, configuration, process-boundary, or workflow document together with its Chinese mirror;
 - preserve unrelated worktree changes and stage or commit only explicit paths when asked;

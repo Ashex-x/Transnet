@@ -31,7 +31,7 @@ English: [Transnet documentation](../docs/documentation-index.md)
 
 ## 仓库规则
 
-- [仓库约定 v1.0.1](conventions-v1.0.1_cn.md)
+- [仓库约定 v1.3.0](conventions-v1.3.0_cn.md)
 
 ## 术语与实现状态
 

@@ -2,7 +2,7 @@
 
 English: [Development and operations](../../docs/guides/development.md)
 
-根目录 [README](../../README.md) 说明前置条件、构建、校验、运行和探针。仓库修改遵循[约定](../conventions-v1.0.1_cn.md)。
+根目录 [README](../../README.md) 说明前置条件、构建、校验、运行和探针。仓库修改遵循[约定](../conventions-v1.3.0_cn.md)。
 
 使用 `python3 tools/validate_docs.py` 校验 fenced JSON 示例、本地 Markdown 链接及中英文标题层级一致性。提交文档变更前，将此校验器与 Rust 校验命令一同运行。
 
