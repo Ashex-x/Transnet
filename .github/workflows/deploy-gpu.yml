@@ -117,11 +117,8 @@ jobs:
               test -r "$release/transnet.toml"
               sed -i \
                 -e 's#/run/transnet/transnet.sock#/home/ashex/services/island.transnet/transnet.sock#' \
-                -e 's#/run/island-port/island-port.sock#/home/ashex/services/island-port/island-port.sock#' \
                 "$release/transnet.toml"
               grep -Fq 'socket_path = "/home/ashex/services/island.transnet/transnet.sock"' \
-                "$release/transnet.toml"
-              grep -Fq 'socket_path = "/home/ashex/services/island-port/island-port.sock"' \
                 "$release/transnet.toml"
               previous="$(readlink -f "$root/current" 2>/dev/null || true)"
               ln -sfn "$release" "$root/current.next"
@@ -133,6 +130,11 @@ jobs:
                   && curl --fail --silent --show-error \
                     --unix-socket "$root/transnet.sock" \
                     --request POST http://localhost/api/v1/health \
+                    --header 'content-type: application/json' \
+                    --data '{}' >/dev/null \
+                  && curl --fail --silent --show-error \
+                    --unix-socket "$root/transnet.sock" \
+                    --request POST http://localhost/api/v1/readyz \
                     --header 'content-type: application/json' \
                     --data '{}' >/dev/null; then
                   healthy=true
