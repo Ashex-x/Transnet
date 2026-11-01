@@ -8,14 +8,11 @@ log_format = "json"
 max_request_body_bytes = 1048576
 
 [canonical]
-enabled = true
-socket_path = "/run/island-port/island-port.sock"
-timeout_ms = 5000
+enabled = false
 
 [knowledge]
-enabled = true
+enabled = false
 required = false
-cursor_secret_env = "TRANSNET_KNOWLEDGE_CURSOR_SECRET"
 
 [translation]
 timeout_seconds = 105
