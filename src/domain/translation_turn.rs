@@ -6,7 +6,7 @@ use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
 
 /// Hard bound for serialized input accepted through either HTTP or the public service API.
-pub const MAX_TURN_BYTES: usize = 1_048_576;
+pub const MAX_TURN_BYTES: usize = 12 * 1_048_576;
 /// Version of the request-local translation lookup normalization rules.
 pub const NORMALIZER_VERSION: &str = "translation-lookup-nfc-v1";
 /// Version of deterministic response breadth rules.

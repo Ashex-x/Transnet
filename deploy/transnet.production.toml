@@ -5,7 +5,7 @@ log_level = "info"
 log_format = "json"
 
 [http]
-max_request_body_bytes = 1048576
+max_request_body_bytes = 12582912
 
 [canonical]
 enabled = false

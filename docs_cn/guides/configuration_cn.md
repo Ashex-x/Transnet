@@ -8,7 +8,7 @@ English: [Configuration](../../docs/guides/configuration.md)
 
 Transnet 仅通过必填的绝对 `socket_path` 服务 HTTP/1.1，并在关闭时给予已接受连接最多 30 秒完成。旧 `host` 与 `port` 键会被拒绝。`RUST_LOG` 覆盖 `log_level`；`log_format = "json"` 选择换行分隔 JSON，其他值选择紧凑文本。
 
-`[http]` 只配置 `max_request_body_bytes`。请求体限制在缓冲 JSON 前应用，默认 1,048,576 字节。CORS 键会被拒绝，因为浏览器调用产品网关而非 Transnet；终端用户认证仍由 island-port 负责。
+`[http]` 只配置 `max_request_body_bytes`。请求体限制在缓冲 JSON 前应用，默认 1,048,576 字节；生产配置设为 12,582,912 字节，以容纳四张有界 inline 图片。产品网关对非翻译路由仍采用较低上限。CORS 键会被拒绝，因为浏览器调用产品网关而非 Transnet；终端用户认证仍由 island-port 负责。
 
 `[translation]` 配置 Unicode 字符数路由边界，以及 Provider 单次超时、首次之后重试次数和重试延迟的旧版默认值。Provider 专属覆盖优先。
 

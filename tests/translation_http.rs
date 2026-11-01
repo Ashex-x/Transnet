@@ -818,6 +818,29 @@ async fn target_payload_limit_uses_the_shared_problem_contract() {
 }
 
 #[tokio::test]
+async fn production_body_limit_reaches_semantic_validation_above_one_mib() {
+  let router = app_router_with_http_config(
+    AppState::new(),
+    &HttpConfig {
+      max_request_body_bytes: 12 * 1_048_576,
+    },
+  )
+  .unwrap();
+  let response = router
+    .oneshot(request(json!({
+      "input": {"type": "text", "text": "x".repeat(1_100_000)},
+      "source_language": "en",
+      "target_language": "zh-CN",
+      "response_level": "brief"
+    })))
+    .await
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+  assert_eq!(body(response).await["code"], "invalid_translation_request");
+}
+
+#[tokio::test]
 async fn missing_orchestrator_fails_closed_on_the_target_route() {
   let router = app_router(AppState::new());
   let response = router
