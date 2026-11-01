@@ -7,6 +7,7 @@ English: [GPU-server deployment](../../docs/guides/deployment.md)
 ## GPU 服务器服务配置
 
 当前生产服务是 `ashex` 用户级单元 `island-transnet.service`。它从 `/home/ashex/services/island.transnet/current` 运行，绑定 `/home/ashex/services/island.transnet/transnet.sock`，由 GitHub 工作流通过 `systemctl --user` 重启。部署工作流在激活不可变 release 前只改写 listener socket 路径。应保持用户级单元启用，并允许 `ashex` 写入服务目录；另一套系统级 `island.transnet.service` 不是部署目标。
+如果仍安装旧的系统级单元，管理员必须先执行 `sudo systemctl disable --now island.transnet.service` 停止并禁用它，再启动用户级单元；否则两者会争夺同一 socket。部署 gate 会核对运行中的用户级单元 PID 是否拥有 socket 并执行当前 release binary；旧单元占用的可连接 socket 不会被误判为部署成功。
 
 仓库中的生产配置当前采用纯模型翻译。由于尚未发布经审核的 canonical release，`[canonical]` 与 `[knowledge]` 均关闭。该配置无需 canonical socket 或知识游标密钥，不公告知识视角，并将相关就绪组件报告为 `disabled`。成功翻译仍需模型 endpoint 和 generation provider；目标就绪只报告已配置依赖的状态，并非虚构的模型输出测试。
 

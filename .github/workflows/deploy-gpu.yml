@@ -126,7 +126,11 @@ jobs:
               systemctl --user restart island-transnet.service
               healthy=false
               for _ in $(seq 1 30); do
+                pid="$(systemctl --user show --property MainPID --value island-transnet.service)"
                 if systemctl --user is-active --quiet island-transnet.service \
+                  && test "$pid" -gt 0 \
+                  && test "$(readlink -f "/proc/$pid/exe")" = "$release/transnet" \
+                  && ss -lxp | grep -F "$root/transnet.sock" | grep -Fq "pid=$pid," \
                   && curl --fail --silent --show-error \
                     --unix-socket "$root/transnet.sock" \
                     --request POST http://localhost/api/v1/health \
