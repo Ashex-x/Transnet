@@ -33,7 +33,7 @@ English: [Transnet service interface](../../docs/interfaces/transnet.md)
 
 Transnet 监听 `/run/transnet/transnet.sock`；Transnet 数据 adapter 调用 `/run/island-port/island-port.sock`。部署可以通过配置迁移 socket，但 endpoint 路径和 payload 不变。Socket owner 创建父目录，只在证明旧 socket 不活动后移除它，以 `0660` 模式绑定，并依赖文件系统 workload identity，而不是转发的用户 header。
 
-每个操作使用 HTTP/1.1、origin-form `/api/v1/...` 路径、`Host: localhost`、UTF-8 JSON 与 `POST`。空输入为 `{}`。Client 发送 `Content-Type: application/json`、`Accept: application/json`、有界 `Content-Length` 和可选 `X-Request-Id`、`X-Deadline-At`。拒绝 query string、chunked request body、multipart body、upgrade 与响应 streaming。Server 拒绝未知 JSON 字段，并返回 `X-Request-Id` 与 `Cache-Control: no-store`。
+每个操作使用 HTTP/1.1、origin-form `/api/v1/...` 路径、`Host: localhost`、UTF-8 JSON 与 `POST`。空输入为 `{}`。Client 发送 `Content-Type: application/json`、`Accept: application/json`、有界 `Content-Length` 和可选 `X-Request-Id`、`X-Deadline-At`。拒绝 query string、chunked request body、multipart body、upgrade；仅翻译 stream 路由允许响应 streaming。Server 拒绝未知 JSON 字段，并返回 `X-Request-Id` 与 `Cache-Control: no-store`。
 
 默认 body 上限为 1 MiB。含 inline 图片的翻译请求可使用该路由专属 12 MiB 编码 body 上限。最多接受四张解码图片，每张不超过 2 MiB 或 4096 × 4096 像素；整个请求最多十六个 region。支持 `image/png`、`image/jpeg` 与 `image/webp`。
 
@@ -318,7 +318,7 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 
 ## POST /api/v1/translations/stream
 
-接受与 `/translations` 相同的严格 JSON body，并返回 `text/event-stream`。事件包括：携带闭合阶段 `admitted`、`generating`、`validating`、`enriching` 的 `progress`；可选、携带 `delta` 的 `thinking`；携带已校验翻译增量的 `translation`；携带完整既有成功 envelope 的 `result`；携带既有 problem envelope 的 `error`；以及终止事件 `done`。翻译内容只在常规校验完成后发送。只有实际选择 reasoning profile 时才可发送 `thinking`，且内容只能来自 llama.cpp 独立的 `reasoning_content` 字段；Transnet 绝不从答案文本推断隐藏推理。Provider 请求对 fast 调用使用 `reasoning_format: none` 与 `reasoning_effort: none`，对 reasoning 调用使用 `reasoning_format: auto` 与 `reasoning_effort: high`，并始终启用 streaming。非流式路由保持不变。
+接受与 `/translations` 相同的严格 JSON body，并返回 `text/event-stream`。事件包括：携带闭合阶段 `admitted`、`generating`、`validating`、`enriching` 的 `progress`；可选、携带 `delta` 的 `thinking`；携带已校验翻译增量的 `translation`；携带完整既有成功 envelope 的 `result`；携带既有 problem envelope 的 `error`；以及终止事件 `done`。翻译内容只在常规校验完成后发送。当前 provider 对两个应用 profile 均关闭 llama.cpp 原生 thinking（`chat_template_kwargs.enable_thinking: false`、`reasoning: off`、`reasoning_format: auto`、`reasoning_effort: none`、`reasoning_budget_tokens: 0`），并为严格 JSON 保留最多 768 个输出 token。因此当前部署不发送 `thinking`；未来若 provider 启用该能力，只能从 llama.cpp 独立的 `reasoning_content` 字段产生此事件。Transnet 绝不从答案文本推断隐藏推理。Stream 使用有界事件队列，并在调用方断开时停止请求任务。非流式路由保持不变。
 
 ## POST /api/v1/basic-cards/lookup
 
@@ -336,11 +336,12 @@ Event loop 与 listener 存活时返回 `200`，不表示 readiness。请求为 
 
 ```json
 {
-  "root": {"kind": "sense", "id": "sense_sweltering_hot_01"},
+  "root": {"kind": "lexical_sense", "id": "sense_sweltering_hot_01"},
   "lens": "contrast",
   "target_language": "zh-CN",
   "response_level": "full",
   "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1",
   "cursor": null
 }
 ```

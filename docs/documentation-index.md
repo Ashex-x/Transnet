@@ -31,7 +31,7 @@
 
 ## Repository rules
 
-- [Repository conventions v1.0.1](../conventions.v1.0.1.md): Rust, documentation, verification, and Git rules.
+- [Repository conventions v1.3.0](../conventions.v1.3.0.md): Rust, documentation, verification, and Git rules.
 
 The system design is authoritative for product semantics. Interface documents are normative within their stated implementation status; Rust trait details remain in source comments and rustdoc.
 

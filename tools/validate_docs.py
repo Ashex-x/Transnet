@@ -169,8 +169,8 @@ def chinese_mirror(path: Path, root: Path) -> Path | None:
   """Map an English documentation path to its required Chinese mirror."""
   if path == root / "README.md":
     return root / "README_cn.md"
-  if path == root / "conventions.v1.0.1.md":
-    return root / "docs_cn" / "conventions-v1.0.1_cn.md"
+  if path == root / "conventions.v1.3.0.md":
+    return root / "docs_cn" / "conventions-v1.3.0_cn.md"
   docs_root = root / "docs"
   try:
     relative = path.relative_to(docs_root)

@@ -1,20 +1,14 @@
 # Transnet conventions
 
-Version: 1.0.1
+Version: 1.3.0
+
+This convention version is independent of the application version. Version 1.3.0 adds owner-specific contract fields, first-use guide order, shared observability, and release records. Earlier versions remain in Git history.
 
 These rules apply to the entire repository. A later versioned conventions file supersedes this one only after repository references are updated. When a component-specific document under docs conflicts with this file, that component document wins for its scope only.
 
 ## Inline documentation
 
-Every public item needs a short note so readers and generated documentation can understand its intent without opening the body. One sentence is sufficient when the name is clear, but document non-obvious design choices, usage constraints, caller responsibilities, units, error behavior, and invariants.
-
-Code notes live beside the symbol in source. Product, architecture, operations, and contract documentation live under docs according to ownership.
-
-Document every module or file header, public type, public function or method, and unsafe API. Also document public fields and private items when they are easy to misuse. Write for a reader who did not write the code: explain role, contract, lifecycle, boundaries, units, errors, panics, timeouts, ownership, validity, and idempotency when relevant. Do not repeat an identifier, and fix notes that no longer match the code.
-
-For Rust, use `//!` for module or crate prose at the top of a file and `///` for items. Start with a one-sentence summary. Link public types where useful, add `# Errors` to fallible public APIs, add `# Safety` to unsafe APIs, and state complexity or lock scope when it affects callers.
-
-All new public items must be documented before merge. When editing a file, add or correct notes on changed public items and nearby stale notes. The file checklist is: header note, every public type and function documented, non-obvious fields documented, and no stale or boilerplate comments.
+Keep comments short and close to the relevant code. Explain constraints, ownership, safety, concurrency, or surprising failures that names and types do not reveal. Do not add boilerplate merely to cover every public item. Rust uses `//!` for useful module context and `///` for non-obvious public contracts. Document unsafe contracts and fallible behavior when callers need it. In-code comments are in English. Fix stale notes when changing behavior.
 
 ## Markdown documentation
 
@@ -57,6 +51,18 @@ English documentation lives in docs. Each translation uses a localized docs_<lan
 
 Use fenced json blocks for endpoint and interface requests and responses. Keep examples simple, valid, consistently indented, and limited to relevant fields. Use other fenced blocks only when syntax highlighting or a multiline non-JSON artifact materially improves clarity.
 
+## Contracts and first-use guides
+
+Keep each hand-written interface contract with the component that owns admission or the wire. For each public field, state its type, unit where relevant, purpose, default or absence behavior, validation, and compatibility rule. State caller and owner, transport, lifecycle, timeouts, failure results, and valid request, response, and error examples. Mark target-only behavior **Target design — not implemented** and link executable work in a TODO.
+
+Order operator guides as first encountered: prerequisites and setup, package discovery and verification, selection and configuration, validation and submission, readiness, live controls and monitoring, logs and debugging, then recovery and upgrade. Introduce each process and term before its first command.
+
+## Shared observability and release records
+
+Service events use stable event codes, request and correlation identifiers when available, and RFC3339 UTC timestamps. Sanitize bounded fields and never log credentials, tokens, raw media, prompts, request text, or unbounded provider payloads. Emit actionable state transitions and failures without periodic success noise. The service owning aggregated or cursor reads documents retention and rotated-cursor recovery in its interface contract.
+
+Application and API contract versions change independently. Compatible additions preserve wire names and defaults; breaking changes need a new contract identity and migration guidance. Release notes state version and date, user-visible changes, compatibility and migration, upgrade steps, known limits, and reproducible verification. Distinguish implemented behavior from target design.
+
 ## REST API contracts
 
 Keep hand-written HTTP and related WebSocket wire contracts below docs/interfaces and update the matching contract in the same change as the client or server handler.
@@ -71,11 +77,11 @@ Prefer one minimal request and response example per route over tables that resta
 
 Use two-space indentation, no tabs, the repository rustfmt configuration, and a 100-column target. Keep functions focused and files separated by responsibility. Prefer explicit types when they materially improve readability.
 
-Repository configuration is the source of truth. Commit formatter, linter, and indentation settings at the root; CI enforces them. VS Code and Cursor use the checked-in .vscode settings and extensions. Other editors must use the same repository configuration rather than a second style guide. AI coding tools follow this file, repository configuration, and applicable module documentation.
+Repository configuration is the source of truth. Commit formatter, linter, and indentation settings at the root; CI enforces them. Editors and coding assistants use those repository settings rather than a second style guide.
 
 ## Rust
 
-Follow the [Google Rust Style Guide](https://google.github.io/styleguide/rustguide.html), then repository configuration. Start every Rust file with a `//!` module comment and document every public item with concise `///` contract text.
+Follow the [Google Rust Style Guide](https://google.github.io/styleguide/rustguide.html), then repository configuration. Use `//!` for useful module-level constraints and concise `///` for non-obvious public contracts.
 
 Use contextual `anyhow` errors at process boundaries and `thiserror` for typed library errors. Prefer Result over panics; use context when propagating failures. Avoid `unwrap` and `expect` outside tests.
 

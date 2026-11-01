@@ -33,7 +33,7 @@ Status: revised target v1 contract. The checked-in executable serves HTTP/1.1 on
 
 Transnet listens on `/run/transnet/transnet.sock`; Transnet data adapters call `/run/island-port/island-port.sock`. Deployments may relocate sockets through configuration, but endpoint paths and payloads do not change. Socket owners create the parent directory, prove a stale socket is inactive before removing it, bind with mode `0660`, and rely on filesystem workload identity rather than forwarded user headers.
 
-Every operation uses HTTP/1.1, an origin-form `/api/v1/...` path, `Host: localhost`, UTF-8 JSON, and `POST`. Empty input is `{}`. Clients send `Content-Type: application/json`, `Accept: application/json`, a bounded `Content-Length`, and optionally `X-Request-Id` and `X-Deadline-At`. Query strings, chunked request bodies, multipart bodies, upgrades, and response streaming are rejected. Servers reject unknown JSON fields and return `X-Request-Id` plus `Cache-Control: no-store`.
+Every operation uses HTTP/1.1, an origin-form `/api/v1/...` path, `Host: localhost`, UTF-8 JSON, and `POST`. Empty input is `{}`. Clients send `Content-Type: application/json`, `Accept: application/json`, a bounded `Content-Length`, and optionally `X-Request-Id` and `X-Deadline-At`. Query strings, chunked request bodies, multipart bodies, upgrades, and response streaming outside the translation stream route are rejected. Servers reject unknown JSON fields and return `X-Request-Id` plus `Cache-Control: no-store`.
 
 The default body limit is 1 MiB. A translation request containing inline images may use the route-specific 12 MiB encoded-body limit. At most four decoded images are accepted, each no larger than 2 MiB or 4096 by 4096 pixels, with at most sixteen regions across the request. Supported image media types are `image/png`, `image/jpeg`, and `image/webp`.
 
@@ -326,7 +326,7 @@ Closed route errors additionally include `invalid_translation_request`, `constra
 
 ## POST /api/v1/translations/stream
 
-Accepts the same strict JSON body as `/translations` and returns `text/event-stream`. Events are `progress` with the closed phases `admitted`, `generating`, `validating`, and `enriching`; optional `thinking` with a `delta`; `translation` with a validated translation delta; `result` with the complete existing success envelope; `error` with the existing problem envelope; and terminal `done`. Translation material is emitted only after normal validation. A `thinking` event is emitted only during an actually selected reasoning-profile call and only from llama.cpp's separate `reasoning_content` field; Transnet never parses hidden reasoning from answer text. Fast provider calls explicitly set llama.cpp `chat_template_kwargs.enable_thinking: false`, `reasoning: off`, `reasoning_format: auto`, `reasoning_effort: none`, and `reasoning_budget_tokens: 0`. Reasoning calls set `enable_thinking: true`, `reasoning: on`, `reasoning_format: auto`, `reasoning_effort: minimal`, and `reasoning_budget_tokens: 128`. Both profiles also carry a 256-token total ceiling. These template and sampling controls bound latency even when a serving model ignores generic reasoning hints. The non-streaming route remains unchanged.
+Accepts the same strict JSON body as `/translations` and returns `text/event-stream`. Events are `progress` with the closed phases `admitted`, `generating`, `validating`, and `enriching`; optional `thinking` with a `delta`; `translation` with a validated translation delta; `result` with the complete existing success envelope; `error` with the existing problem envelope; and terminal `done`. Translation material is emitted only after normal validation. The current provider disables llama.cpp native thinking for both application profiles (`chat_template_kwargs.enable_thinking: false`, `reasoning: off`, `reasoning_format: auto`, `reasoning_effort: none`, `reasoning_budget_tokens: 0`) and allows up to 768 output tokens for strict JSON. Consequently, current deployments do not emit `thinking`; if a future provider enables it, only llama.cpp’s separate `reasoning_content` field may supply that event. Transnet never parses hidden reasoning from answer text. The stream uses a bounded event queue and stops its request task when the consumer disconnects. The non-streaming route remains unchanged.
 
 ## POST /api/v1/basic-cards/lookup
 
@@ -344,11 +344,12 @@ Returns one guided tree-lens projection for a canonical root.
 
 ```json
 {
-  "root": {"kind": "sense", "id": "sense_sweltering_hot_01"},
+  "root": {"kind": "lexical_sense", "id": "sense_sweltering_hot_01"},
   "lens": "contrast",
   "target_language": "zh-CN",
   "response_level": "full",
   "content_release": "knowledge-2026-09",
+  "canonical_schema_version": "canonical-v1",
   "cursor": null
 }
 ```
