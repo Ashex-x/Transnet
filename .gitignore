@@ -18,3 +18,8 @@ __pycache__/
 
 # Generated documentation
 docs/*.pdf
+
+# Shared VS Code defaults; personal workspace metadata stays local.
+!/.vscode/
+/.vscode/*
+!/.vscode/settings.json
